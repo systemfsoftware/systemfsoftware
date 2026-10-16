@@ -18,6 +18,13 @@ on:
         required: false
         type: string
         default: .#sfs-deps
+      backstop-minutes:
+        description: >-
+          The one stuck-job backstop, applied to every job of this workflow. It is not a budget: budgets are measured
+          and reported by the `wall-clock` step, never enforced. Keep it at 60 or above
+        required: false
+        type: number
+        default: 60
 
 permissions:
   contents: read
@@ -28,13 +35,19 @@ jobs:
     name: sfs-deps · tarballs the lockfile names
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     outputs:
       key: ${{ steps.produce.outputs.key }}
+      call: ${{ steps.record.outputs.call }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
+          reusable: commitlint
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
@@ -55,17 +68,29 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ steps.record.outputs.call }}
+          job: sfs-deps
+          name: sfs-deps · tarballs the lockfile names
+          status: ${{ job.status }}
 
   commitlint:
     name: lint PR commits
     needs: sfs-deps
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -102,3 +127,19 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.sfs-deps.outputs.call }}
+          job: commitlint
+          name: lint PR commits
+          status: ${{ job.status }}
+      - if: always()
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: always()
+        name: The measured wall clock, against the PR budget
+        run: wall-clock --records "$RUNNER_TEMP/sfs-job-records" --attempt "$GITHUB_RUN_ATTEMPT" --event "$GITHUB_EVENT_NAME" --scope full

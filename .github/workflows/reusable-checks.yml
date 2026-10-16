@@ -48,7 +48,7 @@ on:
         type: string
         default: ""
       lanes:
-        description: 'JSON list of lint lanes: {"id", "name", "timeout-minutes", "run"?, "docs-run"?, "fetch-depth"?, "runs-on"?}; `run` is a command after the lane''s action. On a docs-only pull request a lane with `docs-run` runs that command after the `docs` phase instead, and a lane without one is skipped'
+        description: 'JSON list of lint lanes: {"id", "name", "run"?, "docs-run"?, "fetch-depth"?, "runs-on"?}; `run` is a command after the lane''s action. On a docs-only pull request a lane with `docs-run` runs that command after the `docs` phase instead, and a lane without one is skipped. A lane runs under the one `backstop-minutes`; it has no timeout of its own'
         required: false
         type: string
         default: "[]"
@@ -63,20 +63,17 @@ on:
         type: number
         default: 12
       max-seconds:
-        description: Planner --max-seconds; keep it at or under the test job's timeout-minutes in seconds
+        description: Planner --max-seconds, the most predicted seconds the planner packs into one test job. It sizes jobs; nothing kills a job on it
         required: false
         type: number
         default: 1800
-      timeout-minutes:
-        description: Each test job's timeout
+      backstop-minutes:
+        description: >-
+          The one stuck-job backstop, applied to every job and step of this workflow. It is not a budget: budgets are
+          measured and reported by the `wall-clock` job, never enforced. Keep it at 60 or above
         required: false
         type: number
-        default: 30
-      plan-timeout-minutes:
-        description: The plan and timings jobs' timeout
-        required: false
-        type: number
-        default: 5
+        default: 60
       gate-name:
         description: Name of the job that passes only when every other job passed
         required: false
@@ -87,11 +84,6 @@ on:
         required: false
         type: boolean
         default: false
-      gate-timeout-minutes:
-        description: The gate job's timeout
-        required: false
-        type: number
-        default: 2
       node-options:
         description: NODE_OPTIONS for the test jobs (a lint lane sets its own `node-options`); GitHub refuses it from $GITHUB_ENV
         required: false
@@ -161,12 +153,18 @@ jobs:
   classify:
     name: classify · docs-only or full
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     outputs:
       scope: ${{ steps.diff.outputs.scope }}
       lanes: ${{ steps.lanes.outputs.lanes }}
       sfs-deps-none: ${{ steps.demand.outcome == 'success' && steps.demand.outputs.key == '' }}
+      call: ${{ steps.record.outputs.call }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
+          reusable: checks
       - id: diff
         uses: $/.github/actions/classify-diff
         with:
@@ -212,13 +210,21 @@ jobs:
             lanes classify-failed
           steps: ${{ toJSON(steps) }}
           reproduce: gh run view ${{ github.run_id }} --log-failed
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ steps.record.outputs.call }}
+          job: classify
+          name: classify · docs-only or full
+          status: ${{ job.status }}
 
   plan:
     name: plan · test jobs from recorded timings
     needs: [classify, sfs-deps]
     if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults: &defaults
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -226,6 +232,10 @@ jobs:
       jobs: ${{ steps.plan.outputs.jobs }}
       lane-source: ${{ steps.mode.outputs.source }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -354,7 +364,7 @@ jobs:
           set -o pipefail
           $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        timeout-minutes: 3
+        timeout-minutes: ${{ inputs.backstop-minutes }}
         with:
           name: test-timings-previous
           path: ${{ inputs.working-directory }}/.timings/previous/
@@ -365,24 +375,36 @@ jobs:
         with:
           job: plan
           reasons: |
-            hook hook-failed
+            hook hook-verdict-failed
             sfs-deps sfs-deps-missing
             builtin plan-failed
             plan plan-failed
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings' && format('nix run github:{0}/{1}#test-timings -- plan', job.workflow_repository, job.workflow_sha) || format('{0} plan', inputs.timings) }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: plan
+          name: plan · test jobs from recorded timings
+          status: ${{ job.status }}
 
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
     needs: classify
     if: needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults: *defaults
     outputs:
       key: ${{ steps.produce.outputs.key }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       - *checkout
       - id: produce
         uses: $/.github/actions/sfs-deps
@@ -399,13 +421,21 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: sfs-deps
+          name: sfs-deps · tarballs the lockfile names
+          status: ${{ job.status }}
 
   lanes:
     name: ${{ matrix.lane.name }}
     needs: [classify, sfs-deps]
     if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' && needs.classify.outputs.lanes != '[]' }}
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
-    timeout-minutes: ${{ matrix.lane.timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults: *defaults
     env:
       NODE_OPTIONS: ${{ matrix.lane.node-options }}
@@ -414,6 +444,10 @@ jobs:
       matrix:
         lane: ${{ fromJSON(needs.classify.outputs.lanes) }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: ${{ matrix.lane.fetch-depth || 1 }}
@@ -453,20 +487,28 @@ jobs:
         with:
           job: lane-${{ matrix.lane.id }}
           reasons: |
-            hook hook-failed
+            hook hook-verdict-failed
             sfs-deps sfs-deps-missing
             builtin lane-failed
             run lane-failed
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ matrix.lane.run || format('the {0} phase of .github/actions/checks-lane', matrix.lane.phase) }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: lane-${{ matrix.lane.id }}
+          name: ${{ matrix.lane.name }}
+          status: ${{ job.status }}
 
   test:
     name: test · ${{ matrix.job.name }}
     needs: [classify, plan, sfs-deps]
     if: needs.classify.outputs.scope != 'docs-only' && needs.plan.outputs.jobs != '[]'
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults: *defaults
     env:
       NODE_OPTIONS: ${{ inputs.node-options }}
@@ -475,6 +517,10 @@ jobs:
       matrix:
         job: ${{ fromJSON(needs.plan.outputs.jobs) }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       - *checkout
       - *turbo
       - *sfs-deps
@@ -539,7 +585,7 @@ jobs:
             if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        timeout-minutes: 3
+        timeout-minutes: ${{ inputs.backstop-minutes }}
         if: always()
         with:
           name: test-timings-part-${{ matrix.job.id }}
@@ -564,24 +610,36 @@ jobs:
         with:
           job: test-${{ matrix.job.id }}
           reasons: |
-            hook hook-failed
+            hook hook-verdict-failed
             sfs-deps sfs-deps-missing
             builtin build-failed
             test test-failed
             shard test-failed
-            hook-after hook-failed
+            hook-after hook-verdict-failed
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ matrix.job.shard == null && format('{0} {1} test', inputs.pnpm, matrix.job.filters) || format('{0} --filter {1} test --shard={2}/{3}', inputs.pnpm, matrix.job.shard.package, matrix.job.shard.index, matrix.job.shard.count) }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: test-${{ matrix.job.id }}
+          name: test · ${{ matrix.job.name }}
+          status: ${{ job.status }}
 
   timings:
     name: record test timings
     needs: [classify, plan, test]
     if: ${{ always() && needs.plan.result == 'success' && needs.classify.outputs.scope != 'docs-only' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     defaults: *defaults
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       # Every step runs under always(): a run cancelled by a newer push still records the passes its test jobs made.
       - if: always()
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -607,7 +665,7 @@ jobs:
           lane: timings
           working-directory: ${{ inputs.working-directory }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        timeout-minutes: 3
+        timeout-minutes: ${{ inputs.backstop-minutes }}
         if: always() && needs.test.result != 'skipped'
         with:
           pattern: test-timings-part-*
@@ -624,7 +682,7 @@ jobs:
             $TIMINGS part --job "$job" --raw "$raw" --out ".timings/parts/$job.json"
           done
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        timeout-minutes: 3
+        timeout-minutes: ${{ inputs.backstop-minutes }}
         if: always()
         continue-on-error: true
         with:
@@ -640,7 +698,7 @@ jobs:
           $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
             --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        timeout-minutes: 3
+        timeout-minutes: ${{ inputs.backstop-minutes }}
         if: always()
         with:
           name: ${{ inputs.record }}
@@ -656,14 +714,26 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ format('{0} merge --previous test-timings.json --parts parts/ --out test-timings.json', inputs.timings) }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: timings
+          name: record test timings
+          status: ${{ job.status }}
 
   check:
     name: ${{ inputs.gate-name }}
     needs: [classify, sfs-deps, plan, lanes, test]
     if: ${{ always() }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.gate-timeout-minutes }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
     steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
       # A skipped job passes only when the classifier or the plan said there was nothing for it to run.
       - id: every
         name: Every lane passed
@@ -707,6 +777,55 @@ jobs:
           job: gate
           reasons: |
             every gate-failed
-            hook hook-failed
+            hook hook-verdict-failed
           steps: ${{ toJSON(steps) }}
           reproduce: gh run view ${{ github.run_id }} --log-failed
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: gate
+          name: ${{ inputs.gate-name }}
+          status: ${{ job.status }}
+
+  # Measures the call's wall clock against the PR budget and reports it. It changes no job's conclusion.
+  wall-clock:
+    name: wall clock · measured against the PR budget
+    needs: [classify, sfs-deps, plan, lanes, test, timings, check]
+    if: ${{ always() }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.backstop-minutes }}
+    permissions:
+      contents: read
+    steps:
+      - id: record
+        uses: $/.github/actions/job-record
+        with:
+          phase: start
+      - uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      # One subdirectory per artifact, which is the layout `wall-clock --records` reads; no merge-multiple.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          pattern: job-record-${{ needs.classify.outputs.call }}-*
+          path: ${{ runner.temp }}/wall-clock
+      - name: The measured wall clock, against the PR budget
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
+        run: |
+          printf '%s' "$NEEDS" > "$RUNNER_TEMP/wall-clock-needs.json"
+          wall-clock --records "$RUNNER_TEMP/wall-clock" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --event "$GITHUB_EVENT_NAME" --scope "$SCOPE" --needs "$RUNNER_TEMP/wall-clock-needs.json"
+      - if: always()
+        uses: $/.github/actions/job-record
+        with:
+          phase: finish
+          call: ${{ needs.classify.outputs.call }}
+          job: wall-clock
+          name: wall clock · measured against the PR budget
+          status: ${{ job.status }}

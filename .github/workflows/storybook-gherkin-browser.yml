@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: sbg-browser-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
     needs: conflicts
     name: browser suite (@systemfsoftware/storybook-gherkin)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       CI: "true"
     steps:

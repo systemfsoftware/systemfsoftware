@@ -24,7 +24,9 @@ runs:
         FROZEN: ${{ inputs.frozen-lockfile }}
       run: |
         if [ "$FROZEN" = "true" ]; then
-          corepack pnpm install --frozen-lockfile
+          corepack pnpm install --frozen-lockfile && exit 0
         else
-          corepack pnpm install
+          corepack pnpm install && exit 0
         fi
+        [ -s "$RUNNER_TEMP/sfs-reason" ] || echo install-failed > "$RUNNER_TEMP/sfs-reason"
+        exit 1

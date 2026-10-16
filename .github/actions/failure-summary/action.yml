@@ -77,6 +77,7 @@ runs:
              next="No reason code covers the failed step (${failed:-a step with no id}). Read its log, then add its step id and a code to this job's reason table." ;;
         esac
         [ "$WORKING_DIRECTORY" = . ] || REPRODUCE="cd $WORKING_DIRECTORY && $REPRODUCE"
+        echo "$reason" > "$RUNNER_TEMP/sfs-job-reason"
         {
           echo "### Failure: \`$reason\`"
           echo "- reproduce locally: \`$REPRODUCE\`"

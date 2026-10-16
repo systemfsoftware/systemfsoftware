@@ -1,0 +1,88 @@
+name: Job record
+description: >-
+  Measure a job's own wall time. `phase: start` as the job's first step stamps the start; `phase: finish` as its last
+  step (`if: always()`) writes the wall time to the step summary and uploads one record the call's `wall-clock` reads.
+  The window starts after GitHub's "Set up job". Nothing here fails, cancels or skips a job
+inputs:
+  phase:
+    description: "`start` (the job's first step) or `finish` (its last step, under `if: always()`)"
+    required: true
+  reusable:
+    description: >-
+      Start only, in the call's root job: `checks`, `nix`, `commitlint` or `mutation`. The action then outputs `call`,
+      the id every record of this reusable call carries
+    required: false
+    default: ""
+  call:
+    description: Finish only; the call id the root job's start step output
+    required: false
+    default: ""
+  job:
+    description: Finish only; this job's unique id within the call, the same id failure-summary gets (e.g. `test-3`)
+    required: false
+    default: ""
+  name:
+    description: Finish only; the job's display name
+    required: false
+    default: ""
+  status:
+    description: Finish only; pass `job.status`
+    required: false
+    default: ""
+outputs:
+  call:
+    description: "`<caller workflow>-<reusable>-<8 hex>`, set when `reusable` is given at start"
+    value: ${{ steps.start.outputs.call }}
+runs:
+  using: composite
+  steps:
+    - id: start
+      if: inputs.phase == 'start'
+      name: Job start
+      shell: bash
+      env:
+        REUSABLE: ${{ inputs.reusable }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+      run: |
+        date +%s > "$RUNNER_TEMP/sfs-job-start"
+        if [ -n "$REUSABLE" ]; then
+          caller=${WORKFLOW_REF%%@*}
+          caller=${caller##*/}
+          caller=${caller%.yml}
+          caller=${caller%.yaml}
+          caller=$(printf '%s' "$caller" | tr -c 'A-Za-z0-9_.-' '-')
+          echo "call=${caller:-workflow}-$REUSABLE-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')" >> "$GITHUB_OUTPUT"
+        fi
+    - id: finish
+      if: always() && inputs.phase == 'finish'
+      name: Job wall time
+      shell: bash
+      env:
+        CALL: ${{ inputs.call }}
+        JOB: ${{ inputs.job }}
+        NAME: ${{ inputs.name }}
+        STATUS: ${{ inputs.status }}
+        GROUP: ${{ github.job }}
+      run: |
+        end=$(date +%s)
+        start=$(cat "$RUNNER_TEMP/sfs-job-start" 2> /dev/null || echo "$end")
+        reason=$(head -n 1 "$RUNNER_TEMP/sfs-job-reason" 2> /dev/null || true)
+        artifact="job-record-${CALL:-unknown}-${JOB:-$GROUP}-a$GITHUB_RUN_ATTEMPT"
+        dir="$RUNNER_TEMP/sfs-job-records/$artifact"
+        mkdir -p "$dir"
+        jq -n --arg call "$CALL" --arg group "$GROUP" --arg job "${JOB:-$GROUP}" --arg name "${NAME:-${JOB:-$GROUP}}" \
+          --argjson attempt "$GITHUB_RUN_ATTEMPT" --argjson start "$start" --argjson end "$end" \
+          --arg outcome "${STATUS:-unknown}" --arg reason "$reason" \
+          '{version: 1, call: $call, group: $group, job: $job, name: $name, attempt: $attempt, start: $start, end: $end,
+            outcome: $outcome, reason: (if $reason == "" then null else $reason end)}' > "$dir/record.json"
+        seconds=$((end - start))
+        printf -- '- wall time: %dm %02ds (%s; measured from the end of "Set up job")\n' \
+          $((seconds / 60)) $((seconds % 60)) "${STATUS:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+        echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+    - if: always() && inputs.phase == 'finish' && steps.finish.outputs.artifact != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.finish.outputs.artifact }}
+        path: ${{ steps.finish.outputs.dir }}/record.json
+        retention-days: 7

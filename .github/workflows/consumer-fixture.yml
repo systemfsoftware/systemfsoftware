@@ -16,8 +16,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: consumer-fixture-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
     needs: checks
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 60
     steps:
       - name: The fixture has no hook, so every phase took the built-in lanes, and the test lane ran answer
         env:
@@ -55,7 +55,7 @@ jobs:
       record: fixture-test-timings
       docs-globs: "**"
       lanes: >-
-        [{"id": "docs", "name": "docs · the tarball packages installed", "timeout-minutes": 60,
+        [{"id": "docs", "name": "docs · the tarball packages installed",
           "docs-run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
   checks-docs-only-installed-tarballs:
     name: checks · docs-only ran the producer and the docs phase
@@ -79,7 +79,7 @@ jobs:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 60
     steps:
       - id: guard
         continue-on-error: true
@@ -102,3 +102,23 @@ jobs:
     uses: ./.github/workflows/reusable-nix.yml
     with:
       working-directory: .github/consumer-fixture
+  job-records:
+    name: job records · one call id per reusable call
+    needs: [checks, checks-docs-only, commitlint, nix]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Every call that ran left records under a call id of its own
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          names=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[].name' | grep '^job-record-' || true)
+          printf '%s\n' "$names"
+          calls() { grep -oE "^job-record-consumer-fixture-$1-[0-9a-f]{8}-" <<< "$names" | sort -u | wc -l; }
+          ran() { jq -r --arg k "$1" 'if .[$k].result == "skipped" then 0 else 1 end' <<< "$NEEDS"; }
+          want_checks=$(( $(ran checks) + $(ran checks-docs-only) ))
+          echo "checks calls: $(calls checks) of $want_checks, nix: $(calls nix) of $(ran nix), commitlint: $(calls commitlint) of $(ran commitlint)"
+          [ "$(calls checks)" -eq "$want_checks" ] && [ "$(calls nix)" -eq "$(ran nix)" ] && [ "$(calls commitlint)" -eq "$(ran commitlint)" ]

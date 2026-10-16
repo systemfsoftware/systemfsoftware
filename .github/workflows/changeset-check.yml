@@ -18,7 +18,7 @@ jobs:
   packed-manifest:
     name: changeset · a packed-manifest change needs an intent
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
