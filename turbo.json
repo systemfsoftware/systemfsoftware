@@ -106,6 +106,21 @@
       "dependsOn": [
         "^build"
       ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/workflows/mutation.yml",
+        "$TURBO_ROOT$/.github/workflows/reusable-mutation.yml",
+        "$TURBO_ROOT$/.github/actions/**",
+        "$TURBO_ROOT$/.github/mutation-seed-costs.json",
+        "$TURBO_ROOT$/scripts/tools/mutation-*",
+        "$TURBO_ROOT$/scripts/tools/stryker-reads.ts",
+        "$TURBO_ROOT$/packages/toolchain/stryker-config/**",
+        "$TURBO_ROOT$/scripts/tools/record-pricing.ts",
+        "$TURBO_ROOT$/scripts/tools/run-reuse.ts",
+        "$TURBO_ROOT$/scripts/tools/job-attempt.ts",
+        "$TURBO_ROOT$/scripts/deno.jsonc",
+        "$TURBO_ROOT$/scripts/deno.lock"
+      ],
       "env": [
         "NODE_ENV",
         "CI",

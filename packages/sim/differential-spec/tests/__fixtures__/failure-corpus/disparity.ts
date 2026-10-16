@@ -1,10 +1,10 @@
 import { differentialReport, reportCheck } from '@systemfsoftware/differential-spec'
-import type { RecordedRun } from '@systemfsoftware/vitest/failure'
+import { type RecordedRun, workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect } from 'effect'
 import { integers } from '../arbitraries.js'
 import type { CorpusFixture } from './record.js'
 
-export const defectFile = 'packages/sim/differential-spec/tests/__fixtures__/failure-corpus/disparity.ts'
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const reference = (value: number): Effect.Effect<number> => Effect.succeed(value * 2)
 

@@ -7,16 +7,15 @@ export interface SharedConfig {
   coverageAnalysis: 'perTest'
   incremental: boolean
   incrementalFile: string
+  incrementalSources: string[]
   ignorePatterns: string[]
   disableBail: boolean
+  dryRunTimeoutMinutes: number
   cleanTempDir: 'always'
   thresholds: { high: number; low: number; break: number }
-  /**
-   * `workflowMutate`, narrowed to the files this shard owns when `STRYKER_SHARD=<index>/<count>` is set. Computed on
-   * first read, so importing the module touches no file; every read returns the same array.
-   */
+  /** `workflowMutate`, the same array on every read. */
   readonly mutate: string[]
-  concurrency?: string
+  concurrency?: string | number
 }
 
 /** The files mutation testing mutates: `src/**\/*.workflow.ts`, minus the `__tests__`, `__fixtures__` and `__mocks__` directories. */

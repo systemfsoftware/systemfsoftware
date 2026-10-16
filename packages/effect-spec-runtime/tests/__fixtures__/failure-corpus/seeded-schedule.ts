@@ -1,8 +1,9 @@
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect, Fiber, Ref } from 'effect'
 import { CorpusDefect } from './defect-error.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/effect-spec-runtime/tests/__fixtures__/failure-corpus/seeded-schedule.ts'
+const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const TOP_CLERK = 'the second clerk'
 

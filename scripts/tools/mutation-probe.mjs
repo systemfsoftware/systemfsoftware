@@ -1,5 +1,5 @@
-// mutation-probe.mjs - the facts `test-timings.ts plan --task mutation` judges a
-// package by, read the way Stryker reads them. `test-timings` runs it with
+// mutation-probe.mjs - the facts `mutation-admit.ts` judges a package by, read
+// the way Stryker reads them. `mutation-admit` runs it with
 // `pnpm exec node --input-type=module -e`, so bare specifiers resolve from the
 // package directory: the config is the file Stryker would discover there, and
 // `@systemfsoftware/stryker-config` is the copy that package installed.
@@ -14,13 +14,9 @@
 // where
 //   config   the config file Stryker discovers
 //   shared   the shared mutated set: its patterns and the files they expand to
-//   mutate   `Inherited { negated }` when the config inherits
-//            `sharedConfig.mutate` untouched: the same array, the shared
-//            patterns first, then only `!<file>` negations, each naming a file
-//            of the shared set verbatim, as `shardMutate` appends for the files
-//            other shards own (Stryker reads a negation as a glob, so any other
-//            spelling could remove files the plan cannot see); `negated` are
-//            the files they name. `Own { patterns, extends, files }` otherwise:
+//   mutate   `Inherited` when the config inherits `sharedConfig.mutate`
+//            untouched: the same array, holding exactly the shared patterns.
+//            `Own { patterns, extends, files }` otherwise:
 //            its patterns (null when it sets none, so Stryker's default
 //            applies), its `extends`, and the files its patterns expand to
 //   scope    what else selects files: the config's `ignorePatterns` (Stryker's
@@ -48,15 +44,6 @@ const expand = (patterns) =>
 /** @param {unknown} left @param {readonly string[]} right */
 const samePatterns = (left, right) =>
   Array.isArray(left) && left.length === right.length && left.every((pattern, i) => pattern === right[i])
-
-// The characters Stryker's mutate matcher can read as a glob (a backslash it rewrites to `/`).
-const GLOB_CHARACTER = /[*?{[\\]/
-
-/** @param {readonly string[]} named @param {readonly string[]} sharedFiles */
-const namesSharedFiles = (named, sharedFiles) => {
-  const files = new Set(sharedFiles)
-  return named.every((file) => files.has(file) && !GLOB_CHARACTER.test(file))
-}
 
 /** The config keys whose paths Stryker's crawl ignores; a path is read with `.`-separated keys. */
 const OUTPUT_PATHS = [
@@ -98,13 +85,7 @@ const configFacts = async (shared) => {
     if (found === undefined) throw new Error(`no Stryker config: none of ${DISCOVERED.join(', ')} exists`)
     const config = (await import(pathToFileURL(found).href)).default ?? {}
     const mutate = config.mutate
-    const head = workflowMutate.length
-    const tail = Array.isArray(mutate) ? mutate.slice(head).map(String) : []
-    const named = tail.map((pattern) => pattern.slice(1))
-    const inherited = mutate === sharedConfig.mutate &&
-      samePatterns(mutate.slice(0, head), workflowMutate) &&
-      tail.every((pattern) => pattern.startsWith('!')) &&
-      namesSharedFiles(named, shared.set.files)
+    const inherited = mutate === sharedConfig.mutate && samePatterns(mutate, workflowMutate)
     const patterns = Array.isArray(mutate) ? mutate.map(String) : null
     const outputs = outputsOf(config)
     return {
@@ -112,7 +93,7 @@ const configFacts = async (shared) => {
       config: found,
       shared: shared.set,
       mutate: inherited && config.extends === undefined
-        ? { _tag: 'Inherited', negated: named }
+        ? { _tag: 'Inherited' }
         : { _tag: 'Own', patterns, extends: config.extends ?? null, files: patterns === null ? [] : expand(patterns) },
       scope: {
         ignorePatterns: Array.isArray(config.ignorePatterns) ? config.ignorePatterns.map(String) : [],

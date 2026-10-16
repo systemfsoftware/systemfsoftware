@@ -1,10 +1,10 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import type { RecordedRun } from '@systemfsoftware/vitest/failure'
+import { type RecordedRun, workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Context, Effect, Layer, Match, Ref } from 'effect'
 import { LockCommand, lockModel } from '../lock.model.js'
 import type { CorpusFixture } from './record.js'
 
-export const defectFile = 'packages/sim/conformance-spec/tests/__fixtures__/failure-corpus/judgement-failure.ts'
+export const defectFile = workspaceRelativePathOf(import.meta.url)
 
 interface LockHandle {
   readonly tryAcquire: (key: string) => Effect.Effect<boolean>
