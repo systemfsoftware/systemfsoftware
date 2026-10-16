@@ -116,6 +116,27 @@ runs:
           echo "::error::scripts/tools/deno-locks.sh must exit 1 naming deno-lock-stale and deno's out-of-date lockfile on a planted stale lock, got exit $status" >&2
           exit 1
         fi
+    - name: Every agent-plugins plugin's declared deno check, test and smoke tasks
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: |
+        # Each plugin defines the subset it ships (git-subtrees: check; oxlint-guard: check,
+        # test; pnpm-guard: check, test, smoke). The lane runs exactly the declared tasks,
+        # in the plugin's own directory — the same commands the hooks document.
+        for plugin in agent-plugins/*/; do
+          cfg=
+          for name in deno.jsonc deno.json; do
+            if [ -f "$plugin/$name" ]; then cfg="$plugin/$name"; break; fi
+          done
+          [ -n "$cfg" ] || continue
+          listing=$(deno task --config "$cfg")
+          for task in check test smoke; do
+            grep -qE "^- $task\$" <<< "$listing" || continue
+            echo "::group::${plugin%/} · deno task $task"
+            (cd "$plugin" && deno task "$task")
+            echo '::endgroup::'
+          done
+        done
     - name: stryker refuses a mutation run outside CI
       if: inputs.lane == 'static'
       shell: bash -e {0}
