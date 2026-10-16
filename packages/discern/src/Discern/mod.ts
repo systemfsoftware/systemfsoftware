@@ -42,19 +42,7 @@ export type {
   RateOptions,
 } from '../decision.blueprint.js'
 
-export {
-  and,
-  deterministic,
-  evaluate,
-  matched,
-  missed,
-  or,
-  preview,
-  reasonOf,
-  statusIs,
-  statusOf,
-  uncertain,
-} from '../pattern.blueprint.js'
+export { and, deterministic, evaluate, or, preview } from '../pattern.blueprint.js'
 export type {
   Answers,
   HandlerResult,
@@ -66,6 +54,7 @@ export type {
   Preview,
   UncertainContext,
 } from '../pattern.blueprint.js'
+export { matched, missed, reasonOf, statusIs, statusOf, uncertain } from '../Verdict.schema.js'
 
 export {
   caseOf as case,
@@ -81,10 +70,10 @@ export {
 } from '../matcher.blueprint.js'
 export type { ClassificationMatcher, FinishedMatcher, Matcher, MatcherFlavor } from '../matcher.blueprint.js'
 
-export { runWithTrace } from '../run-policy.cell.js'
+export { runWithTrace } from '../matcher.blueprint.js'
 export type { Policy, PolicyRun, PolicyTraced } from '../run-policy.cell.js'
 
-export { Eval } from '../measure-pattern.cell.js'
+export { Eval } from '../eval.js'
 export type { CalibrateOptions, EvalExample, MeasureError, SweepOptions, SweepResult } from '../measure-pattern.cell.js'
 
 export {

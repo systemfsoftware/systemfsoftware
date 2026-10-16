@@ -18,6 +18,10 @@ tags: [mutation-testing, stryker, re-key-aggregate, private-leaf-packages, artif
 
 # Mutation budgets split rule packages into private cells under a re-key aggregate
 
+## Supersession note (2026-10-12)
+
+Mutation now mutates only `src/**/*.workflow.ts` (test directories excluded), defined once in `@systemfsoftware/stryker-config`, and the Mutation plan refuses a config that sets its own `mutate` (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`). The oxlint rule packages hold no workflow file, so no leaf below owns a Stryker config or a `mutation` script any more, and per-leaf mutation budgets no longer apply to them. What still holds: a gate reads the artifact a consumer receives, and a private leaf keeps the public package's exported ids stable.
+
 ## Context
 
 One lint-rule package concentrated ~2,075 mutants into a single Stryker cell: one serial CI job, one timeout, no incremental progress on failure. A mutation score for the whole package cannot be observed in reasonable wall-clock time, so the mutation gate degrades into a ritual that either times out or gets exempted. Splitting the package naively faces the opposite constraint: consumers pin rule ids in configs and disable comments, so any namespace migration silently invalidates every suppression.

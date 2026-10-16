@@ -1,15 +1,11 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Number as Num, Option, Result, Schema } from 'effect'
+import { absurd } from 'effect/Function'
 import { evolveSupervisor, SupervisionEvolution } from '../kernel/evolve-supervisor.workflow.js'
 import {
-  CoolingDown,
   interpretSupervisionEvent,
-  Restarting,
-  Running,
-  ShuttingDown,
   type SupervisionDecision,
   SupervisionStep,
-  type SupervisorState,
 } from '../kernel/interpret-supervision-event.workflow.js'
 import { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { TimerKind } from '../kernel/SupervisionEvent.schema.js'
@@ -32,6 +28,8 @@ import type {
 import { BackoffSchedule, RestartStrategy, RestartType, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { ChildDeclaration, CoolDownSetting, DynamicKind } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
+import { CoolingDown, Restarting, Running, ShuttingDown } from '../kernel/SupervisorState.schema.js'
+import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
 import type { ChildInstance, ChildStatus } from '../kernel/SupervisorState.schema.js'
 import { TerminationReason } from '../kernel/TerminationReport.schema.js'
 
@@ -63,20 +61,17 @@ type PolicyParts = {
   readonly autoShutdown?: AutoShutdown | undefined
 }
 
-const policyWith = (parts: PolicyParts): SupervisionPolicy => {
-  const decoded = Schema.decodeResult(SupervisionPolicy)({
-    strategy: parts.strategy,
-    intensity: parts.intensity ?? 8,
-    periodMillis: PERIOD_MILLIS,
-    autoShutdown: parts.autoShutdown ?? 'never',
-    coolDown: parts.coolDown ?? { _tag: 'NoCoolDown' },
-    backoff: parts.backoff ?? { baseMillis: 0, multiplier: 2, capMillis: 0 },
-    dynamic: parts.dynamic ?? { _tag: 'NoDynamicChildren' },
-    livenessTickMillis: 10,
-    childDeclarations: parts.childDeclarations,
-  })
-  return Result.getOrThrow(decoded)
-}
+const policyWith = (parts: PolicyParts): SupervisionPolicy => ({
+  strategy: parts.strategy,
+  intensity: parts.intensity ?? 8,
+  periodMillis: PERIOD_MILLIS,
+  autoShutdown: parts.autoShutdown ?? 'never',
+  coolDown: parts.coolDown ?? { _tag: 'NoCoolDown' },
+  backoff: parts.backoff ?? { baseMillis: 0, multiplier: 2, capMillis: 0 },
+  dynamic: parts.dynamic ?? { _tag: 'NoDynamicChildren' },
+  livenessTickMillis: 10,
+  childDeclarations: parts.childDeclarations,
+})
 
 const declaredChild = (childId: string, restartType: RestartType, significant: boolean): ChildDeclaration => ({
   childId,
@@ -185,10 +180,16 @@ const stepOf = (state: SupervisorState, event: SupervisionEvent): SupervisionSte
   new SupervisionStep({ state, event })
 
 const decidedOf = (interpret: Interpret, step: SupervisionStep): SupervisionDecision =>
-  Result.getOrThrow(interpret(step))
+  Result.match(interpret(step), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
 
 const evolvedOf = (evolve: Evolve, state: SupervisorState, decision: SupervisionDecision): SupervisorState =>
-  Result.getOrThrow(evolve(new SupervisionEvolution({ state, decision })))
+  Result.match(evolve(new SupervisionEvolution({ state, decision })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (next) => next,
+  })
 
 type Folded = {
   readonly state: SupervisorState

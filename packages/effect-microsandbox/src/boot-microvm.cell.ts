@@ -1,5 +1,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Match } from 'effect'
 import type * as Crypto from 'effect/Crypto'
 import type * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
@@ -16,12 +17,33 @@ import type {
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
 import { probeVirtualization } from './probe-virtualization.cell.js'
 
-export const bootMicroVM: Cell.Cell<
-  MicroVMSpec,
-  AcquiredVM,
-  LoopbackViolationError | PortAllocationError | SandboxBootError | VirtualizationUnsupportedError | WaitTimeoutError,
-  Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber | Scope.Scope
-> = probeVirtualization.pipe(
-  Cell.flatMap(() => bootSandbox),
-  Cell.andThen(awaitReadiness),
+type StartError =
+  | LoopbackViolationError
+  | PortAllocationError
+  | SandboxBootError
+  | VirtualizationUnsupportedError
+  | WaitTimeoutError
+
+type StartServices = Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber | Scope.Scope
+
+type BootedStart = Cell.Cell<MicroVMSpec, AcquiredVM, StartError, StartServices>
+
+export const bootMicroVM: BootedStart = probeVirtualization.pipe(
+  Cell.flatMap((probe) =>
+    Match.value(probe).pipe(
+      Match.tag('VirtualizationUnsupportedError', (refusal): BootedStart => Cell.fail(refusal)),
+      Match.orElse((): BootedStart =>
+        bootSandbox.pipe(
+          Cell.flatMap((plan) =>
+            Match.value(plan).pipe(
+              Match.tag('LoopbackViolationError', (refusal): BootedStart => Cell.fail(refusal)),
+              Match.orElse((vm): BootedStart =>
+                Cell.succeed<AcquiredVM, MicroVMSpec>(vm).pipe(Cell.andThen(awaitReadiness))
+              ),
+            )
+          ),
+        )
+      ),
+    )
+  ),
 )

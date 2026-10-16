@@ -75,7 +75,7 @@ row becomes a command that fails in local checks and CI.
 ### System One decision gates (Jev)
 
 Non-autoregressive forward-pass decision models integrated via Effect v4's `Decision` and `DecisionModel`
-primitives (`effect/unstable/ai/Decision`) for questions AST linting cannot decide (semantic breaking changes,
+primitives (`effect/ai/Decision`) for questions AST linting cannot decide (semantic breaking changes,
 regression triage) using calibrated three-valued logic.
 
 _Why it serves the approach:_ provides fast (~35ms), reproducible, unprompted classification without
@@ -84,7 +84,7 @@ sliding into ungrounded conversational LLM reviews.
 ### Flagship proofs & reference architectures
 
 The Stryker CLI mutation engine, modular Oxlint plugin/preset packages, and the end-to-end e-commerce
-fulfillment reference stack (`examples/inventory-fulfillment`), held to the doctrine with strict packaging
+full-stack exemplar ([effect-endgame-starter-kit](https://github.com/systemfsoftware/effect-endgame-starter-kit)), held to the doctrine with strict packaging
 discipline (attw, api-extractor rollups).
 
 _Why it serves the approach:_ real, production-grade applications and developer tools surviving these rules

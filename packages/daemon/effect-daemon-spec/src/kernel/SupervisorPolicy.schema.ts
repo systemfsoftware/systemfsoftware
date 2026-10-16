@@ -196,6 +196,44 @@ export const SupervisionPolicy = Schema.Struct(policyFields).check(
 )
 export type SupervisionPolicy = typeof SupervisionPolicy.Type
 
+export interface SupervisionPolicyParts {
+  readonly strategy: RestartStrategy
+  readonly intensity: Intensity
+  readonly periodMillis: PositiveMillis
+  readonly autoShutdown: AutoShutdown
+  readonly coolDownMillis: number | undefined
+  readonly backoff: BackoffSchedule
+  readonly dynamic: DynamicKind
+  readonly livenessTickMillis: PositiveMillis
+  readonly declarations: ReadonlyArray<ChildDeclaration>
+}
+
+export const supervisionPolicyOf = (parts: SupervisionPolicyParts): SupervisionPolicy => ({
+  strategy: parts.strategy,
+  intensity: parts.intensity,
+  periodMillis: parts.periodMillis,
+  autoShutdown: parts.autoShutdown,
+  coolDown: Match.value(parts.coolDownMillis).pipe(
+    Match.when(undefined, (): CoolDownSetting => ({ _tag: 'NoCoolDown' })),
+    Match.orElse((millis: number): CoolDownSetting => ({ _tag: 'CoolDownAfter', millis })),
+  ),
+  backoff: parts.backoff,
+  dynamic: parts.dynamic,
+  livenessTickMillis: parts.livenessTickMillis,
+  childDeclarations: parts.declarations,
+})
+
+const workerShutdown: ShutdownMode = { _tag: 'Graceful', millis: 5_000 }
+
+const supervisorShutdown: ShutdownMode = { _tag: 'Infinity' }
+
+export const childShutdownOf = (nested: boolean): ShutdownMode =>
+  Match.value(nested).pipe(
+    Match.when(true, (): ShutdownMode => supervisorShutdown),
+    Match.when(false, (): ShutdownMode => workerShutdown),
+    Match.exhaustive,
+  )
+
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and a static import would enter the published

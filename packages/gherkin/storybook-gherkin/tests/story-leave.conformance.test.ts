@@ -1,12 +1,13 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 
 import { everyStepSettled, freshVisit, playedOnce } from './__fixtures__/story-leave.fixture.js'
 
 const Feature = makeFeature({ it })
 
 Feature('Leaving a story with nothing hanging when the visit moves on', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -18,7 +19,7 @@ Feature('Leaving a story with nothing hanging when the visit moves on', { timeou
           (s) => Conformance.released(playedOnce(s.visit), { probe: everyStepSettled(s.visit) }),
         ),
         Then('no step is left hanging and the visit moved on at least once')((s, expect) =>
-          expect(s.checked).toMatchObject({
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

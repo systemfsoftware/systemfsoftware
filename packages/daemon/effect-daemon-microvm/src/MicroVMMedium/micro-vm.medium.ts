@@ -1,18 +1,21 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
-import { Deferred, Effect, Exit, Layer, Match, Option, Ref, Scope, Stream } from 'effect'
+import { Deferred, Effect, Layer, Match, Option, Ref, Scope, Stream } from 'effect'
 import type * as Crypto from 'effect/Crypto'
 import type * as FileSystem from 'effect/FileSystem'
+import { absurd } from 'effect/Function'
+import * as Result from 'effect/Result'
 import type { ExecEvent, ExecHandle, ExecSink } from 'microsandbox'
+import { ClassifyWorkloadExit, classifyWorkloadExit } from './classify-workload-exit.workflow.js'
 import type { MicroVMProgram } from './MicroVMProgram.js'
 import type { MicroVMWorkload, WorkloadCommand } from './MicroVMProgram.schema.js'
+import { PlanVmTeardown, planVmTeardown, type VmTeardown } from './plan-vm-teardown.workflow.js'
+import { terminationReasonOf } from './WorkloadExit.schema.js'
 
 const KILL_TIMEOUT_MILLIS = 5_000
 
 const UNOBSERVED_EXIT_CODE = -1
-
-const UNREPORTED_SIGNAL = 'unreported'
 
 export const declaration: Supervisor.Medium.MediumDeclaration = { reporting: 'exit', groupStop: 'atomic' }
 
@@ -32,7 +35,6 @@ type WorkloadTypeId = typeof WorkloadTypeId
 interface WorkloadStarted extends Supervisor.Medium.Started {
   readonly [WorkloadTypeId]: WorkloadTypeId
   readonly sandbox: MicroVM.RunningVM
-  readonly childScope: Scope.Scope
   readonly exited: Deferred.Deferred<number>
   readonly stopping: Deferred.Deferred<void>
 }
@@ -70,15 +72,25 @@ const bestEffortOf = <E>(effect: Effect.Effect<void, E>): Effect.Effect<void> =>
 
 const reclaimOf = (sandbox: MicroVM.RunningVM): Effect.Effect<void> => bestEffortOf(sandbox.pipe(destroyed))
 
-const teardownOf = (mode: Supervisor.Medium.ShutdownMode) => (sandbox: MicroVM.RunningVM): Effect.Effect<void> =>
-  Match.value(mode).pipe(
-    Match.tag('Brutal', () => bestEffortOf(sandbox.pipe(killed))),
-    Match.tag('Graceful', (graceful) =>
+const teardownPlanOf = (plan: VmTeardown) => (sandbox: MicroVM.RunningVM): Effect.Effect<void> =>
+  Match.value(plan).pipe(
+    Match.tag('KillVm', () => bestEffortOf(sandbox.pipe(killed))),
+    Match.tag('StopVmWithin', (within) =>
       bestEffortOf(
-        sandbox.pipe(stoppedWithin(graceful.millis), Effect.catchDefect(() => bestEffortOf(sandbox.pipe(killed)))),
+        sandbox.pipe(stoppedWithin(within.millis), Effect.catchDefect(() => bestEffortOf(sandbox.pipe(killed)))),
       )),
-    Match.tag('Infinity', () => bestEffortOf(sandbox.pipe(stopped))),
+    Match.tag('StopVm', () => bestEffortOf(sandbox.pipe(stopped))),
     Match.exhaustive,
+  )
+
+const teardownOf = (mode: Supervisor.Medium.ShutdownMode) => (sandbox: MicroVM.RunningVM): Effect.Effect<void> =>
+  sandbox.pipe(
+    teardownPlanOf(
+      Result.match(planVmTeardown(new PlanVmTeardown({ mode })), {
+        onFailure: (error: never): never => absurd(error),
+        onSuccess: (plan) => plan,
+      }),
+    ),
   )
 
 const WORKLOAD_OUTPUT = new TextDecoder()
@@ -169,7 +181,6 @@ function readSession(
 
 const startedOf = (
   sandbox: MicroVM.RunningVM,
-  childScope: Scope.Scope,
   ready: Deferred.Deferred<void>,
   exited: Deferred.Deferred<number>,
   stopping: Deferred.Deferred<void>,
@@ -177,7 +188,6 @@ const startedOf = (
   ...Supervisor.Medium.started(Deferred.await(ready)),
   [WorkloadTypeId]: WorkloadTypeId,
   sandbox,
-  childScope,
   exited,
   stopping,
 })
@@ -193,7 +203,7 @@ const shutdownTermination = (): Supervisor.Medium.TerminationReason => Superviso
 const stopOf = (self: WorkloadStarted, mode: Supervisor.Medium.ShutdownMode): Effect.Effect<void> =>
   Effect.andThen(
     Deferred.succeed(self.stopping, void 0),
-    Effect.andThen(self.sandbox.pipe(teardownOf(mode)), Scope.close(self.childScope, Exit.void)),
+    self.sandbox.pipe(teardownOf(mode)),
   )
 
 const startOf =
@@ -214,15 +224,17 @@ const startOf =
         onNone: () => Effect.void,
         onSome: (bytes) => Effect.asVoid(Effect.forkIn(pumpStdin(session, bytes), childScope)),
       })
-      return startedOf(sandbox, childScope, ready, exited, stopping)
+      return startedOf(sandbox, ready, exited, stopping)
     })
 
+const decisionOf = <Decision>(result: Result.Result<Decision, never>): Decision =>
+  Result.match(result, {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
+  })
+
 const terminationOf = (code: number): Supervisor.Medium.TerminationReason =>
-  code === 0
-    ? Supervisor.Medium.NormalTermination.make({})
-    : Supervisor.Medium.AbnormalTermination.make({
-      report: Supervisor.Medium.ExitReport.make({ code, signal: UNREPORTED_SIGNAL }),
-    })
+  classifyWorkloadExit(new ClassifyWorkloadExit({ code })).pipe(decisionOf, terminationReasonOf)
 
 const mediumFor = (
   options: MicroVMMediumOptions,

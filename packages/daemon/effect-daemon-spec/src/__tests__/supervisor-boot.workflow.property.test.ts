@@ -1,9 +1,8 @@
 import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result, Schema } from 'effect'
-import { initialStateOf } from '../kernel/initial-supervisor-state.js'
+import { absurd } from 'effect/Function'
 import {
   interpretSupervisionEvent,
-  Running,
   type SupervisionDecision,
   SupervisionStep,
 } from '../kernel/interpret-supervision-event.workflow.js'
@@ -11,6 +10,7 @@ import { EventTime } from '../kernel/SupervisionLimits.schema.js'
 import type { StartChild, SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
 import { ChildDeclaration, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { RestartStrategy, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+import { initialStateOf, Running } from '../kernel/SupervisorState.schema.js'
 
 type Decide = typeof interpretSupervisionEvent
 
@@ -53,13 +53,14 @@ const bootsTo = (
   policy: SupervisionPolicy,
   at: EventTime,
 ): SupervisionDecision =>
-  Result.getOrThrow(
+  Result.match(
     decide(
       new SupervisionStep({
         state: new Running({ core: initialStateOf(policy) }),
         event: { _tag: 'SupervisorStarted', at },
       }),
     ),
+    { onFailure: (error: never): never => absurd(error), onSuccess: (decision) => decision },
   )
 
 const bootCommandsOf = (

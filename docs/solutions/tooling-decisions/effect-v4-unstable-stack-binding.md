@@ -3,7 +3,7 @@ title: Binding an Example Backend to the effect v4 unstable Line
 date: "2026-09-20"
 module: systemfsoftware
 problem_type: tooling_decision
-component: example-inventory-fulfillment
+component: effect-v4-pins
 severity: high
 applies_when:
   - Choosing RPC, persistence, and auth packages for an effect 4.0.0-rc workspace
@@ -30,7 +30,7 @@ tags:
 
 ## Problem
 
-The inventory-fulfillment example needed a real backend — RPC transport, PostgreSQL persistence, session auth — while the workspace pins the whole effect line at `4.0.0-rc.116`. Three package decisions looked like registry lookups and were actually compatibility verdicts, because every candidate's peer range was looser than its runtime truth:
+A reference application needed a real backend — RPC transport, PostgreSQL persistence, session auth — while the workspace pins the whole effect line at `4.0.0-rc.116`. Three package decisions looked like registry lookups and were actually compatibility verdicts, because every candidate's peer range was looser than its runtime truth:
 
 - The npm `@effect/rpc@0.76.2` publishes under the effect brand but is the v3 line (peers `effect ^3.22.1`); v4 ships RPC in-tree under `effect/unstable/rpc`, an unstable namespace with no cross-release commitment.
 - `drizzle-orm@1.0.0-rc.4` declares the optional peer `effect >=4.0.0-beta.83` and installs cleanly against rc.116, but its effect integrations call `Schema.TaggedErrorClass` — an API removed from the effect line after `4.0.0-beta.105` (rc.116 exposes `Schema.TaggedError`). The break is at module-evaluation time (`class ... extends Schema.TaggedErrorClass<...>` throws), so a clean install and a passing typecheck both precede the crash.

@@ -56,7 +56,7 @@ Code smell to grep for: a package directory whose files `tsc --showConfig` lists
 
 ## Prevention
 
-- The project-membership guard (`check-project-membership`, part of `gate:tasks`) fails when a tracked TypeScript file belongs to no project or to two; tests live in the test project, which references the app project. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
+- `repo-checks project-membership` (the flake package, run by `pnpm gate:repo` in `gate:tasks`) fails when a tracked TypeScript file belongs to no project or to two; tests live in the test project, which references the app project. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
 - `pnpm lint:conventions` (gritlint's `source-resolution/tsconfig-condition`) fails when a tsconfig project with an `include` neither names `@systemfsoftware/source` in `customConditions` nor extends a preset or a local config that does.
 - Provider source used through the source condition refers to no ambient global that a consumer with `types: []` lacks. Prefer `Uint8Array` and web-standard APIs over Node globals.
 

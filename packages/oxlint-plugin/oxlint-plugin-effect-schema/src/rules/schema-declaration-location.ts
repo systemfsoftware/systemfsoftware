@@ -13,6 +13,7 @@ import {
   WORKFLOW_FILE_BASENAME,
 } from './schema-declaration-location.config.js'
 import { isSchemaVocabularyOrigin } from './SchemaVocabulary.js'
+import { isImportMetaVitestTest } from './vitest-guard.js'
 
 export type MessageIds = 'schemaOutsideSchemaFile' | 'unresolvedSchemaChain'
 
@@ -728,37 +729,6 @@ export const schemaDeclarationLocation = defineRule({
         const verdictReport = (id: ESTree.Node, name: string, verdict: SchemaVerdict): void => {
           if (verdict === 'opaque' || verdict === 'uses' || verdict === 'vocabulary') return
           report(id, name, verdict === 'unresolved' ? 'unresolvedSchemaChain' : 'schemaOutsideSchemaFile')
-        }
-
-        const isImportMetaVitestMember = (node: ESTree.Node | null): boolean =>
-          node !== null &&
-          node.type === 'MemberExpression' &&
-          !node.computed &&
-          node.object.type === 'MetaProperty' &&
-          node.object.meta.type === 'Identifier' &&
-          node.object.meta.name === 'import' &&
-          node.object.property.type === 'Identifier' &&
-          node.object.property.name === 'meta' &&
-          node.property.type === 'Identifier' &&
-          node.property.name === 'vitest'
-
-        const isUndefinedSentinel = (node: ESTree.Node): boolean =>
-          (node.type === 'UnaryExpression' && node.operator === 'void' && node.argument.type === 'Literal' &&
-            node.argument.value === 0) ||
-          (node.type === 'Literal' && node.value === null) ||
-          (node.type === 'Identifier' && node.name === 'undefined')
-
-        const isImportMetaVitestTest = (test: ESTree.Node | null): boolean => {
-          if (isImportMetaVitestMember(test)) return true
-          if (test !== null && test.type === 'BinaryExpression') {
-            const binary = test
-            if (binary.operator !== '!==' && binary.operator !== '!=') return false
-            return (
-              (isImportMetaVitestMember(binary.left) && isUndefinedSentinel(binary.right)) ||
-              (isUndefinedSentinel(binary.left) && isImportMetaVitestMember(binary.right))
-            )
-          }
-          return false
         }
 
         const reportClassDeclaration = (declaration: ESTree.Node): void => {

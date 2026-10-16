@@ -1,6 +1,7 @@
 {
-  "$schema": "./npm/gritlint/configuration_schema.json",
+  "$schema": "https://raw.githubusercontent.com/systemfsoftware/gritlint/fe886c5073e7a1d3327106fc05702053472325af/npm/gritlint/configuration_schema.json",
   "packs": {
+    "cell-architecture": {},
     "source-resolution": {
       "condition": "r\"['\\\"]@systemfsoftware/source['\\\"]\"",
       "presets": "r\"\\\"@systemfsoftware/tsconfig/.*\\\"\"",
@@ -14,8 +15,6 @@
     }
   },
   "ignore": [
-    "repos/**",
-    "crates/**/fixtures/**",
-    "packs/**/fixtures/**"
+    "repos/**"
   ]
 }

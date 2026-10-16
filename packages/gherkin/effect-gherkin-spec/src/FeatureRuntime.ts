@@ -56,7 +56,7 @@ const composeWithBackground = <R>(
 ): Effect.Effect<void, StepError, R> => {
   const scenario = pipeline.pipe(Effect.asVoid)
   if (background === null) return scenario
-  return background.pipe(Effect.asVoid, Effect.flatMap(() => scenario))
+  return background.pipe(Effect.asVoid, Effect.andThen(scenario))
 }
 
 const buildScenario = <R>(

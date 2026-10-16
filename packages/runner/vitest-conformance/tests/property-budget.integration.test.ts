@@ -6,8 +6,8 @@ import { messagesOf, runProbes } from './__fixtures__/run-fixtures'
 
 const Feature = makeFeature({ it })
 
-const INHERITS = 'property-budget/inherits.property.test.ts'
-const OVERRIDE = 'property-budget/override.property.test.ts'
+const INHERITS = 'property-budget/inherits.property.runner.test.ts'
+const OVERRIDE = 'property-budget/override.property.runner.test.ts'
 const PROVIDED_RUNS = '∀n_RunTheProvidedBudget_=Configured'
 const EXPLICIT_RUNS = '∀n_RunTheExplicitBudget_=Given'
 const FALSIFIED = '∀n_KeepsLargeValues_⊥Small'

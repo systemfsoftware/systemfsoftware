@@ -8,11 +8,10 @@
  * handler and reports the trace.
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Option, Schema } from 'effect'
-import { dual } from 'effect/Function'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as Decision from 'effect/unstable/ai/Decision'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import { Array as Arr, Effect, Match, Option, Schema } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as Decision from 'effect/ai/Decision'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,
@@ -23,10 +22,10 @@ import {
 import { SelectedCase, SelectedFallback, SelectedUncertain, Trace } from './Inspection.schema.js'
 import type { CaseTrace, CompiledPlan, TraceSelection } from './Inspection.schema.js'
 import type { Answers, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.blueprint.js'
-import { distinctNodes, evaluate, preview, statusIs, statusOf } from './pattern.blueprint.js'
+import { distinctNodes, evaluate, preview } from './pattern.blueprint.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import { CaseVerdict } from './select-case.workflow.js'
-import { PatternResult } from './Verdict.schema.js'
+import { PatternResult, statusIs, statusOf } from './Verdict.schema.js'
 
 /** One ordered case as the policy run consumes it. The builder wraps `run` once at the API edge, so the cell calls an Effect-returning closure with no lift. */
 export interface PolicyCase<Input, Out, Err, Req> {
@@ -245,6 +244,10 @@ const decisiveOf = <Input, Out, Err, Req>(
 ): Option.Option<Evaluated<Input, Out, Err, Req>> =>
   Arr.findFirst(read.evaluated, (entry) => statusOf(entry.result) !== 'Miss')
 
+/** The refusal a write answers when a decisive case the workflow promised cannot be read back: a typed failure, never a throw. */
+const commandRejectedOf = <Input, Out, Err, Req>(read: PolicyRead<Input, Out, Err, Req>): PolicyCommandRejected =>
+  new PolicyCommandRejected({ caseIds: Arr.map(read.evaluated, (entry) => entry.verdict.caseId) })
+
 // -------------------------------------------------------------------------------------------------
 // Policy
 // -------------------------------------------------------------------------------------------------
@@ -299,25 +302,34 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
     .decide(selectCase)
     .write({
       CaseSelected: (selected, read) =>
-        Effect.map(Option.getOrThrow(decisiveOf(read)).item.run(read.input), (value) => ({
-          value,
-          trace: traceOf(read, SelectedCase.make({ id: selected.caseId })),
-        })),
+        Effect.flatMap(
+          Effect.fromOption(decisiveOf(read), () => commandRejectedOf(read)),
+          (decisive) =>
+            Effect.map(decisive.item.run(read.input), (value) => ({
+              value,
+              trace: traceOf(read, SelectedCase.make({ id: selected.caseId })),
+            })),
+        ),
       FallbackSelected: (_selected, read) =>
         Effect.map(read.fallback(read.input), (value) => ({
           value,
           trace: traceOf(read, SelectedFallback.make({})),
         })),
       UncertainHandled: (selected, read) =>
-        Effect.map(
-          Option.getOrThrow(Option.fromNullishOr(read.uncertainHandler))(
-            read.input,
-            { caseId: selected.caseId, result: Option.getOrThrow(decisiveOf(read)).result },
-          ),
-          (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
+        Effect.flatMap(
+          Effect.fromOption(Option.fromNullishOr(read.uncertainHandler), () => commandRejectedOf(read)),
+          (handler) =>
+            Effect.flatMap(
+              Effect.fromOption(decisiveOf(read), () => commandRejectedOf(read)),
+              (decisive) =>
+                Effect.map(
+                  handler(read.input, { caseId: selected.caseId, result: decisive.result }),
+                  (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
+                ),
+            ),
         ),
       UncertainUnhandled: (refusal, _read) =>
-        Effect.fail(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
+        Effect.succeed(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
       CommandRejected: (rejected, read) =>
         Effect.fail(
           new PolicyCommandRejected({
@@ -327,7 +339,12 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
         ),
     })
 
-  const traced = (input: Input) => cell.run(input)
+  const traced = (input: Input) =>
+    Effect.flatMap(cell.run(input), (answer) =>
+      Match.value(answer).pipe(
+        Match.tag('UncertainMatchError', (error) => Effect.fail(error)),
+        Match.orElse((settled) => Effect.succeed(settled)),
+      ))
   const run = (input: Input) => Effect.map(traced(input), (finished) => finished.value)
   const props: Pick<Policy<Input, Out, Err, Req, S>, typeof PolicyTypeId | 'plan' | 'runWithTrace'> = {
     [PolicyTypeId]: PolicyTypeId,
@@ -337,20 +354,3 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
   const policy: Policy<Input, Out, Err, Req, S> = Object.assign((input: Input) => run(input), props)
   return policy
 }
-
-/** Run a policy and report which cases were evaluated and how each resolved: `policy.runWithTrace(input)` for `pipe`. */
-export const runWithTrace: {
-  <Input>(input: Input): <Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-  ) => PolicyTraced<Out, Err, Req, S>
-  <Input, Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-    input: Input,
-  ): PolicyTraced<Out, Err, Req, S>
-} = dual(
-  2,
-  <Input, Out, Err, Req, S extends Schema.Constraint>(
-    self: Policy<Input, Out, Err, Req, S>,
-    input: Input,
-  ): PolicyTraced<Out, Err, Req, S> => self.runWithTrace(input),
-)

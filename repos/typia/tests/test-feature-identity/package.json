@@ -1,8 +1,8 @@
 {
   "private": true,
   "name": "@typia/test-feature-identity",
-  "version": "15.0.0",
-  "description": "Integrity test of the typia test suites: feature naming, workspace names, and the equality oracle.",
+  "version": "15.0.1",
+  "description": "Integrity test of the typia test suites: feature naming, workspace names, and vacuous assertion oracles.",
   "scripts": {
     "start": "ttsx src/index.ts"
   },

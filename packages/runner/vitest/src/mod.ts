@@ -31,6 +31,8 @@ import * as testContextInternal from './internal/test-context.js'
 declare module 'vitest' {
   interface ProvidedContext {
     [checkDefaultsKey]?: ProvidedCheckDefaults
+    '@systemfsoftware/vitest:package'?: string
+    '@systemfsoftware/vitest:workspace-root'?: string
   }
 }
 
@@ -137,6 +139,16 @@ export namespace Vitest {
   export type BodyRefusal = RefuseSyncBody | RefuseAsyncBody | RefuseEffectBody
 
   /**
+   * A registration's options: Vitest's own, plus `rerun` — the body the leak-check second run runs in place of
+   * the registered one. Without it, a clean first run is followed by a second run of the registered body.
+   *
+   * @since 4.0.0
+   */
+  export interface TestOptions<Eff, AEff> extends V.TestOptions {
+    readonly rerun?: Body<Eff, AEff>
+  }
+
+  /**
    * A test lane: `it(name, function* ({ expect }) { ... })`. `R` is what the lane's own environment provides
    * besides the checks — its scope, and the services of the `layer` block it is written in.
    *
@@ -146,11 +158,11 @@ export namespace Vitest {
     <Eff, AEff>(
       name: NoInfer<Gate<RequirementOf<Eff>, Lane<R>>>,
       body: Body<Eff, AEff> | BodyRefusal,
-      timeout?: number | V.TestOptions,
+      timeout?: number | TestOptions<Eff, AEff>,
     ): void
     <Eff, AEff>(
       body: Body<Eff, AEff> | BodyRefusal,
-      timeout?: number | V.TestOptions,
+      timeout?: number | TestOptions<Eff, AEff>,
     ): (name: NoInfer<Gate<RequirementOf<Eff>, Lane<R>>>) => void
   }
 
@@ -493,3 +505,30 @@ export type { Check, Checks, Expect }
  * @since 4.0.0
  */
 export type { Asserted }
+
+/**
+ * The property-channel failures (R1, R2): refuted, exhausted, non-boolean, under-covered, self-model, the vacuous
+ * impostor verdict and the seed store's read failure. Each carries its own fields, so a consumer reads which property
+ * failed and why instead of parsing a message.
+ *
+ * @since 4.0.0
+ */
+export {
+  CoverageBelowMinimum,
+  NonBooleanVerdict,
+  PropertyExhausted,
+  PropertyRefuted,
+  ReplayNoLongerReproduces,
+  ReplayUnreadable,
+  SeedStoreUnreadable,
+  SelfModelLaw,
+  VacuousProperty,
+} from './internal/property/error.schema.js'
+
+/**
+ * The budget a run provides for its properties (KTD4): the check options minus `replay`, plus `record`, which asks
+ * the engine to write a failing seed to the seed store.
+ *
+ * @since 4.0.0
+ */
+export type { PropertyBudget } from './internal/property/defaults.js'

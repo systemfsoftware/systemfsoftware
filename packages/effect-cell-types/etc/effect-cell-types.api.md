@@ -26,7 +26,7 @@ export namespace Sandwich {
 
 // @public (undocumented)
 export namespace Workflow {
-    export { CheckCommandClass, CommandSchema, DecisionSchema, Inhabited, InstrumentationBrand, InstrumentationMap, InstrumentedCommandSchema, InvalidInstrumentationKey, InvalidInstrumentationValue, MadeWorkflow, MissingInstrumentationAnnotation, SingleVariantDecision, SpanAttributes, UninhabitedDecision, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemas, WorkflowSchemasKey, make };
+    export { CheckCommandClass, CommandSchema, DecisionSchema, ErrorClassDecision, Inhabited, InstrumentationBrand, InstrumentationMap, InstrumentedCommandSchema, InvalidInstrumentationKey, InvalidInstrumentationValue, MadeWorkflow, MissingInstrumentationAnnotation, SingleVariantDecision, SpanAttributes, UninhabitedDecision, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemas, WorkflowSchemasKey, make };
 }
 
 // (No @packageDocumentation comment for this package)

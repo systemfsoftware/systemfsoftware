@@ -9,8 +9,8 @@
  * reaches one fails loudly instead of reading a made-up answer.
  */
 import { Array as Arr, Context, Data, Effect, Layer, Ref, Stream } from 'effect'
+import { ShardId, Sharding } from 'effect/cluster'
 import type * as Scope from 'effect/Scope'
-import { ShardId, Sharding } from 'effect/unstable/cluster'
 
 /** A singleton name the run registered and never released. */
 export class RegistrationLeftHeld extends Data.TaggedError('RegistrationLeftHeld')<{

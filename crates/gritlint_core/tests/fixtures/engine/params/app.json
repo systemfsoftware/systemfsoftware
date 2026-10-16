@@ -1,8 +1,0 @@
-{
-  "name": "@acme/app",
-  "ssr": {
-    "resolve": {
-      "conditions": ["browser"]
-    }
-  }
-}

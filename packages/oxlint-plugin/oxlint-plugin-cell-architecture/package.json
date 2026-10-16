@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-cell-architecture",
   "license": "Apache-2.0",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -42,8 +42,6 @@
     "clean": "rimraf dist",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
@@ -55,13 +53,6 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/oxlint-import-origin": "workspace:^",
-    "@systemfsoftware/stryker-config": "workspace:^",
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
-    "@systemfsoftware/stryker-js": "catalog:stryker",
-    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
-    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

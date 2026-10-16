@@ -1,8 +1,8 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema, Stream } from 'effect'
-import { Rpc, RpcGroup } from 'effect/unstable/rpc'
-import * as RpcTest from 'effect/unstable/rpc/RpcTest'
+import { Rpc, RpcGroup } from 'effect/rpc'
+import * as RpcTest from 'effect/rpc/RpcTest'
 
 const Feature = makeFeature({ it })
 

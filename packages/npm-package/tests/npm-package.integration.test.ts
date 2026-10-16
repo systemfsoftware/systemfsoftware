@@ -331,4 +331,29 @@ Feature('npm-package in-memory file tree and tarball round-trip')
         }),
       ),
     )
+
+    scenario(
+      'Packing a tree whose absolute key names another package is refused',
+      Gherkin.Do.pipe(
+        Given('a file map whose absolute key sits outside the package prefix')('tree', () =>
+          Effect.succeed({
+            'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
+            '/node_modules/other/index.js': 'export {}',
+          })),
+        When('the tree is packed directly to tarball bytes')('attempt', (s) =>
+          Effect.sync(() => {
+            try {
+              packTree(s.tree, 'demo')
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
+            }
+          })),
+        Then('packing halts with an unexpected absolute path error')((s, expect) =>
+          expect(s.attempt).toMatchObject({
+            message: 'Unexpected absolute fixture path: /node_modules/other/index.js',
+          })
+        ),
+      ),
+    )
   })

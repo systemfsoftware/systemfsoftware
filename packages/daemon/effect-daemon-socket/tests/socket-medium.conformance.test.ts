@@ -139,6 +139,7 @@ const checkedAgainstTheLoopbackOracle = (
   Conformance.released(oracleLife(peer, notes), { probe: peer.released })
 
 Feature('Releasing what a supervised socket child held', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -170,13 +171,10 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
                 ending: endingOf(s.observed.notes),
               }),
               ({ frames, failed, ending }) =>
-                expect({
-                  report: s.checked,
-                  stoppedSteps: stoppedStepsOf(s.checked),
-                  failed,
-                  ending,
-                  frames,
-                }).toMatchObject({
+                expect(
+                  { report: s.checked, stoppedSteps: stoppedStepsOf(s.checked), failed, ending, frames },
+                  Conformance.render(s.checked),
+                ).toMatchObject({
                   report: { _tag: 'Pass' },
                   stoppedSteps: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
                   failed: Option.none(),
@@ -217,13 +215,10 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
                 ending: endingOf(s.observed.notes),
               }),
               ({ frames, failed, ending }) =>
-                expect({
-                  report: s.checked,
-                  stoppedSteps: stoppedStepsOf(s.checked),
-                  failed,
-                  ending,
-                  frames,
-                }).toMatchObject({
+                expect(
+                  { report: s.checked, stoppedSteps: stoppedStepsOf(s.checked), failed, ending, frames },
+                  Conformance.render(s.checked),
+                ).toMatchObject({
                   report: { _tag: 'Pass' },
                   stoppedSteps: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
                   failed: Option.none(),

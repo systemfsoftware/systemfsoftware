@@ -7,7 +7,7 @@ component: tooling
 severity: high
 category: docs/solutions/tooling-decisions
 symptoms:
-  - "check-changeset: no 'turbo' devDependency in the root importer of pnpm-lock.yaml"
+  - "changeset gate: no 'turbo' devDependency in the root importer of pnpm-lock.yaml"
   - "pnpm-lock.yaml's `importers:` block named no workspace project besides the root"
   - "ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE naming packageManagerDependencies"
   - "ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS naming \"config\" or \"confirmModulesPurge\""
@@ -18,7 +18,7 @@ applies_when:
 root_cause: dependency_major_change
 resolution_type: dependency_migration
 related_components:
-  - changeset gate (check-changeset)
+  - changeset gate (pnpm-release-management changeset-management)
   - mutation matrix (discover-mutation-targets)
   - release pipeline (pnpm change / pnpm version -r)
   - pnpm-workspace.yaml
@@ -132,7 +132,7 @@ An env-only stream yields `''` — no main document — so the version assertion
 Red before the repair, on the migrated tree (each reproduces the shipped symptom):
 
 - `pnpm install --frozen-lockfile` with the env document absent from `pnpm-lock.yaml` → `ERR_PNPM_FROZEN_LOCKFILE_WITH_OUTDATED_LOCKFILE`.
-- `deno run --allow-read scripts/guards/check-changeset.ts --selftest` → `live pin check: selftest: no 'turbo' devDependency in the root importer of pnpm-lock.yaml`; the live gate prints the same as an `::error::`.
+- The changeset gate's turbo pin check → `no 'turbo' devDependency in the root importer of pnpm-lock.yaml`; the live gate printed it as an `::error::`.
 - `discoverMutationTargets()` over the real lockfile → `pnpm-lock.yaml's importers: block named no workspace project besides the root.`
 
 Green after: the guard selftest's mechanism rows (a two-document fixture whose main document carries the turbo entry, plus an env-only stream that must fail closed), `pnpm test:scripts`, the live gate verdict, and mutation discovery over the real lockfile.

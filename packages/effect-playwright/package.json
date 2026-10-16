@@ -53,11 +53,11 @@
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.test.json"
   },
   "dependencies": {
-    "playwright-core": "catalog:"
+    "playwright-core": "1.63.0"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@playwright/test": "catalog:",
+    "@playwright/test": "1.63.0",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
@@ -76,7 +76,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@playwright/test": "catalog:",
+    "@playwright/test": "^1.63.0",
     "effect": "catalog:peers"
   },
   "peerDependenciesMeta": {

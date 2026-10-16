@@ -18,6 +18,16 @@ import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
+const privateTargetError = () => ({
+  messageId: 'noPrivateTarget',
+  data: {
+    name: NO_PRIVATE_TARGET_NAME,
+    expected: NO_PRIVATE_TARGET_EXPECTED,
+    actual: NO_PRIVATE_TARGET_ACTUAL,
+    fix: NO_PRIVATE_TARGET_FIX,
+  },
+})
+
 ruleTester.run('in-source-test-targets-private', inSourceTestTargetsPrivate, {
   valid: [
     {
@@ -59,6 +69,18 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_ExportedSchemaOperation_When_LawfulPropNamesItAsSubject',
+      code: `
+const LineStarts = S.Array(S.Number)
+export const positionAt = (lineStarts: LineStarts, offset: number): number => lineStarts[offset] ?? offset
+if (import.meta.vitest !== undefined) {
+  const { it } = await import('vitest')
+  it.prop('∀x_PositionAt_=Index', { of: [], subject: positionAt }, (law, [offset]) => law([0, 1], offset))
+}
+`,
+      filename: '/repo/pkg/src/line-map.schema.ts',
     },
     {
       name: 'Should_Allow_NoVitestBlock_When_FileHasNone',
@@ -176,15 +198,20 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
+    },
+    {
+      name: 'Should_Report_NoPrivateTarget_When_SchemaOperationReferencedOutsideSubjectSlot',
+      code: `
+const LineStarts = S.Array(S.Number)
+export const positionAt = (lineStarts: LineStarts, offset: number): number => lineStarts[offset] ?? offset
+if (import.meta.vitest !== undefined) {
+  const { it } = await import('vitest')
+  it.prop('∀x_PositionAt_=Index', { of: [] }, (_, [offset]) => positionAt([0, 1], offset))
+}
+`,
+      filename: '/repo/pkg/src/line-map.schema.ts',
+      errors: [privateTargetError()],
     },
     {
       // The exemption is keyed on the harness's own specifier, so it has to stop
@@ -198,15 +225,7 @@ if (import.meta.vitest !== void 0) {
   it('dummy', () => {})
 }`,
       filename: '/repo/pkg/src/Survivors.workflow.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NoPrivateTarget_When_OnlyImportedReferenced',
@@ -220,15 +239,7 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NoPrivateTarget_When_ReExportedBindingCountsAsExported',
@@ -243,15 +254,7 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NotModuleLevel_When_GuardNestedInFunction',
@@ -294,15 +297,7 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NoPrivateTarget_When_PrivateReferencedOnlyAfterTheGuard',
@@ -317,15 +312,7 @@ if (import.meta.vitest !== undefined) {
 export const fn = (): number => helper(1)
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NoPrivateTarget_When_PlainIfIsNotAVitestGuard',
@@ -342,15 +329,7 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
     {
       name: 'Should_Report_NoPrivateTarget_When_BlockHasNoPrivateTarget',
@@ -359,15 +338,7 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('vitest')
 }`,
       filename: '/repo/pkg/src/Survivors.workflow.ts',
-      errors: [{
-        messageId: 'noPrivateTarget',
-        data: {
-          name: NO_PRIVATE_TARGET_NAME,
-          expected: NO_PRIVATE_TARGET_EXPECTED,
-          actual: NO_PRIVATE_TARGET_ACTUAL,
-          fix: NO_PRIVATE_TARGET_FIX,
-        },
-      }],
+      errors: [privateTargetError()],
     },
   ],
 })

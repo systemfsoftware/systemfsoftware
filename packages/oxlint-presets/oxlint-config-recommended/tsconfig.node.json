@@ -8,6 +8,8 @@
   },
   "include": [
     "oxlint.config.ts",
-    "tsdown.config.ts"
+    "tsdown.config.ts",
+    "vitest.config.ts",
+    "outside-src-fixture"
   ]
 }

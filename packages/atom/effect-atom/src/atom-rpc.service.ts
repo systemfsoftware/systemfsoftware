@@ -12,20 +12,20 @@
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Headers from 'effect/http/Headers'
 import * as Layer from 'effect/Layer'
+import * as Reactivity from 'effect/reactivity/Reactivity'
 import type { ReadonlyRecord } from 'effect/Record'
+import type * as Rpc from 'effect/rpc/Rpc'
+import * as RpcClient from 'effect/rpc/RpcClient'
+import { RpcClientError } from 'effect/rpc/RpcClientError'
+import type * as RpcGroup from 'effect/rpc/RpcGroup'
+import type { RequestId } from 'effect/rpc/RpcMessage'
+import * as RpcSchema from 'effect/rpc/RpcSchema'
 import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type { NoInfer } from 'effect/Types'
-import * as Headers from 'effect/unstable/http/Headers'
-import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
-import type * as Rpc from 'effect/unstable/rpc/Rpc'
-import * as RpcClient from 'effect/unstable/rpc/RpcClient'
-import { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
-import type * as RpcGroup from 'effect/unstable/rpc/RpcGroup'
-import type { RequestId } from 'effect/unstable/rpc/RpcMessage'
-import * as RpcSchema from 'effect/unstable/rpc/RpcSchema'
 import type { SetParameterType, SetReturnType } from 'type-fest'
 import * as AsyncResult from './async-result.js'
 import { schemaCodec } from './async-result.js'
@@ -55,6 +55,18 @@ const orElse = <A>(value: A | undefined, fallback: () => A): A => {
     return fallback()
   }
   return value
+}
+
+const protocolLayer = <I, S, E, R, ROut, E2>(
+  service: Context.Key<I, S>,
+  make: Effect.Effect<S, E, R>,
+  protocol: Layer.Layer<ROut, E2> | ((get: Atom.AtomContext) => Layer.Layer<ROut, E2>),
+) => {
+  const layer = Layer.effect(service, make)
+  if (typeof protocol === 'function') {
+    return (get: Atom.AtomContext) => Layer.provide(layer, Layer.orDie(protocol(get)))
+  }
+  return Layer.provide(layer, Layer.orDie(protocol))
 }
 
 const isObject = (u: unknown): u is object => {
@@ -311,29 +323,14 @@ export const Service = <Self>() =>
     RpcClient.RpcClient.Flat<Rpcs, RpcClientError>
   >()(id)
 
-  const layer = Layer.effect(
-    service,
-    orElse(options.makeEffect, () =>
-      RpcClient.make(options.group, {
-        ...options,
-        flatten: true,
-      })),
-  )
-
-  const protocolFnToLayer = (
-    protocol: (get: Atom.AtomContext) => Layer.Layer<Exclude<NoInfer<RM>, Scope.Scope>, ER>,
-  ) =>
-  (get: Atom.AtomContext) => Layer.provide(layer, Layer.orDie(protocol(get)))
-
-  const protocolToLayer = (protocol: typeof options.protocol) => {
-    if (typeof protocol === 'function') {
-      return protocolFnToLayer(protocol)
-    }
-    return Layer.provide(layer, Layer.orDie(protocol))
-  }
+  const make = orElse(options.makeEffect, () =>
+    RpcClient.make(options.group, {
+      ...options,
+      flatten: true,
+    }))
 
   const runtime = orElse(options.runtime, () => Atom.context())(
-    protocolToLayer(options.protocol),
+    protocolLayer(service, make, options.protocol),
   )
 
   const getRpc = (tag: Rpc.Tag<Rpcs>): Rpc.AnyWithProps => requireRpc(options.group.requests.get(tag), tag)

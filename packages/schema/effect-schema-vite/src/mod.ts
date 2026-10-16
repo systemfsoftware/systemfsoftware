@@ -6,6 +6,7 @@ import {
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Plugin, ResolvedConfig } from 'vite'
+import { LawSuiteSource } from './LawSuiteSource.schema.js'
 
 /** @since 0.1.0 */
 export interface InlineSchemaTestsOptions {
@@ -57,14 +58,14 @@ const schemaLabelOf = (s: FoundSchema, count: number, specifier: string): string
   return s.name
 }
 
-export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
+export const generateSchemaLaws = (lawFilePath: string, srcDir: string): LawSuiteSource => {
   const schemas = findExportedSchemas(srcDir)
-  if (schemas.length === 0) return '// no schemas found\nexport {}\n'
+  if (schemas.length === 0) return LawSuiteSource.make('// no schemas found\nexport {}\n')
 
   const baseDir = dirname(lawFilePath)
   const nameCount = buildNameCounts(schemas)
 
-  return [
+  return LawSuiteSource.make([
     `import { recursionLaws, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
     schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(formatSpecifier(baseDir, s.filePath))}`)
       .join('\n'),
@@ -77,7 +78,7 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
         return `ruleOfSchemas(${quote(label)}, schema_${i})\nrecursionLaws(${quote(label)}, schema_${i})`
       })
       .join('\n'),
-  ].join('\n')
+  ].join('\n'))
 }
 
 /**

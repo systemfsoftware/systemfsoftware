@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "agentGuidance": false,
   "globalDependencies": [
     "scripts/tools/patch-tsgo-if-needed.mjs"
   ],
@@ -13,6 +14,7 @@
       "outputLogs": "new-only",
       "inputs": [
         "src/**",
+        "lib/**",
         "tsconfig.json",
         "tsconfig.build.json",
         "tsconfig.*.json",
@@ -57,7 +59,6 @@
         "vitest.config.*",
         "src/**/*.test.ts",
         "src/**/*.spec.ts",
-        "$TURBO_ROOT$/packages/toolchain/vitest-config/lib/**",
         "!**/README.md",
         "!**/AGENTS.md",
         "!**/CHANGELOG.md",
@@ -69,37 +70,17 @@
         "build"
       ],
       "outputs": [
-        "coverage/**"
+        "coverage/**",
+        "reports/**"
       ],
       "env": [
         "NODE_ENV",
         "CI",
         "AGENT",
         "COVERAGE",
-        "CONFORMANCE_PROFILE",
-        "VITEST_LANE"
+        "CONFORMANCE_PROFILE"
       ],
       "cache": true
-    },
-    "test:contract": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "vitest.config.ts",
-        "vitest-kvm-preflight.ts",
-        "__tests__/**"
-      ],
-      "outputLogs": "new-only",
-      "dependsOn": [
-        "^build",
-        "build"
-      ],
-      "outputs": [],
-      "env": [
-        "CI",
-        "DOCKER_HOST",
-        "TESTCONTAINERS_RYUK_DISABLED"
-      ],
-      "cache": false
     },
     "test:types": {
       "inputs": [

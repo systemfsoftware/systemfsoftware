@@ -71,7 +71,7 @@ ${GUARD_END}`,
     },
     {
       name: 'Should_StaySilent_When_ArbitraryIsArbitrarySchemaDerivation',
-      code: `import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+      code: `import * as Arbitrary from 'effect/Arbitrary'
 ${GUARD}
 it.prop('p', { of: [Arbitrary.schema(UserSchema)], subject: (u) => u, runs: 100 }, (s, [v]) => v !== null)
 ${GUARD_END}`,
@@ -202,7 +202,7 @@ ${GUARD_END}`,
     {
       name: 'Should_StaySilent_When_ArbitrarySchemaDerivesFromADomainBinding',
       code: `import { Schema } from 'effect'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+import * as Arbitrary from 'effect/Arbitrary'
 const Money = Schema.String
 ${GUARD}
 it.prop('p', { of: [Arbitrary.schema(Money)], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)
@@ -211,7 +211,7 @@ ${GUARD_END}`,
     },
     {
       name: 'Should_StaySilent_When_ArbitrarySchemaDerivesFromAnImportedSchema',
-      code: `import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+      code: `import * as Arbitrary from 'effect/Arbitrary'
 import { Money } from './money.schema.js'
 ${GUARD}
 it.prop('p', { of: [Arbitrary.schema(Money).filter((s) => s.length > 0)], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)
@@ -451,7 +451,7 @@ ${GUARD_END}`,
     {
       name: 'Should_Report_When_ArbitrarySchemaRootIsAStockMember',
       code: `import { Schema } from 'effect'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+import * as Arbitrary from 'effect/Arbitrary'
 ${GUARD}
 it.prop('p', { of: [Arbitrary.schema(Schema.String).filter((s) => s.length > 0)], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)
 ${GUARD_END}`,
@@ -481,7 +481,7 @@ ${GUARD_END}`,
     {
       name: 'Should_Report_When_ArbitrarySchemaRootIsAStockComposition',
       code: `import { Schema } from 'effect'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+import * as Arbitrary from 'effect/Arbitrary'
 ${GUARD}
 it.prop('p', { of: [Arbitrary.schema(Schema.Union([Schema.Literal('a'), Schema.String]))], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)
 ${GUARD_END}`,

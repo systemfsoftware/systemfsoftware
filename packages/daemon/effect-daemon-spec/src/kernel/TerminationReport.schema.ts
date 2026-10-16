@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Cause, Option, Schema } from 'effect'
 import { ChildId, Generation, ProbeThreshold } from './SupervisionLimits.schema.js'
 
 /**
@@ -51,3 +51,11 @@ export type IntensityExceededExit = typeof IntensityExceededExit.Type
 
 export const SupervisorExit = Schema.Union([RequestedExit, IntensityExceededExit])
 export type SupervisorExit = typeof SupervisorExit.Type
+
+export const abnormalReasonOfCause = <Failure>(cause: Cause.Cause<Failure>): TerminationReason => ({
+  _tag: 'Abnormal',
+  report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
+})
+
+export const terminationReasonOfCause = (cause: Cause.Cause<TerminationReason>): TerminationReason =>
+  Option.getOrElse(Cause.findErrorOption(cause), () => abnormalReasonOfCause(cause))

@@ -8,7 +8,6 @@
         "$TURBO_DEFAULT$",
         "vitest.config.ts",
         "vitest.config.*",
-        "$TURBO_ROOT$/packages/toolchain/vitest-config/lib/**",
         "$TURBO_ROOT$/pnpm-lock.yaml",
         "!**/README.md",
         "!**/AGENTS.md",

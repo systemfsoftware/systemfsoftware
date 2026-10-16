@@ -8,6 +8,7 @@ const apiExtractorRollups: Record<string, string> = {
 }
 
 const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  delete exports['./no-inline-suppression']
   for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
@@ -28,6 +29,7 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/index.ts',
+    'no-inline-suppression': './src/no-inline-suppression.ts',
   },
   format: 'esm',
   dts: true,
@@ -36,6 +38,7 @@ export default defineConfig({
   exports: {
     devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,
+    bin: { 'no-inline-suppression': './src/no-inline-suppression.ts' },
   },
   deps: {
     onlyBundle: false,

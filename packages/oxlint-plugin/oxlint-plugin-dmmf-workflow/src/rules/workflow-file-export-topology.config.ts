@@ -15,7 +15,7 @@ export const MISSING_FIX =
 export const EXTRA_ACTUAL = 'a second non-schema value export from this workflow file' as const
 
 export const EXTRA_FIX =
-  'delete the extra export, or move it into a sibling module that is not a *.workflow.ts and import it from there; do not re-export it from this file' as const
+  'delete the extra export, or move it to the home of the type it operates on (an operation over pure data goes into the *.schema.ts file that declares that type) and import it from there; do not re-export it from this file' as const
 
 export const REEXPORT_EXPECTED =
   'a <stem>.workflow.ts file to export what it declares, never a binding that arrived from another module' as const

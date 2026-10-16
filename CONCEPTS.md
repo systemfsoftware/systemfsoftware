@@ -122,6 +122,14 @@ A property relating a system's own output on a seed input to its output on a tra
 
 _Gate:_ expressed through the same harness and supervisor as a Differential Test.
 
+### Failure Record
+
+What a failing spec prints for the agent that has to fix it. It leads with where the error was raised outside the spec libraries, then lists the steps up to the failing one and the cell decisions each step caused, and ends with a rerun command. It carries a replay value only when a generator chose the run. Rendered by the spec runner alone, from the spans the steps and cells ran in.
+
+### Failure Corpus
+
+A spec family's set of fixtures with a known injected defect, rendered in-process through the runner. It proves that each failure record names the defect's file, and that the raising frame comes first when the failure has one.
+
 ---
 
 ## Schema & Property Law
@@ -186,16 +194,36 @@ _Gate:_ Turbo task cache configuration in `turbo.json`.
 
 ---
 
+## Mutation Testing
+
+### Mutated Set
+
+The files mutation testing mutates: every workflow file (a file named `*.workflow.ts` that holds a [Workflow](#workflow)) under a package's `src/` directory, outside its test directories (`__tests__`, `__fixtures__`, `__mocks__`), and nothing else (no schema or shell file). It is defined once and inherited untouched by every package's mutation config. A package with no such file carries no mutation script and is not mutated.
+
+_Gate:_ the Mutation plan, the admission step before any mutation run (`test-timings plan --task mutation`), refuses a package whose config sets its own mutate patterns, alters the shared ones, sets an `extends`, adds an ignore pattern, sets `since`, moves a Stryker output path, or cannot be loaded; that holds a workflow file under a directory Stryker's crawl drops (a shared ignore pattern, `node_modules` or `*.tsbuildinfo`); whose installed shared set holds a test file (a `@systemfsoftware/stryker-config` older than the plan); whose mutation script is anything other than `stryker run`; that has no workflow file; that holds a workflow file but no mutation script; or that holds a workflow file on a hidden path (a path segment starting with `.`), which Stryker would mutate though the shared set skips it.
+
+### Job Shape
+
+How a mutation job runs a package: whole, or as one shard of several. The Mutation plan admits a package before it decides which shape the package gets, so whatever judges a package's mutation config must judge it both as a whole-package run and as a shard, and judge a split package again under every shard it is given.
+
+_Gate:_ the Mutation plan judges each config twice, once as a whole-package run and once as a single shard that owns every file, and, for a package it splits into shards, once more under each shard; it refuses the package if any judgment refuses it, or if the shards of a run, one for a whole-package run, do not between them mutate each shared file exactly once.
+
+---
+
 ## Release Pipeline
 
 ### Intent Versioning
 
 The pnpm-native release model where semantic version changes are authored as intent files in `.changeset/*.md`. Consumed during release workflows by `pnpm version -r` to update `package.json` files and generate changelogs.
 
-_Gate:_ `.github/workflows/changeset-check.yml` executing `scripts/guards/check-changeset.ts`.
+_Gate:_ `.github/workflows/changeset-check.yml`, calling pnpm-release-management's reusable changeset check at a pinned commit.
 
 ### Release Set
 
-The exact set of non-private workspace packages whose current version has not yet been published to the npm registry. Computed dynamically by probing the registry before publishing.
+The exact set of non-private workspace packages whose current version has not
+yet been released — a version with no corresponding `<pkg>@vX.Y.Z` git tag.
+Computed from git tags, not a registry: these packages are distributed as Nix
+flake outputs consumed from git refs, so the tag is the durable record that a
+version shipped.
 
-_Gate:_ `scripts/tools/publish-set.ts` run during CI release dispatch.
+_Gate:_ `scripts/tools/cycle.ts` (via `scripts/tools/plan-release.ts`) computes the set during CI release dispatch.

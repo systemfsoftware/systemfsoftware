@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-test-discipline",
   "license": "Apache-2.0",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -27,6 +27,9 @@
     "typescript"
   ],
   "type": "module",
+  "bin": {
+    "no-inline-suppression": "./src/no-inline-suppression.ts"
+  },
   "files": [
     "dist"
   ],
@@ -43,8 +46,6 @@
     "clean": "rimraf dist",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
@@ -52,18 +53,12 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-    "@systemfsoftware/stryker-config": "workspace:^",
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
-    "@systemfsoftware/stryker-js": "catalog:stryker",
-    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
-    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -90,6 +85,9 @@
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
+    },
+    "bin": {
+      "no-inline-suppression": "./dist/no-inline-suppression.mjs"
     }
   }
 }

@@ -1,7 +1,7 @@
 import * as NodeSocketServer from '@effect/platform-node/NodeSocketServer'
 import { Context, Effect, Exit, Layer, Ref, Scope } from 'effect'
-import type * as NetAddress from 'effect/unstable/net/NetAddress'
-import type * as Socket from 'effect/unstable/socket/Socket'
+import type * as NetAddress from 'effect/net/NetAddress'
+import type * as Socket from 'effect/socket/Socket'
 
 export const LOOPBACK = '127.0.0.1'
 export const OK_REPLY = 'HTTP/1.0 200 OK'
@@ -31,10 +31,10 @@ export const guestService = (initialReply: string = OK_REPLY): Layer.Layer<Guest
   Layer.effect(
     GuestService,
     Effect.gen(function*() {
-      const scope = yield* Effect.scope
+      const scope = yield* Scope.fork(yield* Effect.scope)
       const reply = yield* Ref.make(initialReply)
-      const server = yield* NodeSocketServer.make({ host: LOOPBACK, port: 0 }).pipe(Effect.orDie)
-      yield* Effect.forkScoped(server.run(answeredWith(reply)))
+      const server = yield* NodeSocketServer.make({ host: LOOPBACK, port: 0 }).pipe(Effect.orDie, Scope.provide(scope))
+      yield* server.run(answeredWith(reply)).pipe(Effect.forkIn(scope))
       return {
         hostPort: portOf(server.address),
         replyWith: (statusLine: string) => Ref.set(reply, statusLine),

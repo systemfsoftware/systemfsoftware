@@ -89,14 +89,23 @@ export const UNTIMED = { timeout: 0 } as const
  * drives it in its own run, so the check ledger and the running Vitest task are handed over), the
  * run is scoped, and a failure reports its seed and decision path.
  */
-export const exploredProgram = <A, E>(
+const exploredWith = <A, E>(
+  explorer: (scoped: Effect.Effect<A, E>) => Promise<void>,
   program: Effect.Effect<A, E, Scope.Scope>,
 ): Effect.Effect<void, E, Asserted> =>
   Effect.gen(function*() {
     const binding = yield* captureRunBinding
     const bound = binding.bind(program)
-    return yield* Effect.promise(() => bound.pipe(scopedBody, KernelCase.explore))
+    return yield* Effect.promise(() => bound.pipe(scopedBody, explorer))
   })
+
+export const exploredProgram = <A, E>(
+  program: Effect.Effect<A, E, Scope.Scope>,
+): Effect.Effect<void, E, Asserted> => exploredWith(KernelCase.explore, program)
+
+export const exploredOnceProgram = <A, E>(
+  program: Effect.Effect<A, E, Scope.Scope>,
+): Effect.Effect<void, E, Asserted> => exploredWith(KernelCase.exploreOnce, program)
 
 /**
  * A live-declared case runs on the live clock as before; a case without a

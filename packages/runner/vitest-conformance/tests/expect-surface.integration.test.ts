@@ -89,11 +89,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test that writes a check and never hands it over, beside a test that observes nothing')(
           'fixtures',
-          () => Effect.succeed(['expect/yielded.test.ts']),
+          () => Effect.succeed(['expect/yielded.runner.test.ts']),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('each is refused for the check the runner did not judge')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/yielded.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/yielded.runner.test.ts', [
             [
               'yielded checks Should_RefuseTheUnyieldedCheck_When_CheckIsWrittenButNotYielded',
               refusal.unyielded,
@@ -111,7 +111,7 @@ Feature('Fork expect surface')
           'a test that looks twice, a test that lets the clock move between looks, and a test that looks once per row',
         )(
           'fixtures',
-          () => Effect.succeed(['expect/one-state.test.ts']),
+          () => Effect.succeed(['expect/one-state.runner.test.ts']),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('the second look and the per-row looks are refused, and the clock-separated one passes')((s, expect) => {
@@ -120,7 +120,7 @@ Feature('Fork expect surface')
           const loop =
             'one check per observed state Should_RefuseTheCheckInALoop_When_EachItemOfTheSameStateChecksItself'
           return expect({
-            suite: fileOf(s.report, 'expect/one-state.test.ts').status,
+            suite: fileOf(s.report, 'expect/one-state.runner.test.ts').status,
             second: { status: assertionOf(s.report, second).status, message: messagesOf(s.report, second) },
             separated: { status: assertionOf(s.report, separated).status },
             loop: { status: assertionOf(s.report, loop).status, message: messagesOf(s.report, loop) },
@@ -141,11 +141,11 @@ Feature('Fork expect surface')
           'tests claiming how many items there are, that one is present, what kind of value it is, one key, and that it is not null',
         )(
           'fixtures',
-          () => Effect.succeed(['expect/vocabulary.test.ts']),
+          () => Effect.succeed(['expect/vocabulary.runner.test.ts']),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('each is refused by name with its rewrite')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/vocabulary.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/vocabulary.runner.test.ts', [
             ['the curated vocabulary Should_RefuseToHaveLength_When_TheClaimIsHowMany', refusal.toHaveLength],
             ['the curated vocabulary Should_RefuseToBeDefined_When_TheClaimIsPresence', refusal.toBeDefined],
             ['the curated vocabulary Should_RefuseToBeTypeOf_When_TheClaimIsTheKindOfValue', refusal.toBeTypeOf],
@@ -163,11 +163,11 @@ Feature('Fork expect surface')
           'tests claiming that something throws, that a predicate holds, and that a shape matches, each with nothing said',
         )(
           'fixtures',
-          () => Effect.succeed(['expect/needs-argument.test.ts']),
+          () => Effect.succeed(['expect/needs-argument.runner.test.ts']),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('each is refused with the specific argument it is missing')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/needs-argument.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/needs-argument.runner.test.ts', [
             ['matchers that need their specific argument Should_RefuseToThrow_When_NoErrorIsNamed', refusal.toThrow],
             [
               'matchers that need their specific argument Should_RefuseToSatisfy_When_NoReasonIsGiven',
@@ -187,11 +187,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test claiming that a comparison is true')(
           'fixtures',
-          () => Effect.succeed(['expect/boolean-actual.test.ts']),
+          () => Effect.succeed(['expect/boolean-actual.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('it is refused with the two values to pass instead')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/boolean-actual.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/boolean-actual.runner.test.ts', [
             [
               'a boolean actual Should_RefuseTheBooleanActual_When_TheCheckCanOnlyReportTrue',
               refusal.booleanActual,
@@ -206,7 +206,7 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test whose only claim passes and a test whose claim fails before a write')(
           'fixtures',
-          () => Effect.succeed(['expect/kept-matcher.test.ts']),
+          () => Effect.succeed(['expect/kept-matcher.runner.test.ts']),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('the passing claim satisfies the check gate and the failing one stops the write')((s, expect) => {
@@ -214,7 +214,7 @@ Feature('Fork expect surface')
           const stopped = 'a kept matcher Should_StopTheTest_When_TheKeptMatcherFails'
           const messages = messagesOf(s.report, stopped)
           return expect({
-            suite: fileOf(s.report, 'expect/kept-matcher.test.ts').status,
+            suite: fileOf(s.report, 'expect/kept-matcher.runner.test.ts').status,
             kept: { status: assertionOf(s.report, kept).status },
             stopped: { status: assertionOf(s.report, stopped).status, message: messages },
             afterFailure: messages,
@@ -233,11 +233,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('one test over two rows of input')(
           'fixtures',
-          () => Effect.succeed(['expect/each.test.ts']),
+          () => Effect.succeed(['expect/each.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('each row is judged once and the file passes')((s, expect) => {
-          const file = fileOf(s.report, 'expect/each.test.ts')
+          const file = fileOf(s.report, 'expect/each.runner.test.ts')
           return expect({
             status: file.status,
             statuses: file.assertionResults.map((row) => row.status),
@@ -259,11 +259,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test that hands a failing check to a background task and waits for it')(
           'fixtures',
-          () => Effect.succeed(['expect/forked-fiber.test.ts']),
+          () => Effect.succeed(['expect/forked-fiber.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('the test fails with the check diff')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/forked-fiber.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/forked-fiber.runner.test.ts', [
             ['a check in a forked fiber Should_FailTheTest_When_ChildFiberCheckFails', 'expected 1 to deeply equal 2'],
           ])
         ),
@@ -277,7 +277,7 @@ Feature('Fork expect surface')
           'a test whose failing check sits in a block that always runs, under a service layer that releases when the test ends',
         )(
           'run',
-          () => runProbes({ globs: ['expect/finally.test.ts'] }),
+          () => runProbes({ globs: ['expect/finally.runner.test.ts'] }),
         ),
         Then('the block and the release both ran, and the write after the check did not')((s, expect) =>
           expect({
@@ -293,11 +293,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test whose body is a plain function')(
           'fixtures',
-          () => Effect.succeed(['expect/sync-body.test.ts']),
+          () => Effect.succeed(['expect/sync-body.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('it is refused with the generator to write instead')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/sync-body.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/sync-body.runner.test.ts', [
             ['Should_RefuseTheSyncBody_When_BodyIsNotAGenerator', refusal.syncBody],
           ])
         ),
@@ -311,9 +311,9 @@ Feature('Fork expect surface')
           'fixtures',
           () =>
             Effect.succeed([
-              'expect/habit.test.ts',
-              'expect/habit-scoped.test.ts',
-              'expect/habit-scoped-live.test.ts',
+              'expect/habit.runner.test.ts',
+              'expect/habit-scoped.runner.test.ts',
+              'expect/habit-scoped-live.runner.test.ts',
             ]),
         ),
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
@@ -324,9 +324,9 @@ Feature('Fork expect surface')
               message: fileOf(s.report, stem).message,
             })
             return expect({
-              effect: fileAt('expect/habit.test.ts'),
-              scoped: fileAt('expect/habit-scoped.test.ts'),
-              scopedLive: fileAt('expect/habit-scoped-live.test.ts'),
+              effect: fileAt('expect/habit.runner.test.ts'),
+              scoped: fileAt('expect/habit-scoped.runner.test.ts'),
+              scopedLive: fileAt('expect/habit-scoped-live.runner.test.ts'),
             }).toMatchObject({
               effect: { status: 'failed', message: expect.stringContaining(refusal.effectLane) },
               scoped: { status: 'failed', message: expect.stringContaining(refusal.scopedLane) },
@@ -342,11 +342,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('checks that read a refused helper but never call it')(
           'fixtures',
-          () => Effect.succeed(['expect/statics.test.ts']),
+          () => Effect.succeed(['expect/statics.runner.test.ts']),
         ),
         When('the suite runs those checks')('report', (s) => runFixtures(s.fixtures)),
         Then('each read is refused with the rewrite that replaces the helper')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/statics.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/statics.runner.test.ts', [
             [
               'the refused statics Should_RefuseTheAnythingStatic_When_ItIsReadButNotCalled',
               refusal.anything,
@@ -363,11 +363,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a suite that shares setup through a per-test hook')(
           'fixtures',
-          () => Effect.succeed(['expect/hooks.test.ts']),
+          () => Effect.succeed(['expect/hooks.runner.test.ts']),
         ),
         When('the suite runs that suite')('report', (s) => runFixtures(s.fixtures)),
         Then('the suite refuses the hook with the fresh service layer to use instead')((s, expect) =>
-          refusedFileCheck(expect, s.report, 'expect/hooks.test.ts', refusal.hook)
+          refusedFileCheck(expect, s.report, 'expect/hooks.runner.test.ts', refusal.hook)
         ),
       ),
     )
@@ -377,11 +377,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test that hands over a real check and also asserts through an expect it imported from the runner')(
           'fixtures',
-          () => Effect.succeed(['expect/raw-vitest-expect.test.ts']),
+          () => Effect.succeed(['expect/raw-vitest-expect.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('the imported expect is refused and the callback is named instead')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/raw-vitest-expect.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/raw-vitest-expect.runner.test.ts', [
             [
               'an expect imported from vitest Should_RefuseTheRawExpect_When_AnImportedExpectRunsBesideARealCheck',
               refusal.rawExpect,
@@ -396,11 +396,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a test registered by the runner rather than the library')(
           'fixtures',
-          () => Effect.succeed(['expect/foreign-it.test.ts']),
+          () => Effect.succeed(['expect/foreign-it.runner.test.ts']),
         ),
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('it is refused with the library to import the test from')((s, expect) =>
-          refusedSuiteCheck(expect, s.report, 'expect/foreign-it.test.ts', [
+          refusedSuiteCheck(expect, s.report, 'expect/foreign-it.runner.test.ts', [
             ['Should_RefuseTheForeignRegistration_When_VitestRegistersTheTest', refusal.foreignIt],
           ])
         ),
@@ -412,12 +412,12 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a property that fails past a hundred')(
           'fixtures',
-          () => Effect.succeed(['expect/shrink.property.test.ts']),
+          () => Effect.succeed(['expect/shrink.property.runner.test.ts']),
         ),
         When('the suite runs that property')('report', (s) => runFixtures(s.fixtures)),
         Then('the counterexample is the boundary value')((s, expect) =>
           expect({
-            suite: fileOf(s.report, 'expect/shrink.property.test.ts').status,
+            suite: fileOf(s.report, 'expect/shrink.property.runner.test.ts').status,
             boundary: messagesOf(s.report, '∀n_ShrinkToTheBoundary_=Boundary'),
           }).toMatchObject({
             suite: 'failed',

@@ -6,7 +6,7 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Array as Arr, Duration, Effect, Layer, Match, Option, Schema } from 'effect'
 import type { Scope } from 'effect'
 import type * as PlatformError from 'effect/PlatformError'
-import type { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
+import type { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import { fixturePath } from './__fixtures__/process-fixtures.js'
 import {
   ChildReportedOtherThanShutdown,
@@ -114,6 +114,7 @@ const liveReason =
   'each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run'
 
 Feature('Supervising a child process until the scope that owns it closes', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live(liveReason)
   .body(({ scenario }) => {
     scenario(
@@ -133,7 +134,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
         Then('no child is left running and every stop was the shutdown it promised')((s, expect) =>
           Effect.provide(startedChildrenIn, s.environment).pipe(
             Effect.map((started) =>
-              expect({ report: s.checked, started }).toMatchObject({
+              expect({ report: s.checked, started }, Conformance.render(s.checked)).toMatchObject({
                 report: { _tag: 'Pass' },
                 started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
               })
@@ -163,7 +164,7 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
         Then('readiness waited for the child and no child is left running')((s, expect) =>
           Effect.provide(startedChildrenIn, s.environment).pipe(
             Effect.map((started) =>
-              expect({ report: s.checked, started }).toMatchObject({
+              expect({ report: s.checked, started }, Conformance.render(s.checked)).toMatchObject({
                 report: { _tag: 'Pass' },
                 started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
               })

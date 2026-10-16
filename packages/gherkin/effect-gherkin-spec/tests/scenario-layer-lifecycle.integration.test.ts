@@ -40,8 +40,7 @@ const scenarioWorkspaceLayer = Layer.effect(
 const Feature = makeFeature({ it })
 
 Feature('A scenario fixture is opened fresh for each scenario')
-  .withLayer(lifecycleLayer)
-  .withScenarioLayer(scenarioWorkspaceLayer)
+  .withScenarioLayer(Layer.provideMerge(scenarioWorkspaceLayer, lifecycleLayer))
   .body(({ scenario }) => {
     scenario(
       'The first scenario opens its own workspace and nothing has closed yet',

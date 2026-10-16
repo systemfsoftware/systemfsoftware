@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { lanesOf } from './lane.js'
 import {
   meta,
   NO_LAYER_IN_FEATURE_ACTUAL,
@@ -7,7 +8,6 @@ import {
   NO_LAYER_IN_FEATURE_FIX,
   NO_LAYER_IN_FEATURE_NAME,
 } from './no-pseudo-gherkin-unit-tests.config.js'
-import { basenameOf, isBehaviourBasename } from './path.js'
 
 export type MessageIds = 'noLayerInFeature'
 
@@ -51,10 +51,14 @@ const findRootFeatureCall = (callNode: ESTree.CallExpression): ESTree.CallExpres
 export const noPseudoGherkinUnitTests = defineRule({
   meta,
   create(context: Context) {
-    if (!isBehaviourBasename(basenameOf(context.filename))) return {}
+    let behaviour = false
 
     return {
+      Program() {
+        behaviour = lanesOf(context).has('behaviour')
+      },
       CallExpression(node: ESTree.CallExpression) {
+        if (!behaviour) return
         if (node.callee.type === 'MemberExpression' && node.callee.property.type === 'Identifier') {
           if (node.callee.property.name === 'body') {
             const rootFeature = findRootFeatureCall(node)

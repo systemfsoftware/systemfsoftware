@@ -30,7 +30,7 @@ const sharedLayer = Layer.effect(
 
 const scenarioLayer: Layer.Layer<Lens, never, Lifecycle | OtelTracer.OtelTracer> = Layer.effect(
   Lens,
-  Effect.map(Effect.flatMap(Lifecycle, (lifecycle) => lifecycle.next), (build) => ({ build })),
+  Effect.map(Effect.flatMap(Lifecycle, (lifecycle) => lifecycle.peek), (build) => ({ build })),
 )
 
 const LensSpan = Span.declare({
@@ -75,18 +75,14 @@ TraceSuite('suite layers')
   .withLayer(Layer.merge(sharedLayer, harness))
   .withScenarioLayer(Layer.merge(scenarioLayer, harness))
   .body(({ Case }) => {
-    Case('each case rebuilds the scenario layer over a fresh shared lifecycle', lensContract(1), undefined)
-    Case('the next case rebuilds both layers again, so it still sees the first build', lensContract(1), undefined)
+    Case('each case builds its scenario layer over the suite-wide lifecycle', lensContract(0), undefined)
+    Case('the next case reads the same lifecycle, which no scenario layer advanced', lensContract(0), undefined)
   })
 
 TraceSuite('suite shared layer alone')
-  .withLayer(Layer.merge(sharedLayer, harness))
+  .withLayer(Layer.merge(Layer.succeed(Lens, { build: 7 }), harness))
   .body(({ Case }) => {
-    Case(
-      'the suite-wide layer carries the harness for a body without a scenario layer',
-      lifecycleContract(1),
-      undefined,
-    )
+    Case('the suite-wide layer carries the harness for a body without a scenario layer', lensContract(7), undefined)
   })
 
 const sharedProbeRuntime = harness.pipe(

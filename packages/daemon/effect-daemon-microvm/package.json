@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-microvm",
   "license": "Apache-2.0",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -39,8 +39,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
-    "test": "vitest run --project unit --project conformance",
-    "test:contract": "vitest run --project contract",
+    "test": "vitest run --project unit --project integration",
     "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
@@ -48,6 +47,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-daemon-conformance": "workspace:^",
     "@systemfsoftware/effect-daemon-spec": "workspace:^",
     "@systemfsoftware/effect-microsandbox": "workspace:^",
@@ -59,6 +59,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/microvm-test-images": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
@@ -66,7 +67,6 @@
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

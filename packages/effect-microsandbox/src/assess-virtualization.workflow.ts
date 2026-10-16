@@ -2,6 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Schema } from 'effect'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import { ProbeObservation } from './classify-probe-observation.workflow.js'
 
 const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-microsandbox/VirtualizationVerdict')
 type VerdictTypeId = typeof VerdictTypeId
@@ -25,37 +26,6 @@ export class VirtualizationRefused extends Schema.TaggedClass<VirtualizationRefu
 
 export const VirtualizationVerdict = Schema.Union([VirtualizationEligible, VirtualizationRefused])
 export type VirtualizationVerdict = typeof VirtualizationVerdict.Type
-
-export const KvmAccessible = Schema.TaggedStruct('KvmAccessible', {})
-export type KvmAccessible = typeof KvmAccessible.Type
-
-export const KvmDenied = Schema.TaggedStruct('KvmDenied', { topology: Schema.String })
-export type KvmDenied = typeof KvmDenied.Type
-
-export const KvmAbsent = Schema.TaggedStruct('KvmAbsent', { topology: Schema.String })
-export type KvmAbsent = typeof KvmAbsent.Type
-
-export const HvfUnavailable = Schema.TaggedStruct('HvfUnavailable', { arch: Schema.String })
-export type HvfUnavailable = typeof HvfUnavailable.Type
-
-export const WHPUnavailable = Schema.TaggedStruct('WHPUnavailable', { topology: Schema.String })
-export type WHPUnavailable = typeof WHPUnavailable.Type
-
-export const PlatformUnsupported = Schema.TaggedStruct('PlatformUnsupported', {
-  platform: Schema.String,
-  arch: Schema.String,
-})
-export type PlatformUnsupported = typeof PlatformUnsupported.Type
-
-export const ProbeObservation = Schema.Union([
-  KvmAccessible,
-  KvmDenied,
-  KvmAbsent,
-  HvfUnavailable,
-  WHPUnavailable,
-  PlatformUnsupported,
-])
-export type ProbeObservation = typeof ProbeObservation.Type
 
 export class AssessVirtualization extends Schema.TaggedClass<AssessVirtualization>()('AssessVirtualization', {
   platform: Schema.String,

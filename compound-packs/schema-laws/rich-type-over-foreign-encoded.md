@@ -14,10 +14,10 @@ A foreign payload's shape is not this repo's to change: rewriting it breaks the 
 
 1. **The foreign shape is the Encoded side, byte for byte.** Declare it exactly as the third party sends it, optionals and all.
 2. **Decode into a rich Type** with `S.decodeTo` and a `SchemaTransformation` (or `SchemaGetter` pair). The Type side obeys `invariants-as-refinements`, `cross-field-invariants-as-struct-checks`, and `tagged-unions-over-state-by-presence`: the domain sees a union of the cases it distinguishes, not the producer's optionals.
-3. **The transformation is lawful.** Every Type value encodes back to a foreign value that decodes to the same Type; the generated round-trip and encode-stability laws hold. The law runs from the Type side: when the Type drops wire detail the domain does not keep (an HTTP reason phrase, the protocol version), encoding produces a canonical foreign value, and a decoded-then-encoded wire value need not match the original bytes. A law failure is fixed in the codec (`law-failure-is-a-codec-defect`).
+3. **Encode is the inverse the domain needs.** Every Type value encodes back to a foreign value that decodes to the same Type. When the Type drops wire detail the domain does not keep (an HTTP reason phrase, the protocol version), encoding produces a canonical foreign value, and a decoded-then-encoded wire value need not match the original bytes. A codec that loses information the domain keeps is a schema defect; it is proven through the adapter that reads the foreign payload and acts on the Type, never with a serialization test.
 4. **Valid foreign input is not refused for being unwelcome.** A 503 is a valid status line; decode it to a `StatusCode` and let the decider judge it. Refuse only input the domain cannot represent.
-5. **Import the third party's schema when it exports one** (for example `Rpc.exitSchema` from `effect/unstable/rpc`) instead of redeclaring it.
-6. **Root the exported chain at the schema vocabulary.** Write `export const X = S.Struct({...}).pipe(S.decodeTo(...))`, not a local `const Wire = S.Struct(...)` followed by `Wire.pipe(...)`: `@systemfsoftware/effect-schema-discovery`, which `@systemfsoftware/effect-schema-vite` uses to find schemas, recognizes only chains rooted at `Schema.*`, so the second form silently loses the generated round-trip and encode-stability laws.
+5. **Import the third party's schema when it exports one** (for example `Rpc.exitSchema` from `effect/rpc`) instead of redeclaring it.
+6. **The codec lives in the adapter that talks to the third party.** Declare it in that adapter's own `*.schema.ts` file, which imports the domain Type and exports the codec. The domain module declares the rich Type and holds no provider grammar; parsing helpers used only by the codec stay private to the adapter's schema file.
 
 ```ts
 import { Schema as S, SchemaTransformation } from 'effect'
@@ -28,6 +28,6 @@ export const SocketOsError = S.Struct({ code: S.optional(S.String), errno: S.opt
 )
 ```
 
-Working example: `packages/daemon/effect-daemon-socket/src/SocketMedium/socket-failure.schema.ts` (Node's `{ code?, errno? }` decoded into the cases the socket medium distinguishes) and `packages/effect-readiness/src/DialEvidence.schema.ts` (a raw HTTP status line decoded into a branded `StatusCode`).
+Working example: `packages/daemon/effect-daemon-socket/src/SocketMedium/socket-failure.schema.ts` (Node's `{ code?, errno? }` decoded into the cases the socket medium distinguishes) and `packages/effect-readiness/src/http-status-line.schema.ts` (a raw HTTP status line decoded into the domain `Responded`, whose branded `StatusCode` is declared in `DialEvidence.schema.ts`).
 
 Gate: `review`.

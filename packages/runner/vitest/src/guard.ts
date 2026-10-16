@@ -8,11 +8,11 @@
  * @since 4.0.0
  */
 import { beforeEach } from 'vitest'
-import { installGuard, isMarked } from './internal/guard.js'
+import { installGuard, isMarked, UNTIMED_HOOK } from './internal/guard.js'
 import { refusalOf, refuseRawIt } from './internal/refusals.js'
 
 installGuard()
 
 beforeEach((context) => {
   if (!isMarked(context.task)) throw refusalOf(refuseRawIt)
-})
+}, UNTIMED_HOOK)

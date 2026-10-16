@@ -9,7 +9,7 @@ import {
   TOO_MANY_FEATURES_NAME,
 } from '../behaviour-one-feature-per-file.config.js'
 import { behaviourOneFeaturePerFile } from '../behaviour-one-feature-per-file.js'
-import { createRuleTester } from './_tester.js'
+import { createRuleTester, everywhere } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
@@ -73,28 +73,26 @@ Feature('x', () => {})
 `,
       filename: '/repo/pkg/__tests__/side.integration.test.ts',
     },
-    {
-      name: 'Should_Allow_IntegrationTest_When_ItAlsoCallsFeatureOnce_DifferentSuffix',
+    ...everywhere({
+      name: 'Should_Allow_BehaviourTest_When_FeatureCalledOnce',
       code: `${FEATURE_DECL}
 Feature('x', () => {})
 `,
-    },
-    {
-      name: 'Should_Allow_UnitTest_When_NotABehaviourTest',
+    }),
+    ...everywhere({
+      name: 'Should_Allow_Test_When_NoGherkinHarnessImported',
       code: `
 import { it } from 'vitest'
 it('plain', () => {})
 `,
-      filename: '/repo/pkg/tests/foo.test.ts',
-    },
+    }),
   ],
   invalid: [
-    {
+    ...everywhere({
       name: 'Should_Report_TooFewFeatures_When_NoFeatureCallAppears',
       code: `${FEATURE_DECL}
 const x = 1
 `,
-      filename: '/repo/pkg/__tests__/empty.integration.test.ts',
       errors: [{
         messageId: 'tooFewFeatures',
         data: {
@@ -104,7 +102,25 @@ const x = 1
           fix: TOO_FEW_FEATURES_FIX,
         },
       }],
-    },
+    }),
+    ...everywhere({
+      name: 'Should_Report_TooManyFeatures_When_AConformanceTestAlsoImportsTheGherkinHarness',
+      code: `
+import { Conformance } from '@systemfsoftware/conformance-spec'
+${FEATURE_DECL}
+Feature('one', () => {})
+Feature('two', () => {})
+`,
+      errors: [{
+        messageId: 'tooManyFeatures',
+        data: {
+          name: TOO_MANY_FEATURES_NAME,
+          expected: TOO_MANY_FEATURES_EXPECTED,
+          actual: `${TOO_MANY_FEATURES_ACTUAL} (2 found)`,
+          fix: TOO_MANY_FEATURES_FIX,
+        },
+      }],
+    }),
     {
       name: 'Should_Report_TooManyFeatures_When_TwoFeatureCalls',
       code: `${FEATURE_DECL}

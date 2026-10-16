@@ -14,7 +14,6 @@ import {
   Stream,
 } from 'effect'
 import type { ChildStep } from './ChildScript.schema.js'
-import type { TraceComparison } from './compare-traces.workflow.js'
 import { compare } from './compare.js'
 import { ScenarioCompared, ScenarioStalled } from './ConformanceReport.schema.js'
 import type { ConformanceReport, ScenarioResult } from './ConformanceReport.schema.js'
@@ -24,6 +23,7 @@ import { observedStepsOf } from './observed-trace.js'
 import type { ChildRole, Scenario } from './Scenario.schema.js'
 import { Scenarios } from './Scenarios.js'
 import type { ConformanceTrace } from './Trace.schema.js'
+import type { TraceComparison } from './TraceComparison.schema.js'
 
 type Declaration = Supervisor.Medium.MediumDeclaration
 type PortShape<Program, StartError, R> = Supervisor.Medium.MediumPortShape<Program, StartError, R>
@@ -33,7 +33,7 @@ type Trace = ReadonlyArray<Supervisor.TraceEntry>
 
 const GRACEFUL_MILLIS = 200
 
-const SHUTDOWN_MODES: Record<string, NonNullable<Supervisor.ChildOptions['shutdown']> | undefined> = {
+const SHUTDOWN_MODES: Record<ChildRole['shutdown'], NonNullable<Supervisor.ChildOptions['shutdown']>> = {
   brutal: { _tag: 'Brutal' },
   graceful: { _tag: 'Graceful', millis: GRACEFUL_MILLIS },
   infinity: { _tag: 'Infinity' },
@@ -175,12 +175,9 @@ const awaitPredicate = (seen: SeenTrace, predicate: (trace: Trace) => boolean): 
     yield* Deferred.await(done)
   })
 
-const shutdownModeOf = (kind: ChildRole['shutdown']): NonNullable<Supervisor.ChildOptions['shutdown']> =>
-  Option.getOrThrow(Option.fromNullishOr(SHUTDOWN_MODES[kind]))
-
 const childOptionsOf = (role: ChildRole): Supervisor.ChildOptions => ({
   restartType: role.restartType,
-  shutdown: shutdownModeOf(role.shutdown),
+  shutdown: SHUTDOWN_MODES[role.shutdown],
   startTimeoutMillis: role.startTimeoutMillis,
 })
 

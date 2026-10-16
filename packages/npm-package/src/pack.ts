@@ -1,6 +1,8 @@
-import { Function } from 'effect'
+import { Function, Match } from 'effect'
+import * as Result from 'effect/Result'
 import { gzipSync } from 'fflate'
-import type { Package } from './Package.js'
+import { mountedKeyOf, type Package } from './Package.js'
+import { SplitUstarEntryName, splitUstarEntryName } from './split-ustar-entry-name.workflow.js'
 
 const encoder = new TextEncoder()
 
@@ -46,17 +48,6 @@ export function packPackage(pkg: Package): Uint8Array {
   return packEntries(entries)
 }
 
-function normalizeTreeKey(key: string, packageName: string): string {
-  if (key.startsWith('/')) return key
-  return `/node_modules/${packageName}/${key}`
-}
-
-function requirePrefixedPath(key: string, prefix: string, packageName: string): string {
-  const normalized = normalizeTreeKey(key, packageName)
-  if (normalized.startsWith(prefix)) return normalized
-  throw new Error(`Unexpected absolute fixture path: ${key}`)
-}
-
 /**
  * Pack an authored file tree directly, without building a {@link (Package:interface)} first.
  *
@@ -72,7 +63,7 @@ export const packTree: {
     const prefix = `/node_modules/${packageName}/`
     const entries: TarEntry[] = []
     for (const [key, content] of Object.entries(files)) {
-      const relative = requirePrefixedPath(key, prefix, packageName).slice(prefix.length)
+      const relative = mountedKeyOf(key, packageName).slice(prefix.length)
       entries.push({ name: `package/${relative}`, data: encodeDefinedContent(content) })
     }
     return packEntries(entries)
@@ -109,24 +100,37 @@ function headerByteSum(header: Uint8Array): number {
   return sum
 }
 
-function writeUstarPrefix(header: Uint8Array, prefixField: string): void {
+function writeUstarPrefix(header: Uint8Array, prefixField: Uint8Array): void {
   if (prefixField.length === 0) return
-  header.set(encoder.encode(prefixField).subarray(0, 155), 345)
+  header.set(prefixField, 345)
 }
 
-function tarNameFields(entryName: string): { nameField: string; prefixField: string } {
-  if (encoder.encode(entryName).byteLength <= 100) {
-    return { nameField: entryName, prefixField: '' }
-  }
-  const split = splitUstarName(entryName)
-  return { nameField: split.name, prefixField: split.prefix }
+function writeUstarNameFields(header: Uint8Array, entryName: string): void {
+  Result.match(
+    splitUstarEntryName(new SplitUstarEntryName({ nameBytes: encoder.encode(entryName) })),
+    {
+      onFailure: (tooLong) => {
+        throw tooLong
+      },
+      onSuccess: (decision) => {
+        Match.value(decision).pipe(
+          Match.tag('FitsNameField', (fits) => {
+            header.set(fits.nameField, 0)
+          }),
+          Match.tag('SplitIntoPrefixAndName', (split) => {
+            header.set(split.nameField, 0)
+            writeUstarPrefix(header, split.prefixField)
+          }),
+          Match.exhaustive,
+        )
+      },
+    },
+  )
 }
 
 function makeTarHeader(entry: TarEntry): Uint8Array {
   const header = new Uint8Array(512)
-  const fields = tarNameFields(entry.name)
-  header.set(encoder.encode(fields.nameField).subarray(0, 100), 0)
-  writeUstarPrefix(header, fields.prefixField)
+  writeUstarNameFields(header, entry.name)
   writeOctal(header, 100, 8, 0o644)
   writeOctal(header, 108, 8, 0)
   writeOctal(header, 116, 8, 0)
@@ -201,45 +205,4 @@ function writeOctal(header: Uint8Array, offset: number, length: number, value: n
   const oct = value.toString(8).padStart(length - 1, '0')
   const enc = encoder.encode(`${oct}\0`)
   header.set(enc.subarray(0, length), offset)
-}
-
-function fitsUstarSplit(prefix: string, name: string): boolean {
-  if (encoder.encode(prefix).byteLength > 155) return false
-  return encoder.encode(name).byteLength <= 100
-}
-
-function tryUstarSplit(prefix: string, name: string): { prefix: string; name: string } | undefined {
-  if (!fitsUstarSplit(prefix, name)) return undefined
-  return { prefix, name }
-}
-
-function ustarSplitAt(full: string, i: number): { prefix: string; name: string } | undefined {
-  if (full.charAt(i) !== '/') return undefined
-  return tryUstarSplit(full.slice(0, i), full.slice(i + 1))
-}
-
-function ustarIndices(full: string): number[] {
-  const indices: number[] = []
-  for (let i = Math.min(155, full.length); i >= 0; i--) {
-    indices.push(i)
-  }
-  return indices
-}
-
-function isDefinedSplit(
-  split: { prefix: string; name: string } | undefined,
-): split is { prefix: string; name: string } {
-  return split !== undefined
-}
-
-function findUstarSplit(full: string): { prefix: string; name: string } | undefined {
-  return ustarIndices(full).map((i) => ustarSplitAt(full, i)).find(isDefinedSplit)
-}
-
-function splitUstarName(full: string): { prefix: string; name: string } {
-  const found = findUstarSplit(full)
-  if (found === undefined) {
-    throw new Error(`File name too long for ustar without PAX: ${full}`)
-  }
-  return found
 }

@@ -1,6 +1,5 @@
-/// <reference types="vitest/importMeta" />
-import { Array as Arr, Clock, Context, Duration, Effect, Layer, Match, Option, Ref, Result } from 'effect'
-import { dual } from 'effect/Function'
+import { Clock, Context, Duration, Effect, Layer, Match, Option, Ref, Result } from 'effect'
+import { absurd, dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import {
   type Collector,
@@ -10,6 +9,7 @@ import {
   type ObservationFailure,
   type TransportObservationError,
 } from './Observation.service.js'
+import { SettleRemoteRead, settleRemoteRead, type SettleRemoteReadDecision } from './settle-remote-read.workflow.js'
 import type { SpanRecord } from './TraceGraph.schema.js'
 
 /**
@@ -66,26 +66,11 @@ const NO_SPANS: ReadonlyArray<SpanRecord> = []
 
 const NEVER_READ: Settlement = { spans: NO_SPANS, addedAtMillis: 0 }
 
-const idOf = (span: SpanRecord): string => span.spanId
-
-const sameId = (left: SpanRecord, right: SpanRecord): boolean => left.spanId === right.spanId
-
-const idsOf = (spans: ReadonlyArray<SpanRecord>): ReadonlySet<string> => new Set(spans.map(idOf))
-
-const firstOfEachId = (read: ReadonlyArray<SpanRecord>): ReadonlyArray<SpanRecord> => Arr.dedupeWith(read, sameId)
-
-const freshOf = (settlement: Settlement, read: ReadonlyArray<SpanRecord>): ReadonlyArray<SpanRecord> => {
-  const known = idsOf(settlement.spans)
-  return firstOfEachId(read).filter((span) => !known.has(span.spanId))
-}
-
-const absorbed = (settlement: Settlement, read: ReadonlyArray<SpanRecord>, elapsedMillis: number): Settlement => {
-  const fresh = freshOf(settlement, read)
-  return fresh.length === 0 ? settlement : { spans: [...settlement.spans, ...fresh], addedAtMillis: elapsedMillis }
-}
-
-const quietForLongEnough = (settlement: Settlement, elapsedMillis: number, windows: Windows): boolean =>
-  settlement.spans.length > 0 && elapsedMillis - settlement.addedAtMillis >= windows.settleMillis
+const settlementOf = (command: SettleRemoteRead): SettleRemoteReadDecision =>
+  Result.match(settleRemoteRead(command), {
+    onFailure: (unreachable: never): SettleRemoteReadDecision => absurd(unreachable),
+    onSuccess: (decision): SettleRemoteReadDecision => decision,
+  })
 
 const pastDeadline = (elapsedMillis: number, windows: Windows): boolean => elapsedMillis >= windows.timeoutMillis
 
@@ -93,16 +78,13 @@ const settledVerdict = (spans: ReadonlyArray<SpanRecord>): Option.Option<Verdict
 
 const refusedVerdict = (refusal: Refusal): Option.Option<Verdict> => Option.some(Result.fail(refusal))
 
-const verdictOf = (settlement: Settlement, elapsedMillis: number, windows: Windows): Option.Option<Verdict> =>
-  Match.value({
-    quiet: quietForLongEnough(settlement, elapsedMillis, windows),
-    vacant: settlement.spans.length === 0,
-    late: pastDeadline(elapsedMillis, windows),
-  }).pipe(
-    Match.when({ quiet: true }, () => settledVerdict(settlement.spans)),
-    Match.when({ vacant: true, late: true }, () => refusedVerdict('absent')),
-    Match.when({ late: true }, () => refusedVerdict('unfinished')),
-    Match.orElse(() => Option.none()),
+const verdictOfOutcome = (outcome: SettleRemoteReadDecision): Option.Option<Verdict> =>
+  Match.value(outcome).pipe(
+    Match.tag('ReadSettled', (settled) => settledVerdict(settled.observation.spans)),
+    Match.tag('ReadAbsent', () => refusedVerdict('absent')),
+    Match.tag('ReadUnfinished', () => refusedVerdict('unfinished')),
+    Match.tag('ReadStillGrowing', () => Option.none()),
+    Match.exhaustive,
   )
 
 const settleStep = (
@@ -111,8 +93,16 @@ const settleStep = (
   elapsedMillis: number,
   windows: Windows,
 ): Advance => {
-  const advanced = absorbed(settlement, read, elapsedMillis)
-  return { settlement: advanced, verdict: verdictOf(advanced, elapsedMillis, windows) }
+  const outcome = settlementOf(
+    new SettleRemoteRead({
+      observed: settlement,
+      read,
+      elapsedMillis,
+      settleMillis: windows.settleMillis,
+      timeoutMillis: windows.timeoutMillis,
+    }),
+  )
+  return { settlement: outcome.observation, verdict: verdictOfOutcome(outcome) }
 }
 
 const lateRefusal = (settlement: Settlement): Refusal => (settlement.spans.length === 0 ? 'absent' : 'unfinished')
@@ -279,139 +269,3 @@ export const layer: {
       ),
     ),
 )
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic imports: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@systemfsoftware/vitest')
-  const { Schema } = await import('effect')
-  const { SpanRecord } = await import('./TraceGraph.schema.js')
-
-  const WINDOWS: Windows = { settleMillis: 10, timeoutMillis: 100 }
-  const SLOW: Windows = { settleMillis: 500, timeoutMillis: 100 }
-  const Reads = Schema.Array(SpanRecord)
-  const SomeReads = Schema.NonEmptyArray(SpanRecord)
-
-  type SettleStep = (
-    settlement: Settlement,
-    read: ReadonlyArray<SpanRecord>,
-    elapsedMillis: number,
-    windows: Windows,
-  ) => Advance
-
-  const seenAfter = (step: SettleStep, read: ReadonlyArray<SpanRecord>, windows: Windows): Advance =>
-    step(NEVER_READ, read, 0, windows)
-
-  const quietAfter = (step: SettleStep, advance: Advance, elapsedMillis: number, windows: Windows): Advance =>
-    step(advance.settlement, NO_SPANS, elapsedMillis, windows)
-
-  const pollingOf = (verdict: Option.Option<Verdict>): boolean => Option.isNone(verdict)
-
-  const settledOf = (verdict: Option.Option<Verdict>): boolean => Option.exists(verdict, Result.isSuccess)
-
-  const refusalOf = (verdict: Option.Option<Verdict>): Option.Option<Refusal> =>
-    Option.flatMap(verdict, (found) => (Result.isFailure(found) ? Option.some(found.failure) : Option.none()))
-
-  const absentOf = (verdict: Option.Option<Verdict>): boolean =>
-    Option.exists(refusalOf(verdict), (refusal) => refusal === 'absent')
-
-  const unfinishedOf = (verdict: Option.Option<Verdict>): boolean =>
-    Option.exists(refusalOf(verdict), (refusal) => refusal === 'unfinished')
-
-  const holdsId = (span: SpanRecord, spans: ReadonlyArray<SpanRecord>): boolean =>
-    spans.some((candidate) => candidate.spanId === span.spanId)
-
-  const holdsEveryId = (spans: ReadonlyArray<SpanRecord>, of: ReadonlyArray<SpanRecord>): boolean =>
-    of.every((span) => holdsId(span, spans))
-
-  const sameIds = (left: ReadonlyArray<SpanRecord>, right: ReadonlyArray<SpanRecord>): boolean => {
-    const leftIds = idsOf(left)
-    const rightIds = idsOf(right)
-    return leftIds.size === rightIds.size && [...leftIds].every((id) => rightIds.has(id))
-  }
-
-  const firstWithId = (spans: ReadonlyArray<SpanRecord>, spanId: string): SpanRecord | undefined =>
-    spans.find((candidate) => candidate.spanId === spanId)
-
-  const keptFirstRecord = (
-    spans: ReadonlyArray<SpanRecord>,
-    read: ReadonlyArray<SpanRecord>,
-    span: SpanRecord,
-  ): boolean => firstWithId(spans, span.spanId) === firstWithId(read, span.spanId)
-
-  const unionIsTheDistinctRead = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
-    sameIds(seenAfter(step, read, WINDOWS).settlement.spans, read)
-
-  const replayAddsNothing = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean => {
-    const seen = seenAfter(step, read, WINDOWS)
-    return sameIds(quietAfter(step, seen, WINDOWS.settleMillis, WINDOWS).settlement.spans, seen.settlement.spans)
-  }
-
-  const laterReadKeepsEveryEarlierId = (
-    step: SettleStep,
-    earlier: ReadonlyArray<SpanRecord>,
-    later: ReadonlyArray<SpanRecord>,
-  ): boolean => {
-    const union = step(seenAfter(step, earlier, WINDOWS).settlement, later, WINDOWS.settleMillis, WINDOWS)
-      .settlement.spans
-    return holdsEveryId(union, earlier) && holdsEveryId(union, later)
-  }
-
-  const firstRecordOfEachIdSurvives = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
-    read.every((span) => keptFirstRecord(seenAfter(step, read, WINDOWS).settlement.spans, read, span))
-
-  const settlesExactlyAtTheWindow = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean => {
-    const grown = seenAfter(step, read, WINDOWS)
-    return pollingOf(quietAfter(step, grown, WINDOWS.settleMillis - 1, WINDOWS).verdict) &&
-      settledOf(quietAfter(step, grown, WINDOWS.settleMillis, WINDOWS).verdict)
-  }
-
-  const absenceMeansNothingWasSeen = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
-    absentOf(quietAfter(step, seenAfter(step, read, WINDOWS), WINDOWS.timeoutMillis, WINDOWS).verdict) ===
-      (read.length === 0)
-
-  const unfinishedMeansSomethingWasSeen = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
-    unfinishedOf(quietAfter(step, seenAfter(step, read, SLOW), SLOW.timeoutMillis, SLOW).verdict) ===
-      (read.length > 0)
-
-  it.prop(
-    '∀r_SettleUnion_=DistinctRead',
-    { of: [Reads], subject: settleStep },
-    (step, [read]) => unionIsTheDistinctRead(step, read),
-  )
-
-  it.prop(
-    '∀r_SettleReplay_≡FirstUnion',
-    { of: [Reads], subject: settleStep },
-    (step, [read]) => replayAddsNothing(step, read),
-  )
-
-  it.prop(
-    '∀r_SettleShrink_⊇EveryRead',
-    { of: [Reads, Reads], subject: settleStep },
-    (step, [earlier, later]) => laterReadKeepsEveryEarlierId(step, earlier, later),
-  )
-
-  it.prop(
-    '∀r_SettleFirstRecord_=FirstSeen',
-    { of: [Reads], subject: settleStep },
-    (step, [read]) => firstRecordOfEachIdSurvives(step, read),
-  )
-
-  it.prop(
-    '∀r_SettleWindow_=QuietForSettle',
-    { of: [SomeReads], subject: settleStep },
-    (step, [read]) => settlesExactlyAtTheWindow(step, read),
-  )
-
-  it.prop(
-    '∀r_SettleVacant_=AbsentAtDeadline',
-    { of: [Reads], subject: settleStep },
-    (step, [read]) => absenceMeansNothingWasSeen(step, read),
-  )
-
-  it.prop(
-    '∀r_SettleGrowing_=UnfinishedAtDeadline',
-    { of: [Reads], subject: settleStep },
-    (step, [read]) => unfinishedMeansSomethingWasSeen(step, read),
-  )
-}

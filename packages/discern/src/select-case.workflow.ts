@@ -25,7 +25,11 @@ export class UncertainHandled extends Schema.TaggedClass<UncertainHandled>()('Un
 export class UncertainUnhandled extends Schema.TaggedError<UncertainUnhandled>()('UncertainUnhandled', {
   caseId: Schema.String,
   reason: Schema.String,
-}) {}
+}) {
+  override get message(): string {
+    return `Case "${this.caseId}" was uncertain and no handler answered it`
+  }
+}
 
 export const SelectCaseDecision = Schema.Union([CaseSelected, FallbackSelected, UncertainHandled])
 export type SelectCaseDecision = typeof SelectCaseDecision.Type

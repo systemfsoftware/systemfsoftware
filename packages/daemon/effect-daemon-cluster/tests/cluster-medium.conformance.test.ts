@@ -5,7 +5,7 @@ import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Match } from 'effect'
 import type { Scope } from 'effect'
-import type { Sharding } from 'effect/unstable/cluster'
+import type { Sharding } from 'effect/cluster'
 import {
   ChildNotReportedAsInferredDeath,
   ChildReportedOtherThanShutdown,
@@ -88,6 +88,7 @@ const superviseDyingEntity: Effect.Effect<void, ChildNotReportedAsInferredDeath,
 })
 
 Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live(liveReason)
   .body(({ scenario }) => {
     scenario(
@@ -105,7 +106,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
             }),
         ),
         Then('the child answered its liveness probe and no name stays held once the supervision stops')((s, expect) =>
-          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -125,7 +126,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
             }),
         ),
         Then('the child was announced ready and no name stays held once the supervision stops')((s, expect) =>
-          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+          expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })
         ),
       ),
     )
@@ -146,7 +147,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
         ),
         Then(
           'the death the medium cannot observe is reported as inferred, and no name stays held once the supervision stops',
-        )((s, expect) => expect(s.checked).toMatchObject({ _tag: 'Pass' })),
+        )((s, expect) => expect(s.checked, Conformance.render(s.checked)).toMatchObject({ _tag: 'Pass' })),
       ),
     )
   })

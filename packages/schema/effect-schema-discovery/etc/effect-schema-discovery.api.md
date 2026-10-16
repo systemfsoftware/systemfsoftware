@@ -16,10 +16,16 @@ export interface FoundSchema {
 }
 
 // @public
-export const identityOf: (filePath: string, name: string) => string;
+export const identityOf: (schema: FoundSchema) => SchemaIdentity;
 
 // @public
-export const quote: (value: string) => string;
+export const quote: (value: string) => QuotedText;
+
+// @public
+export type QuotedText = `'${string}'`;
+
+// @public
+export type SchemaIdentity = `${string}#${string}`;
 
 // (No @packageDocumentation comment for this package)
 

@@ -16,13 +16,11 @@ import { dual } from 'effect/Function'
 
 import { stepClocks } from './clocks.js'
 import { describeSuspended, newResources, resourceCounts, waitKindOf } from './deadlock.js'
-import type { AnyFiber, SuspendedFiber, WaitKind } from './deadlock.js'
+import type { AnyFiber, ResourceCounts, SuspendedFiber, WaitKind } from './deadlock.js'
 import { installEscapeRecorder } from './escapeRecorder.js'
 import type { Escape, HostTimer, TimerName } from './escapeRecorder.js'
 import { makeKernel } from './kernel.js'
-import type { Task } from './kernel.js'
-import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord } from './kernel.js'
-import { currentKernel } from './runMark.js'
+import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord, Task } from './kernel.js'
 import { acquireRun } from './runQueue.js'
 import type { ReleaseRun } from './runQueue.js'
 
@@ -145,20 +143,10 @@ interface Drive<A, E> {
   readonly kernel: Kernel
   readonly root: AnyFiber<A, E>
   readonly options: RunOptions
-  readonly before: ReadonlyMap<string, number>
+  readonly before: ResourceCounts
   readonly guard: number
   readonly hostImmediate: HostTimer
 }
-
-/**
- * Marks the point in a program where exploration may begin (R15). Under
- * `explore: 'body'`, every decision before it stays on Effect's order.
- */
-/** @internal */
-export const beginExploration: Effect.Effect<void> = Effect.sync(() => {
-  const kernel = currentKernel()
-  if (kernel !== undefined) kernel.beginExploration()
-})
 
 /** One microtask checkpoint: already-queued callbacks run before this resumes. */
 const turn = <T>(value: T): Promise<T> => Promise.resolve().then(() => value)
@@ -224,7 +212,7 @@ const runawayOf = (kernel: Kernel, options: RunOptions, guard: number): RunFailu
   return { ...runOutcomeTags.runaway, steps: kernel.steps.length, pending: kernel.pending.length }
 }
 
-const quiescenceFailure = (kernel: Kernel, before: ReadonlyMap<string, number>): RunFailure => {
+const quiescenceFailure = (kernel: Kernel, before: ResourceCounts): RunFailure => {
   const resources = newResources(before)
   if (resources.length === 0) {
     return { ...runOutcomeTags.deadlock, suspended: describeSuspended(kernel.fibers) }
@@ -257,10 +245,9 @@ const waitsRemain = (resources: ReadonlyArray<string>): boolean =>
   resources.some((resource) => waitKindOf([resource]) === 'File' || waitKindOf([resource]) === 'Socket')
 
 const loweredBaseline = (
-  before: ReadonlyMap<string, number>,
-  now: ReadonlyMap<string, number>,
-): ReadonlyMap<string, number> =>
-  new Map([...before].map(([name, count]) => [name, Math.min(count, now.get(name) ?? 0)]))
+  before: ResourceCounts,
+  now: ResourceCounts,
+): ResourceCounts => new Map([...before].map(([name, count]) => [name, Math.min(count, now.get(name) ?? 0)]))
 
 const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
   drive({ ...state, before: loweredBaseline(state.before, resourceCounts()) })
@@ -474,15 +461,24 @@ const queuedRun = <A, E>(
   }
 }
 
-const runKernelImpl = <A, E>(
+const runImpl = <A, E>(
   program: Effect.Effect<A, E>,
   options: RunOptions = {},
 ): Promise<RunResult<A, E>> => {
   rejectAwaitedExploration(options)
   return acquireRun().then((release) => queuedRun(program, options, release))
 }
+
+/**
+ * Runs one Effect program under one kernel (R2: every clock the program can
+ * reach is the kernel's virtual root clock; R37: at quiescence the kernel
+ * settles its test clocks, then advances the root clock). Driven by the
+ * decision path or chooser in `options`, it returns the exit, the decisions
+ * taken, and a per-step record of which fiber ran. A run started while one is
+ * active queues behind it, so two runs never share the global hooks.
+ */
 /** @internal */
-export const runKernel: {
+export const run: {
   <A, E>(program: Effect.Effect<A, E>, options?: RunOptions): Promise<RunResult<A, E>>
   (options?: RunOptions): <A, E>(program: Effect.Effect<A, E>) => Promise<RunResult<A, E>>
-} = dual((args: IArguments): boolean => args.length > 0 && isProgram(args[0]), runKernelImpl)
+} = dual((args: IArguments): boolean => args.length > 0 && isProgram(args[0]), runImpl)

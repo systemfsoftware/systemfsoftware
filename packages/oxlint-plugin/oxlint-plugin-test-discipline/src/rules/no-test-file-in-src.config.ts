@@ -24,6 +24,15 @@ export const testFileInSrcDetail = (dir: string): Detail => ({
     `pick the arm matching what this file exercises. A workflow law -> rename to <stem>.workflow.property.test.ts inside src/<path>/${dir}/. A kernel/policy/schema property or characterization suite -> convert it to an in-source \`if (import.meta.vitest)\` block in the module it covers. The package public surface -> move outside src/ to tests/<name>.integration.test.ts. No arm matches -> delete this file`,
 })
 
+/** A file with the sanctioned name and place whose content selects no property lane. */
+export const notAPropertyDetail = (dir: string): Detail => ({
+  expected: testFileInSrcDetail(dir).expected,
+  actual:
+    `a <stem>.workflow.property.test.ts inside a ${dir} directory whose content is not a property test (no FastCheck import and no it.prop / it.effect.prop call, or a differential harness import)`,
+  fix:
+    `state each workflow law as it.prop(...) / it.effect.prop(...) over FastCheck arbitraries. A scenario or differential suite -> move it outside src/ to tests/, named for the lane its imports select`,
+})
+
 export const propertyTestLocationDetail = (dir: string): Detail => ({
   expected:
     `src/**/${dir}/<stem>.workflow.property.test.ts — a property test one directory down from the workflow it covers, never beside it`,
@@ -45,7 +54,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Under src/, the only sanctioned test file is a single-segment <stem>.workflow.property.test.ts inside a sanctioned test directory, plus the generated schema-laws.test.ts entry point. Every other test file is banned: a kernel, policy, or schema suite becomes an in-source import.meta.vitest block, and a public-surface test moves outside src/ as an integration test. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
+      'Under src/, the only sanctioned test file is a single-segment <stem>.workflow.property.test.ts inside a sanctioned test directory whose content is a property test (it imports FastCheck or calls it.prop / it.effect.prop), plus the generated schema-laws.test.ts entry point. Every other test file is banned: a kernel, policy, or schema suite becomes an in-source import.meta.vitest block, and a public-surface test moves outside src/ as a Gherkin behaviour test. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
   },
   schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {

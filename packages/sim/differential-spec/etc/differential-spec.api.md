@@ -10,6 +10,8 @@ import { Effect } from 'effect';
 import { Exit } from 'effect';
 import { Expect } from '@systemfsoftware/vitest';
 import * as fc from 'fast-check';
+import { Schema } from 'effect';
+import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
 export namespace Differential {
@@ -29,6 +31,14 @@ export const differentialReport: {
     <Input, OutputA, OutputB, E>(targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<DifferentialReport, never>;
     <Input, OutputA, OutputB, E>(targetA: (input: Input) => Effect.Effect<OutputA, E>, targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): Effect.Effect<DifferentialReport, never>;
 };
+
+// Warning: (ae-forgotten-export) The symbol "DisparityFailure_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class DisparityFailure extends DisparityFailure_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export interface DisparityRecord<Input = unknown> {

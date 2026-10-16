@@ -2,6 +2,14 @@ import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import { describe, expect, it } from 'tstyche'
 import { it as forkIt } from '../src/mod'
+import type {
+  CoverageBelowMinimum,
+  NonBooleanVerdict,
+  PropertyBudget,
+  PropertyRefuted,
+  SeedStoreUnreadable,
+  SelfModelLaw,
+} from '../src/mod'
 
 type Sort = (xs: ReadonlyArray<number>) => ReadonlyArray<number>
 type SortValues = readonly [ReadonlyArray<number>]
@@ -180,5 +188,41 @@ describe('law kinds (R13)', () => {
       { of: [Schema.Array(Schema.Int)], subject },
       (output: ReadonlyArray<number>) => isSorted(output),
     )
+  })
+})
+
+type PropertyFailure =
+  | PropertyRefuted
+  | NonBooleanVerdict
+  | CoverageBelowMinimum
+  | SelfModelLaw
+  | SeedStoreUnreadable
+
+/** Every variant narrows on its own `_tag`, and each arm reads a field only that variant carries. */
+const propertyOfAFailure = (failure: PropertyFailure): string => {
+  if (failure._tag === 'PropertyRefuted') return failure.counterexample.rendered
+  if (failure._tag === 'NonBooleanVerdict') return failure.returned.join(',')
+  if (failure._tag === 'CoverageBelowMinimum') return failure.classes[0]?.label ?? ''
+  if (failure._tag === 'SelfModelLaw') return failure.name
+  return failure.file
+}
+
+describe('property failure variants (R1, R2)', () => {
+  it('exports every variant from the package root with its own tag', () => {
+    expect<PropertyRefuted['_tag']>().type.toBe<'PropertyRefuted'>()
+    expect<NonBooleanVerdict['_tag']>().type.toBe<'NonBooleanVerdict'>()
+    expect<CoverageBelowMinimum['_tag']>().type.toBe<'CoverageBelowMinimum'>()
+    expect<SelfModelLaw['_tag']>().type.toBe<'SelfModelLaw'>()
+    expect<SeedStoreUnreadable['_tag']>().type.toBe<'SeedStoreUnreadable'>()
+  })
+
+  it('narrows the variant union by tag', () => {
+    expect(propertyOfAFailure).type.toBe<(failure: PropertyFailure) => string>()
+  })
+
+  it('exports the provided property budget with record', () => {
+    expect<PropertyBudget['record']>().type.toBe<boolean | undefined>()
+    expect<PropertyBudget['runs']>().type.toBe<number | undefined>()
+    expect<PropertyBudget['seed']>().type.toBe<string | number | undefined>()
   })
 })

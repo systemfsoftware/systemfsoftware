@@ -15,6 +15,7 @@ import * as Cause from 'effect/Cause'
 import type * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Equal from 'effect/Equal'
 import * as Exit from 'effect/Exit'
 import * as Function from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -25,13 +26,18 @@ import * as Scope from 'effect/Scope'
 import * as TestClock from 'effect/testing/TestClock'
 import * as TestConsole from 'effect/testing/TestConsole'
 import * as V from 'vitest'
+import { testIdentityOf, throwFailureRecord } from '../failure.js'
 import type * as Vitest from '../mod.js'
 import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { type Body, drive } from './driver.js'
-import { registerEqualTester } from './equal.js'
 import * as Refusals from './errors.schema.js'
-import { markTask } from './guard.js'
-import { makeProperty, type PropertyRuntime } from './property/engine.js'
+import { isFailureRecordError } from './failure-record.js'
+import { markTask, UNTIMED_HOOK } from './guard.js'
+import { providedCheckDefaults } from './property/defaults.js'
+import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
+import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
+import { makeFileLedger } from './property/impostor.js'
+import { providedRoot } from './provided.js'
 import {
   type HookRefusal,
   isRefusal as isRefusalError,
@@ -44,14 +50,35 @@ import {
   refuseSyncBody,
   unprovidedText,
 } from './refusals.js'
+import { createSpanRecorder, type SpanRecorder } from './span-recorder.js'
 import { VitestTestContext } from './test-context.js'
 import { makeVirtualRuntime, virtualClockLayer, type VirtualRuntime } from './virtual-time.js'
 
 const getCurrentSuite = V.TestRunner.getCurrentSuite
 
+/** A value the runner narrows rather than assumes. */
+type Opaque<A = unknown> = A
+
+let equalTestersRegistered = false
+
+const equalTester = (first: Equal.Equal, second: Equal.Equal): boolean | undefined =>
+  equalTogether(first, second) ? true : undefined
+
+const equalTogether = (first: Equal.Equal, second: Equal.Equal): boolean =>
+  bothEqualable(first, second) && Equal.equals(first, second)
+
+const bothEqualable = (first: Equal.Equal, second: Equal.Equal): boolean =>
+  Equal.isEqual(first) && Equal.isEqual(second)
+
+const registerEqualTesters = (): void => {
+  if (equalTestersRegistered) return
+  equalTestersRegistered = true
+  V.expect.addEqualityTesters([equalTester])
+}
+
 /** @internal */
 export const addEqualityTesters = (): void => {
-  registerEqualTester()
+  registerEqualTesters()
 }
 
 const numbered = (timeout: number): V.TestOptions => ({ timeout })
@@ -62,11 +89,25 @@ const givenOptions = (timeout?: V.TestOptions): V.TestOptions => timeout ?? {}
 export const testOptions = (timeout?: number | V.TestOptions): V.TestOptions =>
   typeof timeout === 'number' ? numbered(timeout) : givenOptions(timeout)
 
+/** Vitest's own options from a registration's: the fork's `rerun` body never reaches Vitest's registrar. */
+const vitestOptionsOf = <Eff, AEff>(given: Vitest.Vitest.TestOptions<Eff, AEff>): V.TestOptions => {
+  const { rerun: _rerun, ...options } = given
+  return options
+}
+
+const registrationOptions = <Eff, AEff>(timeout?: number | Vitest.Vitest.TestOptions<Eff, AEff>): V.TestOptions =>
+  typeof timeout === 'object' ? vitestOptionsOf(timeout) : testOptions(timeout)
+
 /** @internal */
 export const hookTimeout = (timeout?: Duration.Input): number | undefined =>
   timeout === undefined ? undefined : Duration.toMillis(Duration.fromInputUnsafe(timeout))
 
 type Timeout = number | V.TestOptions
+
+type Registration<Eff, AEff> = number | Vitest.Vitest.TestOptions<Eff, AEff>
+
+const rerunOf = <Eff, AEff>(timeout?: Registration<Eff, AEff>): Vitest.Vitest.Body<Eff, AEff> | undefined =>
+  typeof timeout === 'object' ? timeout.rerun : undefined
 
 /** The registration of one test: Vitest's own `it`, one of its modifiers, or `it.for`. */
 type Registrar = (name: string, options: V.TestOptions, body: V.TestFunction<object>) => void
@@ -115,8 +156,19 @@ export const perRun = (): RunEnv => ({ runtime: makeVirtualRuntime(), owned: tru
 
 const propertyEnv: RunEnv = realTime
 
-const logErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
-  Effect.forEach(Cause.prettyErrors(cause), (error) => Effect.logError(error), { discard: true })
+const payloadOf = <E>(reason: Cause.Reason<E>): Opaque =>
+  Cause.isFailReason(reason) ? reason.error : reasonDefectOf(reason)
+
+const reasonDefectOf = <E>(reason: Cause.Reason<E>): Opaque => Cause.isDieReason(reason) ? reason.defect : undefined
+
+const isLoggable = (thrown: Opaque) => <E>(reason: Cause.Reason<E>): boolean =>
+  !Cause.isInterruptReason(reason) && payloadOf(reason) !== thrown
+
+const unthrownOf = <E>(cause: Cause.Cause<E>): Cause.Cause<E> =>
+  cause.pipe(Cause.squash, isLoggable, (loggable) => Cause.fromReasons(cause.reasons.filter(loggable)))
+
+const logUnthrownErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
+  cause.pipe(unthrownOf, Cause.prettyErrors, Effect.forEach((error) => Effect.logError(error), { discard: true }))
 
 const signalOf = (ctx: V.TestContext | undefined): AbortSignal | undefined => ctx?.signal
 
@@ -161,14 +213,18 @@ const runExit = <A, E>(
 const isUnprovided = (error: unknown): error is Error =>
   error instanceof Error && error.message.startsWith('Service not found')
 
+const refuseUnprovided = (failure: Opaque): void => {
+  if (isUnprovided(failure)) throw new Refusals.Slop({ detail: unprovidedText })
+}
+
 const rethrowSquashed = <E>(cause: Cause.Cause<E>): never => {
   const error = Cause.squash(cause)
-  if (isUnprovided(error)) throw new Refusals.Slop({ detail: unprovidedText })
+  refuseUnprovided(error)
   throw error
 }
 
 const failExit = <E>(cause: Cause.Cause<E>): Promise<never> =>
-  logErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
+  logUnthrownErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
 
 const reportExit = <A, E>(exit: Exit.Exit<A, E>): Promise<A | undefined> =>
   Exit.isSuccess(exit) ? Promise.resolve(exit.value) : failExit(exit.cause)
@@ -194,12 +250,47 @@ const trackAbort = <A>(ctx: V.TestContext, promise: Promise<A>): void => {
   if (ctx.signal.aborted) onAbort()
 }
 
-const runTest = (ctx?: V.TestContext, env: RunEnv = realTime) =>
-<A, E>(
+const rethrowRendered = (failure: Opaque): void => {
+  if (isFailureRecordError(failure)) throw failure
+}
+
+const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): never => {
+  const failure = Cause.squash(cause)
+  rethrowRendered(failure)
+  refuseUnprovided(failure)
+  return throwFailureRecord({
+    failure,
+    spans: recorder.spans,
+    identity: testIdentityOf(ctx.task),
+    replay: undefined,
+    root: providedRoot(),
+  })
+}
+
+const failRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): Promise<never> =>
+  logUnthrownErrors(cause).pipe(Effect.runPromise).then(() => throwRecorded(cause, recorder, ctx))
+
+const reportRecorded = <A, E>(
+  exit: Exit.Exit<A, E>,
+  recorder: SpanRecorder,
+  ctx: V.TestContext,
+): Promise<A | undefined> =>
+  Exit.isSuccess(exit) ? Promise.resolve(exit.value) : failRecorded(exit.cause, recorder, ctx)
+
+/**
+ * One test's run, recorded: its own in-memory tracer collects the spans the record is rendered from, and a failure
+ * leaves as the rendered record instead of a raw Cause (KTD2, R2, R7, R8).
+ */
+const runRecorded = <A, E>(
   effect: Effect.Effect<A, E, never>,
+  ctx: V.TestContext,
+  env: RunEnv,
 ): Promise<A | undefined> => {
-  const promise = runPromise(effect, ctx, env)
-  if (ctx !== undefined) trackAbort(ctx, promise)
+  const recorder = createSpanRecorder()
+  const promise = runExit(effect.pipe(Effect.withTracer(recorder.tracer)), ctx, env).then((exit) =>
+    reportRecorded(exit, recorder, ctx)
+  )
+  trackAbort(ctx, promise)
   return promise
 }
 
@@ -282,6 +373,11 @@ const laneBodyOf = <Eff, AEff>(
 ): LaneBody =>
 (checks) => typeof body === 'string' ? refuseBody(refuseSyncBody) : stepsOfBody(body, checks)
 
+const rerunBodyOf = <Eff, AEff>(timeout: Registration<Eff, AEff> | undefined, registered: LaneBody): LaneBody => {
+  const rerun = rerunOf(timeout)
+  return rerun === undefined ? registered : laneBodyOf(rerun)
+}
+
 /** The row body a lane registered: Vitest's `it.for` order is the row first, then the checks (R9). */
 const rowBodyOf = <Row, Eff, AEff>(
   row: Row,
@@ -297,7 +393,7 @@ const runLaned = <R>(
   body: LaneBody,
 ): Promise<void> => {
   const ledger = makeLedger(ctx)
-  return runTest(ctx, env)(mapEffect(bindRun(drive(bodyOf(ledger, body), [], ledger), ctx), env))
+  return runRecorded(mapEffect(bindRun(drive(bodyOf(ledger, body), [], ledger), ctx), env), ctx, env)
 }
 
 const outcomeOf = (promise: Promise<void>): Promise<Error | undefined> =>
@@ -309,7 +405,7 @@ const isSlop = (error: Error): error is Refusals.Slop => Schema.is(Refusals.Slop
 const otherRefusals: ReadonlyArray<(error: Error) => boolean> = [
   isSlop,
   Schema.is(Refusals.InvalidBudget),
-  Schema.is(Refusals.NonBooleanVerdict),
+  Schema.is(NonBooleanVerdict),
   Schema.is(Refusals.LeakedState),
 ]
 
@@ -346,17 +442,34 @@ const presentErrors = (errors: ReadonlyArray<object> | undefined): ReadonlyArray
 /** Whether a run left no failure behind: only a clean first run is worth running a second time. */
 const isClean = (ctx: V.TestContext): boolean => presentErrors(ctx.task.result?.errors).length === 0
 
+const propertyTaskOf = (ctx: V.TestContext): PropertyTask => ({
+  identity: testIdentityOf(ctx.task),
+  filepath: ctx.task.file.filepath,
+  budget: providedCheckDefaults(),
+})
+
 /**
  * Runs a property's program as the test that registered it, under the same context the generator lanes use. The
  * env is the bare `propertyEnv`: a `false` verdict is the property's own shrink path, so nothing interrupts it.
  */
-const runProperty = <E>(ctx: V.TestContext, program: () => Effect.Effect<void, E, never>): Promise<void> =>
-  runTest(ctx, propertyEnv)(bindRun(Effect.suspend(program), ctx))
+const runProperty = <E>(
+  ctx: V.TestContext,
+  program: (task: PropertyTask) => Effect.Effect<void, E, never>,
+): Promise<void> => runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
+
+/** The sync and effect property lanes of one test file share this ledger; it is judged once, at file end (R20). */
+const propertyLedger = makeFileLedger()
+
+V.afterAll(() => {
+  const refused = propertyLedger.finalise()
+  if (refused !== undefined) throw new VacuousProperty(refused)
+}, UNTIMED_HOOK)
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {
   register: (name, program) => marked(() => V.it(name, (ctx) => runProperty(ctx, program))),
   provide: (effect) => effect,
+  ledger: propertyLedger,
 }
 
 const property = makeProperty(syncRuntime)
@@ -487,7 +600,7 @@ const sharedContext = <R, E>(
 ): Effect.Effect<Context.Context<R>, never, never> =>
   Layer.buildWithMemoMap(shared, memoMap, scope).pipe(Effect.orDie, Effect.cached, Effect.runSync)
 
-const makeScopeCloser = (scope: Scope.Scope): () => Promise<void> => {
+const makeScopeCloser = (scope: Scope.Closeable): () => Promise<void> => {
   let closed = false
   return () => {
     if (closed) return Promise.resolve()
@@ -777,20 +890,21 @@ const makeTesterWith = <R>(
   const shouldRerun = (ctx: V.TestContext): boolean => rerunnable && isClean(ctx)
   const rerunIfClean = (ctx: V.TestContext, body: LaneBody): Promise<void> =>
     shouldRerun(ctx) ? rerun(ctx, body) : Promise.resolve()
-  const run = (ctx: V.TestContext, body: LaneBody): Promise<void> =>
+  const run = (ctx: V.TestContext, body: LaneBody, second: LaneBody): Promise<void> =>
     outcomeOf(runOnce(ctx, body)).then((error) => {
       if (error !== undefined) throw error
-      return rerunIfClean(ctx, body)
+      return rerunIfClean(ctx, second)
     })
 
   const registering = (registrar: Registrar): LaneRegister =>
   <Eff, AEff>(
     name: string,
     body: Vitest.Vitest.Body<Eff, AEff> | Vitest.Vitest.BodyRefusal,
-    timeout?: Timeout,
+    timeout?: Registration<Eff, AEff>,
   ): void => {
     const lane = laneBodyOf(body)
-    marked(() => registrar(name, testOptions(timeout), (ctx) => run(ctx, lane)))
+    const second = rerunBodyOf(timeout, lane)
+    marked(() => registrar(name, registrationOptions(timeout), (ctx) => run(ctx, lane, second)))
   }
 
   const dualLane = (registrar: Registrar): Vitest.Vitest.Test<R> => Function.dual(byName, registering(registrar))
@@ -809,13 +923,17 @@ const makeTesterWith = <R>(
     timeout?: Timeout,
   ): void => {
     marked(() =>
-      it.for(cases)(name, testOptions(timeout), (row: Row, ctx: V.TestContext) => run(ctx, rowBodyOf(row, body)))
+      it.for(cases)(name, testOptions(timeout), (row: Row, ctx: V.TestContext) => {
+        const lane = rowBodyOf(row, body)
+        return run(ctx, lane, lane)
+      })
     )
   }
 
   const effectProperty = makeProperty<R>({
     register: (name, program) => marked(() => it(name, (ctx) => runProperty(ctx, program))),
     provide: (effect) => mapEffect(effect, envFor()),
+    ledger: propertyLedger,
   })
 
   const prop: Vitest.Vitest.EffectProperty<R> = (name, spec, holds) => {

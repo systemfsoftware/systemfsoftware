@@ -1,9 +1,8 @@
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
+import images from '@systemfsoftware/microvm-test-images' with { type: 'json' }
 
-const ALPINE_3_20_INDEX_DIGEST = 'sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc'
-
-export const FIXTURE_IMAGE = `alpine:3.20@${ALPINE_3_20_INDEX_DIGEST}`
+export const FIXTURE_IMAGE = images.alpine
 
 export const READY_TOKEN = 'child-script-ready'
 

@@ -7,7 +7,8 @@ export default defineConfig({
   ssr: { resolve: { conditions: serverConditionsWithoutBundlerModule } },
   test: {
     ...sharedConfig.test,
-    include: ['tests/**/*.test.ts'],
+    name: 'unit',
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     includeSource: ['src/**/*.ts'],
     passWithNoTests: false,
   },

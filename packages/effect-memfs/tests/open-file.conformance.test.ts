@@ -136,7 +136,7 @@ Feature('Reading and writing an open note from a position that moves', { timeout
           (s) => openFileCheck(s.subject),
         ),
         Then('every round gets what a plain note and a bookmark would')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
         ),
       ),
     )
@@ -160,7 +160,7 @@ Feature('Reading and writing an open note from a position that moves', { timeout
             }),
         ),
         Then('the borrowed note reads as given up after any stop')((s, expect) =>
-          expect(s.report).toMatchObject({
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

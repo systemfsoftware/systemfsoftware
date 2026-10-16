@@ -1,6 +1,10 @@
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Scope } from 'effect'
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Result, Scope } from 'effect'
+import { absurd } from 'effect/Function'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import type { ChildExitDecision } from './ChildExitDecision.schema.js'
+import { terminationReasonOf } from './ChildExitDecision.schema.js'
+import { ClassifyChildExit, classifyChildExit } from './classify-child-exit.workflow.js'
 import {
   make,
   type Medium as MediumShape,
@@ -27,57 +31,43 @@ type FiberStartedTypeId = typeof FiberStartedTypeId
 interface FiberStarted extends Started {
   readonly [FiberStartedTypeId]: FiberStartedTypeId
   readonly fiber: Fiber.Fiber<void, SupervisorTerminated>
-  readonly scope: Scope.Scope
 }
 
 const fiberStarted = (
   fiber: Fiber.Fiber<void, SupervisorTerminated>,
-  scope: Scope.Scope,
   ready: Effect.Effect<void>,
 ): FiberStarted => ({
   [StartedTypeId]: StartedTypeId,
   [FiberStartedTypeId]: FiberStartedTypeId,
   fiber,
   ready,
-  scope,
 })
 
 const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberStartedTypeId in evidence
 
 const fiberOf = (evidence: Started): Option.Option<FiberStarted> => Option.liftPredicate(evidence, isFiberStarted)
 
-const normalTermination: TerminationReason = { _tag: 'Normal' }
-
 const shutdownTermination: TerminationReason = { _tag: 'Shutdown' }
 
-const abnormalOf = (cause: Cause.Cause<SupervisorTerminated>): TerminationReason => ({
-  _tag: 'Abnormal',
-  report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
-})
-
-const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
-  Exit.match(exit, {
-    onSuccess: () => normalTermination,
-    onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : abnormalOf(cause)),
+const decisionOf = (exit: Exit.Exit<void, SupervisorTerminated>): ChildExitDecision =>
+  Result.match(classifyChildExit(new ClassifyChildExit({ stopping: false, exit })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
   })
 
-const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(self.scope, Exit.void)
+const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
+  terminationReasonOf({ decision: decisionOf(exit), exit })
 
 const forcedChild = (self: FiberStarted): Effect.Effect<void> => Fiber.interrupt(self.fiber)
 
-/**
- * OTP's timed shutdown: the signal (interruption) goes out at once, and the window
- * bounds only how long the stop waits for the child's finalizers before closing its
- * scope.
- */
 const signalledWithin = (self: FiberStarted, millis: number): Effect.Effect<void> =>
-  Effect.andThen(Effect.timeoutOption(forcedChild(self), Duration.millis(millis)), closedChild(self))
+  Effect.asVoid(Effect.timeoutOption(forcedChild(self), Duration.millis(millis)))
 
 const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
   Match.value(mode).pipe(
-    Match.tag('Brutal', () => Effect.andThen(forcedChild(self), closedChild(self))),
+    Match.tag('Brutal', () => forcedChild(self)),
     Match.tag('Graceful', (graceful) => signalledWithin(self, graceful.millis)),
-    Match.tag('Infinity', () => Effect.andThen(forcedChild(self), closedChild(self))),
+    Match.tag('Infinity', () => forcedChild(self)),
     Match.exhaustive,
   )
 
@@ -98,7 +88,7 @@ export const mediumFor = <R = never>(): MediumShape<
         const scope = yield* Effect.scope
         const signalled = yield* Deferred.make<void>()
         const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
-        return fiberStarted(fiber, scope, Deferred.await(signalled))
+        return fiberStarted(fiber, Deferred.await(signalled))
       }),
     report: (evidence) =>
       Option.match(fiberOf(evidence), {

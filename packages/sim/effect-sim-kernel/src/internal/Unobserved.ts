@@ -19,7 +19,7 @@
 import { Context, Effect, Latch, Option, PubSub, Queue, Schema, Scope, Semaphore } from 'effect'
 
 import type { UnobservedPrimitive } from '../Kernel/Bound.js'
-import { currentKernel, FIBER_PROTOTYPE } from './runMark.js'
+import { currentKernel, FIBER_PROTOTYPE } from './kernel.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A

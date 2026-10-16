@@ -13,6 +13,8 @@ export const FIX =
 
 export const EFFECT_SOURCE = 'effect' as const
 
+export const ARBITRARY_SOURCE = 'effect/Arbitrary' as const
+
 export const STOCK_NAME = 'a stock-schema derivation wearing a domain costume' as const
 
 export const STOCK_EXPECTED =

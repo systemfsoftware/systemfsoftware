@@ -1,10 +1,10 @@
 import { NodeHttpServer } from '@effect/platform-node'
 import { Context, Effect, Layer, Result } from 'effect'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
-import * as HttpServer from 'effect/unstable/http/HttpServer'
-import type { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
-import type * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import * as NetAddress from 'effect/unstable/net/NetAddress'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import * as HttpServer from 'effect/http/HttpServer'
+import type { HttpServerRequest } from 'effect/http/HttpServerRequest'
+import type * as HttpServerResponse from 'effect/http/HttpServerResponse'
+import * as NetAddress from 'effect/net/NetAddress'
 
 export class Loopback extends Context.Service<Loopback, { readonly baseUrl: string }>()(
   '@systemfsoftware/trace-spec/tests/__fixtures__/loopback-store.fixture/Loopback',

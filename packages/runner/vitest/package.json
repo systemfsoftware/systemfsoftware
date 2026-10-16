@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/vitest",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -25,6 +25,11 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./failure": {
+      "@systemfsoftware/source": "./src/failure.ts",
+      "types": "./dist/failure.d.ts",
+      "default": "./dist/failure.mjs"
     },
     "./guard": {
       "@systemfsoftware/source": "./src/guard.ts",
@@ -55,6 +60,9 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "@effect/platform-node": "catalog:"
+  },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
@@ -79,6 +87,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./failure": {
+        "types": "./dist/failure.d.ts",
+        "default": "./dist/failure.mjs"
       },
       "./guard": {
         "types": "./dist/guard.d.ts",

@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { JobExited, JobSignaled } from './classify-job-exit.workflow.js'
+import { JobExited, JobSignaled } from './JobExitStatus.schema.js'
 
 export const JobCompletion = Schema.Struct({
   status: Schema.Union([JobExited, JobSignaled]),

@@ -5,6 +5,8 @@ type: "feature"
 product_contract_source: "ce-plan-bootstrap"
 ---
 
+> **Superseded (2026-10-12), mutation only:** the "Mutation Gate" below no longer applies. Stryker mutates only `src/**/*.workflow.ts`, and the oxlint plugins, which hold no workflow file, are not enrolled (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`).
+
 # Problem Frame
 
 TypeScript developers aiming for high boundary safety want to ban untyped `unknown` values across domain implementations (fields, function parameters, returns, type assertions). However, stock oxlint's `typescript/no-restricted-types` is purely syntactic and lacks positional awareness: configuring `"unknown": true` indiscriminately flags generic type parameter defaults such as `<A = unknown>` or `<in InElem = unknown>`.

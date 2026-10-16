@@ -24,17 +24,18 @@ code equals itself, so it passes whether or not the code is right. It shows up u
 
 ## Where the corpus says it
 
-One line in CONST-T10, `dont`: "compute or record the expected value by running the code under
-test, or any build or version of it". Recording an expected value is computing it by running the
-code earlier, so all three names above fall under that line.
+CONST-T10's law: "Take every expected value from an oracle the code under test did not produce".
+Its corpus criteria name the line: an expected value computed or recorded by running the code
+under test, or any build or version of it, fails. Recording an expected value is computing it by
+running the code earlier, so all three names above fall under that line.
 
-CONST-T9 covers the two legitimate neighbours: comparing old and new during a migration until they
-agree, then deleting the old; and persisted gold that is externally authored and independently
-gated. A comparison against a genuinely independent implementation is an oracle under CONST-T10,
-not a tautology.
+CONST-T8's corpus entry covers the two legitimate neighbours: comparing old and new during a
+migration until they agree, then deleting the old; and persisted gold that is externally authored
+and independently gated. A comparison against a genuinely independent implementation is an oracle
+under CONST-T10, not a tautology.
 
 ## Enforcement
 
 Review only. On 2026-09-23 no snapshot-API lint existed in this repo, in
 `systemfsoftware/are-the-types-wrong`, or in `systemfsoftware/systemfsoftware`. A mechanical check
-belongs to whoever owns the lint instruments, not to the author of the rule (CONST-E9).
+belongs to whoever owns the lint instruments, not to the author of the rule (CONST-E7).

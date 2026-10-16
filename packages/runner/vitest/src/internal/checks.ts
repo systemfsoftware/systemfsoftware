@@ -11,8 +11,10 @@
  */
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
+import { callFrame, withRaisingFrame } from './call-site.js'
 import { authorize } from './guard.js'
 import { booleanRefusal, neededText, negatedText, refusalOf, refusedText, refusePiecewise } from './refusals.js'
 
@@ -25,7 +27,7 @@ type Assertion<A> = V.Assertion<void, A>
 export type MakeAssertion = <A>(actual: A, message?: string) => Assertion<A>
 
 /** @internal */
-export type Judgement = (make: MakeAssertion) => void
+export type Judgement = (make: MakeAssertion) => Opaque
 
 /**
  * The service a check needs. `judge` counts the check and throws {@link refusePiecewise} when a check already ran
@@ -34,7 +36,7 @@ export type Judgement = (make: MakeAssertion) => void
  * @internal
  */
 export interface AssertedShape {
-  readonly judge: (judgement: Judgement) => void
+  readonly judge: (judgement: Judgement) => Opaque
   readonly step: () => void
 }
 
@@ -53,6 +55,8 @@ type View = {
   readonly message: string | undefined
   readonly negated: boolean
   readonly written: (j: Judgement) => void
+  /** The site the body called `expect` from, captured there because the fork judges the check later (KTD6). */
+  readonly site: string | undefined
 }
 
 type Refusal<T extends string> = (this: T, ...args: ReadonlyArray<Opaque>) => Check
@@ -181,11 +185,14 @@ const isObject = (value: Opaque): value is object => typeof value === 'object' &
 /** @internal */
 export const isCheck = (value: Opaque): value is Check => isObject(value) && branded.has(value)
 
+const settled = (outcome: Opaque): Effect.Effect<void> =>
+  Predicate.isPromiseLike(outcome) ? Effect.asVoid(Effect.promise(() => outcome)) : Effect.void
+
 const makeCheck = (judgement: Judgement, written: (j: Judgement) => void): Check => {
   written(judgement)
   const check: Check = Effect.gen(function*() {
     const asserted = yield* Asserted
-    asserted.judge(judgement)
+    yield* settled(asserted.judge(judgement))
   })
   branded.add(check)
   return check
@@ -207,11 +214,17 @@ const forView = (view: View, negated: boolean): View => ({ ...view, negated })
 
 const notView = (view: View): View => forView(view, !view.negated)
 
-const viewFor = (written: (j: Judgement) => void, actual: Opaque, message: string | undefined): View => ({
+const viewFor = (
+  written: (j: Judgement) => void,
+  actual: Opaque,
+  message: string | undefined,
+  site: string | undefined,
+): View => ({
   actual,
   message,
   negated: false,
   written,
+  site,
 })
 
 const messageOf = (argument: Opaque): string | undefined => typeof argument === 'string' ? argument : undefined
@@ -249,15 +262,35 @@ const memberAt = <A extends object>(target: A, property: string | symbol): A[key
 
 const isCallable = (value: Opaque): value is (...args: ReadonlyArray<Opaque>) => Opaque => typeof value === 'function'
 
-const invokeMember = (target: Assertion<Opaque>, property: string, args: ReadonlyArray<Opaque>): void => {
+const invokeMember = (target: Assertion<Opaque>, property: string, args: ReadonlyArray<Opaque>): Opaque => {
   const member = memberAt(target, property)
-  if (isCallable(member)) Reflect.apply(member, target, args)
+  return isCallable(member) ? Reflect.apply(member, target, args) : undefined
 }
 
-const judgementOf = (view: View, property: string, args: ReadonlyArray<Opaque>): Judgement => (make) => {
+const judgedBy = (view: View, property: string, args: ReadonlyArray<Opaque>, make: MakeAssertion): Opaque => {
   const assertion = make(view.actual, view.message)
   const target = view.negated ? assertion.not : assertion
-  invokeMember(target, property, args)
+  return invokeMember(target, property, args)
+}
+
+const raisedFailure = (thrown: Opaque, site: string | undefined): Opaque =>
+  thrown instanceof Error ? withRaisingFrame(thrown, site) : thrown
+
+const framedOutcome = (outcome: Opaque, site: string | undefined): Opaque =>
+  Predicate.isPromiseLike(outcome)
+    ? outcome.then(undefined, (thrown: Opaque) => Promise.reject(raisedFailure(thrown, site)))
+    : outcome
+
+/**
+ * A failed judgement is a failure the fork raised: by now the stack holds only the fork's frames, so the site the
+ * body called `expect` from is prepended to the error's stack (R2, KTD6).
+ */
+const judgementOf = (view: View, property: string, args: ReadonlyArray<Opaque>): Judgement => (make) => {
+  try {
+    return framedOutcome(judgedBy(view, property, args, make), view.site)
+  } catch (thrown) {
+    throw raisedFailure(thrown, view.site)
+  }
 }
 
 const judgedCheck = (view: View, property: string, args: ReadonlyArray<Opaque>): Check =>
@@ -323,7 +356,7 @@ const matcherView = (view: View): object => new Proxy({}, viewHandler(view))
 
 const assertionView = (written: (j: Judgement) => void, args: ReadonlyArray<Opaque>): object => {
   if (refuseBooleanActual(args[0])) throw refusalOf(booleanRefusal)
-  return matcherView(viewFor(written, args[0], messageOf(args[1])))
+  return matcherView(viewFor(written, args[0], messageOf(args[1]), callFrame()))
 }
 
 const isDecodingSchema = (value: Opaque): value is Schema.ConstraintDecoder<Opaque> => Schema.isSchema(value)
@@ -397,7 +430,7 @@ export const makeLedger = (ctx: V.TestContext): Ledger => {
         counter.judged += 1
         counter.since += 1
         if (counter.since > 1) throw refusalOf(refusePiecewise)
-        authorize(() => judgement(hard))
+        return authorize(() => judgement(hard))
       },
       step: () => {
         counter.since = 0

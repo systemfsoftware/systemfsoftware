@@ -1,12 +1,28 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
-import { Array as Arr, Duration, Effect, Exit, Fiber, Layer, Match, Option, Queue, Ref, Scope, Stream } from 'effect'
-import type { Socket } from 'effect/unstable/socket'
+import {
+  Array as Arr,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Match,
+  Option,
+  Queue,
+  Ref,
+  Result,
+  Scope,
+  Stream,
+} from 'effect'
+import { absurd } from 'effect/Function'
+import type { Socket } from 'effect/socket'
+import { ClassifyPeerClose, classifyPeerClose, type PeerCloseDecision } from './classify-peer-close.workflow.js'
 import { dialerOf } from './socket-dialer.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
-import { shutdownTerminationOf, terminationOf } from './socket-termination.js'
-import { textOf } from './socket-text.js'
+import { closeFailureOf, shutdownTerminationOf, terminationOf } from './socket-termination.schema.js'
+import { textOf } from './socket-text.schema.js'
 
 export type { SocketAddress, SocketConnection, SocketProgram } from './socket-program.js'
 
@@ -35,8 +51,7 @@ type SocketStartedTypeId = typeof SocketStartedTypeId
 interface SocketStarted extends Supervisor.Medium.Started {
   readonly [SocketStartedTypeId]: SocketStartedTypeId
   readonly life: Fiber.Fiber<void, Socket.SocketError>
-  readonly scope: Scope.Scope
-  readonly writeHalf: Scope.Scope
+  readonly writeHalf: Scope.Closeable
   readonly stopping: Ref.Ref<boolean>
 }
 
@@ -76,8 +91,7 @@ const lifeOf = (parts: LifeParts): Effect.Effect<void, Socket.SocketError, Scope
 
 const socketStarted = (parts: {
   readonly life: Fiber.Fiber<void, Socket.SocketError>
-  readonly scope: Scope.Scope
-  readonly writeHalf: Scope.Scope
+  readonly writeHalf: Scope.Closeable
   readonly stopping: Ref.Ref<boolean>
   readonly ready: Effect.Effect<void>
 }): SocketStarted => ({
@@ -136,11 +150,16 @@ const startOf = (parts: {
     )
     return socketStarted({
       life,
-      scope,
       writeHalf,
       stopping,
       ready: readyOf({ program: parts.program, options: parts.options, prober: parts.prober, log }),
     })
+  })
+
+const peerCloseOf = (close: Socket.SocketCloseError): PeerCloseDecision =>
+  Result.match(classifyPeerClose(new ClassifyPeerClose({ code: close.code })), {
+    onFailure: (error: never): never => absurd(error),
+    onSuccess: (decision) => decision,
   })
 
 const reportOf = (
@@ -151,7 +170,8 @@ const reportOf = (
     onSome: (self) =>
       Effect.map(
         Effect.zip(Fiber.await(self.life), Ref.get(self.stopping)),
-        ([exit, stopping]) => terminationOf({ stopping, exit }),
+        ([exit, stopping]) =>
+          terminationOf({ stopping, exit, peerClose: Option.map(closeFailureOf(exit), peerCloseOf) }),
       ),
   })
 
@@ -161,8 +181,7 @@ const probeOf = (evidence: Supervisor.Medium.Started): Effect.Effect<boolean, ne
     onSome: (self) => Effect.sync(() => self.life.pollUnsafe() === undefined),
   })
 
-const destroyOf = (self: SocketStarted): Effect.Effect<void> =>
-  Effect.andThen(Fiber.interrupt(self.life), Scope.close(self.scope, Exit.void))
+const destroyOf = (self: SocketStarted): Effect.Effect<void> => Fiber.interrupt(self.life)
 
 const settledAfterHalfClose = (self: SocketStarted): Effect.Effect<void> =>
   Effect.andThen(Scope.close(self.writeHalf, Exit.void), Effect.asVoid(Fiber.await(self.life)))
@@ -178,7 +197,7 @@ const shutdownActionOf = (self: SocketStarted, mode: Supervisor.Medium.ShutdownM
           destroyOf(self),
         ),
     ),
-    Match.tag('Infinity', () => Effect.andThen(settledAfterHalfClose(self), Scope.close(self.scope, Exit.void))),
+    Match.tag('Infinity', () => settledAfterHalfClose(self)),
     Match.exhaustive,
   )
 

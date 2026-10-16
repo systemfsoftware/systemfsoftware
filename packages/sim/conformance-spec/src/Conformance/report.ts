@@ -62,14 +62,17 @@ export interface Pass extends PassTag {
 
 export interface Fail<C, R> extends FailTag {
   readonly failure: Failure<C, R>
+  readonly explanation: string
 }
 
 export interface IncompleteReport extends IncompleteTag {
   readonly incomplete: Incomplete
+  readonly explanation: string
 }
 
 export interface OverBudget extends OverBudgetTag {
   readonly bound: Kernel.Bound
+  readonly explanation: string
 }
 
 /** The outcome of one check, at the bound it explored. */
@@ -128,27 +131,54 @@ const passText = (report: Pass): string =>
   `the history matches a sequential order of the model, over ${report.histories} explored schedules: ` +
   `${boundText(report.bound)}`
 
+const failText = <C, R>(failure: Failure<C, R>): string =>
+  [
+    HEADLINE_TEXT[failure.judgement.problem],
+    judgementText(failure.judgement),
+    scheduleText(failure.schedule),
+    `${failure.deviations} deviation(s) from Effect's order`,
+    ...failure.operations.map(operationText),
+    `bound: ${boundText(failure.bound)}`,
+  ].join('\n')
+
+const incompleteText = (incomplete: Incomplete): string =>
+  [
+    'the run never produced a history to judge',
+    uncompletedText(incomplete.failure),
+    scheduleText(incomplete.schedule),
+    `bound: ${boundText(incomplete.bound)}`,
+  ].join('\n')
+
+const overBudgetText = (bound: Kernel.Bound): string =>
+  `the search exhausted its schedule budget before covering every schedule: ${boundText(bound)}`
+
+/** A rejected report, carrying the explanation every reader of the failure gets. */
+export const failed = <C, R>(failure: Failure<C, R>): Fail<C, R> => ({
+  _tag: 'Fail',
+  failure,
+  explanation: failText(failure),
+})
+
+/** A report whose run never produced a history, carrying its explanation. */
+export const incomplete = (incomplete: Incomplete): IncompleteReport => ({
+  _tag: 'Incomplete',
+  incomplete,
+  explanation: incompleteText(incomplete),
+})
+
+/** A report whose search exhausted its budget, carrying its explanation. */
+export const overBudget = (bound: Kernel.Bound): OverBudget => ({
+  _tag: 'OverBudget',
+  bound,
+  explanation: overBudgetText(bound),
+})
+
 /** The report a consumer reads or a test asserts on, as text. */
 export const render = <C, R>(report: Report<C, R>): string =>
   Match.value(report).pipe(
     Match.tag('Pass', passText),
-    Match.tag('Fail', (failed) =>
-      [
-        HEADLINE_TEXT[failed.failure.judgement.problem],
-        judgementText(failed.failure.judgement),
-        scheduleText(failed.failure.schedule),
-        `${failed.failure.deviations} deviation(s) from Effect's order`,
-        ...failed.failure.operations.map(operationText),
-        `bound: ${boundText(failed.failure.bound)}`,
-      ].join('\n')),
-    Match.tag('Incomplete', (incomplete) =>
-      [
-        'the run never produced a history to judge',
-        uncompletedText(incomplete.incomplete.failure),
-        scheduleText(incomplete.incomplete.schedule),
-        `bound: ${boundText(incomplete.incomplete.bound)}`,
-      ].join('\n')),
-    Match.tag('OverBudget', (overBudget) =>
-      `the search exhausted its schedule budget before covering every schedule: ${boundText(overBudget.bound)}`),
+    Match.tag('Fail', (failed) => failed.explanation),
+    Match.tag('Incomplete', (incomplete) => incomplete.explanation),
+    Match.tag('OverBudget', (overBudget) => overBudget.explanation),
     Match.exhaustive,
   )

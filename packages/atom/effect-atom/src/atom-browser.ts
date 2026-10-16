@@ -8,14 +8,14 @@
  *
  * @since 4.0.0
  */
-import * as Context from 'effect/Context'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import { readable, transform, writable } from './atom.blueprint.js'
-import type { Atom, Type, With, WithoutSerializable, Writable, WriteContext } from './atom.blueprint.js'
+import { makeRefreshOnSignal, readable, writable } from './atom.blueprint.js'
+import type { Atom, WithoutSerializable, Writable, WriteContext } from './atom.blueprint.js'
 import type { RegistryImpl } from './registry-engine.js'
 import * as Registry from './registry.handle.js'
+import { type SearchParamCoordinator, SearchParamUpdates } from './search-param.service.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type StringCodec<Type = unknown, Encoded extends string = string> = Schema.ConstraintCodec<Type, Encoded>
@@ -48,32 +48,6 @@ export const windowFocusSignal: Atom<number> = readable((get) => {
   })
   return count
 })
-
-/**
- * Creates a combinator that refreshes an atom whenever the supplied signal atom
- * changes.
- *
- * **Details**
- *
- * The derived atom also subscribes to the source atom so normal source updates are
- * forwarded to its own value.
- *
- * @since 4.0.0
- */
-export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
-  function refreshOnSignal<A extends AnyAtom>(self: A): WithoutSerializable<A>
-  function refreshOnSignal<A extends AnyAtom, V extends Type<A>>(
-    self: A & Atom<V>,
-  ): With<A & Atom<V>, V> {
-    return transform(self, (get) => {
-      get.once(signal)
-      get.subscribe(signal, () => get.refresh(self))
-      get.subscribe(self, (value: V) => get.setSelf(value))
-      return get.once(self)
-    }, { initialValueTarget: self })
-  }
-  return refreshOnSignal
-}
 
 /**
  * Refreshes an atom whenever `windowFocusSignal` changes.
@@ -256,27 +230,6 @@ const optionValue = <A>(value: A | Option.Option<A>): Option.Option<A> => {
   }
   return Option.none()
 }
-
-/**
- * Batches URL search parameter writes for one registry.
- *
- * **Details**
- *
- * Several search parameter atoms can be written in the same tick; the
- * coordinator collects their values and rewrites the address bar once. It lives
- * in the registry's own storage, so two registries never share pending writes
- * and the state dies with its registry.
- */
-interface SearchParamCoordinator {
-  generation: number
-  readonly updates: Map<string, string>
-  updating: boolean
-  readonly registry: Registry.Registry
-}
-
-class SearchParamUpdates extends Context.Service<SearchParamUpdates, SearchParamCoordinator>()(
-  '@systemfsoftware/effect-atom/atom-browser/SearchParamUpdates',
-) {}
 
 const makeSearchParamCoordinator = (registry: Registry.Registry): SearchParamCoordinator => ({
   generation: 0,

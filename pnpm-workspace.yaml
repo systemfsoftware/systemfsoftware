@@ -10,55 +10,36 @@ allowBuilds:
   ssh2: false
   unrs-resolver: false
 catalog:
-  typescript: ^7
+  typescript: ^7.0.2
   microsandbox: 0.7.2
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
-  "@effect/platform-node": 4.0.0-rc.117
-  "@effect/platform-node-shared": 4.0.0-rc.117
-  effect: 4.0.0-rc.117
-  "@effect/sql-pg": 4.0.0-rc.117
-  "@effect/sql-pglite": 4.0.0-rc.117
-  "@effect/tsgo": ^0.45.0
-  "@effect/opentelemetry": 4.0.0-rc.117
-  "@opentelemetry/sdk-trace-base": ^2
+  "@effect/platform-node": ^4.0.1
+  "@effect/platform-node-shared": ^4.0.1
+  effect: ^4.0.1
+  "@effect/sql-pglite": ^4.0.1
+  "@effect/tsgo": ^0.50.0
+  "@effect/opentelemetry": ^4.0.1
+  "@opentelemetry/sdk-trace-base": ^2.11.0
   "@opentelemetry/api": ^1.9.0
-  "@opentelemetry/resources": ^2
-  "@opentelemetry/semantic-conventions": ^1.33
-  fast-check: ^4
-  vitest: ^5
-  "@vitest/snapshot": ^5
-  drizzle-orm: 1.0.0-rc.5-5935859
-  drizzle-kit: 1.0.0-rc.4
-  better-auth: 1.7.5
-  "@electric-sql/pglite": 0.5.8
-  "@electric-sql/pglite-socket": 0.2.11
-  pg: 8.23.0
-  "@types/pg": 8.23.1
-  tsx: 4.23.13
-  "@vitest/coverage-v8": ^5
-  "@vitest/coverage-istanbul": ^5
-  vite-tsconfig-paths: ^6.1.1
-  vite: ^8
+  "@opentelemetry/resources": ^2.11.0
+  "@opentelemetry/semantic-conventions": ^1.43.0
+  fast-check: ^4.9.0
+  vitest: ^5.0.1
+  "@vitest/coverage-v8": ^5.0.1
+  "@vitest/coverage-istanbul": ^5.0.1
+  vite: ^8.2.1
   tsdown: ^0.23.0
   rimraf: ^6.1.3
-  "@types/node": ^26
+  "@types/node": ^26.6.5
   tstyche: ^7.2.5
-  testcontainers: ^12.1.0
   "@microsoft/api-extractor": ^7.59.1
-  "@noble/hashes": 2.4.0
   oxc-parser: ^0.150.0
-  "@oxc-parser/binding-wasm32-wasi": ^0.150.0
   "@oxc-project/types": ^0.150.0
-  "@std/jsonc": jsr:^1.0.2
-  "@std/path": jsr:^1.0.0
-  "@std/fs": jsr:^1.0.6
   "@testing-library/dom": ^10.4.2
-  "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.3
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
   "@types/scheduler": ^0.28.0
-  jsdom: ^30.1.0
   react: ^19.3.0
   react-dom: ^19.3.0
   react-error-boundary: ^6.1.5
@@ -67,36 +48,31 @@ catalog:
   type-fest: ^5.10.0
   "@storybook/addon-vitest": ^10.6.0
   "@storybook/react-vite": ^10.6.0
-  "@vitest/browser": ^5
-  "@vitest/browser-playwright": ^5
-  "@playwright/test": ^1.63.0
-  playwright: ^1
-  playwright-core: ^1.63.0
+  "@vitest/browser": ^5.0.1
+  "@vitest/browser-playwright": ^5.0.1
+  playwright: ^1.63.0
   "@systemfsoftware/vitest-config": workspace:^
-  "@systemfsoftware/conformance-spec": workspace:^
-  "@systemfsoftware/effect-gherkin-spec": workspace:^
 catalogMode: prefer
 catalogs:
   peers:
-    effect: 4.0.0-rc.117
+    effect: ^4
   oxlint:
     oxlint: ~1.82.0
     "@oxlint/plugins": ~1.82.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.1
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.1
-    "@systemfsoftware/stryker-js": ^11.0.0
-    "@systemfsoftware/stryker-js-typescript-checker": ^7.1.0
-    "@systemfsoftware/stryker-js-vitest-runner": ^7.2.0
-    "@systemfsoftware/stryker-test-contribution": ^4.0.0
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
+    "@systemfsoftware/stryker-js": latest
+    "@systemfsoftware/stryker-js-typescript-checker": latest
+    "@systemfsoftware/stryker-js-vitest-runner": latest
     "mutation-testing-elements": 3.9.0
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"
 overrides:
-  fast-check: ^4
-  vite: ^8
+  fast-check: "catalog:"
+  vite: "catalog:"
   # storybook's csf-plugin resolves esbuild 0.27 in its peer context while tsx
   # uses 0.28; the split forks vite and therefore vitest into two physical builds
   # per peer context. One esbuild keeps one vitest (issue #304 guard).
@@ -113,8 +89,10 @@ packages:
   - packages/sim/*
   - packages/toolchain/*
   - packages/trace/*
-  - npm/*
   - omp/plugins/*
-  - examples/*
 patchedDependencies:
-  effect@4.0.0-rc.117: patches/effect@4.0.0-rc.117.patch
+  rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
+supportedArchitectures:
+  os: [linux]
+  cpu: [x64, arm64]
+  libc: [glibc]

@@ -9,6 +9,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
+    name: 'unit',
     testTimeout: testTimeout(),
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     coverage: {

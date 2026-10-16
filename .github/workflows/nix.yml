@@ -1,0 +1,42 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nix:
+    name: nix
+    uses: ./.github/workflows/reusable-nix.yml
+    with:
+      compare-across-systems: .#packages.{system}.workspace-tarballs
+      extra-steps: |
+        [
+          {
+            "name": "An unsupported system is refused naming the supported ones",
+            "run": "if nix eval --raw .#packages.x86_64-windows.dprint 2>refused.log; then\n  echo \"x86_64-windows evaluated\" >&2\n  exit 1\nfi\ngrep -q \"systemfsoftware's flake builds on x86_64-linux, aarch64-linux; x86_64-windows is not one of them\" refused.log"
+          },
+          {
+            "name": "test-timings plans with HOME unset and with a read-only HOME",
+            "installable": ".#checks.{system}.test-timings",
+            "run": "bin=\"$(nix build --no-link --print-out-paths .#checks.{system}.test-timings)/bin/test-timings\"\nws=$(mktemp -d) && mkdir -p \"$ws/p/a\" \"$ws/ro\" && chmod 555 \"$ws/ro\"\nprintf 'packages:\\n  - p/*\\n' > \"$ws/pnpm-workspace.yaml\"\nprintf '{\"name\":\"a\",\"scripts\":{\"test\":\"vitest run\"}}' > \"$ws/p/a/package.json\"\ncd \"$ws\"\nenv -u HOME -u RUNNER_TEMP -u XDG_CACHE_HOME \"$bin\" plan\nenv -u RUNNER_TEMP -u XDG_CACHE_HOME HOME=\"$ws/ro\" \"$bin\" plan"
+          },
+          {
+            "name": "Workspace tarballs rebuild bit-for-bit",
+            "installable": ".#packages.{system}.workspace-tarballs",
+            "run": "nix build --rebuild .#packages.{system}.workspace-tarballs"
+          },
+          {
+            "name": "A consumer lockfile with a wrong integrity fails the store",
+            "installable": ".#sabotage.{system}.consumer-store-wrong-integrity",
+            "run": "if nix build .#sabotage.{system}.consumer-store-wrong-integrity 2>sabotage.log; then\n  echo \"the store built from a wrong integrity\" >&2\n  exit 1\nfi\ngrep -q ERR_PNPM_TARBALL_INTEGRITY sabotage.log"
+          }
+        ]

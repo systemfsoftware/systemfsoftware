@@ -6,12 +6,22 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
+import * as Arr from 'effect/Array'
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
-import { dual } from 'effect/Function'
+import { absurd, dual } from 'effect/Function'
+import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { useAtomValue } from './hooks-value.js'
 import { useRegistry } from './registry-context.js'
+import {
+  AtomRefused,
+  AtomSuspended,
+  ResolveAtomSuspense,
+  resolveAtomSuspense,
+  type ResolveAtomSuspenseDecision,
+} from './resolve-atom-suspense.workflow.js'
 
 type AnyAtom<Val = unknown> = Atom.Atom<Val>
 type AnyPromiseMap<Val = unknown> = WeakMap<AnyAtom<Val>, Promise<void>>
@@ -61,24 +71,77 @@ function promiseMapFor(
   return suspendOnWaiting ? maps.suspendOnWaiting : maps.default
 }
 
-function waitingBlocks<A, E>(
-  result: Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>,
-  suspendOnWaiting: boolean,
-): boolean {
-  if (suspendOnWaiting === false) {
+function waitingOf<A, E>(result: Atom.AsyncResult.Result<A, E>): boolean {
+  if (Atom.AsyncResult.isInitial(result)) {
     return false
   }
   return result.waiting
+}
+
+const suspenseBitMasks = {
+  initial: 1,
+  waiting: 2,
+  suspendOnWaiting: 4,
+  failure: 8,
+  includeFailure: 16,
+} as const
+
+const suspenseDecisionTypeCount = 32
+
+const bitOf = (index: number, mask: number): boolean => (index & mask) !== 0
+
+const suspenseDecisions: ReadonlyArray<ResolveAtomSuspenseDecision> = Array.from(
+  { length: suspenseDecisionTypeCount },
+  (_, index): ResolveAtomSuspenseDecision =>
+    Result.match(
+      resolveAtomSuspense(
+        ResolveAtomSuspense.make({
+          initial: bitOf(index, suspenseBitMasks.initial),
+          waiting: bitOf(index, suspenseBitMasks.waiting),
+          suspendOnWaiting: bitOf(index, suspenseBitMasks.suspendOnWaiting),
+          failure: bitOf(index, suspenseBitMasks.failure),
+          includeFailure: bitOf(index, suspenseBitMasks.includeFailure),
+        }),
+      ),
+      { onFailure: (error: never): ResolveAtomSuspenseDecision => absurd(error), onSuccess: (decision) => decision },
+    ),
+)
+
+const suspenseIndexOf = (
+  initial: boolean,
+  waiting: boolean,
+  suspendOnWaiting: boolean,
+  failure: boolean,
+  includeFailure: boolean,
+): number =>
+  Number(initial) * suspenseBitMasks.initial +
+  Number(waiting) * suspenseBitMasks.waiting +
+  Number(suspendOnWaiting) * suspenseBitMasks.suspendOnWaiting +
+  Number(failure) * suspenseBitMasks.failure +
+  Number(includeFailure) * suspenseBitMasks.includeFailure
+
+function suspenseDecision<A, E>(
+  result: Atom.AsyncResult.Result<A, E>,
+  suspendOnWaiting: boolean,
+  includeFailure: boolean,
+): ResolveAtomSuspenseDecision {
+  return Arr.getUnsafe(
+    suspenseDecisions,
+    suspenseIndexOf(
+      Atom.AsyncResult.isInitial(result),
+      waitingOf(result),
+      suspendOnWaiting,
+      Atom.AsyncResult.isFailure(result),
+      includeFailure,
+    ),
+  )
 }
 
 function resultIsPending<A, E>(
   result: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
 ): boolean {
-  if (Atom.AsyncResult.isInitial(result)) {
-    return true
-  }
-  return waitingBlocks(result, suspendOnWaiting)
+  return Schema.is(AtomSuspended)(suspenseDecision(result, suspendOnWaiting, true))
 }
 
 function shouldKeepPending<A, E>(
@@ -152,10 +215,7 @@ function isReadyResult<A, E>(
   value: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
 ): value is Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
-  if (Atom.AsyncResult.isInitial(value)) {
-    return false
-  }
-  return waitingBlocks(value, suspendOnWaiting) === false
+  return !resultIsPending(value, suspendOnWaiting)
 }
 
 function atomResultOrSuspend<A, E>(
@@ -189,13 +249,13 @@ function failureResultOrThrow<A, E>(
     readonly includeFailure?: boolean | undefined
   },
 ): Atom.AsyncResult.Failure<A, E> {
-  if (includeFailureFrom(options)) {
-    return result
+  if (Schema.is(AtomRefused)(suspenseDecision(result, false, includeFailureFrom(options)))) {
+    throw Cause.squash(result.cause)
   }
-  throw Cause.squash(result.cause)
+  return result
 }
 
-function resolveAtomSuspense<A, E>(
+function resolveFailureOrPassthrough<A, E>(
   result: Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>,
   options?: {
     readonly includeFailure?: boolean | undefined
@@ -254,7 +314,7 @@ export const useAtomSuspense: {
     },
   ): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> => {
     const registry = useRegistry()
-    return resolveAtomSuspense(
+    return resolveFailureOrPassthrough(
       atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
       options,
     )

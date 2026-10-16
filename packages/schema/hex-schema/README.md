@@ -5,7 +5,7 @@ Effect Schema definitions for hexadecimal wire formats — strict, colon-delimit
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/hex-schema 'effect@4.0.0-rc.108'
+pnpm add @systemfsoftware/hex-schema 'effect@^4'
 ```
 
 Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.

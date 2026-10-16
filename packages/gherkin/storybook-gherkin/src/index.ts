@@ -1,7 +1,7 @@
 export { capture } from './Capture.js'
 export type { Capture } from './Capture.js'
 export * from './Errors.schema.js'
-export { feature, From, Steps } from './Feature.js'
+export { feature, From } from './Feature.js'
 export type {
   Feature,
   FeatureOptions,
@@ -13,7 +13,7 @@ export type {
   StepArg,
   StorySpec,
 } from './Feature.js'
-export { And, But, Given, Star, Then, When } from './Steps.js'
+export { And, But, Given, Star, Steps, Then, When } from './Steps.js'
 export type {
   Canvas,
   CapsOf,

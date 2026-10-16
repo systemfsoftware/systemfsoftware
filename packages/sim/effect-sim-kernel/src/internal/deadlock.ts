@@ -47,20 +47,23 @@ const bump = (counts: Map<string, number>, resource: string): void => {
   counts.set(resource, (counts.get(resource) ?? 0) + 1)
 }
 
+/** @internal */
+export type ResourceCounts = ReadonlyMap<string, number>
+
 /** A snapshot of the process resources alive right now, by resource kind. */
 /** @internal */
-export const resourceCounts = (): ReadonlyMap<string, number> => {
+export const resourceCounts = (): ResourceCounts => {
   const counts = new Map<string, number>()
   for (const resource of resourceNames()) bump(counts, resource)
   return counts
 }
 
-const extraOf = (before: ReadonlyMap<string, number>, entry: readonly [string, number]): number =>
+const extraOf = (before: ResourceCounts, entry: readonly [string, number]): number =>
   entry[1] - (before.get(entry[0]) ?? 0)
 
 const appendExtra = (
   appeared: Array<string>,
-  before: ReadonlyMap<string, number>,
+  before: ResourceCounts,
   entry: readonly [string, number],
 ): void => {
   const extra = extraOf(before, entry)
@@ -69,7 +72,7 @@ const appendExtra = (
 
 /** Resource kinds that appeared since `before`, as `"<kind> x<count>"` entries. */
 /** @internal */
-export const newResources = (before: ReadonlyMap<string, number>): ReadonlyArray<string> => {
+export const newResources = (before: ResourceCounts): ReadonlyArray<string> => {
   const appeared: Array<string> = []
   for (const entry of resourceCounts()) appendExtra(appeared, before, entry)
   return appeared

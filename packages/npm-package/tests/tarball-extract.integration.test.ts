@@ -1,9 +1,40 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { createPackage, createPackageFromTarballData, packPackage } from '@systemfsoftware/npm-package'
+import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
 import { Effect, Layer } from 'effect'
+import { gunzipSync } from 'fflate'
 
 const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
+
+const tarBytesOf = (tarball: Uint8Array): Uint8Array => gunzipSync(tarball)
+
+const cleanStringOf = (bytes: Uint8Array): string => {
+  const text = new TextDecoder().decode(bytes)
+  const terminator = text.indexOf('\0')
+  if (terminator === -1) return text
+  return text.slice(0, terminator)
+}
+
+const ustarNameFieldOf = (tar: Uint8Array): string => cleanStringOf(tar.subarray(0, 100))
+const ustarPrefixFieldOf = (tar: Uint8Array): string => cleanStringOf(tar.subarray(345, 500))
+
+const corruptGzipBytes = (): Uint8Array => {
+  const header = Uint8Array.from([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03])
+  const bytes = new Uint8Array(64)
+  bytes.set(header)
+  bytes.fill(0xff, header.length, bytes.length - 4)
+  bytes.set([0x10, 0x00, 0x00, 0x00], bytes.length - 4)
+  return bytes
+}
+
+const decompressorFailureMessage = (bytes: Uint8Array): string | undefined => {
+  try {
+    gunzipSync(bytes)
+    return undefined
+  } catch (err) {
+    return err instanceof Error ? err.message : undefined
+  }
+}
 
 const uint8Of = (value: string | Uint8Array | undefined): Uint8Array => {
   if (value instanceof Uint8Array) return value
@@ -162,6 +193,112 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
           })),
         Then('the extractor rejects the uncompressed text stream')((s, expect) =>
           expect(s.attempt).toMatchObject({ message: 'Tarball is empty' })
+        ),
+      ),
+    )
+
+    scenario(
+      'An entry name longer than the ustar name field splits across prefix and name',
+      Gherkin.Do.pipe(
+        Given('a package whose directory segment pushes the entry name past 100 bytes')('ctx', () => {
+          const directory = 'd'.repeat(100)
+          const tree = {
+            'package.json': jsonString({ name: 'split-test', version: '1.0.0' }),
+            [`dist/${directory}/index.js`]: 'deep',
+          }
+          const pkg = createPackage(tree, 'split-test', '1.0.0')
+          return Effect.succeed({ directory, pkg, tar: tarBytesOf(packPackage(pkg)) })
+        }),
+        When('the tarball is extracted back and its first header fields are read')('read', (s) =>
+          Effect.sync(() => ({
+            extracted: createPackageFromTarballData(packPackage(s.ctx.pkg)),
+            nameField: ustarNameFieldOf(s.ctx.tar),
+            prefixField: ustarPrefixFieldOf(s.ctx.tar),
+          }))),
+        Then('the split fields reassemble the full path and the deep body survives')((s, expect) => {
+          const path = `/node_modules/split-test/dist/${s.ctx.directory}/index.js`
+          return expect({
+            nameField: s.read.nameField,
+            prefixField: s.read.prefixField,
+            body: s.read.extracted.tryReadFile(path),
+          }).toEqual({
+            nameField: 'index.js',
+            prefixField: `package/dist/${s.ctx.directory}`,
+            body: 'deep',
+          })
+        }),
+      ),
+    )
+
+    scenario(
+      'An entry name measuring exactly the name field keeps one name field',
+      Gherkin.Do.pipe(
+        Given('a one-file tree whose entry name measures exactly 100 bytes')(
+          'tar',
+          () => Effect.sync(() => tarBytesOf(packTree({ ['s'.repeat(92)]: 'x' }, 'width-test'))),
+        ),
+        When('its ustar header fields are read')('fields', (s) =>
+          Effect.sync(() => ({
+            nameField: ustarNameFieldOf(s.tar),
+            prefixField: ustarPrefixFieldOf(s.tar),
+          }))),
+        Then('the name field holds the whole entry name and no prefix is written')((s, expect) =>
+          expect(s.fields).toEqual({
+            nameField: `package/${'s'.repeat(92)}`,
+            prefixField: '',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'An entry name no ustar field layout can hold is refused',
+      Gherkin.Do.pipe(
+        Given('a tree whose entry name overflows both fields with no usable separator')(
+          'tree',
+          () => Effect.succeed({ ['x'.repeat(200)]: 'x' }),
+        ),
+        When('the tree is packed directly to tarball bytes')('attempt', (s) =>
+          Effect.sync(() => {
+            try {
+              packTree(s.tree, 'long-test')
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
+            }
+          })),
+        Then('packing halts naming the byte length no split can carry')((s, expect) =>
+          expect(s.attempt).toEqual({
+            message: 'Entry name is 208 bytes, which no ustar prefix/name split can hold',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A corrupt gzip payload surfaces the decompressor failure rather than an empty tarball',
+      Gherkin.Do.pipe(
+        Given('gzip bytes with a valid header and a corrupt deflate payload')('ctx', () => {
+          const bytes = corruptGzipBytes()
+          return Effect.succeed({ bytes, decompressorMessage: decompressorFailureMessage(bytes) })
+        }),
+        When('extraction is attempted')('outcome', (s) =>
+          Effect.sync(() => {
+            try {
+              createPackageFromTarballData(s.ctx.bytes)
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
+            }
+          })),
+        Then('the decompressor own failure reaches the caller')((s, expect) =>
+          expect({
+            message: s.outcome.message,
+            reportedAsEmptyTarball: s.outcome.message === 'Tarball is empty',
+          }).toEqual({
+            message: s.ctx.decompressorMessage,
+            reportedAsEmptyTarball: false,
+          })
         ),
       ),
     )

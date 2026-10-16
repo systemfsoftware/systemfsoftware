@@ -163,7 +163,11 @@ Feature('Growing and shrinking a running supervision tree')
           'answers',
           ({ tree }) =>
             Effect.gen(function*() {
-              const answer = yield* Supervisor.stopChild(tree.supervisor, childIdOfStart(tree.answer), -1)
+              const answer = yield* Supervisor.stopChild(
+                tree.supervisor,
+                childIdOfStart(tree.answer),
+                Number.MAX_SAFE_INTEGER,
+              )
               const remaining = yield* runningChildIds(tree.supervisor)
               return { answer, remaining }
             }),

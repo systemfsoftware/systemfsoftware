@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 import { type LoopbackService, loopbackService } from './__fixtures__/loopback-service.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -25,6 +25,7 @@ const healthExchange = (service: LoopbackService): Effect.Effect<Readiness.HttpE
   )
 
 Feature('Releasing every readiness probe connection when the wait stops early')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -37,10 +38,11 @@ Feature('Releasing every readiness probe connection when the wait stops early')
         ),
         Then('the release run passes and the service saw the wait connect at least once')(
           (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
-              report: { _tag: 'Pass' },
-              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            }),
+            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
+              .toMatchObject({
+                report: { _tag: 'Pass' },
+                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              }),
         ),
       ),
     )
@@ -55,10 +57,11 @@ Feature('Releasing every readiness probe connection when the wait stops early')
         ),
         Then('the release run passes and the service saw the wait connect at least once')(
           (state, expect) =>
-            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
-              report: { _tag: 'Pass' },
-              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
-            }),
+            expect({ report: state.checked, accepted: state.service.accepted() }, Conformance.render(state.checked))
+              .toMatchObject({
+                report: { _tag: 'Pass' },
+                accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              }),
         ),
       ),
     )

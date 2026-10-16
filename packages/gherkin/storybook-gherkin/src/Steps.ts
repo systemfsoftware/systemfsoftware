@@ -2,6 +2,7 @@ import { Array as Arr, Effect, Match, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type { screen, UserEventObject } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
+import type { Assertion, ExpectStatic } from 'vitest'
 
 import type { Capture } from './Capture.js'
 import { CaptureDecodeFailed, DuplicateCapture } from './Errors.schema.js'
@@ -118,6 +119,9 @@ export interface PlayContext<TArgs = unknown> {
 export interface StepContext<TArgs = unknown> {
   readonly canvas: Canvas
   readonly screen: typeof screen
+  readonly expect: Omit<ExpectStatic, 'element'> & {
+    <T>(actual: T, message?: string): Assertion<Promise<void>, T>
+  }
   readonly userEvent: UserEventObject
   readonly step: StepFn
   readonly args: TArgs
@@ -309,6 +313,8 @@ export const Then: StepCtor = makeStepCtor('Then')
 export const And: StepCtor = makeStepCtor('And')
 export const But: StepCtor = makeStepCtor('But')
 export const Star: StepCtor = makeStepCtor('Star')
+
+export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
 
 const isNonNullObject = (value: unknown): value is object => {
   if (typeof value !== 'object') return false

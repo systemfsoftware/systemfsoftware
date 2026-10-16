@@ -1,8 +1,8 @@
 import { Discern } from '@systemfsoftware/discern'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { describe, expect, it } from 'tstyche'
 
 const Request = Schema.String

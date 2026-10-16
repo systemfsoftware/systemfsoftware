@@ -1,7 +1,0 @@
-{
-  "extends": "@other/base",
-  "compilerOptions": {
-    "composite": true
-  },
-  "include": ["src", "tests"]
-}

@@ -1,7 +1,7 @@
 ---
 title: A gate can go green because it stopped looking
 date: 2026-08-18
-last_updated: 2026-09-23
+last_updated: 2026-09-26
 category: architecture-patterns
 module: constitution corpus validator
 problem_type: architecture_pattern
@@ -146,8 +146,8 @@ for (const p of PATHS) {
 And what cannot be failed is stated on the success line rather than omitted:
 
 ```
-valid: 37 rules across 6 yaml blocks in 1 files, 9 families; no id reassigned since origin/main
-  1 id(s) vacated since origin/main: CONST-T11
+valid: 36 rules across 6 yaml blocks in 1 files, 9 families; no id reassigned since origin/main
+  1 id(s) vacated since origin/main: CONST-T4
 ```
 
 And the fixture-anchoring pair from the reverse surgery — same gate, same narrowing,

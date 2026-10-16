@@ -1,6 +1,7 @@
 export const BLUEPRINT_FILE_SUFFIX = '.blueprint.ts'
 export const RETIRED_RESOURCE_FILE_SUFFIX = '.resource.ts'
 export const HANDLE_FILE_SUFFIX = '.handle.ts'
+export const CELL_FILE_SUFFIX = '.cell.ts'
 export const TYPE_TEST_SUFFIX = '.tst.ts'
 
 export type KindFileKind = 'blueprint' | 'handle'
@@ -16,6 +17,8 @@ export const isRetiredResourceFile = (filename: string): boolean =>
   basenameOf(filename).endsWith(RETIRED_RESOURCE_FILE_SUFFIX)
 
 export const isHandleFile = (filename: string): boolean => basenameOf(filename).endsWith(HANDLE_FILE_SUFFIX)
+
+export const isCellFile = (filename: string): boolean => basenameOf(filename).endsWith(CELL_FILE_SUFFIX)
 
 export const kindOfFile = (filename: string): KindFileKind | null => {
   if (isBlueprintFile(filename)) return 'blueprint'

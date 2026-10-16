@@ -76,7 +76,3 @@ publish pack:    hooks ON  (npm-package prepack: pnpm build rebuilds dist)
 - **Keep hooks minimal.** `prepare` on a bin-shipping package is a ~60 ms transpile-only build by design; a hook that grows into a workspace-wide operation turns one pack into a multi-package mutation.
 - **A package that reaches a workspace tool through its published version never receives that tool's unreleased fix.** Where a package consumes its own sibling from the registry to avoid closing a dependency cycle, the sibling's in-source read-only packing is invisible to it: the analysis task executes the published binary, which packs with hooks enabled and rebuilds the very output its concurrent readers are importing. Diagnose it by identity, not timestamp — a clean-and-rebuild replaces the files, so the inode changes while the byte size does not. Force the read-only form from the caller's environment, which holds for every version of the tool, instead of relying on the tool carrying its own flag.
 - Verification that closed this: `check:local` exits 0; a live graph query confirms the lane's `test:contract` still waits on own and `^build`; CI runs the lane in containers against the hookless tarballs.
-
-## Related Issues
-
-- [first publish under OIDC trusted publishing](../tooling-decisions/first-publish-under-oidc-trusted-publishing.md) — the second, independent blocker on the same failed release: the publish preflight aborts on packages that have never existed on the registry.

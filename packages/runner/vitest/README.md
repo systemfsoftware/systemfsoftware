@@ -97,6 +97,18 @@ A passing test outside a declared-shared block runs a second time on a fresh bui
 
 That is how a module-level counter, a shared cache, or a process-global histogram gets reported instead of staying green. `it.live` is re-run too, so a real-resource suite gets the same check. A declared-shared block is the one exception.
 
+A registration can name what the second run runs with `rerun`, a generator body of the same shape. The second run still happens only after a clean first run, on a fresh build, and a failure there is still `LeakedState`. A harness whose first run already repeats the body many times uses it to run the body once more instead of repeating all of that work:
+
+```ts
+it('reads the stored row', function*({ expect }) {
+  // the first run
+}, {
+  rerun: function*({ expect }) {
+    // the second run, on a fresh build of the services
+  },
+})
+```
+
 ## Concurrency and shuffle
 
 Tests inside a block run concurrently and in shuffled order, and each concurrent test keeps its own failure list and check counts. Concurrency is what makes a cross-test leak reproducible: two tests that interleave are two tests whose state must not be shared. Nothing else pins their order.
@@ -171,15 +183,81 @@ it.prop(
 
 ### The constant-impostor gate
 
-After a property holds, it runs again against a constant impostor of its subject — a fake that returns the first output forever, whatever the input. Each subject is judged across every property in its file, when the file ends. If nothing in the file refutes the impostor, the file fails `VacuousProperty`:
-
-> sort: no property in this file refuted the constant impostor of \`sort\`, so nothing here pins it down. … Laws that only relate outputs to each other (additivity, idempotence, commutativity, round trips through the subject) hold for such constants. Pin the output to the input: compare against an independent model (\`subject(x)\` equals a straightforward reimplementation), or conjoin a base case (\`subject([one])\` equals its known value). Also check that the body calls the \`subject\` it was given, not the imported implementation.
-
-`sorting is ordered` alone is vacuous, because a constant empty array is also ordered. A law that pins the output to an input refutes the impostor for that subject:
+After a property holds, it runs again against a constant impostor of its subject — a fake that returns the first output forever, whatever the input. Each subject is judged across every property in its file, when the file ends. If nothing in the file refutes the impostor, the file fails with `VacuousProperty`:
 
 ```ts
-it.law.model('agree with insertion sort', { of: [S.Array(S.Int)], subject: sort }, insertionSort)
+export interface VacuousProperty {
+  readonly _tag: 'VacuousProperty'
+  readonly subjects: ReadonlyArray<{
+    readonly label: string
+    readonly properties: ReadonlyArray<{
+      readonly property: { name: string; site: string | null; seed: number; runs: number }
+      readonly frozen:
+        | { _tag: 'Frozen'; outputs: ReadonlyArray<{ member: string; output: { rendered: string; value: unknown } }> }
+        | { _tag: 'NeverCalled' }
+    }>
+  }>
+  readonly exempt: ReadonlyArray<{ name: string; kind: string }>
+  readonly replay: string
+}
 ```
+
+The `frozen` union distinguishes a subject whose impostor was called (`Frozen`, with rendered outputs for each member) from one never called during the vacuity check (`NeverCalled`). Replay the same verdict with:
+
+```bash
+CONFORMANCE_REPLAY="property=<hash>;seed=<n>;runs=<n>|..." pnpm test
+```
+
+Other property failures are exported from the package root as tagged errors — each carries its own fields:
+
+- **`PropertyRefuted`**: `property` (name, site, seed, runs), `counterexample` (rendered, value), `shrinks`, `replay`
+- **`PropertyExhausted`**: `property`, `discards`, `budget` (`{ runs, maxDiscards }`, `maxDiscards` null when uncapped), `replay` — the generator discarded too many draws, so the property was never evaluated; it is not a refutation and records nothing to the seed store
+- **`NonBooleanVerdict`**: `property`, `drawn` (rendered, value), `returned` (array of kinds), `replay`
+- **`CoverageBelowMinimum`**: `property`, `classes` (array of {label, hits, runs, minimum}), `replay`
+- **`SelfModelLaw`**: `name`, `site` — the law compared the subject to itself
+- **`SeedStoreUnreadable`**: `file`, `line`, `detail` — a seed store file's line could not be decoded
+- **`ReplayUnreadable`**: `text` — `CONFORMANCE_REPLAY` names neither the kernel's `seed=…;path=…` nor a property entry
+- **`ReplayNoLongerReproduces`**: `property`, `replay` — a `CONFORMANCE_REPLAY` replay no longer reproduces its recorded failure
+
+A reporter receives every field on the raw error, so a script or agent narrows by `_tag` and reads the fields directly without parsing messages:
+
+```ts
+if (error._tag === 'VacuousProperty') {
+  for (const subject of error.subjects) {
+    for (const run of subject.properties) {
+      console.log(run.property.name, run.frozen._tag, run.property.seed)
+    }
+  }
+}
+```
+
+### Seeds and the seed store
+
+A provided budget asks for derandomized runs by carrying a `seed`. Each property then gets its own stable seed derived from that seed and its identity, so different properties draw different inputs and the same property draws the same inputs in every process and on every machine:
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  test: { provide: { '@systemfsoftware/vitest:property-check': { runs: 30, seed: 1 } } },
+})
+```
+
+**Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
+
+**Migration**: code that relied on a provided seed making every property share one stream must set `arbitrary: { seed: <literal> }` on each property that needs a literal seed.
+
+**The seed store and recording**: failing seeds are automatically saved to a checked-in JSON Lines file `__property_seeds__/<test file>.jsonl` beside the test file. Each line holds either:
+
+- Refuted: `{ "_tag": "Refuted", "property": "full test name", "seed": 42, "attempt": 5, "size": 3, "path": [0,1], "failure": "ReturnedFalse" }`
+- NonBoolean: `{ "_tag": "NonBoolean", "property": "full test name", "seed": 42, "runs": 100 }`
+
+Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
+
+**Stale seeds**: a recorded seed-store refutation whose draw now passes no longer fails the property; the property's novel draws decide it, and the stale line can be deleted. A recorded draw that still fails but whose recorded shrink steps no longer replay (the generator's shrinking or the failure's kind changed) refutes the property with that draw, unshrunk, as its counterexample. An explicit `CONFORMANCE_REPLAY` replay that no longer reproduces its failure fails with `ReplayNoLongerReproduces` — the stored seed-store path is the one that passes.
+
+**Generator changes**: if a property's generator changes, its recorded seeds may no longer produce their old counterexamples, so the failure stops reproducing. Cases that must always run belong in the test source itself, not in the seed store.
+
+**The `record` option**: `{ runs: 30, record: false }` opts out of writing seeds for a run; the engine still reads and replays existing seeds.
 
 ### Law kinds
 

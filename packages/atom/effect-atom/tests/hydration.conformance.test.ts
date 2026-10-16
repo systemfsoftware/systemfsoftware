@@ -89,6 +89,7 @@ const hydrationCheck = (
   })
 
 Feature('Saving a still-loading value and filling it in on a reloaded page', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -105,7 +106,9 @@ Feature('Saving a still-loading value and filling it in on a reloaded page', { t
         Then('the reloaded page shows the value loading until it finishes, then shows the finished value')((
           s,
           expect,
-        ) => expect(s.report).toMatchObject({ _tag: 'Pass', histories: HYDRATION_ROUNDS })),
+        ) =>
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: HYDRATION_ROUNDS })
+        ),
       ),
     )
   })

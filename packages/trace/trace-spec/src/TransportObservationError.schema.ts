@@ -6,4 +6,8 @@ export class TransportObservationError
     source: Schema.String,
     detail: Schema.String,
   })
-{}
+{
+  override get message(): string {
+    return `The trace store at "${this.source}" could not serve trace "${this.traceId}": ${this.detail}`
+  }
+}

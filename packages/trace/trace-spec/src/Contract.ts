@@ -1,8 +1,10 @@
 import type { Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
+import { callFrameOutside, withRaisingFrame } from '@systemfsoftware/vitest/failure'
 import { Effect, FileSystem, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
+import { BreakFailure } from './BreakFailure.schema.js'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
 import { EmptyObservationError } from './EmptyObservationError.schema.js'
 import * as FailureDump from './FailureDump.js'
@@ -12,9 +14,19 @@ import { Observation, type ObservationFailure } from './Observation.service.js'
 import type * as Rel from './Rel.js'
 import type { Run, Stimulus } from './Stimulus.js'
 import { TransportObservationError } from './TransportObservationError.schema.js'
-import type { Verdict } from './Verdict.schema.js'
+import { report, type Verdict } from './Verdict.schema.js'
 
-export { ContractDecodeError, EmptyObservationError, IncompleteObservationError, TransportObservationError }
+const OWN_FRAMES = /\/trace-spec\/(?:src|dist)\//u
+
+const callFrame = (): string | undefined => callFrameOutside(OWN_FRAMES)
+
+export {
+  BreakFailure,
+  ContractDecodeError,
+  EmptyObservationError,
+  IncompleteObservationError,
+  TransportObservationError,
+}
 
 export const TypeId = Symbol.for('@systemfsoftware/trace-spec/Contract')
 export type TypeId = typeof TypeId
@@ -117,11 +129,13 @@ const dumpOf = (
   verdict: Verdict,
   options: CheckOptions | undefined,
 ): Effect.Effect<string | null, never, FileSystem.FileSystem> =>
-  Option.match(FailureDump.report(verdict), {
+  Option.match(report(verdict), {
     onNone: () => Effect.succeed(null),
-    onSome: (report) =>
+    onSome: (rendered) =>
       Effect.map(
-        Effect.option(FailureDump.write({ ...observed, conjunct: verdict.conjunct, report, name: options?.dumpName })),
+        Effect.option(
+          FailureDump.write({ ...observed, conjunct: verdict.conjunct, report: rendered, name: options?.dumpName }),
+        ),
         Option.getOrNull,
       ),
   })
@@ -171,6 +185,8 @@ export interface Report {
 /** What a hold answers: nothing to report. */
 const held: Report = { verdict: 'Hold', report: '' }
 
+const failureOfReport = (report: Report): BreakFailure => new BreakFailure({ report: report.report })
+
 const reportOf = <Input, Output>(relationId: string, judgment: Judgment<Input, Output>): Report =>
   Match.value(judgment.verdict).pipe(
     Match.tag('Hold', (): Report => held),
@@ -178,7 +194,7 @@ const reportOf = <Input, Output>(relationId: string, judgment: Judgment<Input, O
       verdict: 'Break',
       report: [
         `trace contract broke: ${relationId}`,
-        Option.getOrElse(FailureDump.report(breach), () => ''),
+        Option.getOrElse(report(breach), () => ''),
         `trace ${judgment.run.traceId}`,
         `dump ${judgment.dumpPath ?? '(not written)'}`,
       ].join('\n'),
@@ -186,14 +202,23 @@ const reportOf = <Input, Output>(relationId: string, judgment: Judgment<Input, O
     Match.exhaustive,
   )
 
+const verdictCheckWith = <Input, Output, E, R>(
+  self: Contract<Input, Output, E, R>,
+  expect: Expect,
+  judgment: Judgment<Input, Output>,
+  frame: string | undefined,
+): Check => {
+  const finding = reportOf(self.relation.id, judgment)
+  return finding.verdict === 'Break'
+    ? Effect.die(withRaisingFrame(failureOfReport(finding), frame))
+    : expect(finding, finding.report).toEqual(held)
+}
+
 const verdictCheckImpl = <Input, Output, E, R>(
   self: Contract<Input, Output, E, R>,
   expect: Expect,
   judgment: Judgment<Input, Output>,
-): Check => {
-  const report = reportOf(self.relation.id, judgment)
-  return expect(report, report.report).toEqual(held)
-}
+): Check => verdictCheckWith(self, expect, judgment, callFrame())
 
 /**
  * The one check a judgement makes: it passes only when the relation held, and its message is the report, so a
@@ -216,8 +241,10 @@ const checkDual = <Input, Output, E, R>(
   expect: Expect,
   input: Input,
   options?: CheckOptions,
-): Effect.Effect<void, JudgeFailure<E>, Asserted | Services<R>> =>
-  Effect.flatMap(judgeDual(self, input, options), (judgment) => verdictCheckImpl(self, expect, judgment))
+): Effect.Effect<void, JudgeFailure<E>, Asserted | Services<R>> => {
+  const frame = callFrame()
+  return Effect.flatMap(judgeDual(self, input, options), (judgment) => verdictCheckWith(self, expect, judgment, frame))
+}
 
 /**
  * The test edge over `judge`: the judgement and its one check. A break fails the check with the report;

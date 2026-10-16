@@ -1,6 +1,0 @@
-{
-  "compilerOptions": {
-    "module": "preserve",
-    "customConditions": ["@systemfsoftware/source"]
-  }
-}

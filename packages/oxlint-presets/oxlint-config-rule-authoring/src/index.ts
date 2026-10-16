@@ -1,23 +1,17 @@
 import type { OxlintConfig } from 'oxlint'
 
+/**
+ * The one ignore list every preset in this repository carries on its default config. A config that lists a
+ * preset under `extends` does not inherit it; a config that spreads it into its own `ignorePatterns` does.
+ */
 export const ignorePatterns: readonly string[] = [
   '**/node_modules/**',
   '**/dist/**',
-  '**/lib/**',
-  '**/esm/**',
-  '**/cjs/**',
-  '**/build/**',
-  '**/out/**',
   '**/.turbo/**',
   '**/coverage/**',
   '**/.stryker-tmp/**',
-  '**/*.d.ts',
   '**/*.tsbuildinfo',
-  '**/*.mjs',
   '**/.claude/**',
-  '**/.opencode/**',
-  '**/.sisyphus/**',
-  '**/.repo/**',
   '**/.worktrees/**',
   '**/repos/**',
 ]

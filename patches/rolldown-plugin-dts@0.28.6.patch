@@ -1,0 +1,39 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index cb3854eccb1c8208bdd18bde6d9026a6261dff61..202e6eae0e94881ab90d5820dc1a44a57a5fa834 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1427,6 +1427,12 @@ function createFakeJsPlugin({ sourcemap, cjsDefault, sideEffects }) {
+ 			source: null,
+ 			attributes: []
+ 		}));
++		if (program.body.some(isLocalDeclaration) && !program.body.some(isExportListStatement) && !program.body.some((node) => node.type === "TSExportAssignment")) program.body.push(b.ExportNamedDeclaration({
++			declaration: null,
++			specifiers: [],
++			source: null,
++			attributes: []
++		}));
+ 		const comments = /* @__PURE__ */ new Set();
+ 		const commentsValue = /* @__PURE__ */ new Set();
+ 		for (const id of chunk.moduleIds) {
+@@ -1480,6 +1486,21 @@ function isModuleStatement(node) {
+ 		"TSExportAssignment"
+ 	]) || node.type === "TSImportEqualsDeclaration" && node.moduleReference.type === "TSExternalModuleReference";
+ }
++function isExportListStatement(node) {
++	return node.type === "ExportNamedDeclaration" && !node.declaration;
++}
++function isLocalDeclaration(node) {
++	if (is.oneOf(node, [
++		"TSInterfaceDeclaration",
++		"TSTypeAliasDeclaration",
++		"TSEnumDeclaration",
++		"ClassDeclaration",
++		"FunctionDeclaration",
++		"VariableDeclaration",
++		"TSDeclareFunction"
++	])) return true;
++	return node.type === "TSModuleDeclaration" && node.kind === "namespace" && node.id.type === "Identifier" && node.id.name !== "global";
++}
+ //#endregion
+ //#region src/tsc/vue.ts
+ const debug$3 = createDebug("rolldown-plugin-dts:vue");

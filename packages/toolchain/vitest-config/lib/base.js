@@ -1,42 +1,23 @@
-import { glob, realpath } from 'node:fs/promises'
-import { join } from 'node:path'
+import { realpath } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { defaultInclude, defineConfig as defineVitestConfig } from 'vitest/config'
+import { defineConfig as defineVitestConfig } from 'vitest/config'
 
 import { exists, firstExisting, readJson } from './files.js'
-
-/** The suffix that defines a conformance file, the one project `defineConfig` splits off. */
-const CONFORMANCE_GLOB = '**/*.conformance.test.ts'
-
-/**
- * Whether the package at `root` keeps any conformance file; the walk stops at the first one.
- *
- * @param {string} root
- * @returns {Promise<boolean>}
- */
-const hasConformanceFiles = async (root) => {
-  for await (const _file of glob(CONFORMANCE_GLOB, { cwd: root, exclude: ['**/node_modules/**', '**/dist/**'] })) {
-    return true
-  }
-  return false
-}
-
-/** The pull-request lane, which leaves every package's conformance files out. */
-const isPrLane = () => process.env['VITEST_LANE'] === 'pr'
 
 /** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
 /** @typedef {NonNullable<ViteUserConfig['test']>} TestConfig */
 /** @typedef {NonNullable<TestConfig['projects']>} Projects */
 /**
  * What one config load reads from disk about its own package: the exemption table entry that decides
- * where the guard applies, the guard setup files its projects take, and the conformance facts the
- * project split and the lane's shape are decided from.
+ * where the guard applies, the guard setup files its projects take, and the name and workspace root the
+ * fork's provided context carries.
  *
  * @typedef {{
  *   readonly exemption: { readonly projects: readonly string[] | '*', readonly registrar: string } | undefined,
  *   readonly guardSetupFiles: ReadonlyArray<string>,
- *   readonly conformanceFiles: boolean,
- *   readonly laneLeavesOut: boolean,
+ *   readonly name: string,
+ *   readonly root: string,
  * }} PackageFacts
  */
 
@@ -55,7 +36,7 @@ const stringField = (value, key) => {
 // Both pipelines need it: node-environment tests resolve through the SSR resolver,
 // while browser tests use the client one. Vite replaces the default conditions when
 // they are set, so the defaults are spread back in rather than dropped.
-export const sourceCondition = '@systemfsoftware/source'
+const sourceCondition = '@systemfsoftware/source'
 
 // The fork's package. Its own tests load its guard from source, since it holds no dependency on itself.
 const forkPackage = '@systemfsoftware/vitest'
@@ -114,7 +95,8 @@ const guardSetupFile = async (cwd, name) => {
   const refuse = (/** @type {string} */ what) =>
     new Error(
       `[@systemfsoftware/vitest-config] ${name} ${what}, so its tests would run without the KTD8 guard. ` +
-        `Declare "${forkPackage}": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
+        `Add "${forkPackage}" to devDependencies of ${join(cwd, 'package.json')} ` +
+        `(as "workspace:^" inside the systemfsoftware monorepo, otherwise the flake tarball or a version range), ` +
         `or name the exempt test project in vitest-config's guard exemption table.`,
     )
   const forkDir = join(cwd, 'node_modules', forkPackage)
@@ -143,9 +125,50 @@ const packageFacts = async (cwd) => {
   const name = stringField(await readJson(join(cwd, 'package.json')), 'name')
   const exemption = guardExemptions[name]
   const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
-  const conformanceFiles = await hasConformanceFiles(cwd)
-  return { exemption, guardSetupFiles: guardFiles, conformanceFiles, laneLeavesOut: isPrLane() && conformanceFiles }
+  const root = await workspaceRoot(cwd)
+  return { exemption, guardSetupFiles: guardFiles, name, root }
 }
+
+/**
+ * The workspace root: the nearest ancestor of `cwd` that holds `pnpm-workspace.yaml`, or `cwd` when none does.
+ *
+ * @param {string} cwd
+ * @returns {Promise<string>}
+ */
+const workspaceRoot = async (cwd) => {
+  let dir = cwd
+  while (!(await exists(join(dir, 'pnpm-workspace.yaml')))) {
+    const parent = dirname(dir)
+    if (parent === dir) return cwd
+    dir = parent
+  }
+  return dir
+}
+
+/**
+ * The facts a run's provided context carries for the fork: this package's npm name and the workspace root every
+ * rendered path is relativized against. The runner reads them with Vitest's `inject`, so a rerun line names the
+ * package without the fork ever reading a built-in.
+ *
+ * @param {PackageFacts} facts
+ * @returns {Record<string, string>}
+ */
+const packageProvide = (facts) => {
+  /** @type {Record<string, string>} */
+  const provided = {}
+  if (facts.name.length > 0) provided['@systemfsoftware/vitest:package'] = facts.name
+  if (facts.root.length > 0) provided['@systemfsoftware/vitest:workspace-root'] = facts.root
+  return provided
+}
+
+/**
+ * A test block with the package's own provided values merged over whatever it already provides.
+ *
+ * @param {TestConfig | undefined} test
+ * @param {PackageFacts} facts
+ * @returns {TestConfig}
+ */
+const withProvide = (test, facts) => ({ ...test, provide: { ...test?.provide, ...packageProvide(facts) } })
 
 /**
  * A test block with the package's guard setup files added on top of its own, each at most once.
@@ -200,112 +223,15 @@ const isTestProject = (value) => typeof value === 'object' && value !== null && 
 const projectWithSetup = (project, facts) => {
   if (!isTestProject(project)) return project
   const test = project.test
-  return { ...project, test: withSetupFiles(test, !isExemptProject(test, facts), facts) }
+  return { ...project, test: withProvide(withSetupFiles(test, !isExemptProject(test, facts), facts), facts) }
 }
 
 /**
- * The include of a test block whose specs are its own minus the conformance files: a conformance file
- * is exercised in the conformance project alone.
- *
- * @param {ReadonlyArray<string> | undefined} include
- * @returns {Array<string>}
- */
-const unitInclude = (include) => [...(include ?? defaultInclude), `!${CONFORMANCE_GLOB}`]
-
-/**
- * The test block of a project that runs every spec but the conformance ones.
- *
- * @param {TestConfig} test
- * @returns {TestConfig}
- */
-const unitTest = (test) => ({ ...test, include: unitInclude(test.include) })
-
-/**
- * The test block of the conformance project: the conformance files are its only specs, and it
- * collects no in-source test of its own, so its spec set is exactly those files.
- *
- * @param {TestConfig} test
- * @returns {TestConfig}
- */
-const conformanceTest = (test) => ({ ...test, include: [CONFORMANCE_GLOB], includeSource: [] })
-
-/**
- * @param {TestConfig} test
- * @param {string} name
- * @returns {{ readonly test: TestConfig }}
- */
-const namedProject = (test, name) => ({ test: { ...test, name } })
-
-/**
- * Whether a project is the one that runs the conformance files, by the name every conformance project
- * carries.
- *
- * @param {unknown} project
- * @returns {boolean}
- */
-const isConformanceProject = (project) => isTestProject(project) && stringField(project.test, 'name') === 'conformance'
-
-/**
- * A project with the conformance files taken out of its specs; a project that ran only conformance
- * files keeps its name and runs nothing.
- *
- * @param {unknown} project
- * @returns {unknown}
- */
-const projectWithoutConformance = (project) => {
-  if (!isTestProject(project)) return project
-  const test = project.test ?? {}
-  return { ...project, test: isConformanceProject(project) ? withoutSpecs(test) : unitTest(test) }
-}
-
-/**
- * The declared projects as the lane serves them: the pr lane takes the conformance files out of every
- * project, and keeps every project's name, because a package's own `--project conformance` run must
- * still find the project it names.
- *
- * @param {ReadonlyArray<unknown>} projects
- * @param {PackageFacts} facts
- * @returns {Array<unknown>}
- */
-const laneProjects = (
-  projects,
-  facts,
-) => (facts.laneLeavesOut ? projects.map(projectWithoutConformance) : [...projects])
-
-/**
- * The projects of a config that declares none: a package that keeps conformance files runs them in
- * their own project beside the unit one, and the pr lane drops that project; a package that keeps none
- * stays the single project it is.
- *
- * @param {TestConfig} test
- * @param {PackageFacts} facts
- * @returns {Projects | undefined}
- */
-const splitProjects = (test, facts) => {
-  if (!facts.conformanceFiles) return undefined
-  const unit = namedProject(unitTest(test), 'unit')
-  return facts.laneLeavesOut ? [unit] : [unit, namedProject(conformanceTest(test), 'conformance')]
-}
-
-/**
- * A test block with no spec of its own: the root of a split config runs nothing and must not leak an
- * include into the projects that inherit it, and a declared conformance project the lane leaves
- * without its files must still resolve and run nothing.
- *
- * @param {TestConfig} test
- * @returns {TestConfig}
- */
-const withoutSpecs = (test) => ({ ...test, include: [], includeSource: [] })
-
-/**
- * Vitest's `defineConfig` with the conformance coverage gate added to the config's own plugins, the
- * conformance files split into a project of their own, and the lane's project list: its per-test
- * handoff and the guard are added to every block that runs tests (the root when the config declares no
- * projects, otherwise each inline project). The root of a config with projects runs no tests of its
- * own, and a project with `extends: true` inherits the root's setup files, so a guard on that root
- * would reach an exempt project. The pr lane drops the conformance project, which the gate reports as
- * a partial run instead of judging. The config it builds is a promise, because resolving the guard and
- * the package's conformance files reads the file system.
+ * Vitest's `defineConfig` with the guard and the fork's provided context added to every block that runs
+ * tests: the root when the config declares no projects, otherwise each inline project. The root of a
+ * config with projects runs no tests of its own, and a project with `extends: true` inherits the root's
+ * setup files, so a guard on that root would reach an exempt project. The config it builds is a promise,
+ * because resolving the guard reads the file system.
  *
  * @param {ViteUserConfig} config
  * @returns {Promise<ViteUserConfig>}
@@ -313,16 +239,12 @@ const withoutSpecs = (test) => ({ ...test, include: [], includeSource: [] })
 export const defineConfig = async (config) => {
   const facts = await packageFacts(process.cwd())
   const declared = config.test?.projects
-  const base = withSetupFiles(config.test, declared === undefined, facts)
-  const projects = declared === undefined
-    ? splitProjects(base, facts)
-    : laneProjects(declared.map((project) => projectWithSetup(project, facts)), facts)
-  const split = declared === undefined && projects !== undefined
+  const base = withProvide(withSetupFiles(config.test, declared === undefined, facts), facts)
   return defineVitestConfig({
     ...config,
-    test: projects === undefined
+    test: declared === undefined
       ? base
-      : { ...(split ? withoutSpecs(base) : base), projects: /** @type {Projects} */ (projects) },
+      : { ...base, projects: /** @type {Projects} */ (declared.map((project) => projectWithSetup(project, facts))) },
   })
 }
 
@@ -340,10 +262,13 @@ const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 // One tier table decides how many draws every property gets: a Stryker worker wants fast mutant runs,
 // CI wants the thorough tier, and a local run sits between them. The fork merges this over its own
 // `runs: 100` unless a property sets its own.
-const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : isCI ? 1000 : 100
+const isMutationWorker = process.env['STRYKER_MUTATOR_WORKER'] !== undefined
 
-// The fork reads these under `inject`; the key is its published `ProvidedContext` key.
-const propertyCheckDefaults = { runs: propertyRuns }
+const propertyRuns = isMutationWorker ? 30 : isCI ? 1000 : 100
+
+// The fork reads these under `inject`; the key is its published `ProvidedContext` key. CI and Stryker workers
+// never write the fork's seed store: a CI checkout is discarded, and a mutation worker fails on purpose.
+const propertyCheckDefaults = isMutationWorker || isCI ? { runs: propertyRuns, record: false } : { runs: propertyRuns }
 
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.

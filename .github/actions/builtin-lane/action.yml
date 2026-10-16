@@ -1,0 +1,66 @@
+name: Built-in checks lane
+description: >-
+  The steps reusable-checks.yml runs for each phase when the caller has no `.github/actions/checks-lane` hook: a pnpm
+  workspace with turbo, a `build` task where one exists and a `test` script per tested package
+inputs:
+  lane:
+    description: plan, a lint lane's id, test, test-after, timings, gate or docs
+    required: true
+  job:
+    description: The test job from the plan, as JSON
+    required: false
+    default: "{}"
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root
+    required: false
+    default: .
+  install:
+    description: Install dependencies in the plan phase, for a turbo dry run
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Lane environment
+      shell: bash
+      run: printf 'CI=true\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
+    - name: Corepack for the planner's pnpm
+      if: inputs.lane == 'plan' && inputs.install != 'true'
+      shell: bash
+      run: corepack enable
+    - id: install
+      if: (inputs.lane == 'plan' && inputs.install == 'true') || (inputs.lane != 'plan' && inputs.lane != 'test-after' && inputs.lane != 'timings' && inputs.lane != 'gate')
+      uses: $/.github/actions/install-deps
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - name: Turbo cache
+      if: inputs.lane == 'test'
+      uses: actions/cache@v6
+      with:
+        path: ${{ inputs.working-directory }}/.turbo/cache
+        key: sfs-turbo-${{ runner.os }}-${{ inputs.working-directory }}-test-${{ fromJSON(inputs.job).id }}-${{ github.sha }}
+        restore-keys: |
+          sfs-turbo-${{ runner.os }}-${{ inputs.working-directory }}-test-${{ fromJSON(inputs.job).id }}-
+          sfs-turbo-${{ runner.os }}-${{ inputs.working-directory }}-
+    - id: build
+      name: Build
+      if: inputs.lane == 'test'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FILTERS: ${{ fromJSON(inputs.job).filters }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/sfs-logs"
+        set -o pipefail
+        corepack pnpm exec turbo run build --output-logs=errors-only $FILTERS 2>&1 | tee "$RUNNER_TEMP/sfs-logs/build.log"
+    - name: Reason for a failed install or build
+      if: failure()
+      shell: bash
+      env:
+        INSTALL: ${{ steps.install.outcome }}
+        BUILD: ${{ steps.build.outcome }}
+      run: |
+        reason=
+        [ "$INSTALL" = failure ] && reason=install-failed
+        [ -z "$reason" ] && [ "$BUILD" = failure ] && reason=build-failed
+        if [ -n "$reason" ] && [ ! -s "$RUNNER_TEMP/sfs-reason" ]; then echo "$reason" > "$RUNNER_TEMP/sfs-reason"; fi

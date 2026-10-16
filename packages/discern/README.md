@@ -7,7 +7,7 @@ A policy asks every question it needs in one model call. Its answers can be reco
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/discern effect@4.0.0-rc.116
+pnpm add @systemfsoftware/discern 'effect@^4'
 ```
 
 `effect` is a peer dependency: this package declares it but does not install it, so one copy is shared with the rest of your project.
@@ -19,7 +19,7 @@ A review policy blocks a risky breaking change, asks for a migration guide on an
 ```ts
 import { Discern } from '@systemfsoftware/discern'
 import { Effect, Schema } from 'effect'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 
 // A stand-in model that answers every requested decision with `answer`.
 // A real one comes from any Effect `DecisionModel` provider.

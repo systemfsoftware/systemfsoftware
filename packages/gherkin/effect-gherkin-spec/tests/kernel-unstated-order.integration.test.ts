@@ -145,8 +145,9 @@ Feature('Two clerks shelve without an agreed order')
             ({ first, second }) =>
               second !== first &&
               /CONFORMANCE_REPLAY="/u.test(second) &&
-              /CONFORMANCE_REPLAY="/u.test(first),
-            'each spec names its own failing order with a replay path',
+              !/CONFORMANCE_REPLAY="/u.test(first),
+            'the spec that fails on the baseline order carries no replay, the one a seed chose carries its replay, ' +
+              'and the two reports differ',
           )
         ),
       ),

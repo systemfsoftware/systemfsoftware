@@ -8,7 +8,8 @@
  */
 import { Clock, Context, Duration, Effect, Layer } from 'effect'
 
-import { kernelTestClock } from '../internal/clocks.js'
+import { makeTestClock } from '../internal/clocks.js'
+import { currentKernel } from '../internal/kernel.js'
 
 /**
  * The test-clock service a scenario reaches through the `Clock` service and
@@ -32,7 +33,15 @@ export interface TestClock extends Clock.Clock {
  * settles its requests only when nothing else can run. Only available inside a
  * kernel run.
  */
-export const make: Effect.Effect<TestClock> = kernelTestClock
+export const make: Effect.Effect<TestClock> = Effect.sync(() => {
+  const kernel = currentKernel()
+  if (kernel === undefined) {
+    throw new Error('effect-sim-kernel: the kernel test clock is only available inside a kernel run')
+  }
+  const testClock = makeTestClock(kernel.clocks.clock)
+  kernel.clocks.testClocks.push(testClock)
+  return testClock
+})
 
 const contextOf = (testClock: TestClock): Context.Context<Clock.Clock> =>
   Context.makeUnsafe<Clock.Clock>(new Map([[Clock.Clock.key, testClock]]))

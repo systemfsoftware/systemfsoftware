@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Match, Schema, Stream } from 'effect'
+import { Cause, Effect, Exit, Layer, Match, Schema, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import type { Observable } from 'rxjs'
 
@@ -38,6 +38,7 @@ const stopsSearched = (report: Conformance.Report<never, never>): number =>
   )
 
 Feature('Letting go of a source subscription when the reader stops')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -52,7 +53,7 @@ Feature('Letting go of a source subscription when the reader stops')
           (s) => Conformance.released(readingOne(s.bridge.source), s.bridge.check),
         ),
         Then('nobody is left subscribed after any stop, and the seeded search tries at least one')((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -74,7 +75,7 @@ Feature('Letting go of a source subscription when the reader stops')
         Then(
           "nobody is left subscribed after any stop, Ada's reader is handed the failure, and the seeded search tries at least one",
         )((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -96,7 +97,7 @@ Feature('Letting go of a source subscription when the reader stops')
         Then(
           "nobody is left subscribed after any stop, Ada's reader reaches the end, and the seeded search tries at least one",
         )((s, expect) =>
-          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }, Conformance.render(s.checked)).toMatchObject({
             report: { _tag: 'Pass' },
             stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

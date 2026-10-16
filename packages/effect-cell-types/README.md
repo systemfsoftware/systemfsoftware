@@ -7,7 +7,7 @@ A cell reads what it needs, decides, and writes the result. This package owns ev
 ## Install
 
 ```bash
-pnpm add @systemfsoftware/effect-cell-types effect@4.0.0-rc.116
+pnpm add @systemfsoftware/effect-cell-types 'effect@^4'
 ```
 
 `effect` is a peer dependency. The package targets Effect 4 and runs anywhere Effect runs.
@@ -171,6 +171,7 @@ The compiler refuses a decision that breaks these rules. Each refusal names the 
 | a `decision` of `Schema.Boolean`, or an outcome without a `_tag` | `UntaggedDecision`                            |
 | one success class and `error: Schema.Never`                      | `SingleVariantDecision`                       |
 | outcome classes without a shared family brand                    | `UnsharedTypeId`                              |
+| an outcome that is an `S.TaggedError`                            | `ErrorClassDecision`                          |
 | an error without a `_tag`                                        | `UntaggedError`                               |
 | a `decision` of `Schema.Never`                                   | `UninhabitedDecision`                         |
 | a command class without `[Workflow.InstrumentationBrand]`        | the missing `[InstrumentationBrand]` property |
@@ -239,6 +240,8 @@ const summary = pipe(
 ```
 
 Only failures of `read` and of handlers reach `mapError`, `orElse`, and the failure side of `match`. A domain error from the decision is an outcome with its own handler, so it arrives as an answer.
+
+Let a refusal's handler answer the refusal, and fail only when the handler's own work fails. A failed handler records the run as `infrastructure` and hands the refusal to the fallbacks, retries, and transactions built for runs that did not finish. When a published function must fail with the refusal, the code that runs the cell matches the answer by `_tag` and fails there.
 
 ## Telemetry
 

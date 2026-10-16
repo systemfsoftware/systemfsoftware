@@ -1,7 +1,7 @@
 import type { Graph, Observation } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
 import type { Effect } from 'effect'
-import type * as HttpClient from 'effect/unstable/http/HttpClient'
+import type * as HttpClient from 'effect/http/HttpClient'
 import { describe, expect, it } from 'tstyche'
 
 describe('TempoTraceStore.source', () => {

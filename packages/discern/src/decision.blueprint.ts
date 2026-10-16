@@ -11,19 +11,19 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match, Predicate, Schema } from 'effect'
+import * as AiError from 'effect/ai/AiError'
+import * as Decision from 'effect/ai/Decision'
+import * as DecisionModel from 'effect/ai/DecisionModel'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
-import * as AiError from 'effect/unstable/ai/AiError'
-import * as Decision from 'effect/unstable/ai/Decision'
-import * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { decisionFingerprint, hash } from './decision-model.blueprint.js'
+import { decisionFingerprint, hash } from './ContentAddress.schema.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import type { Answers, LeafOptions, NodeCore, Pattern, PatternRefusal } from './pattern.blueprint.js'
-import { distinctFirstById, matched, missed, notPattern, semanticLeaf, uncertain } from './pattern.blueprint.js'
+import { distinctFirstById, notPattern, semanticLeaf } from './pattern.blueprint.js'
 import { Probability } from './Route.schema.js'
-import type { PatternResult } from './Verdict.schema.js'
+import { matched, missed, type PatternResult, uncertain } from './Verdict.schema.js'
 
 /** Any Effect decision kind. */
 export type AnyDecision = Decision.Any

@@ -64,6 +64,7 @@ const collectionCheck = (
   })
 
 Feature('A shopping list collection that stays with a plain list', { timeout: 0 })
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -78,7 +79,7 @@ Feature('A shopping list collection that stays with a plain list', { timeout: 0 
           (s) => collectionCheck(s.subject, { sequences: COLLECTION_ROUNDS, operations: 10 }),
         ),
         Then('the shopping list matches the plain list after every round')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: COLLECTION_ROUNDS })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: COLLECTION_ROUNDS })
         ),
       ),
     )

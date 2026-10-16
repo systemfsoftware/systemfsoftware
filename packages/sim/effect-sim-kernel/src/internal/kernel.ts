@@ -8,16 +8,15 @@
  * module-level mutable state survives a release.
  *
  * The hooks read Effect runtime internals, which the plan allows only inside this
- * package (R17). They are pinned to `effect` 4.0.0-rc.117 and fail loudly when a
- * field or method moves.
+ * package (R17). They are verified against `effect` 4.0.0 and fail loudly when a
+ * field or method moves in a later 4.x release.
  */
-import { Clock, Context, Deferred, Match, Ref, Scheduler } from 'effect'
+import { Clock, Context, Deferred, Effect, Match, Ref, Scheduler } from 'effect'
 
 import { makeRunClocks } from './clocks.js'
 import type { RunClocks } from './clocks.js'
 import type { AnyFiber } from './deadlock.js'
 import type { Escape } from './escapeRecorder.js'
-import { claimRun, FIBER_PROTOTYPE, isRunLive, releaseRun } from './runMark.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -123,6 +122,63 @@ const protoOf = (value: object): object => {
   const proto: Field = Object.getPrototypeOf(value)
   return isHostObject(proto) ? proto : Object.prototype
 }
+
+// ---------------------------------------------------------------------------
+// The one-live-run mark
+// ---------------------------------------------------------------------------
+
+// A module-private slot on the patched fiber prototype names the kernel whose
+// run is live: acquisition claims it, release clears it, and the concurrency
+// guard reads it. The symbol never leaves this module, so the slot is
+// unnameable from consumer code. No module-level mutable state lives here — the
+// slot travels on the fiber prototype itself.
+const ACTIVE_RUN = Symbol('~effect-sim-kernel/activeRun')
+
+const isKernel = (candidate: object): candidate is Kernel => 'pending' in candidate && 'release' in candidate
+
+/** @internal */
+export const FIBER_PROTOTYPE: object = protoOf(Effect.runFork(Effect.void))
+
+const heldRun = (): Field => fieldOf(FIBER_PROTOTYPE, ACTIVE_RUN)
+
+const isLiveKernel = (candidate: Field): candidate is Kernel => isHostObject(candidate) && isKernel(candidate)
+
+/** @internal */
+export const currentKernel = (): Kernel | undefined => {
+  const candidate: Field = heldRun()
+  return isLiveKernel(candidate) ? candidate : undefined
+}
+
+/** @internal */
+export const isRunLive = (): boolean => isHostObject(heldRun())
+
+/** @internal */
+export const claimRun = (kernel: Kernel): void => {
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, kernel)
+}
+
+/** @internal */
+export const releaseRun = (): void => {
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, undefined)
+}
+
+/**
+ * Whether the live run is inside a synchronous step. A library that samples a
+ * run from outside can tell work the run caused from work an outside fiber did
+ * between steps. `false` when no run is live.
+ */
+/** @internal */
+export const isStepping = (): boolean => currentKernel()?.phase === 'step'
+
+/**
+ * From here on, the schedule may deviate from Effect's order (R15). Under
+ * `explore: 'body'`, every decision before it stays on Effect's order.
+ */
+/** @internal */
+export const beginExploration: Effect.Effect<void> = Effect.sync(() => {
+  const kernel = currentKernel()
+  if (kernel !== undefined) kernel.beginExploration()
+})
 
 // ---------------------------------------------------------------------------
 // Hook acquisition and release
@@ -369,6 +425,30 @@ const dispatchObserved = (
   return applyOriginal(original, fiber, args)
 }
 
+/**
+ * The fibers whose original `evaluate` is on the stack right now. Effect 4.0.1
+ * restores a fiber's async context by calling `evaluate` again from inside its
+ * own evaluation (`FiberImpl.evaluate` re-enters through
+ * `AsyncResource.runInAsyncScope`), so one resume arrives as two nested calls.
+ * The nested call is that first resume continuing, not a new one: running the
+ * original inline keeps a resume one kernel step, as it was under 4.0.0, where
+ * queueing the nested call would spend an extra step on every slice. Only the
+ * outermost call marks the fiber; a nested call returns before marking, so the
+ * slot never outlives the evaluation it names.
+ */
+const evaluating = new WeakSet<AnyFiber>()
+
+const withEvaluation = <A>(fiber: AnyFiber, run: () => A): A => {
+  evaluating.add(fiber)
+  try {
+    return run()
+  } finally {
+    evaluating.delete(fiber)
+  }
+}
+
+const isEvaluating = (fiber: AnyFiber): boolean => evaluating.has(fiber)
+
 const isResumableBy = (fiber: AnyFiber, kernel: Kernel): boolean =>
   fiber.pollUnsafe() === undefined && dispatcherOf(fiber) === kernel.dispatcher
 
@@ -385,7 +465,9 @@ const resumeExternallyThrough = (
   // so it becomes the next step's scheduling choice (R36). The root fiber's
   // first slice runs before `start` claims the run, so it stays inline, the way
   // Effect itself would run it.
-  kernel.resumeExternally(fiber, () => applyOriginal(original, fiber, args))
+  kernel.resumeExternally(fiber, () => {
+    withEvaluation(fiber, () => applyOriginal(original, fiber, args))
+  })
   return undefined
 }
 
@@ -405,7 +487,19 @@ const queuedOrObserved = (
   args: ReadonlyArray<Field>,
 ): Field => {
   if (isResumingRun(fiber, kernel)) return resumeExternallyThrough(fiber, kernel, original, args)
-  return dispatchObserved(fiber, kernel, original, args)
+  return withEvaluation(fiber, () => dispatchObserved(fiber, kernel, original, args))
+}
+
+const dispatchOutermost = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  if (startsInStep(fiber, kernel)) {
+    return withEvaluation(fiber, () => dispatchObserved(fiber, kernel, original, args))
+  }
+  return queuedOrObserved(fiber, kernel, original, args)
 }
 
 const dispatchEvaluate = (
@@ -414,8 +508,8 @@ const dispatchEvaluate = (
   original: MethodFunction,
   args: ReadonlyArray<Field>,
 ): Field => {
-  if (startsInStep(fiber, kernel)) return dispatchObserved(fiber, kernel, original, args)
-  return queuedOrObserved(fiber, kernel, original, args)
+  if (isEvaluating(fiber)) return dispatchObserved(fiber, kernel, original, args)
+  return dispatchOutermost(fiber, kernel, original, args)
 }
 
 const interruptAgain = (fiber: AnyFiber, args: ReadonlyArray<Field>) => (): void => {

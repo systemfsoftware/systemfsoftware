@@ -21,11 +21,10 @@ const ciIsSet = (): boolean => {
   return value !== undefined && value.length > 0
 }
 
-/** Runs only when the contract project runs, so the other lanes never need hardware virtualization. */
 export const setup = (): void => {
   if (ciIsSet() && !kvmIsGranted()) {
     throw new Error(
-      `the microVM contract lane needs hardware virtualization and this runner grants none: ${kvmReason()}. .github/workflows/reusable-contract.yml grants it; a missing KVM fails this lane rather than skipping it.`,
+      `the microVM integration suites need hardware virtualization and this runner grants none: ${kvmReason()}. .github/workflows/reusable-checks.yml grants it; a missing KVM fails these suites rather than skipping them.`,
     )
   }
 }

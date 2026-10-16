@@ -5,7 +5,7 @@ Feature specs as Storybook stories — Gherkin Given/When/Then embedded in CSF w
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/storybook-gherkin 'effect@4.0.0-rc.108' 'storybook@>=10.0.0'
+pnpm add @systemfsoftware/storybook-gherkin 'effect@^4' 'storybook@>=10.0.0'
 ```
 
 Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.

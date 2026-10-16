@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-microsandbox",
   "license": "Apache-2.0",
-  "version": "3.1.0",
+  "version": "5.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -40,7 +40,6 @@
     "typecheck": "tsc -b",
     "test": "vitest run --config vitest.config.ts",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "smoke": "pnpm exec turbo run smoke:journey --filter=@systemfsoftware/effect-microsandbox",
     "smoke:journey": "node examples/boot-alpine.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
@@ -61,6 +60,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/microvm-test-images": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
@@ -68,7 +68,6 @@
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

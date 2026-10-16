@@ -98,29 +98,30 @@ costs more than the catalogue's in-process start timeouts.
 
 ```bash
 pnpm --filter @systemfsoftware/effect-daemon-microvm typecheck
-pnpm --filter @systemfsoftware/effect-daemon-microvm test
-pnpm --filter @systemfsoftware/effect-daemon-microvm test:contract   # needs /dev/kvm
+pnpm --filter @systemfsoftware/effect-daemon-microvm test   # boots microVMs where /dev/kvm is accessible
 pnpm --filter @systemfsoftware/effect-daemon-microvm build
 ```
 
-`test:contract` runs the `contract` project and needs hardware virtualization. On a host without an
-accessible `/dev/kvm` it skips, naming the reason in every skipped suite title; `test` runs the
-`unit` and `conformance` projects and never boots a VM. In CI (`CI` set) a missing `/dev/kvm` fails
-the contract project from its `globalSetup` instead — `.github/workflows/reusable-contract.yml`
+`test` runs the `unit` and `integration` projects; only `integration` boots a VM and
+needs hardware virtualization. On a host without an accessible `/dev/kvm` its suites skip, naming
+the reason in every skipped suite title. In CI (`CI` set) a missing `/dev/kvm` fails the
+integration project from its `globalSetup` instead — `.github/workflows/reusable-checks.yml`
 grants access to it.
 
 ### Fixture provenance
 
-The contract suite's fixture workload is `sh` in `alpine:3.20`, pinned by content digest:
+The integration suites' fixture workload is `sh` in `alpine:3.20`, pinned by content digest and
+read from `@systemfsoftware/microvm-test-images`, the one place the repository's microVM checks
+take image references from:
 
 ```
-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+mirror.gcr.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 ```
 
-That is the index digest Docker Hub's registry reported for the `3.20` tag on 2026-09-24, read with
-`HEAD https://registry-1.docker.io/v2/library/alpine/manifests/3.20` and the `docker-content-digest`
-header (media type `application/vnd.oci.image.index.v1+json`). The script the fixture runs is
-`tests/__fixtures__/child-script.ts`, built from `MicroVMMedium.ChildStepLines`.
+The registry host is explicit because microsandbox resolves a bare `alpine:3.20` to Docker Hub,
+whose anonymous pull limit GitHub-hosted runners exhaust. That package's README records how the
+digest was read. The script the fixture runs is `tests/__fixtures__/child-script.ts`, built from
+`MicroVMMedium.ChildStepLines`.
 
 ## License
 

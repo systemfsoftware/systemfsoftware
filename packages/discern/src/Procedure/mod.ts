@@ -1,3 +1,4 @@
+export { DepthExceededError } from '../admit-procedure-depth.workflow.js'
 export { CurrentDepth, MaxDepth, withMaxDepth } from '../procedure-depth.service.js'
 export type {
   Any,
@@ -11,7 +12,6 @@ export type {
 } from '../procedure.blueprint.js'
 export { fromEffect, make } from '../procedure.blueprint.js'
 export {
-  DepthExceededError,
   NoEligibleProcedureError,
   ProcedureCommandRejectedError,
   RoutingUncertainError,

@@ -194,9 +194,9 @@ ruleTester.run('ban-classes', banClasses, {
       filename: PROD,
     },
     {
-      name: 'Should_Pass_When_ExtendsPersistableClass_FromUnstable',
+      name: 'Should_Pass_When_ExtendsPersistableClass',
       code: `
-        import { Persistable } from 'effect/unstable'
+        import { Persistable } from 'effect/persistence'
         class Entry extends Persistable.Class({ payload: {} }) {}
       `,
       filename: PROD,
@@ -204,7 +204,7 @@ ruleTester.run('ban-classes', banClasses, {
     {
       name: 'Should_Pass_When_ExtendsRpcMake',
       code: `
-        import { Rpc } from 'effect/unstable'
+        import { Rpc } from 'effect/rpc'
         class Ping extends Rpc.make("Ping") {}
       `,
       filename: PROD,
@@ -212,7 +212,7 @@ ruleTester.run('ban-classes', banClasses, {
     {
       name: 'Should_Pass_When_ExtendsRpcMiddlewareService',
       code: `
-        import { RpcMiddleware } from 'effect/unstable'
+        import { RpcMiddleware } from 'effect/rpc'
         class Auth extends RpcMiddleware.Service<Auth, { provides: Identity }>()("effect/Auth", {}) {}
       `,
       filename: PROD,
@@ -220,7 +220,7 @@ ruleTester.run('ban-classes', banClasses, {
     {
       name: 'Should_Pass_When_ExtendsRpcGroupMake',
       code: `
-        import { RpcGroup } from 'effect/unstable'
+        import { RpcGroup } from 'effect/rpc'
         class PingRpcs extends RpcGroup.make(Ping) {}
       `,
       filename: PROD,

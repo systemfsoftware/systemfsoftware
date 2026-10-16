@@ -2,38 +2,8 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Option, Result, Schema } from 'effect'
 import type { ObservedStep } from './Trace.schema.js'
 import { ObservedStep as ObservedStepSchema } from './Trace.schema.js'
+import { TraceComparison, TracesConform, TracesDiverge } from './TraceComparison.schema.js'
 
-const ComparisonTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-conformance/TraceComparison')
-type ComparisonTypeId = typeof ComparisonTypeId
-
-/** The candidate reproduced the reference within its declaration. */
-export class TracesConform extends Schema.TaggedClass<TracesConform>()('TracesConform', {
-  scenario: Schema.String,
-  medium: Schema.String,
-  compared: Schema.Int,
-}) {
-  readonly [ComparisonTypeId] = ComparisonTypeId
-}
-
-/** The candidate first diverged from the reference at `index`. */
-export class TracesDiverge extends Schema.TaggedClass<TracesDiverge>()('TracesDiverge', {
-  scenario: Schema.String,
-  medium: Schema.String,
-  index: Schema.Int,
-  reference: Schema.String,
-  candidate: Schema.String,
-}) {
-  readonly [ComparisonTypeId] = ComparisonTypeId
-}
-
-export const TraceComparison = Schema.Union([TracesConform, TracesDiverge])
-export type TraceComparison = typeof TraceComparison.Type
-
-/**
- * Compares two traces already projected to one medium's declaration, so a
- * projection's losses — a coarsened report, a relaxed stop order — are applied
- * before the decision runs and never inside it.
- */
 export class CompareTraces extends Schema.TaggedClass<CompareTraces>()('CompareTraces', {
   scenario: Schema.String,
   medium: Schema.String,

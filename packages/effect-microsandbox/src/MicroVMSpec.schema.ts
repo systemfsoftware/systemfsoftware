@@ -12,7 +12,7 @@ export const GuestPort = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum
 export type GuestPort = typeof GuestPort.Type
 
 export const HttpWait = Schema.TaggedStruct('Http', {
-  path: Schema.String.pipe(Schema.check(Schema.isStartsWith('/'))),
+  path: Schema.String.pipe(Schema.check(Schema.isStartingWith('/'))),
   port: GuestPort,
 })
 export type HttpWait = typeof HttpWait.Type
@@ -23,7 +23,7 @@ export type PortWait = typeof PortWait.Type
 export const PortProbe = Schema.Union([
   Schema.TaggedStruct('Tcp', {}),
   Schema.TaggedStruct('Http', {
-    path: Schema.String.pipe(Schema.check(Schema.isStartsWith('/'))),
+    path: Schema.String.pipe(Schema.check(Schema.isStartingWith('/'))),
   }),
 ])
 export type PortProbe = typeof PortProbe.Type

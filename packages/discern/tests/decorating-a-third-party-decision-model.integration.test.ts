@@ -1,7 +1,7 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, MutableRef, Schema } from 'effect'
-import * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import * as DecisionModel from 'effect/ai/DecisionModel'
 import { answersFor, probabilityAnswer } from './__fixtures__/counting-model.fixture.js'
 
 const Feature = makeFeature({ it })

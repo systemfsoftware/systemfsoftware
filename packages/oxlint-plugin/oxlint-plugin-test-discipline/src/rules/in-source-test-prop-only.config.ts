@@ -5,7 +5,7 @@ export const NON_PROP_CALL_EXPECTED =
   'only `it.prop` or `it.effect.prop` member-chain calls (standard modifiers included) with boolean predicates' as const
 export const NON_PROP_CALL_ACTUAL = 'a bare or member-chain test call other than `it.prop`/`it.effect.prop`' as const
 export const NON_PROP_CALL_FIX =
-  'delete the block — non-property in-source tests belong nowhere in `src/`; re-home a meaningful example through the cell public export as `*.integration.test.ts`, or rewrite a real invariant as `it.prop` over a schema-derived arbitrary' as const
+  'delete the block — non-property in-source tests belong nowhere in `src/`; re-home a meaningful example through the cell public export as a Gherkin behaviour test under tests/, or rewrite a real invariant as `it.prop` over a schema-derived arbitrary' as const
 
 export const meta = {
   type: 'problem',

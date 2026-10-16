@@ -1,5 +1,16 @@
 import { Cause, Exit } from 'effect'
-import type { DisparityRecord } from './RelationalOracle.js'
+
+import { DisparityFailure } from './DisparityFailure.schema.js'
+
+export { DisparityFailure }
+
+export interface DisparityRecord<Input = unknown> {
+  readonly input: Input
+  readonly outputA: string
+  readonly outputB: string
+  readonly trace: string
+  readonly reproSnippet: string
+}
 
 const stringify = <V = unknown>(value: V): string | undefined => {
   try {

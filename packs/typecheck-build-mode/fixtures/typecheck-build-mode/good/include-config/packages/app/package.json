@@ -1,4 +1,0 @@
-{
-  "name": "@acme/app",
-  "scripts": { "typecheck": "tsc --noEmit" }
-}

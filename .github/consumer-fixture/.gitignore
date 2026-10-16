@@ -1,0 +1,6 @@
+node_modules/
+.turbo/
+reports/
+.stryker-tmp/
+# The tarballs pnpm-lock.yaml installs from: `nix build .#sfs-deps`, copied here
+.sfs-deps/

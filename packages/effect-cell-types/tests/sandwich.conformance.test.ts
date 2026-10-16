@@ -31,6 +31,7 @@ const probeBook = (ledger: {
   )
 
 Feature('Filing every order run under how it ended, even when the run is stopped')
+  .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(
@@ -59,13 +60,16 @@ Feature('Filing every order run under how it ended, even when the run is stopped
             }),
         ),
         Then('every stopped run is filed under how it ended, and the search tried at least one stop')((s, expect) =>
-          expect({
-            report: s.checked,
-            explored: Match.value(s.checked).pipe(
-              Match.tag('Pass', (pass) => pass.histories),
-              Match.orElse(() => 0),
-            ),
-          }).toMatchObject({
+          expect(
+            {
+              report: s.checked,
+              explored: Match.value(s.checked).pipe(
+                Match.tag('Pass', (pass) => pass.histories),
+                Match.orElse(() => 0),
+              ),
+            },
+            Conformance.render(s.checked),
+          ).toMatchObject({
             report: { _tag: 'Pass' },
             explored: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })

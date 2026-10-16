@@ -1,235 +1,523 @@
 name: Checks (reusable)
 
+# The checks shape any pnpm workspace can call: plan -> lint lanes and packed test jobs -> timings record -> gate.
+# A calling repository may supply `.github/actions/checks-lane`, a composite action with inputs `lane`, `job` and
+# `profile`. Each job checks the repository out and calls it once per phase, with `lane` set to `plan`, a lint
+# lane's id, `test`, `test-after`, `timings`, `gate`, or `docs` (a lane's docs command on a docs-only pull request,
+# with the lane as `job`); a phase the action has no steps for does nothing. Without
+# that action, or under a non-root `working-directory`, every phase runs the built-in lanes instead
+# (`$/.github/actions/builtin-lane`). This workflow reaches its own actions through `$/`, never the caller's `./`.
 on:
   workflow_call:
+    outputs:
+      lane-source:
+        description: "`hook` when the caller's checks-lane action ran each phase, `built-in` otherwise"
+        value: ${{ jobs.plan.outputs.lane-source }}
+      test-jobs:
+        description: JSON list of the test jobs the plan scheduled, each with its `packages`; `[]` when every package was skipped
+        value: ${{ jobs.plan.outputs.jobs }}
     inputs:
+      working-directory:
+        description: The pnpm workspace root, relative to the repository root. A non-root value checks out only that directory and always runs the built-in lanes
+        required: false
+        type: string
+        default: .
       profile:
-        description: Conformance profile the test jobs run at; `local` for a pull request, `per-change` for the merge queue, main, and the release gate
+        description: Passed to the checks-lane action unchanged; systemfsoftware's conformance profile (`local` or `per-change`)
         required: false
         type: string
         default: per-change
+      record:
+        description: Name of the timing record artifact the plan reads and the timings job writes
+        required: false
+        type: string
+        default: test-timings
+      timings:
+        description: Command that runs the test-timings planner (the flake's `test-timings`, or a deno invocation of the script). With the built-in lanes, `test-timings` is this workflow's own planner
+        required: false
+        type: string
+        default: test-timings
+      runs-on:
+        description: JSON label list for the plan, timings and gate jobs
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      test-runs-on:
+        description: JSON label list for the test jobs and any lint lane that names none; empty means `runs-on`
+        required: false
+        type: string
+        default: ""
+      lanes:
+        description: 'JSON list of lint lanes: {"id", "name", "timeout-minutes", "run"?, "docs-run"?, "fetch-depth"?, "runs-on"?}; `run` is a command after the lane''s action. On a docs-only pull request a lane with `docs-run` runs that command after the `docs` phase instead, and a lane without one is skipped'
+        required: false
+        type: string
+        default: "[]"
+      target:
+        description: Planner --target, seconds of predicted work per job
+        required: false
+        type: number
+        default: 300
+      max-jobs:
+        description: Planner --max-jobs
+        required: false
+        type: number
+        default: 12
+      max-seconds:
+        description: Planner --max-seconds; keep it at or under the test job's timeout-minutes in seconds
+        required: false
+        type: number
+        default: 1800
+      timeout-minutes:
+        description: Each test job's timeout
+        required: false
+        type: number
+        default: 30
+      plan-timeout-minutes:
+        description: The plan and timings jobs' timeout
+        required: false
+        type: number
+        default: 5
+      gate-name:
+        description: Name of the job that passes only when every other job passed
+        required: false
+        type: string
+        default: the gate
+      gate-lane:
+        description: Check out and run the checks-lane action's `gate` phase after the gate's own check
+        required: false
+        type: boolean
+        default: false
+      gate-timeout-minutes:
+        description: The gate job's timeout
+        required: false
+        type: number
+        default: 2
+      node-options:
+        description: NODE_OPTIONS for the test jobs (a lint lane sets its own `node-options`); GitHub refuses it from $GITHUB_ENV
+        required: false
+        type: string
+        default: ""
+      pnpm:
+        description: How the test steps invoke pnpm
+        required: false
+        type: string
+        default: pnpm
+      test-flags:
+        description: Extra flags on the packed jobs' `turbo run test`
+        required: false
+        type: string
+        default: ""
+      shard-flags:
+        description: Extra flags on a shard job's vitest run
+        required: false
+        type: string
+        default: ""
+      persist-credentials:
+        description: actions/checkout persist-credentials
+        required: false
+        type: boolean
+        default: true
+      fetch-tags:
+        description: actions/checkout fetch-tags
+        required: false
+        type: boolean
+        default: false
+      dry-run:
+        description: Command printing turbo's `--dry=json` for the test task without `--only` (e.g. `pnpm dlx turbo@2 run test --dry=json`), so each hash covers the task's dependencies as the test jobs' own keys do; the plan skips a package whose task is a remote cache hit, or which last passed whole on the same dry-run hash. Empty plans every package, except that the built-in lanes default it to `<pnpm> exec turbo run test --dry=json` on a pull request
+        required: false
+        type: string
+        default: ""
+      docs-globs:
+        description: Newline- or comma-separated globs that replace the docs set (`docs/**`, root `*.md`, `**/AGENTS.md`, `**/CLAUDE.md`). A pull request that changes only docs skips the test and timings jobs and runs only lanes with a `docs-run`; the plan still runs
+        required: false
+        type: string
+        default: ""
+      turbo-team:
+        description: Remote Turbo cache team; empty leaves the remote cache off
+        required: false
+        type: string
+        default: ""
+      sfs-deps-installable:
+        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
+        required: false
+        type: string
+        default: .#sfs-deps
+    secrets:
+      turbo-api:
+        description: Remote Turbo cache API URL
+        required: false
+      turbo-token:
+        description: Remote Turbo cache token
+        required: false
 
 permissions:
   contents: read
   actions: read
 
 env:
-  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env scripts/tools/test-timings.ts
+  TIMINGS: ${{ inputs.timings }}
 
 jobs:
+  classify:
+    name: classify · docs-only or full
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    outputs:
+      scope: ${{ steps.diff.outputs.scope }}
+      lanes: ${{ steps.lanes.outputs.lanes }}
+      sfs-deps-none: ${{ steps.demand.outcome == 'success' && steps.demand.outputs.key == '' }}
+    steps:
+      - id: diff
+        uses: $/.github/actions/classify-diff
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          docs-globs: ${{ inputs.docs-globs }}
+      - id: lanes
+        name: Lanes this diff runs
+        env:
+          SCOPE: ${{ steps.diff.outputs.scope }}
+          LANES: ${{ inputs.lanes }}
+        run: |
+          if [ "$SCOPE" = docs-only ]; then
+            filter='[.[] | select(.["docs-run"]) | . + {phase: "docs", run: .["docs-run"]}]'
+          else
+            filter='[.[] | . + {phase: .id}]'
+          fi
+          echo "lanes=$(jq -c "$filter" <<< "$LANES")" >> "$GITHUB_OUTPUT"
+      # A docs-only diff still runs the sfs-deps producer when the lockfile names .sfs-deps/ tarballs, since the
+      # built-in docs phase installs. Any doubt (no tools, no lockfile, a refused lockfile) leaves it running.
+      - name: The lockfile alone, on a docs-only diff
+        if: steps.diff.outputs.scope == 'docs-only'
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .sfs-lockfile
+          persist-credentials: false
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/pnpm-lock.yaml', inputs.working-directory) || '/pnpm-lock.yaml' }}
+          sparse-checkout-cone-mode: false
+      - id: demand
+        name: Tarballs the lockfile names
+        if: steps.diff.outputs.scope == 'docs-only'
+        continue-on-error: true
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        run: sfs-deps key --working-directory ".sfs-lockfile/$WORKING_DIRECTORY"
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: classify
+          reasons: |
+            diff classify-failed
+            lanes classify-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: gh run view ${{ github.run_id }} --log-failed
+
   plan:
     name: plan · test jobs from recorded timings
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    needs: [classify, sfs-deps]
+    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    defaults: &defaults
+      run:
+        working-directory: ${{ inputs.working-directory }}
     outputs:
       jobs: ${{ steps.plan.outputs.jobs }}
+      lane-source: ${{ steps.mode.outputs.source }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: denoland/setup-deno@v2
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: ${{ inputs.persist-credentials }}
+          fetch-tags: ${{ inputs.fetch-tags }}
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+      - &turbo
+        name: Remote Turbo cache
+        if: inputs.turbo-team != ''
+        env:
+          TEAM: ${{ inputs.turbo-team }}
+          API: ${{ secrets.turbo-api }}
+          TOKEN: ${{ secrets.turbo-token }}
+        run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
+      # Before the hook-or-built-in routing, so a hook's own install finds the tarballs in place.
+      - &sfs-deps
+        id: sfs-deps
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ needs.sfs-deps.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - &mode
+        id: mode
+        name: Lane hook or built-in lanes
+        if: always()
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+          HOOK: ${{ hashFiles('.github/actions/checks-lane/action.yml') != '' }}
+          DRY_RUN: ${{ needs.classify.outputs.scope != 'docs-only' && inputs.dry-run || '' }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
+          PNPM: ${{ inputs.pnpm }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$WORKING_DIRECTORY" != . ]; then
+            source=built-in reason=hook-not-visible-working-directory
+          elif [ "$HOOK" = true ]; then
+            source=hook reason=
+          else
+            source=built-in reason=
+          fi
+          if [ -z "$DRY_RUN" ] && [ "$source" = built-in ] && [ "$EVENT" = pull_request ] && [ "$SCOPE" != docs-only ]; then
+            DRY_RUN="$PNPM exec turbo run test --dry=json"
+          fi
+          printf 'source=%s\nreason=%s\ndry-run=%s\n' "$source" "$reason" "$DRY_RUN" >> "$GITHUB_OUTPUT"
+      - if: steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings'
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: hook
+        uses: ./.github/actions/checks-lane
+        if: steps.mode.outputs.source == 'hook'
+        with:
+          lane: plan
+          profile: ${{ inputs.profile }}
+      - id: builtin
+        uses: $/.github/actions/builtin-lane
+        if: steps.mode.outputs.source == 'built-in'
+        with:
+          lane: plan
+          working-directory: ${{ inputs.working-directory }}
+          install: ${{ steps.mode.outputs.dry-run != '' }}
+      - name: Which lanes ran
+        env:
+          SOURCE: ${{ steps.mode.outputs.source }}
+          REASON: ${{ steps.mode.outputs.reason }}
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        run: |
+          if [ "$SOURCE" = hook ]; then
+            echo '### Lanes: lane hook (`.github/actions/checks-lane`)' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '### Lanes: built-in lanes' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$REASON" = hook-not-visible-working-directory ]; then
+            {
+              echo "- reason: \`$REASON\`: \`working-directory: $WORKING_DIRECTORY\` checks out only that directory, so no \`.github/actions/checks-lane\` hook is visible and the built-in lanes ran."
+              echo "- next action: none if the built-in lanes are what this workspace wants; to run a hook, call with \`working-directory: .\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=$REASON::working-directory $WORKING_DIRECTORY hides the checks-lane hook; the built-in lanes ran"
+          fi
       - name: Latest timing record, main's first
         env:
           GH_TOKEN: ${{ github.token }}
-          RECORD: test-timings-${{ inputs.profile }}
+          RECORD: ${{ inputs.record }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           mkdir -p .timings/previous
-          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" \
-            --jq '[.artifacts[] | select(.expired | not)] | (map(select(.workflow_run.head_branch == "main"))[0] // .[0]).id // empty') || id=
-          if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
-            unzip -o -q .timings/previous.zip -d .timings/previous || true
+          if ! { gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" > .timings/listing.json &&
+            id=$($TIMINGS latest --listing .timings/listing.json --branch "$BRANCH"); }; then
+            echo "::warning::listing the $RECORD artifacts failed; planning with no previous record"
+            id=
           fi
+          if [ -n "$id" ] && ! { gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip &&
+            unzip -o -q .timings/previous.zip -d .timings/previous; }; then
+            echo "::warning::fetching record artifact $id failed; planning with no previous record"
+            rm -rf .timings/previous && mkdir -p .timings/previous
+          fi
+          echo "record artifact: ${id:-none}"
           ls .timings/previous
+      - name: Every ref's recent passes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .timings/passes
+          [ -f .timings/listing.json ] && ids=$($TIMINGS recent --listing .timings/listing.json --count 30) || ids=
+          for id in $ids; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > ".timings/passes/$id.zip" &&
+              unzip -o -q ".timings/passes/$id.zip" -d ".timings/passes/$id" || echo "::warning::fetching record artifact $id failed"
+            rm -f ".timings/passes/$id.zip"
+          done
+      - name: Which test tasks the cache already holds
+        if: steps.mode.outputs.dry-run != ''
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry-run }}
+        run: |
+          if ! $DRY_RUN > .timings/dry.json; then
+            echo "::warning::the turbo dry run failed; planning every package"
+            rm -f .timings/dry.json
+          fi
       - id: plan
-        run: $TIMINGS plan --record .timings/previous/test-timings.json
-      - uses: actions/upload-artifact@v7
+        run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set -o pipefail
+          $TIMINGS plan $( [ -f .timings/dry.json ] && echo --dry .timings/dry.json ) --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        timeout-minutes: 3
         with:
           name: test-timings-previous
-          path: .timings/previous/
+          path: ${{ inputs.working-directory }}/.timings/previous/
           if-no-files-found: ignore
           retention-days: 1
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: plan
+          reasons: |
+            hook hook-failed
+            sfs-deps sfs-deps-missing
+            builtin plan-failed
+            plan plan-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: ${{ steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings' && format('nix run github:{0}/{1}#test-timings -- plan', job.workflow_repository, job.workflow_sha) || format('{0} plan', inputs.timings) }}
+          working-directory: ${{ inputs.working-directory }}
 
-  static:
-    name: static checks (pnpm check:static)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  sfs-deps:
+    name: sfs-deps · tarballs the lockfile names
+    needs: classify
+    if: needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    defaults: *defaults
+    outputs:
+      key: ${{ steps.produce.outputs.key }}
+    steps:
+      - *checkout
+      - id: produce
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: sfs-deps
+          reasons: ""
+          steps: ${{ toJSON(steps) }}
+          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
+          working-directory: ${{ inputs.working-directory }}
+
+  lanes:
+    name: ${{ matrix.lane.name }}
+    needs: [classify, sfs-deps]
+    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' && needs.classify.outputs.lanes != '[]' }}
+    runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
+    timeout-minutes: ${{ matrix.lane.timeout-minutes }}
+    defaults: *defaults
     env:
-      NODE_OPTIONS: "--max-old-space-size=4096"
-      CI: "true"
-      OXLINT_FORMAT: github
-      TSGO_FORMAT: github-actions
-      TURBO_LOG_ORDER: stream
+      NODE_OPTIONS: ${{ matrix.lane.node-options }}
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: ${{ fromJSON(needs.classify.outputs.lanes) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
-      - uses: ./.github/actions/install-deps
-      - uses: cachix/install-nix-action@v31
-      - name: dprint from the flake
-        run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
-      - uses: denoland/setup-deno@v2
-      - name: Turbo cache
-        uses: actions/cache@v6
+          fetch-depth: ${{ matrix.lane.fetch-depth || 1 }}
+          persist-credentials: ${{ inputs.persist-credentials }}
+          fetch-tags: ${{ inputs.fetch-tags }}
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+      - *turbo
+      - *sfs-deps
+      - *mode
+      - id: hook
+        uses: ./.github/actions/checks-lane
+        if: steps.mode.outputs.source == 'hook'
         with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-checks-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-checks-
-            turbo-${{ runner.os }}-
-      - name: Static checks
-        run: corepack pnpm check:static
-
-  rust:
-    name: gritlint · rust gate (pnpm gate:rust, launcher)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-      CARGO_INCREMENTAL: "0"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
-      - name: Cargo cache
-        id: cargo-cache
-        uses: actions/cache/restore@v6
+          lane: ${{ matrix.lane.phase }}
+          job: ${{ toJSON(matrix.lane) }}
+          profile: ${{ inputs.profile }}
+      - id: builtin
+        uses: $/.github/actions/builtin-lane
+        if: steps.mode.outputs.source == 'built-in'
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'flake.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
-      - name: Rust gate
-        run: nix develop --command sh scripts/tools/gate-rust.sh
-      - name: Launcher forwards arguments and exit code
-        run: nix develop --command deno task --config npm/gritlint/deno.jsonc test
-      # Only main saves: a pull request's cache is visible to that pull request alone, and each
-      # ~1.5 GB copy pushed main's out of the repository's 10 GB cache budget.
-      - name: Save the cargo cache
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
-
-  gritlint:
-    name: gritlint · sandboxed journey, pnpm lint:conventions
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
-      # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
-      - name: Sandboxed gritlint store path
-        id: closure
-        run: |
-          out="$(nix eval --raw .#gritlint.outPath)"
-          echo "out=$out" >> "$GITHUB_OUTPUT"
-          echo "key=gritlint-closure-${out#/nix/store/}" >> "$GITHUB_OUTPUT"
-      - name: gritlint closure cache
-        id: closure-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/gritlint-closure
-          key: ${{ steps.closure.outputs.key }}
-      - name: Load the cached closure
-        if: steps.closure-cache.outputs.cache-hit == 'true'
+          lane: ${{ matrix.lane.phase }}
+          working-directory: ${{ inputs.working-directory }}
+      - id: run
+        name: ${{ matrix.lane.name }}
+        if: matrix.lane.run
         env:
-          OUT: ${{ steps.closure.outputs.out }}
-        run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/gritlint-closure" "$OUT"
-      - name: Build the sandboxed gritlint and export its closure
-        if: steps.closure-cache.outputs.cache-hit != 'true'
-        env:
-          OUT: ${{ steps.closure.outputs.out }}
+          RUN: ${{ matrix.lane.run }}
+          LOG: ${{ matrix.lane.id }}
         run: |
-          built="$(nix build --no-link --print-out-paths .#gritlint)"
-          test "$built" = "$OUT" || { echo "built $built, evaluated $OUT" >&2; exit 1; }
-          nix copy --to "file://$RUNNER_TEMP/gritlint-closure?compression=zstd" "$OUT"
-      - name: Save the closure cache
-        if: steps.closure-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set +e
+          bash -e -c "$RUN" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/$LOG.log"
+          exit "${PIPESTATUS[0]}"
+      - if: failure()
+        uses: $/.github/actions/failure-summary
         with:
-          path: ${{ runner.temp }}/gritlint-closure
-          key: ${{ steps.closure.outputs.key }}
-      - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
-        run: |
-          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-      - name: Sandboxed check fails on a planted violation and passes once fixed
-        env:
-          OUT: ${{ steps.closure.outputs.out }}
-        run: |
-          bin="$OUT/bin/gritlint"
-          fixture="$RUNNER_TEMP/gritlint-fixture"
-          mkdir -p "$fixture/packages/app"
-          cd "$fixture"
-          printf '{"packs": {"typecheck-build-mode": {}}}\n' > gritlint.json
-          printf '{"files": [], "references": [{"path": "./tsconfig.app.json"}]}\n' > packages/app/tsconfig.json
-          printf '{"name": "app", "scripts": {"typecheck": "tsc --noEmit"}}\n' > packages/app/package.json
-          status=0
-          "$bin" check || status=$?
-          test "$status" -eq 1 || { echo "a planted violation must exit 1, got $status" >&2; exit 1; }
-          printf '{"name": "app", "scripts": {"typecheck": "tsc -b"}}\n' > packages/app/package.json
-          "$bin" check
-      - name: This repository's conventions
-        run: ./bin/gritlint check
+          job: lane-${{ matrix.lane.id }}
+          reasons: |
+            hook hook-failed
+            sfs-deps sfs-deps-missing
+            builtin lane-failed
+            run lane-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: ${{ matrix.lane.run || format('the {0} phase of .github/actions/checks-lane', matrix.lane.phase) }}
+          working-directory: ${{ inputs.working-directory }}
 
   test:
     name: test · ${{ matrix.job.name }}
-    needs: plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    needs: [classify, plan, sfs-deps]
+    if: needs.classify.outputs.scope != 'docs-only' && needs.plan.outputs.jobs != '[]'
+    runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults: *defaults
+    env:
+      NODE_OPTIONS: ${{ inputs.node-options }}
     strategy:
       fail-fast: false
       matrix:
         job: ${{ fromJSON(needs.plan.outputs.jobs) }}
-    env:
-      NODE_OPTIONS: "--max-old-space-size=4096"
-      CI: "true"
     steps:
-      - uses: actions/checkout@v7
-      - name: Select the pr lane
-        if: inputs.profile == 'local'
-        run: printf 'CONFORMANCE_PROFILE=local\nVITEST_LANE=pr\n' >> "$GITHUB_ENV"
-      - uses: ./.github/actions/install-deps
-      - uses: denoland/setup-deno@v2
-      - name: Turbo cache
-        uses: actions/cache@v6
+      - *checkout
+      - *turbo
+      - *sfs-deps
+      - *mode
+      - id: hook
+        uses: ./.github/actions/checks-lane
+        if: steps.mode.outputs.source == 'hook'
         with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-test-${{ matrix.job.id }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-test-${{ matrix.job.id }}-
-            turbo-${{ runner.os }}-checks-
-            turbo-${{ runner.os }}-
-      - name: Cache Playwright browsers
-        if: matrix.job.browser
-        uses: actions/cache@v6
+          lane: test
+          job: ${{ toJSON(matrix.job) }}
+          profile: ${{ inputs.profile }}
+      - id: builtin
+        uses: $/.github/actions/builtin-lane
+        if: steps.mode.outputs.source == 'built-in'
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-      - name: Install Playwright chromium
-        if: matrix.job.browser
-        run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
-      - name: Build
-        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
-      - name: Test
+          lane: test
+          job: ${{ toJSON(matrix.job) }}
+          working-directory: ${{ inputs.working-directory }}
+      - id: test
+        name: Test
         if: matrix.job.shard == null
-        run: corepack pnpm exec turbo run test --only --concurrency=1 --continue --summarize --output-logs=new-only --log-order=stream --log-prefix=none ${{ matrix.job.filters }}
+        env:
+          PNPM: ${{ inputs.pnpm }}
+          TEST_FLAGS: ${{ inputs.test-flags }}
+          FILTERS: ${{ matrix.job.filters }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set -o pipefail
+          $PNPM exec turbo run test --concurrency=1 --continue --summarize $TEST_FLAGS $FILTERS 2>&1 | tee "$RUNNER_TEMP/sfs-logs/test.log"
       - name: Test shard
         id: shard
         if: matrix.job.shard != null
         env:
+          PNPM: ${{ inputs.pnpm }}
+          SHARD_FLAGS: ${{ inputs.shard-flags }}
           PACKAGE: ${{ matrix.job.shard.package }}
           SHARD: ${{ matrix.job.shard.index }}/${{ matrix.job.shard.count }}
         run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set -o pipefail
           start=$SECONDS
           code=0
-          corepack pnpm --filter "$PACKAGE" test --shard="$SHARD" --passWithNoTests || code=$?
+          $PNPM --filter "$PACKAGE" test --shard="$SHARD" --passWithNoTests $SHARD_FLAGS 2>&1 | tee "$RUNNER_TEMP/sfs-logs/test.log" || code=$?
           echo "seconds=$((SECONDS - start))" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           exit "$code"
@@ -244,60 +532,181 @@ jobs:
         run: |
           mkdir -p .timings
           if [ -n "$SECONDS_TAKEN" ]; then
-            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json" \
-              --package "$PACKAGE" --shard "$SHARD" --seconds "$SECONDS_TAKEN" --exit "$EXIT_CODE"
+            printf '{"package":"%s","shard":"%s","seconds":"%s","exit":"%s"}' \
+              "$PACKAGE" "$SHARD" "$SECONDS_TAKEN" "$EXIT_CODE" > ".timings/$JOB_ID.json"
           else
-            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json"
+            summary=$(ls -t .turbo/runs/*.json 2>/dev/null | head -n 1)
+            if [ -n "$summary" ]; then cp "$summary" ".timings/$JOB_ID.json"; fi
           fi
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        timeout-minutes: 3
         if: always()
         with:
           name: test-timings-part-${{ matrix.job.id }}
-          path: .timings/${{ matrix.job.id }}.json
+          path: ${{ inputs.working-directory }}/.timings/${{ matrix.job.id }}.json
           if-no-files-found: ignore
           retention-days: 1
+      - id: hook-after
+        uses: ./.github/actions/checks-lane
+        if: ${{ !cancelled() && steps.mode.outputs.source == 'hook' }}
+        with:
+          lane: test-after
+          job: ${{ toJSON(matrix.job) }}
+          profile: ${{ inputs.profile }}
+      - uses: $/.github/actions/builtin-lane
+        if: ${{ !cancelled() && steps.mode.outputs.source == 'built-in' }}
+        with:
+          lane: test-after
+          job: ${{ toJSON(matrix.job) }}
+          working-directory: ${{ inputs.working-directory }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: test-${{ matrix.job.id }}
+          reasons: |
+            hook hook-failed
+            sfs-deps sfs-deps-missing
+            builtin build-failed
+            test test-failed
+            shard test-failed
+            hook-after hook-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: ${{ matrix.job.shard == null && format('{0} {1} test', inputs.pnpm, matrix.job.filters) || format('{0} --filter {1} test --shard={2}/{3}', inputs.pnpm, matrix.job.shard.package, matrix.job.shard.index, matrix.job.shard.count) }}
+          working-directory: ${{ inputs.working-directory }}
 
   timings:
     name: record test timings
-    needs: [plan, test]
-    if: ${{ always() && needs.plan.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    needs: [classify, plan, test]
+    if: ${{ always() && needs.plan.result == 'success' && needs.classify.outputs.scope != 'docs-only' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.plan-timeout-minutes }}
+    defaults: *defaults
     steps:
-      - uses: actions/checkout@v7
-      - uses: denoland/setup-deno@v2
-      - uses: actions/download-artifact@v8
+      # Every step runs under always(): a run cancelled by a newer push still records the passes its test jobs made.
+      - if: always()
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: ${{ inputs.persist-credentials }}
+          fetch-tags: ${{ inputs.fetch-tags }}
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+      - *mode
+      - if: always() && steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings'
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - uses: ./.github/actions/checks-lane
+        if: always() && steps.mode.outputs.source == 'hook'
+        with:
+          lane: timings
+          profile: ${{ inputs.profile }}
+      - uses: $/.github/actions/builtin-lane
+        if: always() && steps.mode.outputs.source == 'built-in'
+        with:
+          lane: timings
+          working-directory: ${{ inputs.working-directory }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        timeout-minutes: 3
+        if: always() && needs.test.result != 'skipped'
         with:
           pattern: test-timings-part-*
-          path: .timings/parts
+          path: ${{ inputs.working-directory }}/.timings/raw
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - id: part
+        name: Each job's measurements as a part
+        if: always()
+        run: |
+          mkdir -p .timings/raw .timings/parts
+          for raw in .timings/raw/*.json; do
+            [ -e "$raw" ] || continue
+            job=$(basename "$raw" .json)
+            $TIMINGS part --job "$job" --raw "$raw" --out ".timings/parts/$job.json"
+          done
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        timeout-minutes: 3
+        if: always()
         continue-on-error: true
         with:
           name: test-timings-previous
-          path: .timings/previous
-      - name: Merge this run into the record
-        run: $TIMINGS merge --previous .timings/previous/test-timings.json --parts .timings/parts --out .timings/test-timings.json --sha "$GITHUB_SHA"
-      - uses: actions/upload-artifact@v7
+          path: ${{ inputs.working-directory }}/.timings/previous
+      - id: merge
+        name: Merge this run into the record
+        if: always()
+        env:
+          PLAN: ${{ needs.plan.outputs.jobs }}
+        run: |
+          printf '%s' "$PLAN" > .timings/plan.json
+          $TIMINGS merge --target ${{ inputs.target }} --previous .timings/previous/test-timings.json --parts .timings/parts \
+            --plan .timings/plan.json --out .timings/test-timings.json --sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        timeout-minutes: 3
+        if: always()
         with:
-          name: test-timings-${{ inputs.profile }}
-          path: .timings/test-timings.json
+          name: ${{ inputs.record }}
+          path: ${{ inputs.working-directory }}/.timings/test-timings.json
           retention-days: 30
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: timings
+          reasons: |
+            part timings-failed
+            merge timings-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: ${{ format('{0} merge --previous test-timings.json --parts parts/ --out test-timings.json', inputs.timings) }}
+          working-directory: ${{ inputs.working-directory }}
 
   check:
-    name: the gate (pnpm check:ci)
-    needs: [plan, static, rust, gritlint, test]
+    name: ${{ inputs.gate-name }}
+    needs: [classify, sfs-deps, plan, lanes, test]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.gate-timeout-minutes }}
     steps:
-      - name: Every lane passed
+      # A skipped job passes only when the classifier or the plan said there was nothing for it to run.
+      - id: every
+        name: Every lane passed
         env:
+          CLASSIFY: ${{ needs.classify.result }}
+          SCOPE: ${{ needs.classify.outputs.scope }}
+          SFS_DEPS: ${{ needs.sfs-deps.result }}
           PLAN: ${{ needs.plan.result }}
-          STATIC: ${{ needs.static.result }}
-          RUST: ${{ needs.rust.result }}
-          GRITLINT: ${{ needs.gritlint.result }}
+          LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
+          NO_LANES: ${{ needs.classify.outputs.lanes == '[]' }}
+          NO_SFS_DEPS: ${{ needs.classify.outputs.sfs-deps-none }}
+          NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
-          echo "plan=$PLAN static=$STATIC rust=$RUST gritlint=$GRITLINT test=$TEST"
-          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$RUST" = success ] && [ "$GRITLINT" = success ] && [ "$TEST" = success ]
+          echo "classify=$CLASSIFY scope=$SCOPE sfs-deps=$SFS_DEPS (none named: $NO_SFS_DEPS) plan=$PLAN lanes=$LANES test=$TEST"
+          docs=false
+          [ "$SCOPE" = docs-only ] && docs=true
+          [ "$CLASSIFY" = success ] &&
+            { [ "$SFS_DEPS" = success ] || { [ "$docs" = true ] && [ "$NO_SFS_DEPS" = true ] && [ "$SFS_DEPS" = skipped ]; }; } &&
+            [ "$PLAN" = success ] &&
+            { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
+            { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
+      # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
+      - if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: ${{ inputs.persist-credentials }}
+          fetch-tags: ${{ inputs.fetch-tags }}
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+      - id: hook
+        uses: ./.github/actions/checks-lane
+        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
+        with:
+          lane: gate
+          job: ${{ needs.plan.outputs.jobs }}
+          profile: ${{ inputs.profile }}
+      - if: failure()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: gate
+          reasons: |
+            every gate-failed
+            hook hook-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: gh run view ${{ github.run_id }} --log-failed

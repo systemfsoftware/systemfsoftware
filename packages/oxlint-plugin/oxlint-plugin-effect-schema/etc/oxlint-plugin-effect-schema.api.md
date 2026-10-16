@@ -19,7 +19,9 @@ const _default: {
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
+        'schema-file-imports-pure-modules-only': Rule;
         'schema-recursive-union-budget': Rule;
+        'tagged-error-requires-message': Rule;
     };
     configs: {
         recommended: {

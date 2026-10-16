@@ -81,6 +81,7 @@ const liveReason =
   'each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run'
 
 Feature('Supervising a workload in a microVM until the scope that owns it closes', { timeout: 120_000 })
+  .withLayer(Layer.empty)
   .live(liveReason)
   .body(({ scenario }) => {
     scenario(
@@ -98,7 +99,7 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
             }),
         ),
         Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
-          (state, expect) => expect(state.checked).toMatchObject({ _tag: 'Pass' }),
+          (state, expect) => expect(state.checked, Conformance.render(state.checked)).toMatchObject({ _tag: 'Pass' }),
         ),
       ),
     )
@@ -118,7 +119,7 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
             }),
         ),
         Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
-          (state, expect) => expect(state.checked).toMatchObject({ _tag: 'Pass' }),
+          (state, expect) => expect(state.checked, Conformance.render(state.checked)).toMatchObject({ _tag: 'Pass' }),
         ),
       ),
     )

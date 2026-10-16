@@ -1,0 +1,11 @@
+name: Grant KVM access
+description: Make /dev/kvm readable and writable by the runner user, so microVM suites can boot.
+runs:
+  using: composite
+  steps:
+    - name: Grant KVM access via udev rule
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger

@@ -1,11 +1,10 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Equal, Exit, Fiber, Hash, Layer, Predicate, Schema } from 'effect'
+import { Arbitrary, Effect, Equal, Exit, Fiber, Hash, Layer, Predicate, Schema } from 'effect'
 import { dual } from 'effect/Function'
-import { Arbitrary } from 'effect/unstable/arbitrary'
 
 import { type Operation, type Recording, recording as makeRecording } from './history.js'
 import { ModelError } from './model-errors.schema.js'
-import { type Fail, noSequentialOrder, type Report } from './report.js'
+import { type Fail, failed, incomplete, noSequentialOrder, overBudget, type Report } from './report.js'
 
 /** A pure model of the implementation: the state a Schema declares, and one step. */
 export interface Model<C, S, R> {
@@ -168,18 +167,15 @@ const failureReportOf = <C, R, X>(
 ): Report<C, R> => {
   const history = historyOf(result)
   if (history === undefined) {
-    return { _tag: 'Incomplete', incomplete: { failure: failureOf(result), schedule, bound } }
+    return incomplete({ failure: failureOf(result), schedule, bound })
   }
-  const failure: Fail<C, R> = {
-    _tag: 'Fail',
-    failure: {
-      judgement: noSequentialOrder,
-      schedule: result.decisions,
-      deviations: deviationsOf(result),
-      operations: history,
-      bound,
-    },
-  }
+  const failure: Fail<C, R> = failed({
+    judgement: noSequentialOrder,
+    schedule: result.decisions,
+    deviations: deviationsOf(result),
+    operations: history,
+    bound,
+  })
   return failure
 }
 
@@ -271,9 +267,9 @@ const reducedSearchReport = <C, S, R, E, REnv>(
   searched: Kernel.SearchReport<ReadonlyArray<Operation<C, R>>, E>,
   bound: Kernel.Bound,
 ): Effect.Effect<Report<C, R>> => {
-  const overBudget = overBudgetOf(searched)
-  if (overBudget !== undefined) {
-    return Effect.succeed({ _tag: 'OverBudget', bound: overBudget.bound })
+  const exhausted = overBudgetOf(searched)
+  if (exhausted !== undefined) {
+    return Effect.succeed(overBudget(exhausted.bound))
   }
   return reducedFailures(specification, implementation, assignments, searched.failures, bound)
 }
@@ -319,9 +315,9 @@ const reportedOutcome = <C, S, R, E, REnv>(
   assignments: ReadonlyArray<ReadonlyArray<C>>,
   searched: Kernel.SearchReport<ReadonlyArray<Operation<C, R>>, E>,
 ): Effect.Effect<Report<C, R>> => {
-  const overBudget = overBudgetOf(searched)
-  if (overBudget !== undefined) {
-    return Effect.succeed({ _tag: 'OverBudget', bound: overBudget.bound })
+  const exhausted = overBudgetOf(searched)
+  if (exhausted !== undefined) {
+    return Effect.succeed(overBudget(exhausted.bound))
   }
   return reportedFailures(specification, implementation, assignments, searched.failures, searched.bound)
 }

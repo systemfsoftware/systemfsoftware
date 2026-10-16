@@ -1,21 +1,25 @@
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Result } from 'effect'
-import { dual } from 'effect/Function'
-import { CompareTraces, compareTraces, type TraceComparison } from './compare-traces.workflow.js'
+import { absurd, dual } from 'effect/Function'
+import { CompareTraces, compareTraces } from './compare-traces.workflow.js'
 import { ProjectTrace, projectTrace } from './project-trace.workflow.js'
 import type { ConformanceTrace, ObservedStep } from './Trace.schema.js'
+import type { TraceComparison } from './TraceComparison.schema.js'
 
 type Declaration = Supervisor.Medium.MediumDeclaration
 
 const projectedStepsOf = (trace: ConformanceTrace, declaration: Declaration): ReadonlyArray<ObservedStep> =>
-  Result.getOrThrow(projectTrace(new ProjectTrace({ trace, declaration }))).steps
+  Result.match(projectTrace(new ProjectTrace({ trace, declaration })), {
+    onFailure: (error) => absurd(error),
+    onSuccess: (projection) => projection.steps,
+  })
 
 const comparePair = (
   reference: ConformanceTrace,
   candidate: ConformanceTrace,
   declaration: Declaration,
 ): TraceComparison =>
-  Result.getOrThrow(
+  Result.match(
     compareTraces(
       new CompareTraces({
         scenario: candidate.scenario,
@@ -24,6 +28,7 @@ const comparePair = (
         candidate: projectedStepsOf(candidate, declaration),
       }),
     ),
+    { onFailure: (error) => absurd(error), onSuccess: (comparison) => comparison },
   )
 
 /**

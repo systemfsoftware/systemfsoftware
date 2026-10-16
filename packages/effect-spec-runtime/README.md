@@ -13,9 +13,13 @@ import { Effect } from 'effect'
 
 `KernelCase.caseProgram(body, env)` builds a case whose layers are rebuilt fresh around every run and whose body runs under the kernel's test clock; `KernelCase.liveCase(body, env, reason)` is the live-clock counterpart and announces the reason on the run report, so every live case is listed with why it stayed live.
 
+`KernelCase.explore(program)` runs the baseline (the zero-preemption schedule), then the profile's seeded schedules — 250 at `per-change`, 25 at `local` — but only when the baseline had a choice point, an explored step with more than one runnable task. A baseline without one has a single schedule, so the case runs once. `KernelCase.exploreOnce(program)` runs the case once with no seeds: the decision path `CONFORMANCE_REPLAY` names, else the baseline.
+
+A registered explored case runs `explore` first and `exploreOnce` as the fork's leak-check second run, on a fresh build. A passing case therefore costs 2 kernel runs without a choice point and 252 with one at `per-change`, and state the first run leaves behind still fails the second as `LeakedState`.
+
 ## Suite
 
-`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both:
+`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, by the first case that runs, every case of the suite sees those same services, and they are released when the suite ends; state a case must not share belongs in the case layer:
 
 ```ts
 Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
@@ -39,7 +43,7 @@ Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
 - Each entry point hands `use` a registrar (`Suite.RegisterFn<B, E, R>`); the registrar's body and error channels are yours to declare, and its requirement channel is the union of the layer services it hands you. A shared layer is acquired once for the whole suite; a per-case layer is acquired and finalized around every case.
 - `register` mode is `Suite.RegisterMode` (`'run' | 'skip' | 'only'`).
 
-`Register.exploredProgram(program)` is the kernel run of one case's program: it re-provides the test's binding onto the program (so the checks the kernel runs count for this test), scopes the run, and reports a failure with its seed and decision path.
+An explored case's kernel run re-provides the test's binding onto the program (so the checks the kernel runs count for this test), scopes the run, and reports a failure with its seed and decision path. Its second run takes the same path through `KernelCase.exploreOnce`.
 
 ## TaskRef
 

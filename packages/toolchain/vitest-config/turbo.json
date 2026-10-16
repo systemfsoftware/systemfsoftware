@@ -1,0 +1,14 @@
+{
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "attw": {
+      "inputs": [
+        "lib/**",
+        "package.json",
+        ".attw.json"
+      ]
+    }
+  }
+}

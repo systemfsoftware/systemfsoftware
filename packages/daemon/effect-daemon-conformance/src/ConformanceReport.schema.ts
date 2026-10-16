@@ -1,6 +1,6 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Schema } from 'effect'
-import { TraceComparison } from './compare-traces.workflow.js'
+import { TraceComparison } from './TraceComparison.schema.js'
 
 export const ScenarioCompared = Schema.TaggedStruct('ScenarioCompared', {
   scenario: Schema.String,

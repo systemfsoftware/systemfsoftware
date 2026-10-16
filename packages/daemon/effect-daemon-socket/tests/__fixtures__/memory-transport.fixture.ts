@@ -1,7 +1,7 @@
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { Array as Arr, Cause, Effect, Option, Queue, Ref, Schedule } from 'effect'
 import type * as Scope from 'effect/Scope'
-import { Socket } from 'effect/unstable/socket'
+import { Socket } from 'effect/socket'
 
 const POLL_SPACING = '1 millis'
 const POLL_ATTEMPTS = 200

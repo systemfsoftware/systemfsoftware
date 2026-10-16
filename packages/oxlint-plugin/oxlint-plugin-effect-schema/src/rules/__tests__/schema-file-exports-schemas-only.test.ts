@@ -4,6 +4,12 @@ import {
   CODEC_EXPORT_ACTUAL,
   CODEC_EXPORT_EXPECTED,
   CODEC_EXPORT_FIX,
+  EFFECT_CARRIER_EXPORT_ACTUAL,
+  EFFECT_CARRIER_EXPORT_EXPECTED,
+  EFFECT_CARRIER_EXPORT_FIX,
+  MISSING_ANNOTATION_EXPORT_ACTUAL,
+  MISSING_ANNOTATION_EXPORT_EXPECTED,
+  MISSING_ANNOTATION_EXPORT_FIX,
   NON_SCHEMA_EXPORT_ACTUAL,
   NON_SCHEMA_EXPORT_EXPECTED,
   NON_SCHEMA_EXPORT_FIX,
@@ -27,6 +33,26 @@ const nonSchemaError = (name: string) => ({
     expected: NON_SCHEMA_EXPORT_EXPECTED,
     actual: NON_SCHEMA_EXPORT_ACTUAL,
     fix: NON_SCHEMA_EXPORT_FIX,
+  },
+})
+
+const missingAnnotationError = (name: string) => ({
+  messageId: 'missingAnnotationExport',
+  data: {
+    name,
+    expected: MISSING_ANNOTATION_EXPORT_EXPECTED,
+    actual: MISSING_ANNOTATION_EXPORT_ACTUAL,
+    fix: MISSING_ANNOTATION_EXPORT_FIX,
+  },
+})
+
+const effectCarrierError = (name: string) => ({
+  messageId: 'effectCarrierExport',
+  data: {
+    name,
+    expected: EFFECT_CARRIER_EXPORT_EXPECTED,
+    actual: EFFECT_CARRIER_EXPORT_ACTUAL,
+    fix: EFFECT_CARRIER_EXPORT_FIX,
   },
 })
 
@@ -157,6 +183,191 @@ export type { Tile as TileType } from './tile.schema.js'`,
       code: `import { Schema as S } from 'effect'
 export const U = S.Struct({ a: S.String })
 export { }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_SchemaFileExportsAnOperationOverSameFileSchemas',
+      code: `import { Schema as S } from 'effect'
+export const LineStarts = S.Array(S.Number)
+export type LineStarts = S.Schema.Type<typeof LineStarts>
+export const Offset = S.Number
+export type Offset = S.Schema.Type<typeof Offset>
+export const Position = S.Struct({ line: S.Number, column: S.Number })
+export type Position = S.Schema.Type<typeof Position>
+export function positionAt(starts: LineStarts, offset: Offset): Position {
+  return Position.make({ line: starts.length, column: offset })
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationNamesOnlyItsSameFileReturnType',
+      code: `import { Schema as S } from 'effect'
+export const Position = S.Struct({ line: S.Number })
+export type Position = S.Schema.Type<typeof Position>
+export const origin = (line: number): Position => Position.make({ line })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationTakesASameFileUnionAlias',
+      code: `import { Schema as S } from 'effect'
+export const Circle = S.Struct({ radius: S.Number })
+export const Square = S.Struct({ side: S.Number })
+export type Shape = S.Schema.Type<typeof Circle> | S.Schema.Type<typeof Square>
+export const area = (shape: Shape): number => shape`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationReturnsNonCarrierErrorData',
+      code: `import { Schema as S } from 'effect'
+import type { PlatformError } from 'effect/PlatformError'
+export const StatusLine = S.Struct({ code: S.Number, reason: S.String })
+export type StatusLine = S.Schema.Type<typeof StatusLine>
+export const failureOf = (line: StatusLine): PlatformError => {
+  throw new Error(String(line))
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationNamesAForwardDeclaredRecursiveSchema',
+      code: `import { Schema as S } from 'effect'
+let U: S.Schema<string>
+export const Member = S.suspend((): S.Schema<string> => U)
+U = S.String
+export const describe = (value: U): string => String(value)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OnlyTheSameFileParameterIsAnnotated',
+      code: `import { Schema as S } from 'effect'
+export const LineStarts = S.Array(S.Number)
+export type LineStarts = S.Schema.Type<typeof LineStarts>
+export const positionAt = (starts: LineStarts, offset) => starts[offset]`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationNamesASameFileInterface',
+      code: `import { Schema as S } from 'effect'
+export const LineStarts = S.Array(S.Number)
+export type LineStarts = S.Schema.Type<typeof LineStarts>
+export interface LineMap { readonly starts: LineStarts }
+export const sizeOf = (map: LineMap): number => map.starts.length`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationNamesASameFileEnum',
+      code: `import { Schema as S } from 'effect'
+export enum Axis { X = 'x', Y = 'y' }
+export const AxisSchema = S.Literal(Axis.X, Axis.Y)
+export const labelOf = (axis: Axis): string => String(axis)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OperationNamesASameFileSchemaClass',
+      code: `import { Schema as S } from 'effect'
+export class Position extends S.Class<Position>('Position')({ line: S.Number }) {}
+export const originOf = (line: number): Position => Position.make({ line })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_DualOperationCarriesItsSignatureInADeclaratorAnnotation',
+      code: `import { Schema as S } from 'effect'
+import { dual } from 'effect/Function'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const getOrElse: {
+  <B>(f: () => B): (self: Box) => number | B
+  <B>(self: Box, f: () => B): number | B
+} = dual(2, (self: Box, f: () => unknown) => self.n)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_DeclaratorAnnotatedArrowNamesOnlyItsSameFileReturnType',
+      code: `import { Schema as S } from 'effect'
+import type { Count } from './count.schema.js'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const toBox: (n: Count) => Box = (n) => Box.make({ n })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_OverloadedExportNamesASameFileType',
+      code: `import { Schema as S } from 'effect'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export function sizeOf(self: Box): number
+export function sizeOf(self: Box, other: Box): number
+export function sizeOf(self: Box, other?: Box): number { return self.n }`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_TypeOnlyNamespaceDeclaresVocabulary',
+      code: `export declare namespace Result {
+  interface Proto { readonly _tag: 'Proto' }
+  type Success<R> = R
+  namespace Failure { type Of<R> = R }
+}`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_TypeIdentitySymbolIsExported',
+      code: `export const TypeId: unique symbol = Symbol.for('~effect/reactivity/Result')`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_BareSymbolTypeIdentityIsExported',
+      code: `export const TypeId = Symbol('~effect/reactivity/Result')`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_PredicateGuardNamesASameFileType',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const isResult = (u: unknown): u is Result<unknown, unknown> => false`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_UnionReturnNamesTwoSameFileTypes',
+      code: `export interface Success<A, E> { readonly _tag: 'Success' }
+export interface Failure<A, E> { readonly _tag: 'Failure' }
+export const fromExit = <A, E>(exit: unknown): Success<A, E> | Failure<A, E> => null as never`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ReturnTypeParameterConstraintIsSameFile',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const waiting = <R extends Result<unknown, unknown>>(self: R): R => self`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_SameNameInterfaceAndConstBothExist',
+      code: `interface Schema<A> { readonly _tag: 'Schema' }
+const Schema = { make: () => null }
+export const fromSchema = (self: Schema<unknown>): Schema<unknown> => self`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ReadonlyArrayOfSameFileTypeIsAnnotated',
+      code: `export interface Result<A, E> { readonly _tag: 'Success' | 'Failure' }
+export const all = (xs: readonly Result<unknown, unknown>[]): readonly Result<unknown, unknown>[] => xs`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithItsOwnSameFileLiteralType',
+      code: `export type TypeId = '~a/b'
+export const TypeId: TypeId = '~a/b'`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithASameFileInterface',
+      code: `import { Schema as S } from 'effect'
+interface Schema<A, I> { readonly _tag: 'Schema' }
+export const ResultSchema: Schema<typeof S.Number, typeof S.String> = Schema({ number: S.Number, string: S.String })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_ConstIsAnnotatedWithASameFileUnion',
+      code: `interface Success { readonly _tag: 'Success' }
+interface Failure { readonly _tag: 'Failure' }
+export const initial: Success | Failure = { _tag: 'Success' }`,
       filename: SCHEMA_FILE,
     },
   ],
@@ -293,6 +504,155 @@ export { WorkerMessageSchema as WM } from './other.js'`,
         nonSchemaError('flatten'),
         reexportError('./other.js'),
       ],
+    },
+    {
+      name: 'Should_Report_When_OperationNamesOnlyAForeignType',
+      code: `import type { LineStarts } from './line-map.schema.js'
+export const offsetOf = (starts: LineStarts, offset: number): number => offset`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('offsetOf')],
+    },
+    {
+      name: 'Should_Report_When_OperationNamesOnlyASameFileValue',
+      code: `class Adapter { readonly kind = 'adapter' }
+export const useAdapter = (adapter: Adapter): string => adapter.kind`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('useAdapter')],
+    },
+    {
+      name: 'Should_Report_When_ExportedArrowHasNoAnnotations',
+      code: `export const parse = (raw) => raw`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('parse')],
+    },
+    {
+      name: 'Should_Report_When_ExportedFunctionHasNoAnnotations',
+      code: `export function parse(raw) { return raw }`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('parse')],
+    },
+    {
+      name: 'Should_Report_When_OperationReturnsAnEffectCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Effect from 'effect/Effect'
+export const Position = S.Struct({ line: S.Number })
+export type Position = S.Schema.Type<typeof Position>
+export const positionAt = (offset: number): Effect.Effect<Position> => Effect.succeed(offset)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('positionAt')],
+    },
+    {
+      name: 'Should_Report_When_OperationReturnsAStreamCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Stream from 'effect/Stream'
+export const Position = S.Struct({ line: S.Number })
+export type Position = S.Schema.Type<typeof Position>
+export const positions = (offset: number): Stream.Stream<Position> => Stream.empty`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('positions')],
+    },
+    {
+      name: 'Should_Report_When_OperationReturnsALayerCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Layer from 'effect/Layer'
+export const Position = S.Struct({ line: S.Number })
+export type Position = S.Schema.Type<typeof Position>
+export const positionLayer = (offset: number): Layer.Layer<Position> => Layer.empty`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('positionLayer')],
+    },
+    {
+      name: 'Should_Report_When_PrimitiveOnlyArrowKeepsTheBrandingRemedy',
+      code: `export const ensureTrailingSeparator = (path: string): string => path`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('ensureTrailingSeparator')],
+    },
+    {
+      name: 'Should_Report_When_DualOperationReturnsAnEffectCarrier',
+      code: `import { Schema as S } from 'effect'
+import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
+export const Box = S.Struct({ n: S.Number })
+export type Box = S.Schema.Type<typeof Box>
+export const getOrElse: {
+  <B>(f: () => B): (self: Box) => Effect.Effect<number | B>
+  <B>(self: Box, f: () => B): Effect.Effect<number | B>
+} = dual(2, (self: Box, f: () => unknown) => Effect.succeed(self.n))`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('getOrElse')],
+    },
+    {
+      name: 'Should_Report_When_DualOperationNamesOnlyForeignAndPrimitiveTypes',
+      code: `import { dual } from 'effect/Function'
+import type { LineStarts } from './line-map.schema.js'
+export const offsetOf: {
+  (starts: LineStarts): number
+  (starts: LineStarts, offset: number): number
+} = dual(2, (starts: LineStarts, offset: number): number => offset)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('offsetOf')],
+    },
+    {
+      name: 'Should_Report_When_CallInitializerHasNoDeclaratorAnnotation',
+      code: `import { dual } from 'effect/Function'
+export const getOrElse = dual(2, (self: number, f: () => number) => self + f())`,
+      filename: SCHEMA_FILE,
+      errors: [missingAnnotationError('getOrElse')],
+    },
+    {
+      name: 'Should_Report_When_NamespaceHoldsAValue',
+      code: `export declare namespace N { const x: number }`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('N')],
+    },
+    {
+      name: 'Should_Report_When_TypeIdentitySymbolTakesANonLiteralKey',
+      code: `const key = '~x/Result'
+export const TypeId: unique symbol = Symbol.for(key)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('TypeId')],
+    },
+    {
+      name: 'Should_Report_When_UnionReturnNamesAnEffectCarrierMember',
+      code: `import * as Effect from 'effect/Effect'
+export interface Success { readonly _tag: 'Success' }
+export const of = (a: unknown): Success | Effect.Effect<unknown> => Effect.succeed(a)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('of')],
+    },
+    {
+      name: 'Should_Report_When_PredicateGuardsAForeignType',
+      code: `import type { Foo } from './foo.schema.js'
+export const isFoo = (u: unknown): u is Foo => false`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('isFoo')],
+    },
+    {
+      name: 'Should_Report_When_ConstraintCyclesBackToItsOwnParameter',
+      code: `export const waiting = <R extends R>(self: R): R => self`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('waiting')],
+    },
+    {
+      name: 'Should_Report_When_GenericContainerOfSameFileTypeIsNotUnwrapped',
+      code: `export interface Result { readonly _tag: 'Success' }
+export const all = (xs: ReadonlyArray<Result>): ReadonlyArray<Result> => xs`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('all')],
+    },
+    {
+      name: 'Should_Report_When_ConstAnnotationNamesOnlyAForeignType',
+      code: `import * as Option from 'effect/Option'
+export const someValue: Option.Option<number> = Option.some(1)`,
+      filename: SCHEMA_FILE,
+      errors: [nonSchemaError('someValue')],
+    },
+    {
+      name: 'Should_Report_When_ConstAnnotationNamesAnEffectCarrier',
+      code: `import * as Effect from 'effect/Effect'
+export const program: Effect.Effect<number> = Effect.succeed(1)`,
+      filename: SCHEMA_FILE,
+      errors: [effectCarrierError('program')],
     },
   ],
 })

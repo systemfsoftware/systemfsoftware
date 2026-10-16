@@ -79,7 +79,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('every run gets the answers a real filesystem would give')((s, expect) =>
-          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+          expect(s.report, Conformance.render(s.report)).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
         ),
       ),
     )
@@ -104,7 +104,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('every interleaving matches Ada and Bo taking turns one after the other')((s, expect) =>
-          expect(s.report).toMatchObject({
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -127,7 +127,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
-          expect(s.report).toMatchObject({
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -150,7 +150,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
             }),
         ),
         Then('no watch is left open after any stop')((s, expect) =>
-          expect(s.report).toMatchObject({
+          expect(s.report, Conformance.render(s.report)).toMatchObject({
             _tag: 'Pass',
             histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
           })
@@ -178,7 +178,7 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
               }),
           ),
           Then('the scratch folder holds nothing left behind after any stop')((s, expect) =>
-            expect(s.report).toMatchObject({
+            expect(s.report, Conformance.render(s.report)).toMatchObject({
               _tag: 'Pass',
               histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
             })

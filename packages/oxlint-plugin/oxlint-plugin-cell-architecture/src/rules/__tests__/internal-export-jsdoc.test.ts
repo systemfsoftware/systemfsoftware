@@ -1,6 +1,13 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
-import { MISSING_TAG_ACTUAL, MISSING_TAG_EXPECTED, MISSING_TAG_FIX } from '../internal-export-jsdoc.config.js'
+import {
+  MISSING_TAG_ACTUAL,
+  MISSING_TAG_EXPECTED,
+  MISSING_TAG_FIX,
+  OUTSIDE_TAG_ACTUAL,
+  OUTSIDE_TAG_EXPECTED,
+  OUTSIDE_TAG_FIX,
+} from '../internal-export-jsdoc.config.js'
 import { internalExportJsdoc } from '../internal-export-jsdoc.js'
 
 RuleTester.it = vitest.it
@@ -22,6 +29,16 @@ const missing = [{
     expected: MISSING_TAG_EXPECTED,
     actual: MISSING_TAG_ACTUAL,
     fix: MISSING_TAG_FIX,
+  },
+}]
+
+const tagged = [{
+  messageId: 'internalTagOutsideFolder' as const,
+  data: {
+    name: 'export',
+    expected: OUTSIDE_TAG_EXPECTED,
+    actual: OUTSIDE_TAG_ACTUAL,
+    fix: OUTSIDE_TAG_FIX,
   },
 }]
 
@@ -51,6 +68,11 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       name: 'Should_StaySilent_When_StringLiteralMentionsInternal',
       filename: '/repo/pkg/src/internal/a.ts',
       code: `/** @internal */\nexport const MESSAGE = 'the @internal surface'\n`,
+    },
+    {
+      name: 'Should_StaySilent_When_PublicProseCommentMentionsTheTag',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `// documents with @category/@since/@internal; teach the tag checker\nexport const foo = 1\n`,
     },
   ],
   invalid: [
@@ -96,6 +118,30 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       filename: '/repo/pkg/src/internal/a.ts',
       code: `export const MESSAGE = 'the @internal surface'\n`,
       errors: missing,
+    },
+    {
+      name: 'Should_Report_When_InternalExportCommentMentionsTagMidSentence',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `// documents with @category/@since/@internal; teach the tag checker\nexport const foo = 1\n`,
+      errors: missing,
+    },
+    {
+      name: 'Should_Report_When_PublicExportUsesCapitalizedTag',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `/** @Internal */\nexport const foo = 1\n`,
+      errors: tagged,
+    },
+    {
+      name: 'Should_Report_When_PublicReexportCarriesTag',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `/** @internal */\nexport { publicName } from './public.js'\n`,
+      errors: tagged,
+    },
+    {
+      name: 'Should_Report_When_PublicUntaggedNeighborFollowsTaggedExport',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `/** @internal */\nexport const a = 1\nexport const b = 2\n`,
+      errors: tagged,
     },
   ],
 })

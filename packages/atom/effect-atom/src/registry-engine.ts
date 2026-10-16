@@ -1,14 +1,18 @@
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Exit from 'effect/Exit'
-import { constVoid, type LazyArg } from 'effect/Function'
+import { absurd, constVoid, type LazyArg } from 'effect/Function'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
+import * as Result from 'effect/Result'
 import { MixedScheduler, type Scheduler, type SchedulerDispatcher } from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
 import { batchRunner, type BatchState, makeBatchState, NodeImpl } from './atom-node.js'
 import type * as Atom from './atom.blueprint.js'
 import { hostPorts } from './internal/host-timer.js'
+import { IdleRemaining, type IdleRemainingDecision, judgeIdleRemaining } from './judge-idle-remaining.workflow.js'
+import { type IdleTtlDecision, JudgeIdleTtl, judgeIdleTtl } from './judge-idle-ttl.workflow.js'
 import type { Node, PreloadRefused, Registry } from './registry.handle.js'
 
 type AnyValue<A = unknown> = A
@@ -191,19 +195,52 @@ function hearIfChanged<A>(node: NodeImpl<A>, lastSeen: { value: A }, f: (_: A) =
   f(node._value)
 }
 
-function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom): boolean {
-  if (atom.spec.idleTTL === 0) {
-    return false
-  }
-  return hasIdleTtl(registry, atom)
-}
+type Bit = 0 | 1
 
-function hasIdleTtl(registry: RegistryImpl, atom: Atom.Atom): boolean {
-  if (atom.spec.idleTTL !== undefined) {
-    return true
-  }
-  return registry.defaultIdleTTL !== undefined
-}
+const bitOf = (value: boolean): Bit => (value ? 1 : 0)
+
+const bitTable = <T>(build: (value: boolean) => T): Record<Bit, T> => ({
+  0: build(false),
+  1: build(true),
+})
+
+const decided = <Decision>(result: Result.Result<Decision, never>): Decision =>
+  Result.match(result, {
+    onFailure: (error) => absurd<Decision>(error),
+    onSuccess: (decision) => decision,
+  })
+
+const idleTtlVerdict = (
+  keepAlive: boolean,
+  idleTtlSet: boolean,
+  idleTtlZero: boolean,
+  defaultIdleTtlSet: boolean,
+): IdleTtlDecision =>
+  decided(judgeIdleTtl(JudgeIdleTtl.make({
+    keepAlive,
+    idleTtlSet,
+    idleTtlZero,
+    defaultIdleTtlSet,
+  })))
+
+const idleTtlSweeps = (
+  keepAlive: boolean,
+  idleTtlSet: boolean,
+  idleTtlZero: boolean,
+  defaultIdleTtlSet: boolean,
+): boolean =>
+  Match.value(idleTtlVerdict(keepAlive, idleTtlSet, idleTtlZero, defaultIdleTtlSet)).pipe(
+    Match.tags({ SweepsAfterIdle: () => true, NoIdleSweep: () => false }),
+    Match.exhaustive,
+  )
+
+const IDLE_TTL_SWEEPS: Record<Bit, Record<Bit, Record<Bit, Record<Bit, boolean>>>> = bitTable((keepAlive) =>
+  bitTable((idleTtlSet) =>
+    bitTable((idleTtlZero) =>
+      bitTable((defaultIdleTtlSet) => idleTtlSweeps(keepAlive, idleTtlSet, idleTtlZero, defaultIdleTtlSet))
+    )
+  )
+)
 
 function notifyNodeAdded(registry: RegistryImpl, node: NodeImpl): void {
   if (registry.onNodeAdded === undefined) {
@@ -321,11 +358,10 @@ function throwIfDisposed<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
   }
 }
 
-function scheduleRemovalUnlessKeepAlive<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
-  if (atom.spec.keepAlive) {
-    return
+function scheduleRemovalUnlessPinned(registry: RegistryImpl, node: NodeImpl): void {
+  if (node.canBeRemoved) {
+    registry.scheduleAtomRemoval(node.atom)
   }
-  registry.scheduleAtomRemoval(atom)
 }
 
 function removeNodeIfCanBeRemoved(registry: RegistryImpl, node: NodeImpl): void {
@@ -371,30 +407,29 @@ function idleTtlOf(atom: Atom.Atom, defaultIdleTTL: number | undefined): number 
   return atom.spec.idleTTL
 }
 
-function remainingAfterSweep(
-  registry: RegistryImpl,
-  node: NodeImpl,
+const idleRemainingVerdict = (
   nodeIdleTTL: number,
-  currentSweepTTL: number,
-): number | undefined {
-  const idleTTL = nodeIdleTTL - currentSweepTTL
-  if (idleTTL <= 0) {
-    evictNodeIfIdle(registry, node)
-    return undefined
-  }
-  return idleTTL
-}
+  currentSweepTTL: number | null,
+): IdleRemainingDecision =>
+  decided(judgeIdleRemaining(IdleRemaining.make({
+    nodeIdleTtl: nodeIdleTTL,
+    elapsedTtl: currentSweepTTL ?? 0,
+    swept: currentSweepTTL !== null,
+  })))
 
-function remainingIdleTtl(
+function scheduleIdleSweep(
   registry: RegistryImpl,
   node: NodeImpl,
   nodeIdleTTL: number,
   currentSweepTTL: number | null,
-): number | undefined {
-  if (currentSweepTTL === null) {
-    return nodeIdleTTL
-  }
-  return remainingAfterSweep(registry, node, nodeIdleTTL, currentSweepTTL)
+): void {
+  Match.value(idleRemainingVerdict(nodeIdleTTL, currentSweepTTL)).pipe(
+    Match.tags({
+      EvictDue: () => evictNodeIfIdle(registry, node),
+      StillIdle: (verdict) => addNodeToTimeoutBucket(registry, node, verdict.millis),
+    }),
+    Match.exhaustive,
+  )
 }
 
 function timeoutBucketFor(registry: RegistryImpl, idleTTL: number): number {
@@ -603,10 +638,11 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   atomHasTtl(atom: Atom.Atom): boolean {
-    if (atom.spec.keepAlive) {
-      return false
-    }
-    return atomIdleTtlIsActive(this, atom)
+    return IDLE_TTL_SWEEPS[bitOf(atom.spec.keepAlive)][bitOf(atom.spec.idleTTL !== undefined)][
+      bitOf(
+        atom.spec.idleTTL === 0,
+      )
+    ][bitOf(this.defaultIdleTTL !== undefined)]
   }
 
   ensureNode<A>(atom: Atom.Atom<A>): NodeImpl<A> {
@@ -618,8 +654,9 @@ export class RegistryImpl extends Pipeable.Class {
 
   createNode<A>(atom: Atom.Atom<A>): NodeImpl<A> {
     throwIfDisposed(this, atom)
-    scheduleRemovalUnlessKeepAlive(this, atom)
-    return new NodeImpl(this, atom)
+    const node = new NodeImpl(this, atom)
+    scheduleRemovalUnlessPinned(this, node)
+    return node
   }
 
   invalidateAtom = <A>(atom: Atom.Atom<A>): void => {
@@ -665,11 +702,7 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   private scheduleOrEvictIdleNode(node: NodeImpl, nodeIdleTTL: number): void {
-    const remaining = remainingIdleTtl(this, node, nodeIdleTTL, this.#currentSweepTTL)
-    if (remaining === undefined) {
-      return
-    }
-    addNodeToTimeoutBucket(this, node, remaining)
+    scheduleIdleSweep(this, node, nodeIdleTTL, this.#currentSweepTTL)
   }
 
   removeNodeTimeout(node: NodeImpl): void {

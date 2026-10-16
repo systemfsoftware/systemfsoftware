@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom",
   "license": "Apache-2.0",
-  "version": "5.1.0",
+  "version": "6.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -41,7 +41,6 @@
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
@@ -67,7 +66,6 @@
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",

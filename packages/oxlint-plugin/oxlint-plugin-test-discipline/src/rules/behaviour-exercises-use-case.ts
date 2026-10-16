@@ -7,8 +7,8 @@ import {
   NO_SUBJECT_IMPORT_FIX,
   NO_SUBJECT_IMPORT_NAME,
 } from './behaviour-exercises-use-case.config.js'
+import { lanesOf } from './lane.js'
 import { FOREIGN_RUNNERS, GHERKIN_PACKAGE } from './path.config.js'
-import { basenameOf, isBehaviourBasename } from './path.js'
 
 export type MessageIds = 'noSubjectImport'
 
@@ -47,7 +47,7 @@ const isFoundationImport = (source: string, filename: string): boolean => {
 }
 
 /** The stem of a path with its final extension stripped, for identity comparisons. */
-const stemOf = (file: string): string => file.replace(/\.[^/]+$/, '')
+const stemOf = (file: string): string => file.replace(/\.[^./]+$/, '')
 
 /**
  * A relative module specifier resolved against the linted file's directory,
@@ -138,7 +138,7 @@ export const behaviourExercisesUseCase = defineRule({
         if (typeof node.value === 'string' && DIST_SEGMENT.test(node.value)) reached = true
       },
       'Program:exit'(node: ESTree.Program) {
-        if (!isBehaviourBasename(basenameOf(context.filename))) return
+        if (!lanesOf(context).has('behaviour')) return
         if (reached) return
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue

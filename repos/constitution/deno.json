@@ -2,7 +2,8 @@
   "version": "0.1.0",
   "nodeModulesDir": "auto",
   "tasks": {
-    "test": "deno run --allow-read=CONSTITUTION.md --allow-run=git scripts/validate-constitution.ts",
+    "test": "deno run --allow-read=CONSTITUTION.md,ENFORCEMENT.md --allow-run=git scripts/validate-constitution.ts",
+    "test:validator": "./scripts/validate-constitution.test.ts",
     "prepare": "git config core.hooksPath .husky"
   },
   "imports": {

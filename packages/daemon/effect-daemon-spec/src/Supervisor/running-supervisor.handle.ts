@@ -1,13 +1,16 @@
 import { Handle } from '@systemfsoftware/effect-cell-types'
-import { Clock, Context, Deferred, Effect, HashMap, Match, Option, PubSub, Queue, Ref, Scope } from 'effect'
+import { Clock, Context, Deferred, Effect, HashMap, Option, PubSub, Queue, Ref, Scope } from 'effect'
 import { dual } from 'effect/Function'
 import * as Stream from 'effect/Stream'
-import type { SupervisionDecision, SupervisorState } from '../kernel/interpret-supervision-event.workflow.js'
+import type { SupervisionDecision } from '../kernel/interpret-supervision-event.workflow.js'
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
-import { Binder, type BoundChild } from './bound-child.js'
+import type { SupervisorState } from '../kernel/SupervisorState.schema.js'
+import { Binder, type BoundChild, type Incarnation } from './bound-child.js'
+import type { DynamicOutcome } from './DynamicOutcome.schema.js'
+import { staleOf } from './DynamicOutcome.schema.js'
 import type { FiberProgram } from './FiberMedium.js'
-import type { Medium, Started } from './Medium.js'
+import type { Medium } from './Medium.js'
 import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 /** Brands a running supervisor handle. */
@@ -21,42 +24,21 @@ export interface TraceEntry {
   readonly decision: typeof SupervisionDecision.Encoded
 }
 
-/** A dynamic start the supervisor accepted, naming the child it allocated. */
-export interface DynamicStartAccepted {
-  readonly outcome: 'accepted'
-  readonly childId: ChildId
-  readonly generation: Generation
-}
-
-/** A dynamic start the supervisor refused (ceiling reached, or not running). */
-export interface DynamicStartRefused {
-  readonly outcome: 'refused'
-}
-
-/** The answer to a dynamic start. */
-export type DynamicStartOutcome = DynamicStartAccepted | DynamicStartRefused
-
-/** A dynamic stop that removed the child. */
-export interface DynamicStopDone {
-  readonly outcome: 'stopped'
-}
-
-/** A dynamic stop that named no current incarnation. */
-export interface DynamicStopMissed {
-  readonly outcome: 'missed'
-}
-
-/** The answer to a dynamic stop. */
-export type DynamicStopOutcome = DynamicStopDone | DynamicStopMissed
-
-/** Any dynamic answer, as the reply table stores it. */
-export type DynamicOutcome = DynamicStartOutcome | DynamicStopOutcome
+export type {
+  DynamicOutcome,
+  DynamicStartAccepted,
+  DynamicStartOutcome,
+  DynamicStartRefused,
+  DynamicStopDone,
+  DynamicStopMissed,
+  DynamicStopOutcome,
+} from './DynamicOutcome.schema.js'
 
 interface SupervisorSlot {
   readonly state: Ref.Ref<SupervisorState>
   readonly mailbox: Queue.Queue<SupervisionEvent>
   readonly trace: PubSub.PubSub<TraceEntry>
-  readonly evidence: Ref.Ref<HashMap.HashMap<string, Started>>
+  readonly evidence: Ref.Ref<HashMap.HashMap<string, Incarnation>>
   readonly replies: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>
   readonly boundChildren: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
   readonly pending: Ref.Ref<HashMap.HashMap<string, BoundChild>>
@@ -92,7 +74,7 @@ export const RunningSupervisorHandle = {
         state: yield* Ref.make(initial),
         mailbox: yield* Queue.unbounded<SupervisionEvent>(),
         trace: yield* PubSub.unbounded<TraceEntry>(),
-        evidence: yield* Ref.make(HashMap.empty<string, Started>()),
+        evidence: yield* Ref.make(HashMap.empty<string, Incarnation>()),
         replies: yield* Ref.make(HashMap.empty<string, Deferred.Deferred<DynamicOutcome>>()),
         boundChildren: yield* Ref.make(children),
         pending: yield* Ref.make(HashMap.empty<string, BoundChild>()),
@@ -114,7 +96,7 @@ export const mailboxOf = (self: RunningSupervisor): Queue.Queue<SupervisionEvent
 export const tracePubSubOf = (self: RunningSupervisor): PubSub.PubSub<TraceEntry> =>
   RunningSupervisorDef.slot(self).trace
 
-export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Started>> =>
+export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Incarnation>> =>
   RunningSupervisorDef.slot(self).evidence
 
 export const repliesOf = (
@@ -277,12 +259,6 @@ const resolveWaiting = (
       onNone: () => Effect.void,
       onSome: (waiter: Deferred.Deferred<DynamicOutcome>) => Effect.asVoid(Deferred.succeed(waiter, outcome)),
     }),
-  )
-
-const staleOf = (event: SupervisionEvent): DynamicOutcome =>
-  Match.value(event).pipe(
-    Match.when({ _tag: 'DynamicStartRequested' }, (): DynamicOutcome => ({ outcome: 'refused' })),
-    Match.orElse((): DynamicOutcome => ({ outcome: 'missed' })),
   )
 
 export const Ops = {

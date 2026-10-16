@@ -5,8 +5,8 @@ import { assertionOf, fileOf, messagesOf, namesOf, runFixtures } from './__fixtu
 
 const Feature = makeFeature({ it })
 
-const CHEATS = ['cheats/property-shape.property.test.ts']
-const LAW_KINDS = 'property/law-kinds.test.ts'
+const CHEATS = ['cheats/property-shape.property.runner.test.ts']
+const LAW_KINDS = 'property/law-kinds.runner.test.ts'
 const VACUOUS = 'no property in this file refuted'
 
 const GENUINE = '∀xs_KeepsEveryElement_⊆Input'
@@ -38,7 +38,7 @@ Feature('Judging a property suite')
       Gherkin.Do.pipe(
         Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
         Then('the genuine property passed, the impostor file is refused, and both are named')((s, expect) => {
-          const file = fileOf(s.report, 'property-shape.property.test.ts')
+          const file = fileOf(s.report, 'property-shape.property.runner.test.ts')
           return expect({
             genuine: assertionOf(s.report, GENUINE).status,
             numTotalTests: s.report.numTotalTests,
@@ -61,14 +61,14 @@ Feature('Judging a property suite')
       Gherkin.Do.pipe(
         Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
         Then('the corpus holds exactly one file and it is refused for refuting no property')((s, expect) => {
-          const file = fileOf(s.report, 'property-shape.property.test.ts')
+          const file = fileOf(s.report, 'property-shape.property.runner.test.ts')
           return expect({
             cheats: CHEATS,
             numTotalTests: s.report.numTotalTests,
             file: file.status,
             message: file.message,
           }).toMatchObject({
-            cheats: ['cheats/property-shape.property.test.ts'],
+            cheats: ['cheats/property-shape.property.runner.test.ts'],
             numTotalTests: expect.schemaMatching(Schema.Int.check(Schema.isGreaterThan(0))),
             file: 'failed',
             message: expect.stringContaining(VACUOUS),
@@ -130,11 +130,11 @@ Feature('Judging a property suite')
       Gherkin.Do.pipe(
         Given('a property over a subject that answers undefined once')(
           'report',
-          () => runFixtures(['property/undefined-output.property.test.ts']),
+          () => runFixtures(['property/undefined-output.property.runner.test.ts']),
         ),
         Then('the file passes and the property is judged genuine')((s, expect) =>
           expect({
-            file: fileOf(s.report, 'undefined-output.property.test.ts').status,
+            file: fileOf(s.report, 'undefined-output.property.runner.test.ts').status,
             subject: assertionOf(s.report, '∀x_UndefinedFirstOutput_≠Impostor').status,
           }).toMatchObject({ file: 'passed', subject: 'passed' })
         ),
@@ -146,10 +146,10 @@ Feature('Judging a property suite')
       Gherkin.Do.pipe(
         Given('a property whose declared coverage class is never reached')(
           'report',
-          () => runFixtures(['property/coverage-once.property.test.ts']),
+          () => runFixtures(['property/coverage-once.property.runner.test.ts']),
         ),
         Then('the property carries the share and the file carries no coverage message of its own')((s, expect) => {
-          const file = fileOf(s.report, 'coverage-once.property.test.ts')
+          const file = fileOf(s.report, 'coverage-once.property.runner.test.ts')
           const messages = messagesOf(s.report, '∀xs_CoverageShareNamed_≠Twice')
           return expect({
             status: file.status,
@@ -176,7 +176,7 @@ Feature('Judging a property suite')
         Then('every law passes and the file is not refused')((s, expect) =>
           expect({
             verdicts: Object.fromEntries(LAWS_THAT_HOLD.map((name) => [name, assertionOf(s.report, name).status])),
-            refuted: fileOf(s.report, 'law-kinds.test.ts').message,
+            refuted: fileOf(s.report, 'law-kinds.runner.test.ts').message,
           }).toEqual({
             verdicts: Object.fromEntries(LAWS_THAT_HOLD.map((name) => [name, 'passed'])),
             refuted: expect.not.stringContaining(VACUOUS),

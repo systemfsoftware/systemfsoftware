@@ -23,19 +23,14 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Predicate } from 'effect'
+import type * as AiError from 'effect/ai/AiError'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual, identity } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
-import type * as AiError from 'effect/unstable/ai/AiError'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
+import { DepthExceededError } from './admit-procedure-depth.workflow.js'
 import { ask, type ClassifyDecision, openClassifyOn } from './decision.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
-import {
-  invokeProcedure,
-  invokeProcedureWithFallback,
-  prepareRoute,
-  type RoutingAnswer,
-  type RoutingView,
-} from './invoke-procedure.cell.js'
+import { invokeProcedure } from './invoke-procedure.cell.js'
 import {
   type AnyProcedure,
   type ErrorOf,
@@ -47,13 +42,13 @@ import {
   type RequirementsOf,
 } from './procedure.blueprint.js'
 import {
-  DepthExceededError,
   NoEligibleProcedureError,
   ProcedureCommandRejectedError,
   RoutingUncertainError,
 } from './ProcedureError.schema.js'
 import { region } from './region.service.js'
 import type { RouteOptions } from './Route.schema.js'
+import { invokeProcedureWithFallback, prepareRoute, type RoutingAnswer, type RoutingView } from './routing.js'
 import type { Route, RouteUncertainOf } from './select-route.workflow.js'
 
 type Top<A = unknown> = A

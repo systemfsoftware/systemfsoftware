@@ -27,7 +27,12 @@ import {
   UNSEALED_IMPORT_ACTUAL,
   UNSEALED_IMPORT_FIX,
 } from './make-body-purity.config.js'
-import { classifyBodyReferences, isFailingVerdict, type ReferenceVerdict } from './ReferenceClassification.js'
+import {
+  classifyBodyReferences,
+  type FailingReferenceVerdict,
+  isFailingVerdict,
+  type ReferenceVerdict,
+} from './ReferenceClassification.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds =
@@ -81,7 +86,7 @@ const isAllowedGuard = (node: ESTree.Node, body: MakeBodyKind): boolean => {
   return first !== undefined && first === node && isConvergingGuard(node)
 }
 
-const verdictOfKind = (verdict: ReferenceVerdict): MessageIds => {
+const verdictOfKind = (verdict: FailingReferenceVerdict): MessageIds => {
   switch (verdict.kind) {
     case 'ioImport':
       return 'ioImportReference'
@@ -97,16 +102,14 @@ const verdictOfKind = (verdict: ReferenceVerdict): MessageIds => {
       return 'runtimeImportReference'
     case 'moduleMutation':
       return 'moduleMutationReference'
-    // The gate `isFailingVerdict` keeps the pass kinds out; the default is
-    // unreachable and never carries a report.
-    default:
+    case 'unresolvable':
       return 'unresolvableReference'
   }
 }
 
 const verdictData = (
   name: string,
-  verdict: ReferenceVerdict,
+  verdict: FailingReferenceVerdict,
 ): { readonly name: string; readonly expected: string; readonly actual: string; readonly fix: string } => {
   const referenceName = `a reference to ${name}`
   switch (verdict.kind) {
@@ -160,7 +163,7 @@ const verdictData = (
         actual: MODULE_MUTATION_ACTUAL,
         fix: MODULE_MUTATION_FIX,
       }
-    default:
+    case 'unresolvable':
       return {
         name: referenceName,
         expected: PURE_BODY_EXPECTED,
@@ -173,8 +176,10 @@ const verdictData = (
 /**
  * The KTD3 purity obligations of a `Workflow.make` decision body: references
  * resolve to parameters, const locals, module declarations in this file, benign
- * builtins, or the sealed pure `effect` surface. The refused set is I/O imports,
- * every other import, module state, local mutation, I/O globals and an unbound
+ * builtins, the sealed pure `effect` surface, or a binding imported from a
+ * relative `*.schema.js`/`*.schema.ts` specifier - the schema-file edge, the one
+ * local import a decision may make. The refused set is I/O imports, every import
+ * outside that edge, module state, local mutation, I/O globals and an unbound
  * name. Control flow is limited to a single converging first-statement guard.
  */
 export const makeBodyPurity = defineRule({

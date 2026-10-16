@@ -6,32 +6,34 @@ import { AssessVirtualization, assessVirtualization } from '../assess-virtualiza
 it.prop(
   '∀cmd_Verdict_=Sound',
   { of: [AssessVirtualization], subject: assessVirtualization },
-  (subject, [command]) => {
-    const verdict = Result.getOrThrow(subject(command))
-    return Match.value(command.observation).pipe(
-      Match.tag('KvmAccessible', () =>
-        Match.value(verdict).pipe(
-          Match.tag('VirtualizationEligible', () => true),
-          Match.tag('VirtualizationRefused', () => false),
-          Match.exhaustive,
-        )),
-      Match.orElse((refusalObs) =>
-        Match.value(verdict).pipe(
-          Match.tag('VirtualizationEligible', () => false),
-          Match.tag('VirtualizationRefused', ({ remediation, topology }) => {
-            const expectedTopology = Match.value(refusalObs).pipe(
-              Match.tag('KvmDenied', (o) => o.topology),
-              Match.tag('KvmAbsent', (o) => o.topology),
-              Match.tag('WHPUnavailable', (o) => o.topology),
-              Match.tag('HvfUnavailable', (o) => `arch=${o.arch}`),
-              Match.tag('PlatformUnsupported', (o) => `platform=${o.platform} (${o.arch})`),
+  (subject, [command]) =>
+    Result.match(subject(command), {
+      onFailure: () => false,
+      onSuccess: (verdict) =>
+        Match.value(command.observation).pipe(
+          Match.tag('KvmAccessible', () =>
+            Match.value(verdict).pipe(
+              Match.tag('VirtualizationEligible', () => true),
+              Match.tag('VirtualizationRefused', () => false),
+              Match.exhaustive,
+            )),
+          Match.orElse((refusalObs) =>
+            Match.value(verdict).pipe(
+              Match.tag('VirtualizationEligible', () => false),
+              Match.tag('VirtualizationRefused', ({ remediation, topology }) => {
+                const expectedTopology = Match.value(refusalObs).pipe(
+                  Match.tag('KvmDenied', (o) => o.topology),
+                  Match.tag('KvmAbsent', (o) => o.topology),
+                  Match.tag('WHPUnavailable', (o) => o.topology),
+                  Match.tag('HvfUnavailable', (o) => `arch=${o.arch}`),
+                  Match.tag('PlatformUnsupported', (o) => `platform=${o.platform} (${o.arch})`),
+                  Match.exhaustive,
+                )
+                return remediation.length > 0 && topology === expectedTopology
+              }),
               Match.exhaustive,
             )
-            return remediation.length > 0 && topology === expectedTopology
-          }),
-          Match.exhaustive,
-        )
-      ),
-    )
-  },
+          ),
+        ),
+    }),
 )

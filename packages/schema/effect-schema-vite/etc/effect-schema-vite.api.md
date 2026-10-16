@@ -5,9 +5,12 @@
 ```ts
 
 import { Plugin as Plugin_2 } from 'vite';
+import { Schema } from 'effect';
 
+// Warning: (ae-forgotten-export) The symbol "LawSuiteSource" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => string;
+export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => LawSuiteSource;
 
 // @public (undocumented)
 export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2;

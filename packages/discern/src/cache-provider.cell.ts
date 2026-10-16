@@ -1,8 +1,8 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
+import * as AiError from 'effect/ai/AiError'
+import type * as Decision from 'effect/ai/Decision'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import * as Effect from 'effect/Effect'
-import * as AiError from 'effect/unstable/ai/AiError'
-import type * as Decision from 'effect/unstable/ai/Decision'
-import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import type { ObservationSplit, Provider } from './decision-model.blueprint.js'
 import type { ProviderAnswer } from './Observation.schema.js'
 import { CurrentRegion } from './region.service.js'
@@ -62,7 +62,7 @@ export const cacheObservations = Sandwich.named('discern.model.cache')(readCache
     AllRecorded: (_recorded, read) =>
       Effect.succeed({ answers: read.hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
     AskForMissing: (_asked, read) => askAndRecord(read),
-    RecordingMissing: (refusal, _read) => Effect.fail(refusal),
+    RecordingMissing: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>
       Effect.fail(
         AiError.make({

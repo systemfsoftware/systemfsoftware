@@ -8,7 +8,6 @@
  *
  * @since 4.0.0
  */
-
 /**
  * The brand every run-time refusal carries. A test is run a second time on a fresh build to catch leaked state,
  * so when that second run fails with a refusal the fork itself made, the runner re-throws the refusal rather than

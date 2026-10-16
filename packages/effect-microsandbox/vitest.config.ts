@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
+    name: 'unit',
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
   },
 })

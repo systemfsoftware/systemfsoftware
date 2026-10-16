@@ -14,7 +14,7 @@ resolution_type: package_fork
 related_components:
   - packages/discern
   - subtrees.toml
-  - guard-protected-writes
+  - repo-checks subtrees
 tags:
   - fork
   - subtree
@@ -30,7 +30,7 @@ tags:
 
 ## Candidates
 
-1. **A `repos/` entry in `subtrees.toml`.** Rejected. The substrate forbids the work: `REPO-S3` declares every `repos/` tree read-only and the `guard-protected-writes` hook fails a write into one. A subtree is a reference this repo reads (`REPO-W4`), not a copy it owns, so a defect found there cannot be repaired in place.
+1. **A `repos/` entry in `subtrees.toml`.** Rejected. The substrate forbids the work: `REPO-S3` declares every `repos/` tree read-only and `repo-checks subtrees` fails any commit whose subtree tree differs from the squash commit that vendored it. A subtree is a reference this repo reads (`REPO-W4`), not a copy it owns, so a defect found there cannot be repaired in place.
 2. **A git submodule mounted at the package path.** Rejected. It preserves upstream history and a remote to pull from, but no workspace member uses a submodule shape, so the pnpm member resolution it needs has no precedent to copy.
 3. **An npm dependency on `@doeixd/discern`.** Rejected. It is the only candidate that leaves the code unowned, which is the property the fork exists to obtain — the same reason `@systemfsoftware/effect-memfs` and `@systemfsoftware/effect-atom` are forks rather than dependencies.
 4. **An owned member at `@systemfsoftware/discern`.** Chosen.
@@ -45,10 +45,10 @@ Provenance stays legible in both directions: the package description and README 
 
 **The ownership boundary decides the substrate, not the code's origin.** For any third-party tree, ask one question first: does anything in this repo intend to write to it?
 
-- Reference only → `repos/` + `subtrees.toml`. Upstream is tracked by `git subtree pull`; `REPO-S3` plus `guard-protected-writes` make writes impossible rather than discouraged.
+- Reference only → `repos/` + `subtrees.toml`. Upstream is tracked by `git subtree pull`; `REPO-S3` plus `repo-checks subtrees` make a committed edit fail the gate rather than merely discouraged.
 - Repaired, extended, or shipped → a member under `packages/`. Upstream is a reference; `REPO-O1` makes the tree first-party and forbids deferring to it.
 
-The falsifier is one step, and it is the check a reviewer runs: **name a defect you intend to fix in the tree.** If one exists, the tree cannot be a `repos/` subtree, because the substrate forbids the fix. Equivalently — a `repos/` entry whose consumer needs a patch is a fork that has been placed in the wrong substrate, and the symptom is a plan that proposes an edit the hook will reject.
+The falsifier is one step, and it is the check a reviewer runs: **name a defect you intend to fix in the tree.** If one exists, the tree cannot be a `repos/` subtree, because the substrate forbids the fix. Equivalently — a `repos/` entry whose consumer needs a patch is a fork that has been placed in the wrong substrate, and the symptom is a plan that proposes an edit the gate will reject.
 
 Two consequences follow, and both are the reason this is an invariant rather than a one-off judgement:
 

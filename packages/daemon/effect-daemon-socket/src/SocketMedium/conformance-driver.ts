@@ -12,6 +12,7 @@ import type { SocketProgram } from './socket-program.js'
 export const conformanceDriver: Conformance.ConformanceDriver<SocketProgram, never, never> = {
   name: 'socket',
   declaration,
+  scenario: { millis: 10_000, startTimeoutMillis: 1_000, livenessTickMillis: 10_000 },
   port,
   launch: (_childId, _script) =>
     Effect.map(Effect.orDie(makeLoopbackServer), (server) => ({

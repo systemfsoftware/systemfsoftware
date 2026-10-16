@@ -1,40 +1,10 @@
 import { conformanceTestRequiresHarness } from '../conformance-test-requires-harness.js'
-import { createRuleTester } from './_tester.js'
+import { createRuleTester, everywhere } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
 const HP =
   'import { Conformance } from @systemfsoftware/conformance-spec and express the test as Conformance.linearizable(implementation, { commands, model, run, fibers, operations }) in the scenario body'
-
-const rawRunnerError = (name: string) => ({
-  messageId: 'rawRunnerCall' as const,
-  data: {
-    name: `raw runner call (${name}) in a conformance test file`,
-    expected: HP,
-    actual: `${name}(...) bypasses the conformance check`,
-    fix: `rewrite using ${HP}`,
-  },
-})
-
-const runnerImportError = (source: string) => ({
-  messageId: 'runnerImport' as const,
-  data: {
-    name: `runner import from ${source} in a conformance test file`,
-    expected: HP,
-    actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
-    fix: `delete the runner import; ${HP}`,
-  },
-})
-
-const missingImportError = {
-  messageId: 'missingHarnessImport' as const,
-  data: {
-    name: 'conformance test file without the @systemfsoftware/conformance-spec import',
-    expected: HP,
-    actual: 'no conformance check import found',
-    fix: HP,
-  },
-}
 
 const missingUsageError = {
   messageId: 'missingHarnessUsage' as const,
@@ -48,13 +18,20 @@ const missingUsageError = {
 
 ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarness, {
   valid: [
-    {
+    ...everywhere({
       name: 'Should_Allow_LinearizableCall_When_ConformanceBarrelInvoked',
       code: `
         import { Conformance } from '@systemfsoftware/conformance-spec'
         Conformance.linearizable(lock, { commands: Commands, model, run, fibers: 2, operations: 4 })
       `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
+    }),
+    {
+      name: 'Should_Allow_LinearizableCall_When_ImportedFromAHarnessSubpath',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec/linearizable'
+        Conformance.linearizable(lock, { commands: Commands, model, run, fibers: 2, operations: 4 })
+      `,
+      filename: '/repo/pkg/tests/a.integration.test.ts',
     },
     {
       name: 'Should_Allow_SequentialCall_When_ConformanceBarrelInvoked',
@@ -72,26 +49,24 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       `,
       filename: '/repo/pkg/tests/a.conformance.test.ts',
     },
-    {
-      name: 'Should_Allow_PlainTest_When_NotConformanceFile',
+    ...everywhere({
+      name: 'Should_Allow_PlainTest_When_NoConformanceHarnessImported',
       code: `
         import { it } from 'vitest'
         it('works', () => {})
       `,
-      filename: '/repo/pkg/tests/a.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_PlainTest_When_PropertyFile',
+    }),
+    ...everywhere({
+      name: 'Should_Allow_PropertyTest_When_NoConformanceHarnessImported',
       code: `
         import { it } from '@systemfsoftware/vitest'
         it.prop('works', [arb], ([x]) => x === x)
       `,
-      filename: '/repo/pkg/src/a.workflow.property.test.ts',
-    },
+    }),
   ],
   invalid: [
     {
-      name: 'Should_Report_LegacyCheckAndRunnerImport_When_LinearizableCheckUsed',
+      name: 'Should_Report_LegacyCheck_When_LinearizableCheckRunsBesideAPlainIt',
       code: `
         import { Linearizable } from '@systemfsoftware/conformance-spec'
         import { it } from 'vitest'
@@ -100,8 +75,6 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       `,
       filename: '/repo/pkg/tests/a.conformance.test.ts',
       errors: [
-        runnerImportError('vitest'),
-        rawRunnerError('it'),
         {
           messageId: 'legacyHarnessCall' as const,
           data: {
@@ -170,15 +143,23 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
         },
       ],
     },
-    {
+    ...everywhere({
+      name: 'Should_Report_MissingUsage_When_AVacuousAdopterImportsConformanceButOnlyPassesATest',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        import { it } from 'vitest'
+        it('passes', () => {})
+      `,
+      errors: [missingUsageError],
+    }),
+    ...everywhere({
       name: 'Should_Report_MissingUsage_When_ConformanceImportedButNeverInvoked',
       code: `
         import { Conformance } from '@systemfsoftware/conformance-spec'
         const harness = Conformance
       `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
       errors: [missingUsageError],
-    },
+    }),
     {
       name: 'Should_Report_MissingUsage_When_ConformanceNamespaceMemberIsUnknown',
       code: `
@@ -197,51 +178,6 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
           },
         },
       ],
-    },
-    {
-      name: 'Should_Report_MissingImport_When_ConformanceTestIsEmpty',
-      code: `
-        const x = 1
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [missingImportError],
-    },
-    {
-      name: 'Should_Report_RawRunner_When_VacuousAdopterImportsConformanceButOnlyPassesATest',
-      code: `
-        import { Conformance } from '@systemfsoftware/conformance-spec'
-        import { it } from 'vitest'
-        it('passes', () => {})
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [runnerImportError('vitest'), rawRunnerError('it')],
-    },
-    {
-      name: 'Should_Report_RawRunnerAndMissingImport_When_VacuousAdopterImportsNothing',
-      code: `
-        import { it } from 'vitest'
-        it('passes', () => {})
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [runnerImportError('vitest'), missingImportError, rawRunnerError('it')],
-    },
-    {
-      name: 'Should_Report_RunnerImport_When_ForkRunnerImportedInConformanceFile',
-      code: `
-        import { Conformance } from '@systemfsoftware/conformance-spec'
-        import { it } from '@systemfsoftware/vitest'
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [runnerImportError('@systemfsoftware/vitest')],
-    },
-    {
-      name: 'Should_Report_RunnerImport_When_UpstreamEffectVitestImportedInConformanceFile',
-      code: `
-        import { Conformance } from '@systemfsoftware/conformance-spec'
-        import { it } from '@effect/vitest'
-      `,
-      filename: '/repo/pkg/tests/a.conformance.test.ts',
-      errors: [runnerImportError('@effect/vitest')],
     },
   ],
 })
