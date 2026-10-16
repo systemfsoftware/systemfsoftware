@@ -15,9 +15,6 @@ concurrency:
 jobs:
   nix:
     name: nix
-    permissions:
-      contents: read
-      actions: read
     uses: ./.github/workflows/reusable-nix.yml
     with:
       compare-across-systems: .#packages.{system}.workspace-tarballs

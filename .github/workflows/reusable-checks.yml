@@ -7,7 +7,6 @@ name: Checks (reusable)
 # with the lane as `job`); a phase the action has no steps for does nothing. Without
 # that action, or under a non-root `working-directory`, every phase runs the built-in lanes instead
 # (`$/.github/actions/builtin-lane`). This workflow reaches its own actions through `$/`, never the caller's `./`.
-# Every job measures its own wall time, and a red push to the default branch publishes its culprit data for the patrol.
 on:
   workflow_call:
     outputs:
@@ -17,9 +16,6 @@ on:
       test-jobs:
         description: JSON list of the test jobs the plan scheduled, each with its `packages`; `[]` when every package was skipped
         value: ${{ jobs.plan.outputs.jobs }}
-      red-main:
-        description: The red-main decision JSON on a failed push of the default branch; empty otherwise
-        value: ${{ jobs.red-main.outputs.data }}
     inputs:
       working-directory:
         description: The pnpm workspace root, relative to the repository root. A non-root value checks out only that directory and always runs the built-in lanes
@@ -812,7 +808,7 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
       # One subdirectory per artifact, which is the layout `wall-clock --records` reads; no merge-multiple.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           pattern: job-record-${{ needs.classify.outputs.call }}-*
@@ -832,45 +828,4 @@ jobs:
           call: ${{ needs.classify.outputs.call }}
           job: wall-clock
           name: wall clock · measured against the PR budget
-          status: ${{ job.status }}
-
-  # On a failed push of the default branch, publishes the culprit data the patrol reads.
-  red-main:
-    name: red-main · culprit data for the patrol
-    needs: [classify, sfs-deps, plan, lanes, test, timings, check]
-    if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(needs.*.result, 'failure') }}
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.backstop-minutes }}
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      data: ${{ steps.red-main.outputs.data }}
-    steps:
-      - id: record
-        uses: $/.github/actions/job-record
-        with:
-          phase: start
-      - id: red-main
-        uses: $/.github/actions/red-main
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          call: ${{ needs.classify.outputs.call }}
-          needs: ${{ toJSON(needs) }}
-          token: ${{ github.token }}
-      - if: failure()
-        uses: $/.github/actions/failure-summary
-        with:
-          job: red-main
-          reasons: red-main culprit-lookup-failed
-          steps: ${{ toJSON(steps) }}
-          reproduce: gh run view ${{ github.run_id }} --log-failed
-      - if: always()
-        uses: $/.github/actions/job-record
-        with:
-          phase: finish
-          call: ${{ needs.classify.outputs.call }}
-          job: red-main
-          name: red-main · culprit data for the patrol
           status: ${{ job.status }}

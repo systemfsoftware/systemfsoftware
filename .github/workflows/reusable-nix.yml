@@ -2,10 +2,6 @@ name: Nix (reusable)
 
 on:
   workflow_call:
-    outputs:
-      red-main:
-        description: On a failed push of the default branch, the red-main decision as JSON (culprit data for the patrol); empty otherwise
-        value: ${{ jobs.red-main.outputs.data }}
     inputs:
       working-directory:
         description: The flake's directory, relative to the repository root
@@ -334,7 +330,7 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           pattern: job-record-${{ needs.classify.outputs.call }}-*
@@ -354,43 +350,4 @@ jobs:
           call: ${{ needs.classify.outputs.call }}
           job: wall-clock
           name: wall clock · measured against the PR budget
-          status: ${{ job.status }}
-
-  red-main:
-    name: red-main · culprit data for the patrol
-    needs: [classify, build, compare]
-    if: ${{ always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(needs.*.result, 'failure') }}
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.backstop-minutes }}
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      data: ${{ steps.red-main.outputs.data }}
-    steps:
-      - uses: $/.github/actions/job-record
-        with:
-          phase: start
-      - id: red-main
-        uses: $/.github/actions/red-main
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          call: ${{ needs.classify.outputs.call }}
-          needs: ${{ toJSON(needs) }}
-          token: ${{ github.token }}
-      - if: failure()
-        uses: $/.github/actions/failure-summary
-        with:
-          job: red-main
-          reasons: red-main culprit-lookup-failed
-          steps: ${{ toJSON(steps) }}
-          reproduce: gh run view ${{ github.run_id }} --log-failed
-      - if: always()
-        uses: $/.github/actions/job-record
-        with:
-          phase: finish
-          call: ${{ needs.classify.outputs.call }}
-          job: red-main
-          name: red-main · culprit data for the patrol
           status: ${{ job.status }}
