@@ -21,6 +21,8 @@ It is the same cheap-fix dynamic [oxlint-guard](https://github.com/systemfsoftwa
 
 pnpm-guard closes both — at the edit and at the command, not at the pipeline.
 
+The pipeline half of that split already exists in this repository: `scripts/tools/repo-checks/release-age.ts`, run as `release-age` inside `pnpm gate:repo` in CI's static lane, enforces the same release-age quarantine over the whole tree at gate time. pnpm-guard is the layer in front of the agent; it is not a replacement for that gate.
+
 ## Install
 
 The two commands above are the whole install: `/plugin marketplace add` registers this repository as a plugin marketplace, and `/plugin install` takes pnpm-guard from it. Both run inside Claude Code.
