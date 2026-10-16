@@ -5,6 +5,6 @@
   "description": "Blocks agent edits that weaken pnpm's supply-chain posture (pnpm-workspace.yaml, .npmrc, .pnpmfile) and Bash commands that flip the same switches out-of-band (PreToolUse).",
   "author": { "name": "systemfsoftware" },
   "repository": "https://github.com/systemfsoftware/systemfsoftware",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["pnpm", "supply-chain", "claude-code", "hooks", "guard"]
 }

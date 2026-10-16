@@ -1,6 +1,6 @@
 # pnpm-guard
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 > Blocks agent edits and commands that weaken pnpm's supply-chain posture — the release-age quarantine, build-script grants, registries, and auth lines — rather than which package manager you use.
 
@@ -192,4 +192,4 @@ Formatting is owned by the repository's dprint config (`pnpm exec dprint fmt` fr
 
 ## License
 
-[MIT](LICENSE). Issues: [systemfsoftware/systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/issues).
+[Apache-2.0](LICENSE). Issues: [systemfsoftware/systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/issues).
