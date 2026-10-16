@@ -1,0 +1,11 @@
+# @systemfsoftware/vitest-config@0.1.1
+
+The Effect dependency now resolves to 4.0.5, and so does every `@effect/*` package installed with it.
+
+- Effect 4.0.5 requires `effect@^4.0.5` as a peer, so a tree mixing 4.0.5 with an earlier 4.0.x fails at import, not at install. Install the versions your tree's `@effect/*` packages name.
+- `FileSystem.File.Info` reports `dev`, `ino`, `rdev`, `nlink` and `blocks` as `bigint` where it reported `number`. Convert at your own boundary with `BigInt` or `Number`.
+- A decision's `instructions` and its classify and probability `criteria` accept a JSON object or array as well as a string, and a rating's `criteria` are `{ label, description }` entries rather than bare labels. Read a level's `label`, not the entry. Published dependency ranges now name a full version: `vitest`, `@vitest/*` and `@types/node` ranges start at 5.0.1 and 26.6.2 (were `^5` and `^26`), `typescript` at 7.0.2 (was `^7`) and `playwright` at 1.63.0 (was `^1`). The `vitest` peer dependency of `@systemfsoftware/effect-gherkin-spec`, `@systemfsoftware/effect-schema-law`, `@systemfsoftware/effect-schema-vite`, `@systemfsoftware/effect-spec-runtime`, `@systemfsoftware/storybook-gherkin`, `@systemfsoftware/trace-spec`, `@systemfsoftware/vitest` and `@systemfsoftware/vitest-config` is now `^5.0.1`, so a consumer needs at least Vitest 5.0.1. `@systemfsoftware/trace-spec` depends on `@opentelemetry/semantic-conventions` `^1.43.0` (was `^1.33`). Property failures (`PropertyRefuted`, `NonBooleanVerdict`, `CoverageBelowMinimum`, `VacuousProperty`, `SelfModelLaw`, `SeedStoreUnreadable`, `ReplayUnreadable`) are exported tagged errors whose fields (property name, site, seed, runs, witness, `replay` text) reach reporters, replacing the `detail` prose. A provided budget `seed` now gives each property its own stable seed; failing seeds are recorded in `__property_seeds__/<test file>.jsonl` and replayed first; vitest-config sets `record: false` in CI and Stryker.
+
+- To keep one literal seed, set `arbitrary: { seed }` on the property.
+- Commit `__property_seeds__` files; a case that must always run belongs in the test source.
+- Catch a self-model law as `SelfModelLaw`, no longer `VacuousProperty`. Ship `@systemfsoftware/vitest-config` as a public flake workspace tarball at 0.1.0; the 0.1.0 release notes describe its surface.
