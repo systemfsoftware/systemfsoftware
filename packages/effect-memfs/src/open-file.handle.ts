@@ -493,6 +493,86 @@ if (import.meta.vitest !== void 0) {
       ),
   )
 
+  // A `Stat` built from drawn numbers, so the conversion at the stat boundary is exercised whatever the host
+  // reports. A runner's own uid and gid decide only whether a number is drawn zero, which is one case of many.
+  // A stat count is never negative, so the generator draws whole numbers at or above zero; a negative one is not a
+  // value the conversion has an opinion about.
+  const Count = Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0)))
+
+  const CountQuestion = Schema.Struct({
+    blocks: Count,
+    blksize: Count,
+    dev: Count,
+    gid: Count,
+    ino: Count,
+    nlink: Count,
+    rdev: Count,
+    size: Count,
+    uid: Count,
+  })
+  type InfoQuestion = typeof CountQuestion.Type
+
+  // The counts under test are drawn; the rest of the stat comes from a real memfs entry, so the timestamps are
+  // the real `Date` values the boundary itself reports rather than dates this test manufactures.
+  const { Volume } = await import('memfs')
+  const realStat: Stat = Volume.fromJSON({ '/counted.txt': 'counted' }).statSync('/counted.txt')
+
+  const answeringStat = (drawn: InfoQuestion): Stat => ({
+    ...realStat,
+    isFile: () => true,
+    isDirectory: () => false,
+    isSymbolicLink: () => false,
+    isBlockDevice: () => false,
+    isCharacterDevice: () => false,
+    isFIFO: () => false,
+    isSocket: () => false,
+    ...drawn,
+  })
+
+  /** Effect's `File.Info` contract, read off the type rather than off the code under test: a count the filesystem
+   * did not record is absent rather than zero, and a count it did record is that count, widened the way the
+   * contract types it. `dev` and `size` are not optional, so they carry their own comparison. */
+  const agreesOnOptional = <A>(reported: Option.Option<A>, value: number, widen: (n: number) => A): boolean =>
+    Option.match(reported, {
+      onNone: () => value === 0,
+      onSome: (present) => present === widen(value),
+    })
+
+  /** Each comparison names the count it reads, so the table and the drawn counts stay in step without an assertion. */
+  const optionalCounts = [
+    ['blocks', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.blocks, value, BigInt)],
+    ['blksize', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.blksize, value, ByteSize.bytes)],
+    ['gid', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.gid, value, (n) => n)],
+    ['ino', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.ino, value, BigInt)],
+    ['nlink', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.nlink, value, BigInt)],
+    ['rdev', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.rdev, value, BigInt)],
+    ['uid', (info: FileSystem.File.Info, value: number) => agreesOnOptional(info.uid, value, (n) => n)],
+  ] as const satisfies ReadonlyArray<
+    readonly [keyof InfoQuestion, (info: FileSystem.File.Info, value: number) => boolean]
+  >
+
+  const requiredCounts = [
+    ['dev', (info: FileSystem.File.Info, value: number) => info.dev === BigInt(value)],
+    ['size', (info: FileSystem.File.Info, value: number) => ByteSize.equals(info.size, ByteSize.bytes(value))],
+  ] as const satisfies ReadonlyArray<
+    readonly [keyof InfoQuestion, (info: FileSystem.File.Info, value: number) => boolean]
+  >
+
+  type CountAgreement = readonly [keyof InfoQuestion, (info: FileSystem.File.Info, value: number) => boolean]
+
+  const everyAgrees =
+    (info: FileSystem.File.Info, drawn: InfoQuestion) => (agreements: ReadonlyArray<CountAgreement>): boolean =>
+      agreements.every(([name, agrees]) => agrees(info, drawn[name]))
+
+  const infoAgrees = (info: FileSystem.File.Info, drawn: InfoQuestion): boolean =>
+    everyAgrees(info, drawn)(optionalCounts) && everyAgrees(info, drawn)(requiredCounts)
+
+  it.prop(
+    '∀i_InfoCounts_≡RecordedOrAbsent',
+    { of: [CountQuestion], subject: (drawn: InfoQuestion) => infoOf(answeringStat(drawn)) },
+    (subject, [drawn]) => infoAgrees(subject(drawn), drawn),
+  )
+
   const StatQuestion = Schema.Literals(['isFile', 'isDirectory', 'isSymbolicLink'])
   const DriverQuestion = Schema.Literals(['close', 'read', 'write', 'stat'])
   const KindQuestion = Schema.Literals([
