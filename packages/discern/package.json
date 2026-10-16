@@ -93,14 +93,14 @@
     "provenance": true
   },
   "inlinedDependencies": {
-    "@effect/platform-node": "4.0.1",
-    "@effect/platform-node-shared": "4.0.1",
+    "@effect/platform-node": "4.0.5",
+    "@effect/platform-node-shared": "4.0.5",
     "@jridgewell/sourcemap-codec": "1.6.0",
-    "chai": "6.2.2",
+    "chai": "6.3.0",
     "expect-type": "1.4.0",
-    "magic-string": "1.4.1",
-    "tinybench": "6.1.4",
-    "vite": "8.2.1",
-    "vitest": "5.0.1"
+    "magic-string": "1.4.3",
+    "tinybench": "6.2.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
   }
 }

@@ -110,11 +110,21 @@ export const driverOf = <H = unknown>(value: H): Result.Result<Driver, ShapeRefu
 
 const isZeroOrNaN = (value: number): boolean => value === 0 || Number.isNaN(value)
 
+/** Effect's `File.Info` reads a device, inode, link and block count as a bigint; a memfs `Stat` reports them as numbers. */
+const bigIntOf = (value: number): bigint => BigInt(Math.trunc(value))
+
 const numberOptionOf = (value: number): Option.Option<number> => {
   if (isZeroOrNaN(value)) {
     return Option.none()
   }
   return Option.some(value)
+}
+
+const bigintOptionOf = (value: number): Option.Option<bigint> => {
+  if (isZeroOrNaN(value)) {
+    return Option.none()
+  }
+  return Option.some(bigIntOf(value))
 }
 
 const sizeOptionOf = (value: number): Option.Option<ByteSize.ByteSize> =>
@@ -146,16 +156,16 @@ export const infoOf = (stat: Stat): FileSystem.File.Info => ({
   mtime: Option.fromNullishOr(stat.mtime),
   atime: Option.fromNullishOr(stat.atime),
   birthtime: Option.fromNullishOr(stat.birthtime),
-  dev: Number(stat.dev),
-  rdev: numberOptionOf(stat.rdev),
-  ino: numberOptionOf(stat.ino),
+  dev: bigIntOf(stat.dev),
+  rdev: bigintOptionOf(stat.rdev),
+  ino: bigintOptionOf(stat.ino),
   mode: stat.mode,
-  nlink: numberOptionOf(stat.nlink),
+  nlink: bigintOptionOf(stat.nlink),
   uid: numberOptionOf(stat.uid),
   gid: numberOptionOf(stat.gid),
-  size: ByteSize.bytes(Number(stat.size)),
+  size: ByteSize.bytes(stat.size),
   blksize: sizeOptionOf(stat.blksize),
-  blocks: numberOptionOf(stat.blocks),
+  blocks: bigintOptionOf(stat.blocks),
 })
 const planSeekPosition = (
   position: bigint,

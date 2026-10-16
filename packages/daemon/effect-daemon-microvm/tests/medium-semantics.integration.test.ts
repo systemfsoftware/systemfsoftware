@@ -19,7 +19,7 @@ class RunSandboxes extends Context.Service<RunSandboxes, { readonly prefix: stri
 const RunSandboxesLayer = Layer.effect(
   RunSandboxes,
   Effect.map(
-    Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomUUIDv4)),
+    Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomUUIDv4())),
     (id) => ({ prefix: `run-${id.slice(0, 8)}-` }),
   ),
 ).pipe(Layer.provide(nodeServicesLayer))

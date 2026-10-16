@@ -1,6 +1,7 @@
-import { Match, Schema } from 'effect'
+import { Schema } from 'effect'
 import type * as Decision from 'effect/ai/Decision'
 import { dual } from 'effect/Function'
+import { decisionDefinition } from './DecisionDefinition.schema.js'
 
 /**
  * The canonical digest of a value, used to key recordings, caches, and decision
@@ -67,34 +68,9 @@ const digestOf = (input: string): string => {
 export const hash = (value: Hashable): ContentAddress =>
   ContentAddress.make(digestOf(typeof value === 'string' ? value : canonicalOf(value, true)))
 
-const decisionHashable = (decision: Decision.Any): Hashable =>
-  Match.value(decision).pipe(
-    Match.tag(
-      'Classify',
-      (classified): Hashable => ({
-        _tag: 'Classify',
-        instructions: classified.instructions,
-        criteria: { ...classified.criteria },
-      }),
-    ),
-    Match.tag(
-      'Rate',
-      (rated): Hashable => ({ _tag: 'Rate', instructions: rated.instructions, criteria: [...rated.criteria] }),
-    ),
-    Match.tag(
-      'Probability',
-      (probable): Hashable => ({
-        _tag: 'Probability',
-        instructions: probable.instructions,
-        criteria: { ...probable.criteria },
-      }),
-    ),
-    Match.exhaustive,
-  )
-
 /** Identity of a decision *definition* — instructions and criteria, not its id. */
 export const decisionFingerprint = (decision: Decision.Any): ContentAddress =>
-  ContentAddress.make(`df_${digestOf(canonicalOf(decisionHashable(decision), false))}`)
+  ContentAddress.make(`df_${digestOf(canonicalOf(decisionDefinition(decision), false))}`)
 
 /**
  * Content address of one semantic observation: the decision definition together
@@ -109,6 +85,6 @@ export const observationAddress: {
   2,
   (decision: Decision.Any, state: Schema.Json): ContentAddress =>
     ContentAddress.make(
-      `o_${digestOf(`${canonicalOf(decisionHashable(decision), false)}|${canonicalOf(state, true)}`)}`,
+      `o_${digestOf(`${canonicalOf(decisionDefinition(decision), false)}|${canonicalOf(state, true)}`)}`,
     ),
 )

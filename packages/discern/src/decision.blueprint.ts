@@ -19,6 +19,7 @@ import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { decisionFingerprint, hash } from './ContentAddress.schema.js'
+import { decisionDefinition } from './DecisionDefinition.schema.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import type { Answers, LeafOptions, NodeCore, Pattern, PatternRefusal } from './pattern.blueprint.js'
 import { distinctFirstById, notPattern, semanticLeaf } from './pattern.blueprint.js'
@@ -224,11 +225,17 @@ const answerCheckOf = <D extends AnyDecision>(decision: D): AnswerGuard<D> => {
           onSome: (answer) => Arr.contains(labels, answer.label),
         })
     }),
-    Match.tag('Rate', (rated): AnswerGuard<D> => (input): input is Answer<D> =>
-      Option.match(rateDecode(input), {
-        onNone: () => false,
-        onSome: (answer) => Arr.contains(rated.criteria, answer.label),
-      })),
+    Match.tag('Rate', (rated): AnswerGuard<D> => {
+      const levels = Match.value(decisionDefinition(rated)).pipe(
+        Match.tag('Rate', (definition) => definition.criteria),
+        Match.orElse(() => []),
+      )
+      return (input): input is Answer<D> =>
+        Option.match(rateDecode(input), {
+          onNone: () => false,
+          onSome: (answer) => Arr.contains(levels, answer.label),
+        })
+    }),
     Match.tag(
       'Probability',
       (): AnswerGuard<D> => (input): input is Answer<D> => Option.isSome(probabilityDecode(input)),
