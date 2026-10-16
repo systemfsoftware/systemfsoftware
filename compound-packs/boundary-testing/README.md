@@ -6,6 +6,7 @@ Every boundary adapter is an integration seam connecting the pure domain core to
 
 Rules in this pack govern:
 
+- A test's expected value never comes from what the code under test wrote (`expected-values-never-come-from-the-subjects-output`).
 - Testing boundary adapters against real local system oracles (kernel loopback, ephemeral filesystems, local subprocesses).
 - Pinning third-party library semantics with differential parity tests.
 - Forbidding mocks on internal glue and private modules.

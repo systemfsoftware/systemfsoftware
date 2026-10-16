@@ -44,7 +44,7 @@ runs:
           chmod +x "$bin/$1"
         }
         tool test-timings '--allow-read --allow-write --allow-env --allow-run=pnpm' test-timings.ts
-        tool mutation-job '--allow-read --allow-write --allow-env --allow-run=timeout' mutation-job.ts
+        tool mutation-job '--allow-read --allow-write --allow-env --allow-run=corepack' mutation-job.ts
         tool classify-diff '--allow-read --allow-write --allow-env' classify-diff.ts
         tool sfs-deps '--allow-read --allow-write --allow-env' sfs-deps.ts
         tool wall-clock '--allow-read --allow-write --allow-env' wall-clock.ts

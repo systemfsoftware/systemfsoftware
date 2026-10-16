@@ -8,7 +8,7 @@ applies_when:
 tags: [schema-laws, tests, fixtures, harness, schema-smuggling, leaky-exports]
 ---
 
-A schema a test declares for itself escapes everything that grades schemas. `@systemfsoftware/effect-schema-vite` scans only `src`, so it gets no generated laws. It drifts from the production type it imitates, and when it models a concept production lacks, it hides the missing type. A copy of a third party's schema passes against itself while the real one changes.
+A schema a test declares for itself drifts from the production type it imitates, and when it models a concept production lacks, it hides the missing type. A copy of a third party's schema passes against itself while the real one changes.
 
 ## Rule
 

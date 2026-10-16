@@ -11,6 +11,8 @@ supersedes: docs/plans/2026-09-26-1954-refactor-adt-operation-homes-plan.md
 
 # ADT Operation Homes for Exported Logic - Plan
 
+> **Superseded (2026-10-12):** This plan's directive to mutate `src/**/*.schema.ts` and to use per-package `mutate: shardMutate([...])` globs is superseded by `docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`. Stryker now mutates only `src/**/*.workflow.ts`, defined once in `@systemfsoftware/stryker-config`, enforced by the Mutation planner, and a package with no workflow file is not enrolled. This plan's migration of exported logic into schema files remains valid; only the mutation envelope changed.
+
 ## Goal Capsule
 
 - **Objective:** An author, human or agent, holding exported logic in a runtime package finds exactly one legal home for it, every pack, lint fix text and the constitution agree on that home, and the mutation gate measures the logic there (issue #556).

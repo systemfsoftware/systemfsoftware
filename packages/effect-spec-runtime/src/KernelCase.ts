@@ -221,18 +221,8 @@ const throwIfFailed = <A, E>(observed: Kernel.RunResult<A, E>, schedule: Schedul
     Match.orElse((completed) => throwIfExitFailed(completed, schedule, recorder)),
   )
 
-interface Survey {
-  readonly fibers: number
-  readonly steps: number
-}
-
-const surveyOf = <A, E>(baseline: Kernel.RunResult<A, E>): Survey => ({
-  fibers: new Set(baseline.steps.map((step) => step.fiberId)).size,
-  steps: baseline.steps.length,
-})
-
-const budgetOf = (survey: Survey): Promise<number> =>
-  Effect.runPromise(Kernel.currentSeedsFor({ fibers: survey.fibers, steps: survey.steps }))
+const budgetOf = <A, E>(baseline: Kernel.RunResult<A, E>): Promise<number> =>
+  Effect.runPromise(Kernel.currentSeedsFor(baseline))
 
 const seedList = (count: number): ReadonlyArray<number> => Array.from({ length: count }, (_entry, seed) => seed)
 
@@ -261,7 +251,7 @@ const runSeeds = <A, E>(
   program: Effect.Effect<A, E>,
   seeds: ReadonlyArray<number>,
   at: number,
-  steps: number,
+  steps: Kernel.PctStepCount,
 ): Promise<void> => {
   const seed = seeds[at]
   if (seed === undefined) return Promise.resolve()
@@ -272,29 +262,44 @@ const runSeeds = <A, E>(
   })
 }
 
-const seededRuns = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined, survey: Survey): Promise<void> =>
-  budgetOf(survey).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, survey.steps))
+const stepBoundOf = <A, E>(baseline: Kernel.RunResult<A, E>): Kernel.PctStepCount =>
+  Kernel.PctStepCount.make(baseline.decisions.length)
 
-const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> => {
+const seededRuns = <A, E>(
+  program: Effect.Effect<A, E>,
+  seed: number | undefined,
+  baseline: Kernel.RunResult<A, E>,
+): Promise<void> =>
+  budgetOf(baseline).then((budget) => runSeeds(program, seedsToRun(seed, budget), 0, stepBoundOf(baseline)))
+
+const baselineRun = <A, E>(program: Effect.Effect<A, E>): Promise<Kernel.RunResult<A, E>> => {
   const run = recorded(program)
   return Kernel.run(run.program, { explore: 'body' }).then((baseline) => {
     throwIfFailed(baseline, { seed: undefined, decisions: baseline.decisions }, run.recorder)
-    return seededRuns(program, seed, surveyOf(baseline))
+    return baseline
   })
 }
+
+const baselineThen = <A, E>(program: Effect.Effect<A, E>, seed: number | undefined): Promise<void> =>
+  baselineRun(program).then((baseline) => seededRuns(program, seed, baseline))
 
 const replayOrSeeded = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
   replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineThen(program, replay.seed)
 
-/**
- * Runs one case's program under the kernel: the direct order first, then the
- * profile's seeded PCT schedules at the profile depth. A failure reports its
- * seed and decision path, which `CONFORMANCE_REPLAY` reproduces.
- */
+const replayOrBaseline = <A, E>(program: Effect.Effect<A, E>, replay: Replay): Promise<void> =>
+  replay.path.length > 0 ? replayRun(program, replay, replay.path) : baselineRun(program).then(() => {})
+
 export const explore = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
   readReplayValue().then((value) => {
     if (value === undefined) return baselineThen(program, undefined)
     return replayOrSeeded(program, replayOfText(value))
+  })
+
+/** An explored case's leak-check second run: its first run already took every seeded schedule. */
+export const exploreOnce = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
+  readReplayValue().then((value) => {
+    if (value === undefined) return baselineRun(program).then(() => {})
+    return replayOrBaseline(program, replayOfText(value))
   })
 
 if (import.meta.vitest !== void 0) {
@@ -393,5 +398,55 @@ if (import.meta.vitest !== void 0) {
     '∀outcome_CaseScope_=TheScopedEnvironmentIsReleased',
     { of: [CaseOutcome], subject: releasedWhenScoped },
     (scoped, [outcome]) => Effect.map(scoped(outcome), (released) => released === expectsRelease(outcome)),
+  )
+
+  class Shelf extends Context.Service<Shelf, Ref.Ref<number>>()('@systemfsoftware/effect-spec-runtime/test/Shelf') {}
+
+  const LayerSteps = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 40 })))
+
+  const Clerks = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 2, maximum: 3 })))
+
+  const shelfBuiltIn = (steps: number): Layer.Layer<Shelf> =>
+    Layer.effect(
+      Shelf,
+      Effect.andThen(
+        Effect.forEach(Array.from({ length: steps }), () => Effect.yieldNow, { discard: true }),
+        Ref.make(0),
+      ),
+    )
+
+  const shelvedBy = (clerks: number): Effect.Effect<void, never, Shelf> =>
+    Effect.gen(function*() {
+      const shelf = yield* Shelf
+      const shelve = Ref.update(shelf, (count) => count + 1)
+      const fibers = yield* Effect.forEach(Array.from({ length: clerks }), () => Effect.forkChild(shelve))
+      yield* Effect.forEach(fibers, Fiber.join, { discard: true })
+    })
+
+  const offeredIn = (program: Effect.Effect<void>): Promise<ReadonlyArray<number>> => {
+    const offered: Array<number> = []
+    const record = (choice: Kernel.Choice): undefined => {
+      offered.push(choice.index)
+      return undefined
+    }
+    return Kernel.run(program, { explore: 'body', choose: record }).then(() => offered)
+  }
+
+  it.effect.prop(
+    '∀scenario_StepBoundOf_=TheExploredDecisionsAChangePointCanLand',
+    { of: [LayerSteps, Clerks], subject: stepBoundOf },
+    (boundOf, [layerSteps, clerks]) =>
+      Effect.gen(function*() {
+        const program = caseProgram(shelvedBy(clerks), shelfBuiltIn(layerSteps))
+        const baseline = yield* Effect.promise(() => Kernel.run(program, { explore: 'body' }))
+        const offered = yield* Effect.promise(() => offeredIn(program))
+        const bound = boundOf(baseline)
+        const verdicts = [
+          offered.every((index) => index < bound),
+          offered.includes(bound - 1),
+          bound < baseline.steps.length,
+        ]
+        return verdicts.every((held) => held)
+      }),
   )
 }
