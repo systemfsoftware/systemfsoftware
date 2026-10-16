@@ -1,0 +1,18 @@
+{
+  // Read by `pnpm change` and the shared release tooling
+  // (systemfsoftware/pnpm-release-management).
+  "base": "main",
+  "branch": "changeset-release/main",
+  "versioning": {
+    // The root package.json keeps a `version` field although it is private and
+    // never released: the bump decodes the root manifest's version.
+    "strategy": "changesets",
+  },
+  // Turbo's task graph decides which packages a change touches, so an intent is
+  // required for exactly the publishable packages a PR affects.
+  "gate": { "strategy": "turbo", "task": "build" },
+  "pr": {
+    "title": "chore(release): version packages",
+    "body": "Consumes pending `.changeset/` intents.",
+  },
+}

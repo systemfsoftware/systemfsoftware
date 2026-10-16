@@ -1,0 +1,180 @@
+name: Consumer template
+
+# Runs the template's own callers (templates/consumer/.github/workflows/) at the
+# template's pin, with the template directory as the working directory, so the
+# reusables are called by SHA exactly as a consumer calls them. The nightly mutation
+# caller runs in consumer-template-mutation.yml instead, since no push- or
+# pull-request-triggered workflow may call mutation. `template-callers`
+# (scripts/tools/repo-checks) keeps both workflows' calls equal to the template's.
+#
+# Cost: about 1,000-1,150 runner-min/day. Every pull request runs it, at most 9.8-11.3
+# job-min per run (pull-request runs 38294428307 to 38377698689, each of which changed
+# the template; on a pull request that does not, the nix call builds nothing) at 92.9
+# pull-request runs/day (650 ci.yml pull-request runs, 2026-10-06T10:00Z to
+# 2026-10-13T10:00Z): about 910-1,050. Every push to main runs it, at 8.9-10.0 job-min
+# per run (the jobs of those runs that also run on a push) at 9.6 pushes/day (67
+# first-parent commits on main in the same window): about 85-96. Inside each run the
+# reusables select the work: turbo's dry run plans the template's tests and nix builds
+# only outputs whose derivation changed.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: consumer-template-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  instantiate:
+    name: instantiate · nix flake init -t writes the template
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: nix
+        uses: cachix/install-nix-action@v31
+      - id: init
+        name: Init into an empty directory and compare with templates/consumer
+        run: |
+          out="$RUNNER_TEMP/consumer"
+          mkdir "$out"
+          (cd "$out" && nix flake init -t "git+file://$GITHUB_WORKSPACE?shallow=1#default")
+          diff -r "$GITHUB_WORKSPACE/templates/consumer" "$out"
+      - id: summary
+        if: failure() || cancelled()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: instantiate
+          reasons: |
+            init lane-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: >-
+            r=$PWD d=$(mktemp -d) e=$(mktemp -d) && git archive HEAD templates/consumer | tar -x -C "$e"
+            && (cd "$d" && nix flake init -t "git+file://$r?shallow=1#default") && diff -r "$e/templates/consumer" "$d"
+      - id: wall-time
+        if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
+  checks:
+    name: checks
+    permissions:
+      contents: read
+      actions: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-checks.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main
+    with:
+      working-directory: templates/consumer
+      record: template-test-timings-${{ github.run_id }}-${{ github.run_attempt }}
+  mutation-refuses-pull-request:
+    name: mutation · refuses a pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - id: guard
+        name: Mutation guard (advisory, expected to fail on a pull request; the next step is the verdict)
+        continue-on-error: true
+        uses: $/.github/actions/mutation-event-guard
+      - id: refused
+        name: The guard failed with mutation-on-pull-request
+        env:
+          OUTCOME: ${{ steps.guard.outcome }}
+        run: |
+          reason=$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null || true)
+          rm -f "$RUNNER_TEMP/sfs-reason"
+          echo "outcome=$OUTCOME reason=$reason"
+          [ "$OUTCOME" = failure ] && [ "$reason" = mutation-on-pull-request ]
+      - id: summary
+        if: failure() || cancelled()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: mutation-refuses-pull-request
+          reasons: |
+            refused lane-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: >-
+            EVENT=pull_request RUNNER_TEMP=$(mktemp -d) bash -c "$(sed -n '/run: |/,$p' .github/actions/mutation-event-guard/action.yml | tail -n +2)"
+      - id: wall-time
+        if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
+  commitlint:
+    name: commitlint
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-commitlint.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main
+    with:
+      working-directory: templates/consumer
+  nix:
+    name: nix
+    permissions:
+      contents: read
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-nix.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main
+    with:
+      working-directory: templates/consumer
+  template-ran:
+    name: template · instantiated, slug tested, flake checks built
+    needs: [instantiate, checks, nix]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: {}
+    steps:
+      - id: start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - id: proofs
+        name: Every proof passed and the test plan scheduled slug
+        env:
+          INSTANTIATE: ${{ needs.instantiate.result }}
+          CHECKS: ${{ needs.checks.result }}
+          SOURCE: ${{ needs.checks.outputs.lane-source }}
+          JOBS: ${{ needs.checks.outputs.test-jobs }}
+          NIX: ${{ needs.nix.result }}
+        run: |
+          bad=
+          for job in "instantiate=$INSTANTIATE" "checks=$CHECKS" "nix=$NIX"; do
+            [ "${job#*=}" = success ] || bad="$bad ${job%%=*} (${job#*=})"
+          done
+          [ "$SOURCE" = built-in ] || bad="$bad checks lane-source (${SOURCE:-none})"
+          jq -e 'any(.[]; .packages | index("slug"))' <<< "$JOBS" > /dev/null || bad="$bad checks test-jobs (no slug job)"
+          if [ -n "$bad" ]; then
+            echo "failed:$bad" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - id: summary
+        if: failure() || cancelled()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: template-ran
+          reasons: |
+            proofs gate-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: >-
+            r=$PWD d=$(mktemp -d) e=$(mktemp -d) && git archive HEAD templates/consumer | tar -x -C "$e"
+            && (cd "$d" && nix flake init -t "git+file://$r?shallow=1#default") && diff -r "$e/templates/consumer" "$d"
+            && (cd templates/consumer && nix flake check -L)
+      - id: wall-time
+        if: always()
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+        run: |
+          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"

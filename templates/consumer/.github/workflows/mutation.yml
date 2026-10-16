@@ -1,0 +1,20 @@
+name: Mutation
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  mutation:
+    name: mutation
+    permissions:
+      contents: read
+      actions: write
+    uses: systemfsoftware/systemfsoftware/.github/workflows/reusable-mutation.yml@02bf9653b1ca2b0a2951baf2743bb3f70d19fc77 # main

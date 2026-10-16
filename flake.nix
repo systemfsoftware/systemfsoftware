@@ -79,8 +79,7 @@
               permissions = "--allow-read --allow-write --allow-env --allow-run=pnpm";
               runtimeInputs = [ pkgs.pnpm_12 ];
             };
-            # Repository invariants for any pnpm workspace (subtrees,
-            # release-age, project-membership, single-plan, packed-manifest); see
+            # Repository invariants for any pnpm workspace; see
             # scripts/tools/repo-checks/cli.ts. project-membership runs the
             # workspace's own installed compiler.
             repo-checks = denoTool {
@@ -124,6 +123,13 @@
           integrity = "sha512-${lib.fixedWidthString 86 "A" ""}==";
         };
       });
+
+      # `nix flake init -t github:systemfsoftware/systemfsoftware` copies this
+      # directory verbatim: its CI and flake input pin one commit of this one.
+      templates.default = {
+        path = ./templates/consumer;
+        description = "A pnpm workspace on systemfsoftware's toolchain, with CI through its reusable workflows";
+      };
 
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {

@@ -1,0 +1,22 @@
+{
+  "name": "consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.0",
+  "scripts": {
+    "prepare": "effect-tsgo patch --oxlint --no-typescript --skip-missing",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
+    "@effect/tsgo": "0.50.0",
+    "oxlint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "turbo": "2.11.5"
+  }
+}

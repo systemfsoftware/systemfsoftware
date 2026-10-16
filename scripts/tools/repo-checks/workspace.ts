@@ -4,8 +4,7 @@
 // package, as in pnpm.
 import { expandGlob } from '@std/fs/expand-glob'
 import { dirname, join } from '@std/path'
-import { parse } from '@std/yaml'
-import { Undecided } from './verdict.ts'
+import { parseYamlObject, Undecided } from './verdict.ts'
 
 export const WORKSPACE_FILE = 'pnpm-workspace.yaml'
 
@@ -13,16 +12,13 @@ export type WorkspaceDocument = Readonly<Record<string, unknown>>
 
 export const readWorkspace = async (root: string): Promise<WorkspaceDocument> => {
   const path = join(root, WORKSPACE_FILE)
-  let doc: unknown
+  let text: string
   try {
-    doc = parse(await Deno.readTextFile(path))
+    text = await Deno.readTextFile(path)
   } catch (cause) {
-    throw new Undecided(`${path}: unreadable YAML - ${cause instanceof Error ? cause.message : String(cause)}`)
+    throw new Undecided(`${path}: unreadable - ${cause instanceof Error ? cause.message : String(cause)}`)
   }
-  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
-    throw new Undecided(`${path}: the document is not a mapping`)
-  }
-  return doc as WorkspaceDocument
+  return parseYamlObject(text, path)
 }
 
 const packageGlobs = (doc: WorkspaceDocument): readonly string[] => {

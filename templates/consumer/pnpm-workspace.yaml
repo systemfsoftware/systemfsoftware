@@ -1,0 +1,28 @@
+packages:
+  - packages/*
+
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@systemfsoftware/*"
+
+allowBuilds:
+  protobufjs: false
+
+# Every @systemfsoftware/* package systemfsoftware builds comes from its flake
+# tarball (`nix build .#sfs-deps`, copied into .sfs-deps/), including the
+# presets' own dependencies, which would otherwise resolve from npm.
+overrides:
+  "@systemfsoftware/effect-cell-types": file:.sfs-deps/effect-cell-types-12.0.0.tgz
+  "@systemfsoftware/oxlint-config-cell-architecture": file:.sfs-deps/oxlint-config-cell-architecture-4.0.0.tgz
+  "@systemfsoftware/oxlint-config-dmmf": file:.sfs-deps/oxlint-config-dmmf-2.0.0.tgz
+  "@systemfsoftware/oxlint-config-recommended": file:.sfs-deps/oxlint-config-recommended-4.0.0.tgz
+  "@systemfsoftware/oxlint-config-rule-authoring": file:.sfs-deps/oxlint-config-rule-authoring-1.1.0.tgz
+  "@systemfsoftware/oxlint-plugin-cell-architecture": file:.sfs-deps/oxlint-plugin-cell-architecture-5.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-dmmf-workflow": file:.sfs-deps/oxlint-plugin-dmmf-workflow-7.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-effect-platform": file:.sfs-deps/oxlint-plugin-effect-platform-2.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-effect-schema": file:.sfs-deps/oxlint-plugin-effect-schema-6.0.0.tgz
+  "@systemfsoftware/oxlint-plugin-test-discipline": file:.sfs-deps/oxlint-plugin-test-discipline-5.0.0.tgz
+  "@systemfsoftware/stryker-config": file:.sfs-deps/stryker-config-0.1.0.tgz
+  "@systemfsoftware/tsconfig": file:.sfs-deps/tsconfig-2.0.1.tgz
+  "@systemfsoftware/vitest": file:.sfs-deps/vitest-2.0.0.tgz
+  "@systemfsoftware/vitest-config": file:.sfs-deps/vitest-config-0.1.0.tgz

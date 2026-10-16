@@ -1,6 +1,8 @@
-// The verdict every check returns, and the one way a check reads git. A check
+// The verdict every check returns, the shared JSON and YAML readers and the
+// canonical comparison checks use, and the one way a check reads git. A check
 // that cannot decide throws Undecided; the CLI maps it to exit 2 so a planted
 // violation (exit 1) is never confused with a broken environment.
+import { parse } from '@std/yaml'
 
 export type Verdict =
   | { readonly _tag: 'Holds'; readonly summary: string }
@@ -27,19 +29,26 @@ const childEnv = (): Record<string, string> =>
     Object.entries(Deno.env.toObject()).filter(([key]) => !key.startsWith('LD_') && !key.startsWith('DYLD_')),
   )
 
-export const run = async (command: string, args: readonly string[]): Promise<string> => {
-  let out: Deno.CommandOutput
+const spawn = async (
+  command: string,
+  args: readonly string[],
+  output: 'capture' | 'stderr-only',
+): Promise<Deno.CommandOutput> => {
   try {
-    out = await new Deno.Command(command, {
+    return await new Deno.Command(command, {
       args: [...args],
       clearEnv: true,
       env: childEnv(),
-      stdout: 'piped',
-      stderr: 'piped',
+      stdout: output === 'capture' ? 'piped' : 'null',
+      stderr: output === 'capture' ? 'piped' : 'inherit',
     }).output()
   } catch (cause) {
     throw new Undecided(`${command} could not start: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
+}
+
+export const run = async (command: string, args: readonly string[]): Promise<string> => {
+  const out = await spawn(command, args, 'capture')
   if (!out.success) {
     const tail = decoder.decode(out.stderr).trim().split('\n').slice(-8).join('\n')
     throw new Undecided(`${command} ${args.join(' ')} failed (exit ${out.code}):\n${tail}`)
@@ -48,6 +57,9 @@ export const run = async (command: string, args: readonly string[]): Promise<str
 }
 
 export const git = (args: readonly string[]): Promise<string> => run('git', args)
+
+export const gitCode = async (args: readonly string[]): Promise<number> =>
+  (await spawn('git', args, 'stderr-only')).code
 
 /** The object at `<rev>:<path>`, or null when the path is absent there; any other git failure is Undecided. */
 export const objectAt = async (
@@ -72,6 +84,27 @@ export const parseJsonObject = (text: string, label: string): Readonly<Record<st
   }
   return value as Readonly<Record<string, unknown>>
 }
+
+/** A YAML document that must be a mapping; unparseable text or any other document is Undecided. */
+export const parseYamlObject = (text: string, label: string): Readonly<Record<string, unknown>> => {
+  let value: unknown
+  try {
+    value = parse(text)
+  } catch (cause) {
+    throw new Undecided(`${label}: unparseable YAML - ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Undecided(`${label}: not a mapping`)
+  }
+  return value as Readonly<Record<string, unknown>>
+}
+
+/** JSON with every object's keys sorted, so two values compare equal when only their key order differs. */
+export const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, inner) =>
+    typeof inner === 'object' && inner !== null && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a.localeCompare(b)))
+      : inner)
 
 export const exists = async (path: string): Promise<boolean> => {
   try {
