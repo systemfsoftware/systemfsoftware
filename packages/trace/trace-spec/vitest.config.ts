@@ -1,0 +1,15 @@
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+
+const serverConditionsWithoutBundlerModule = ['node', 'development|production', '@systemfsoftware/source']
+
+export default defineConfig({
+  ...sharedConfig,
+  ssr: { resolve: { conditions: serverConditionsWithoutBundlerModule } },
+  test: {
+    ...sharedConfig.test,
+    name: 'unit',
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    includeSource: ['src/**/*.ts'],
+    passWithNoTests: false,
+  },
+})

@@ -1,0 +1,21 @@
+{
+  // Consumed by the shared release tooling (systemfsoftware/pnpm-release-management),
+  // which this repository now calls as reusable workflows instead of carrying its
+  // own copy of the pipeline. Finishing this adoption is what makes the flagship
+  // consume the same tooling as every other repository.
+  "base": "main",
+  "branch": "changeset-release/main",
+  "versioning": {
+    // The root package.json keeps a `version` field although it is private and
+    // never released: `version-management bump` decodes the root manifest's version
+    // under every strategy and refuses with `VersionIntentMalformed` without it.
+    "strategy": "changesets",
+  },
+  // Turbo's task graph decides which packages a change touches, so an intent is
+  // required for exactly the publishable packages a PR actually affects.
+  "gate": { "strategy": "turbo", "task": "build" },
+  "pr": {
+    "title": "chore(release): version packages",
+    "body": "Consumes pending `.changeset/` intents.\n\nMerging tags the released versions and creates GitHub Releases.",
+  },
+}

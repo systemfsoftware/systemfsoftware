@@ -1,5 +1,6 @@
 import { OpenApi } from "@typia/interface";
 
+import { OpenApiReferenceKey } from "../../utils/internal/OpenApiReferenceKey";
 import { OpenApiTypeChecker } from "../OpenApiTypeChecker";
 
 export namespace OpenApiSchemaNamingRule {
@@ -24,7 +25,7 @@ export namespace OpenApiSchemaNamingRule {
       return joinIntersection(getNameOfString(schema), union);
     // INSTANCES
     else if (OpenApiTypeChecker.isReference(schema))
-      return schema.$ref.split("/").pop() ?? "unknown";
+      return OpenApiReferenceKey.read(schema.$ref) ?? schema.$ref;
     else if (OpenApiTypeChecker.isObject(schema)) return "__object";
     else if (OpenApiTypeChecker.isArray(schema))
       return joinIntersection(getNameOfArray(schema), union);

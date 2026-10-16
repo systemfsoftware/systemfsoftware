@@ -52,13 +52,13 @@ Three coordinated changes:
 **1. Wire api-extractor into the `build` script for every package that has an api-extractor config and an `exports.types` pointing at the rollup filename.**
 
 ```json
-// packages/effect-schema-extensions/package.json
+// packages/schema/effect-schema-extensions/package.json
 "build": "tsdown && pnpm api:check" // api:check: api-extractor run [--config api-extractor.hex-schema.json]
 
-// packages/effect-schema-law/package.json
+// packages/schema/effect-schema-law/package.json
 "build": "tsdown && pnpm api:check"
 
-// packages/hex-schema/package.json
+// packages/schema/hex-schema/package.json
 "build": "tsdown && pnpm api:check"
 ```
 
@@ -67,7 +67,7 @@ Three coordinated changes:
 **2. Make the api-extractor tsconfig extend the base shared tsconfig (`@systemfsoftware/tsconfig/tsc/dom/library-monorepo`) directly**, not the package's `tsconfig.json`. Extending the package config pulls the workspace's TypeScript sources into the programme, which api-extractor rejects with `ae-wrong-input-file-type`. Extending the base follows standard Node resolution across each package's `exports` map: the `.mjs` `default` export, then the sibling `.d.ts` (the api-extractor rollup output) auto-located beside it.
 
 ```json
-// packages/effect-schema-extensions/tsconfig.api.json
+// packages/schema/effect-schema-extensions/tsconfig.api.json
 {
   "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
   "include": ["dist/index.d.ts"]

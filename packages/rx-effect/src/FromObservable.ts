@@ -1,8 +1,10 @@
 import { Cause, Effect, Queue, Stream } from 'effect'
 import type * as Rx from 'rxjs'
 
+type AnyError<U = unknown> = U
+
 export const fromObservable =
-  <E>(onError: (error: unknown) => E) => <A>(observable: Rx.Observable<A>): Stream.Stream<A, E> =>
+  <E>(onError: (error: AnyError) => E) => <A>(observable: Rx.Observable<A>): Stream.Stream<A, E> =>
     Stream.callback<A, E>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() =>

@@ -7,23 +7,28 @@ import {
 } from '@systemfsoftware/oxlint-import-origin'
 
 /**
- * The module whose `Workflow` value owns the constructor boundary — the declared
- * members `make`, `total`, and `andThen`. Mirrors the stryker-plugins
- * workflow-make-ignorer constants; the oxlint package cannot import the stryker
- * package, so the three constants are declared here.
+ * The module whose `Workflow` value owns the constructor boundary — the single
+ * declared member `make`. Mirrors the stryker-plugins workflow-make-ignorer
+ * constants; the oxlint package cannot import the stryker package, so the
+ * constants are declared here.
  */
 export const WORKFLOW_SOURCE = '@systemfsoftware/effect-cell-types' as const
 
 /** The import name a specifier must carry to be the workflow value. */
 export const WORKFLOW_IMPORT_NAME = 'Workflow' as const
 
+/** The options-object property carrying the decision body. */
+const DECIDE_PROPERTY = 'decide' as const
+
+/** The options-object property carrying the command schema. */
+const COMMAND_PROPERTY = 'command' as const
+
 /**
- * The members of the workflow value that construct a workflow: `make` (the
- * decision with an error channel), `total` (the decision that cannot fail), and
- * `andThen` (the composite that wires one workflow's decision output into the
- * next workflow's command). Declared once, as a set: every make-keyed rule
- * locates the boundary through this kernel, so a constructor added to the
- * workflow value is added here and no rule goes dark on it.
+ * The members of the workflow value that construct a workflow: `make`, the one
+ * constructor, taking an options object `{ command, decision, error, decide }`.
+ * Declared once, as a set: every make-keyed rule locates the boundary through
+ * this kernel, so a constructor added to the workflow value is added here and no
+ * rule goes dark on it.
  *
  * The documented bound: the member is read from the import origin of the call's
  * callee, resolved in THIS file. A constructor reached through a re-export chain
@@ -32,43 +37,30 @@ export const WORKFLOW_IMPORT_NAME = 'Workflow' as const
  */
 export const WORKFLOW_CONSTRUCTOR_MEMBERS: Readonly<Record<string, true>> = {
   make: true,
-  total: true,
-  andThen: true,
 }
-
-/**
- * The members whose signature takes constructed workflows in place of a decider:
- * an `andThen` construction holds no decision body in the file that opens it, so
- * a body-scoped rule demands nothing there. Every other constructor is presumed
- * to take one — a member added above without this line keeps its body checked.
- */
-const COMPOSING_MEMBERS: Readonly<Record<string, true>> = { andThen: true }
 
 type FunctionLike = ESTree.Function & { readonly type: 'FunctionDeclaration' | 'FunctionExpression' }
 
 export type MakeBodyKind = ESTree.ArrowFunctionExpression | FunctionLike
 
 /**
- * A located workflow construction boundary — a `Workflow.make`, `Workflow.total`,
- * or `Workflow.andThen` call. `resolvedBody` is the decider body when the decider
- * is a function written inline or a module-scope function reference resolved in the
- * same file; it is `null` when the body cannot be located from this file's AST (an
- * imported decision, a call with no function argument at all). A `null` body is a
- * finding the caller reports when `takesDeciderBody` is true, and nothing to report
- * when it is false — a composing constructor holds no decision body to find.
+ * A located workflow construction boundary — a `Workflow.make` call. `resolvedBody`
+ * is the decider body, read from the `decide` property of the single options
+ * object argument: an inline function, or a module-scope function reference
+ * resolved in the same file, including a shorthand property. It is `null` when
+ * the decision cannot be located from this file's AST (a missing `decide`
+ * property, an imported decision, a value that is neither a function nor a
+ * resolvable reference), which the caller reports.
  *
- * `commandArgument` is the schema-class position — the first construction
- * argument, after the `call`/`apply` shift. It is a slot rather than a shape
- * because that is what the signature says: `make` takes the command first and
- * the decider second. It is `null` when the call passes no such argument, which
- * the compiler already refuses; a rule reading it stays silent there rather
- * than reporting a second time.
+ * `commandProperty` is the `command` property of that same options object — the
+ * schema-class position the compiler checks. It is `null` when the object
+ * carries no `command` property, which the compiler already refuses; a rule
+ * reading it stays silent there rather than reporting a second time.
  */
 export interface MakeBoundary {
   readonly makeCall: ESTree.CallExpression
   readonly resolvedBody: MakeBodyKind | null
-  readonly commandArgument: ESTree.Node | null
-  readonly takesDeciderBody: boolean
+  readonly commandProperty: ESTree.Node | null
 }
 
 interface ScopeLike {
@@ -209,8 +201,6 @@ const isWorkflowModuleSpecifier = (source: string): boolean =>
 const isConstructorMember = (member: string | null): boolean =>
   member !== null && WORKFLOW_CONSTRUCTOR_MEMBERS[member] === true
 
-const isComposingMember = (member: string | null): boolean => member !== null && COMPOSING_MEMBERS[member] === true
-
 const isMakeBoundaryOrigin = (origin: ImportOrigin): boolean => {
   if (!isWorkflowModuleSpecifier(origin.source)) return false
   if (!isConstructorMember(originFinalMember(origin))) return false
@@ -247,13 +237,34 @@ const followIdentifier = (
 }
 
 /**
- * Every workflow construction call in the file — any declared constructor member
+ * The `value` of the property named `name` on a non-computed object-literal
+ * property, or `null`. The options-object properties are the only slots the
+ * `make` signature reads — `command` the schema class, `decide` the decision —
+ * so a locator pinned to argument slots misses both the moment the object
+ * reorders them; reading by name cannot.
+ */
+const propertyValueOf = (node: ESTree.Node | null, name: string): ESTree.Node | null => {
+  if (node === null || node.type !== 'ObjectExpression') return null
+  for (const property of node.properties) {
+    if (property.type !== 'Property' || property.computed) continue
+    const key = property.key
+    const matched = key.type === 'Identifier'
+      ? key.name === name
+      : key.type === 'Literal' && typeof key.value === 'string' && key.value === name
+    if (matched) return property.value
+  }
+  return null
+}
+
+/**
+ * Every workflow construction call in the file — the declared constructor member
  * — shadow-correct: a local rebinding of the name is not the boundary, and an
  * alias that resolves back to the workflow import is. The callee is judged by its
  * import origin, never its spelling, so computed members, aliases, destructuring
- * and bind/apply/call indirections all count. The body is the argument function
- * when it is inline or a same-file reference; otherwise `resolvedBody` is `null`,
- * and `takesDeciderBody` carries whether this constructor takes one at all.
+ * and bind/apply/call indirections all count. The decision is the `decide`
+ * property of the options object when it is an inline function or a same-file
+ * reference (shorthand included); otherwise `resolvedBody` is `null` and the
+ * caller reports it.
  *
  * A call in a type position is a probe of a type, erased before anything runs, so
  * it is not a construction and yields no boundary.
@@ -267,13 +278,13 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
     if (origin === null || !isMakeBoundaryOrigin(origin)) return
     // The construction is the call that INVOKES the make function, and its own
     // argument list is not always the call's. `make.bind(...)` is a partial
-    // application - its arguments are the this-bound target, not the decision body -
-    // so the construction is the later call of the bound value. `make.call(this, a, b)`
-    // invokes make directly and shifts every construction argument one slot later.
-    // `make.apply(this, [a, b])` invokes it too, but puts the whole list inside an
-    // array: reading slot 1 there yields the array, so the command position resolved
-    // to an ArrayExpression the rules cannot classify and the body search found no
-    // function - both layers silently dark on a real construction.
+    // application - its arguments are the this-bound target, not the options
+    // object - so the construction is the later call of the bound value.
+    // `make.call(this, options)` invokes make directly and shifts the options
+    // object one slot later. `make.apply(this, [options])` invokes it too, but
+    // puts the whole list inside an array: reading slot 0 there yields that
+    // array, so the command and decision reads both came back empty and every
+    // rule keyed on them went silently dark on a real construction.
     const callee = node.callee
     let constructionArguments: readonly (ESTree.Node | null)[] = node.arguments
     if (isMemberExpression(callee) && !callee.computed && callee.property.type === 'Identifier') {
@@ -287,31 +298,23 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
         constructionArguments = list !== undefined && list.type === 'ArrayExpression' ? list.elements : []
       }
     }
-    // The decider is found by SHAPE, never by slot index: `make` takes the
-    // command schema class first and the decider second, and a locator pinned
-    // to one slot resolves the class, yields no body, and turns every
-    // body-scoped rule silently dark. Search forward and take the first
-    // argument that resolves to a function.
+    const options = constructionArguments[0] ?? null
+    const decide = propertyValueOf(options, DECIDE_PROPERTY)
     let resolvedBody: MakeBodyKind | null = null
-    for (const argument of constructionArguments) {
-      if (argument === null) continue
-      if (isArrowFunction(argument) || isFunctionLike(argument)) {
-        resolvedBody = argument
-        break
-      }
-      if (isIdentifier(argument)) {
-        const followed = followIdentifier(argument, context.sourceCode.getScope, 0)
-        if (followed !== null) {
-          resolvedBody = followed
-          break
-        }
+    if (decide !== null) {
+      if (isArrowFunction(decide) || isFunctionLike(decide)) {
+        resolvedBody = decide
+      } else if (isIdentifier(decide)) {
+        // A shorthand `decide` property arrives as the bare identifier; so does a
+        // written one. The follow-the-reference walk resolves either to its
+        // module-scope declaration in this file.
+        resolvedBody = followIdentifier(decide, context.sourceCode.getScope, 0)
       }
     }
     boundaries.push({
       makeCall: node,
       resolvedBody,
-      commandArgument: constructionArguments[0] ?? null,
-      takesDeciderBody: !isComposingMember(originFinalMember(origin)),
+      commandProperty: propertyValueOf(options, COMMAND_PROPERTY),
     })
   })
   return boundaries

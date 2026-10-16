@@ -59,7 +59,7 @@ After (fixed — tsdown bundles `devDependencies`, functions inlined into dist):
 
 ## Why This Works
 
-tsdown follows the conventional bundler rule — `getProductionDeps` collects `dependencies`, `peerDependencies`, `peerDependenciesMeta` and `optionalDependencies` and externalizes those; `devDependencies` alone is bundled (`repos/tsdown/src/features/deps.ts`). A `deps: { onlyBundle: false }` config disables the bundling whitelist rather than restricting bundling:
+tsdown follows the conventional bundler rule — `getProductionDeps` collects `dependencies`, `peerDependencies`, `peerDependenciesMeta` and `optionalDependencies` and externalizes those; `devDependencies` alone is bundled (tsdown's `src/features/deps.ts`). A `deps: { onlyBundle: false }` config disables the bundling whitelist rather than restricting bundling:
 
 | Dependency category | Bundle behavior                                                                         |
 | ------------------- | --------------------------------------------------------------------------------------- |
@@ -81,6 +81,5 @@ The dependency _category_ is therefore part of a publishable package's distribut
 
 ## Related Issues
 
-- [tsdown manages publishConfig during build](../tooling-decisions/tsdown-manages-publishconfig-during-build.md) — same tool, adjacent failure class (exports-field drift, not dependency externalization); AGENTS.md REPO-S4 covers exports, not dep categorization.
 - [exports/types rollup drift](../build-errors/exports-types-rollup-drift.md) — same verify-the-dist family; note attw only checks type resolution, not import resolubility, so it would not have caught this.
 - Detected by ce-code-review run `20260720-181925` (ten reviewers; three flagged it as a P1).

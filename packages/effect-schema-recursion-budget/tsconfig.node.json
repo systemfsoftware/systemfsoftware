@@ -1,8 +1,0 @@
-{
-  "extends": "@systemfsoftware/tsconfig/node",
-  "include": [
-    "oxlint.config.ts",
-    "tsdown.config.ts",
-    "vitest-setup.ts"
-  ]
-}

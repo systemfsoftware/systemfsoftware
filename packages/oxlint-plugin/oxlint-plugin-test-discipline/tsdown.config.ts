@@ -1,0 +1,46 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
+import { defineConfig } from 'tsdown'
+
+type ExportEntry = string | Record<string, string | undefined>
+
+const apiExtractorRollups: Record<string, string> = {
+  '.': './dist/oxlint-plugin-test-discipline.d.ts',
+}
+
+const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  delete exports['./no-inline-suppression']
+  for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
+    const entry = exports[subpath]
+    if (typeof entry === 'string') {
+      exports[subpath] = { types, default: entry }
+    } else if (typeof entry === 'object' && Boolean(entry)) {
+      const { default: defaultEntry, types: _existingTypes, ...rest } = entry
+      let withDefault: Record<string, string> = {}
+      if (typeof defaultEntry === 'string') {
+        withDefault = { default: defaultEntry }
+      }
+      exports[subpath] = { ...rest, types, ...withDefault }
+    }
+  }
+  return exports
+}
+
+export default defineConfig({
+  ...quietBuild,
+  entry: {
+    index: './src/index.ts',
+    'no-inline-suppression': './src/no-inline-suppression.ts',
+  },
+  format: 'esm',
+  dts: true,
+  tsconfig: './tsconfig.build.json',
+  outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
+  exports: {
+    devExports: '@systemfsoftware/source',
+    customExports: injectApiExtractorTypes,
+    bin: { 'no-inline-suppression': './src/no-inline-suppression.ts' },
+  },
+  deps: {
+    onlyBundle: false,
+  },
+})

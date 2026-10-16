@@ -1,7 +1,36 @@
+import { Function, Match } from 'effect'
+import * as Result from 'effect/Result'
 import { gzipSync } from 'fflate'
-import type { Package } from './Package.js'
+import { mountedKeyOf, type Package } from './Package.js'
+import { SplitUstarEntryName, splitUstarEntryName } from './split-ustar-entry-name.workflow.js'
 
 const encoder = new TextEncoder()
+
+type TarEntry = { name: string; data: Uint8Array }
+
+function encodeDefinedContent(content: string | Uint8Array): Uint8Array {
+  if (typeof content === 'string') return encoder.encode(content)
+  return content
+}
+
+function encodeContent(content: string | Uint8Array | undefined): Uint8Array {
+  if (content === undefined) return new Uint8Array(0)
+  return encodeDefinedContent(content)
+}
+
+function packRelativeEntry(
+  prefix: string,
+  path: string,
+  content: string | Uint8Array | undefined,
+): TarEntry | undefined {
+  if (!path.startsWith(prefix)) return undefined
+  return { name: `package/${path.slice(prefix.length)}`, data: encodeContent(content) }
+}
+
+function pushDefinedEntry(entries: TarEntry[], entry: TarEntry | undefined): void {
+  if (entry === undefined) return
+  entries.push(entry)
+}
 
 /**
  * In-process ustar + Gzip (fflate) packer.
@@ -12,130 +41,168 @@ const encoder = new TextEncoder()
  */
 export function packPackage(pkg: Package): Uint8Array {
   const prefix = `/node_modules/${pkg.packageName}/`
-  const entries: Array<{ name: string; data: Uint8Array }> = []
+  const entries: TarEntry[] = []
   for (const path of pkg.listFiles('/')) {
-    if (!path.startsWith(prefix)) continue
-    const relative = path.slice(prefix.length)
-    const tarName = `package/${relative}`
-    const content = pkg.tryReadBytes(path)
-    const data = content === undefined
-      ? new Uint8Array(0)
-      : typeof content === 'string'
-      ? encoder.encode(content)
-      : content
-    entries.push({ name: tarName, data })
+    pushDefinedEntry(entries, packRelativeEntry(prefix, path, pkg.tryReadBytes(path)))
   }
   return packEntries(entries)
 }
 
 /**
- * Pack an authored file tree directly, without building a {@link Package} first.
+ * Pack an authored file tree directly, without building a {@link (Package:interface)} first.
  *
  * Reading a file through `Package` caches its decoded text, so packing a tree
  * that carries binary bodies straight from the map avoids that conversion.
  */
-export function packTree(
-  files: Record<string, string | Uint8Array>,
-  packageName: string,
-): Uint8Array {
-  const prefix = `/node_modules/${packageName}/`
-  const entries: Array<{ name: string; data: Uint8Array }> = []
-  for (const [key, content] of Object.entries(files)) {
-    const normalized = key.startsWith('/') ? key : `/node_modules/${packageName}/${key}`
-    if (!normalized.startsWith(prefix)) {
-      throw new Error(`Unexpected absolute fixture path: ${key}`)
+export const packTree: {
+  (packageName: string): (files: Record<string, string | Uint8Array>) => Uint8Array
+  (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array
+} = Function.dual(
+  2,
+  (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array => {
+    const prefix = `/node_modules/${packageName}/`
+    const entries: TarEntry[] = []
+    for (const [key, content] of Object.entries(files)) {
+      const relative = mountedKeyOf(key, packageName).slice(prefix.length)
+      entries.push({ name: `package/${relative}`, data: encodeDefinedContent(content) })
     }
-    const relative = normalized.slice(prefix.length)
-    const tarName = `package/${relative}`
-    const data = typeof content === 'string' ? encoder.encode(content) : content
-    entries.push({ name: tarName, data })
-  }
-  return packEntries(entries)
+    return packEntries(entries)
+  },
+)
+
+function compareGreater(left: string, right: string): number {
+  if (left > right) return 1
+  return 0
+}
+
+function compareEntryNames(a: TarEntry, b: TarEntry): number {
+  if (a.name < b.name) return -1
+  return compareGreater(a.name, b.name)
 }
 
 /** Sort by entry name, lay out the ustar blocks, and gzip with a zeroed mtime. */
-function packEntries(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
-  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+function packEntries(entries: TarEntry[]): Uint8Array {
+  entries.sort(compareEntryNames)
   return gzipSync(buildTar(entries), { mtime: 0 })
 }
 
-function buildTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
-  const blocks: Uint8Array[] = []
+function headerByte(header: Uint8Array, i: number): number {
+  const value = header[i]
+  if (value === undefined) return 0
+  return value
+}
 
-  for (const entry of entries) {
-    const header = new Uint8Array(512)
-
-    let nameField = entry.name
-    let prefixField = ''
-    if (encoder.encode(entry.name).byteLength > 100) {
-      const split = splitUstarName(entry.name)
-      nameField = split.name
-      prefixField = split.prefix
-    }
-
-    const nameBytes = encoder.encode(nameField)
-    header.set(nameBytes.subarray(0, 100), 0)
-
-    if (prefixField) {
-      const prefixBytes = encoder.encode(prefixField)
-      header.set(prefixBytes.subarray(0, 155), 345)
-    }
-
-    writeOctal(header, 100, 8, 0o644)
-    writeOctal(header, 108, 8, 0)
-    writeOctal(header, 116, 8, 0)
-    writeOctal(header, 124, 12, entry.data.length)
-    writeOctal(header, 136, 12, 0)
-    header.fill(0x20, 148, 156)
-
-    header[156] = 0x30
-
-    encoder.encodeInto('ustar\0', header.subarray(257, 263))
-    encoder.encodeInto('00', header.subarray(263, 265))
-
-    let sum = 0
-    for (let i = 0; i < 512; i++) sum += header[i] ?? 0
-    const chk = sum.toString(8).padStart(6, '0') + '\0 '
-    encoder.encodeInto(chk, header.subarray(148, 156))
-
-    blocks.push(header)
-    if (entry.data.length > 0) {
-      const paddedLen = Math.ceil(entry.data.length / 512) * 512
-      const padded = new Uint8Array(paddedLen)
-      padded.set(entry.data)
-      blocks.push(padded)
-    }
+function headerByteSum(header: Uint8Array): number {
+  let sum = 0
+  for (let i = 0; i < 512; i++) {
+    sum += headerByte(header, i)
   }
+  return sum
+}
 
-  blocks.push(new Uint8Array(1024))
+function writeUstarPrefix(header: Uint8Array, prefixField: Uint8Array): void {
+  if (prefixField.length === 0) return
+  header.set(prefixField, 345)
+}
 
-  const total = blocks.reduce((a, b) => a + b.length, 0)
-  const out = new Uint8Array(total)
+function writeUstarNameFields(header: Uint8Array, entryName: string): void {
+  Result.match(
+    splitUstarEntryName(new SplitUstarEntryName({ nameBytes: encoder.encode(entryName) })),
+    {
+      onFailure: (tooLong) => {
+        throw tooLong
+      },
+      onSuccess: (decision) => {
+        Match.value(decision).pipe(
+          Match.tag('FitsNameField', (fits) => {
+            header.set(fits.nameField, 0)
+          }),
+          Match.tag('SplitIntoPrefixAndName', (split) => {
+            header.set(split.nameField, 0)
+            writeUstarPrefix(header, split.prefixField)
+          }),
+          Match.exhaustive,
+        )
+      },
+    },
+  )
+}
+
+function makeTarHeader(entry: TarEntry): Uint8Array {
+  const header = new Uint8Array(512)
+  writeUstarNameFields(header, entry.name)
+  writeOctal(header, 100, 8, 0o644)
+  writeOctal(header, 108, 8, 0)
+  writeOctal(header, 116, 8, 0)
+  writeOctal(header, 124, 12, entry.data.length)
+  writeOctal(header, 136, 12, 0)
+  header.fill(0x20, 148, 156)
+  header[156] = 0x30
+  encoder.encodeInto('ustar\0', header.subarray(257, 263))
+  encoder.encodeInto('00', header.subarray(263, 265))
+  const chk = headerByteSum(header).toString(8).padStart(6, '0') + '\0 '
+  encoder.encodeInto(chk, header.subarray(148, 156))
+  return header
+}
+
+function paddedDataBlock(data: Uint8Array): Uint8Array | undefined {
+  if (data.length === 0) return undefined
+  const padded = new Uint8Array(Math.ceil(data.length / 512) * 512)
+  padded.set(data)
+  return padded
+}
+
+function appendPadded(blocks: Uint8Array[], data: Uint8Array): void {
+  const padded = paddedDataBlock(data)
+  if (padded === undefined) return
+  blocks.push(padded)
+}
+
+function buildEntryBlocks(entry: TarEntry): Uint8Array[] {
+  const blocks = [makeTarHeader(entry)]
+  appendPadded(blocks, entry.data)
+  return blocks
+}
+
+function pushAll(blocks: Uint8Array[], extra: Uint8Array[]): void {
+  for (const block of extra) {
+    blocks.push(block)
+  }
+}
+
+function totalLength(blocks: Uint8Array[]): number {
+  return blocks.reduce((a, b) => a + b.length, 0)
+}
+
+function copyBlock(out: Uint8Array, block: Uint8Array, off: number): number {
+  out.set(block, off)
+  return off + block.length
+}
+
+function copyBlocks(out: Uint8Array, blocks: Uint8Array[]): void {
   let off = 0
-  for (const b of blocks) {
-    out.set(b, off)
-    off += b.length
+  for (const block of blocks) {
+    off = copyBlock(out, block, off)
   }
+}
+
+function concatBlocks(blocks: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(totalLength(blocks))
+  copyBlocks(out, blocks)
   return out
+}
+
+function buildTar(entries: TarEntry[]): Uint8Array {
+  const blocks: Uint8Array[] = []
+  for (const entry of entries) {
+    pushAll(blocks, buildEntryBlocks(entry))
+  }
+  blocks.push(new Uint8Array(1024))
+  return concatBlocks(blocks)
 }
 
 function writeOctal(header: Uint8Array, offset: number, length: number, value: number): void {
   const oct = value.toString(8).padStart(length - 1, '0')
   const enc = encoder.encode(`${oct}\0`)
   header.set(enc.subarray(0, length), offset)
-}
-function splitUstarName(full: string): { prefix: string; name: string } {
-  for (let i = Math.min(155, full.length); i >= 0; i--) {
-    if (full.charAt(i) === '/') {
-      const prefix = full.slice(0, i)
-      const name = full.slice(i + 1)
-      if (
-        encoder.encode(prefix).byteLength <= 155 &&
-        encoder.encode(name).byteLength <= 100
-      ) {
-        return { prefix, name }
-      }
-    }
-  }
-  throw new Error(`File name too long for ustar without PAX: ${full}`)
 }

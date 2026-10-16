@@ -1,0 +1,66 @@
+import { it } from '@systemfsoftware/vitest'
+import { Equal, Match, Option, Schema } from 'effect'
+import * as Result from 'effect/Result'
+import { ClassifyJobExit, classifyJobExit } from '../classify-job-exit.workflow.js'
+import { JobExited, type JobExitStatus } from '../JobExitStatus.schema.js'
+
+type Classify = typeof classifyJobExit
+
+const classifiedHolds = (
+  classify: Classify,
+  code: number,
+  stdout: Uint8Array,
+  stderr: Uint8Array,
+  law: (status: JobExitStatus) => boolean,
+): boolean =>
+  Result.match(classify(new ClassifyJobExit({ code, stdout, stderr })), {
+    onFailure: () => false,
+    onSuccess: (status) => law(status),
+  })
+
+const exitedOf = (status: JobExitStatus): Option.Option<JobExited> =>
+  Match.value(status).pipe(
+    Match.tag('JobExited', (exited) => Option.some(exited)),
+    Match.tag('JobSignaled', () => Option.none<JobExited>()),
+    Match.exhaustive,
+  )
+
+const signaledOf = (status: JobExitStatus): boolean =>
+  Match.value(status).pipe(
+    Match.tag('JobExited', () => false),
+    Match.tag('JobSignaled', () => true),
+    Match.exhaustive,
+  )
+
+it.prop(
+  '∀code_ClassifyJobExit_=JobExited',
+  {
+    of: [
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
+      Schema.Uint8Array,
+      Schema.Uint8Array,
+    ],
+    subject: classifyJobExit,
+  },
+  (subject, [code, stdout, stderr]) =>
+    classifiedHolds(subject, code, stdout, stderr, (status) =>
+      Option.match(exitedOf(status), {
+        onNone: () => false,
+        onSome: (exited) => Equal.equals(exited.code, code),
+      })),
+)
+
+it.prop(
+  '∀negative_ClassifyJobExit_=JobSignaled',
+  {
+    of: [Schema.Int.pipe(Schema.check(Schema.isLessThan(0))), Schema.Uint8Array, Schema.Uint8Array],
+    subject: classifyJobExit,
+  },
+  (subject, [code, stdout, stderr]) => classifiedHolds(subject, code, stdout, stderr, signaledOf),
+)
+
+it.prop(
+  '∀code_JobExited_≡Natural',
+  { of: [Schema.TaggedStruct('JobExited', { code: Schema.Int })], subject: Schema.decodeOption(JobExited) },
+  (subject, [candidacy]) => Option.isSome(subject(candidacy)) === (candidacy.code >= 0),
+)

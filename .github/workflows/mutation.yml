@@ -1,10 +1,14 @@
+# Cost: 0 runner-min/day today: this lane starts only on workflow_dispatch, the stopgap #700 set. #733
+# adds a nightly schedule on main and keeps workflow_dispatch; Mutation never runs on a push or a pull
+# request. Each run mutates the full corpus. Before the workflow-only change a full run took 422 job-min,
+# measured on run 37962737026 (2026-10-09, 244 files in 26 packages). After it, a run mutates 54 files in
+# 14 packages and is not yet measured; that run's per-package mutant counts model it at about 179 job-min.
+# At #733's one nightly run a day that is about 179 runner-min/day after the change against 422 before,
+# plus the same again for each manual dispatch. Main's 76 first-parent commits from 2026-10-06T00:00Z to
+# 2026-10-13T00:00Z (10.9 a day) start no run: the price is per night, not per commit.
 name: Mutation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -15,186 +19,9 @@ permissions:
   contents: read
 
 jobs:
-  conflicts:
-    name: no merge conflicts
-    uses: ./.github/workflows/conflict-check.yml
-    with:
-      base_ref: ${{ github.event.pull_request.base.ref }}
-      head_sha: ${{ github.event.pull_request.head.sha }}
-  abort-on-conflict:
-    name: abort on mid-run merge conflict
-    needs: conflicts
-    runs-on: ubuntu-latest
-    timeout-minutes: 55
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      - name: Watch for the PR turning dirty
-        if: github.event.pull_request.head.sha != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          while true; do
-            state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .mergeable_state)
-            if [ "$state" = "dirty" ]; then
-              printf '::error title=merge conflicts::This branch conflicted with the base while the run was in progress. Cancelling the run.\n'
-              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/cancel" >/dev/null 2>&1 || true
-              exit 1
-            fi
-            active=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
-              --jq '[.jobs[] | select(.status != "completed")] | length')
-            if [ "$active" -le 1 ]; then
-              echo "no other jobs running; watcher done"
-              exit 0
-            fi
-            sleep 60
-          done
-  discover:
-    needs: conflicts
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      packages: ${{ steps.discover.outputs.packages }}
-      package_count: ${{ steps.discover.outputs.package_count }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Changed paths
-        id: changed
-        run: |
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
-            echo 'changed=[]' >> "$GITHUB_OUTPUT"
-          else
-            git diff --name-only "$base" HEAD \
-              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s.split("\n").filter(Boolean))))' \
-              | sed 's/^/changed=/' >> "$GITHUB_OUTPUT"
-          fi
-      - id: discover
-        env:
-          MUTATION_CHANGED_PATHS: ${{ steps.changed.outputs.changed }}
-        run: node scripts/tools/discover-mutation-targets.mjs --github --changed
-
   mutation:
-    needs: discover
-    if: needs.discover.outputs.package_count > 0
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJson(needs.discover.outputs.packages) }}
-    name: Mutation (${{ matrix.package }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/install-deps
-      - uses: denoland/setup-deno@v2
-      - run: corepack pnpm build
-
-      - uses: actions/cache/restore@v6
-        with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main
-          restore-keys: |
-            ${{ runner.os }}-stryker-${{ matrix.package }}-
-
-      # Advisory: a mutation score below threshold never fails this job — the
-      # merged report in the `report` job carries that verdict. A run that never
-      # produced a report is not a score outcome, so the step below fails red:
-      # a missing binary, a crashed run or a timeout must never read green.
-      - name: Mutation
-        id: mutation
-        continue-on-error: true
-        timeout-minutes: 30
-        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=errors-only
-
-      - name: Require a mutation report
-        if: ${{ !cancelled() }}
-        env:
-          PACKAGE: ${{ matrix.package }}
-          OUTCOME: ${{ steps.mutation.outcome }}
-        run: ./scripts/tools/build-mutation-summary.ts --require --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
-
-      - name: Write mutation summary
-        if: always()
-        env:
-          PACKAGE: ${{ matrix.package }}
-          OUTCOME: ${{ steps.mutation.outcome }}
-        run: ./scripts/tools/build-mutation-summary.ts --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
-
-      - uses: actions/cache/save@v6
-        if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
-        with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-${{ github.run_id }}
-
-      - name: Record part metadata
-        if: always()
-        run: |
-          mkdir -p '${{ matrix.package }}/reports'
-          printf '{"package":"%s","outcome":"%s"}\n' \
-            '${{ matrix.package }}' '${{ steps.mutation.outcome }}' \
-            > '${{ matrix.package }}/reports/mutation-part.json'
-
-      - name: Sanitize artifact name
-        id: sanitize
-        if: always()
-        run: echo "name=$(echo '${{ matrix.package }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        continue-on-error: true
-        with:
-          name: mutation-part-${{ steps.sanitize.outputs.name }}
-          path: |
-            ${{ matrix.package }}/reports/mutation-part.json
-            ${{ matrix.package }}/reports/mutation-report.json
-            ${{ matrix.package }}/reports/mutation-stream.jsonl
-          if-no-files-found: ignore
-          retention-days: 1
-
-  report:
-    name: Mutation report
-    needs: [discover, mutation]
-    if: ${{ !cancelled() && needs.discover.outputs.package_count > 0 }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: mutation
+    uses: ./.github/workflows/reusable-mutation.yml
     permissions:
       contents: read
       actions: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/install-deps
-      - name: Build the report merger
-        run: corepack pnpm turbo build --filter=@systemfsoftware/stryker-js-cli
-
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          path: mutation-parts
-          pattern: mutation-part-*
-
-      - name: Merge
-        env:
-          PACKAGES: ${{ needs.discover.outputs.packages }}
-        run: node packages/stryker-js/stryker-js-cli/dist/main.mjs merge-reports --parts mutation-parts --out mutation-merged
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mutation-report-${{ github.run_number }}
-          path: mutation-merged/*
-          retention-days: 14
-
-      - name: Delete part artifacts
-        if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-            --jq '.artifacts[] | select(.name | startswith("mutation-part-")) | .id' \
-          | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done

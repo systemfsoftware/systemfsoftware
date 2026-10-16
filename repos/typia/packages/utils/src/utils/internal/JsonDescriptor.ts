@@ -25,17 +25,12 @@ export namespace JsonDescriptor {
    * an unrelated type's prose, straight into what an LLM reads.
    */
   export const cascade = (props: {
-    prefix: string;
     components: OpenApi.IComponents;
     schema: OpenApi.IJsonSchema.IReference;
     escape: boolean;
-    key?: string;
+    key: string;
   }): string | undefined => {
-    const accessors: string[] = (
-      props.key ??
-      props.schema.$ref.split(props.prefix)[1] ??
-      props.schema.$ref.split("/").at(-1)!
-    ).split(".");
+    const accessors: string[] = props.key.split(".");
     const pReferences: IParentReference[] = accessors
       .slice(0, props.escape ? accessors.length : accessors.length - 1)
       .map((_, i, array) => array.slice(0, i + 1).join("."))

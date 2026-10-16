@@ -18,6 +18,10 @@ tags: [mutation-testing, stryker, re-key-aggregate, private-leaf-packages, artif
 
 # Mutation budgets split rule packages into private cells under a re-key aggregate
 
+## Supersession note (2026-10-12)
+
+Mutation now mutates only `src/**/*.workflow.ts` (test directories excluded), defined once in `@systemfsoftware/stryker-config`, and the Mutation plan refuses a config that sets its own `mutate` (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`). The oxlint rule packages hold no workflow file, so no leaf below owns a Stryker config or a `mutation` script any more, and per-leaf mutation budgets no longer apply to them. What still holds: a gate reads the artifact a consumer receives, and a private leaf keeps the public package's exported ids stable.
+
 ## Context
 
 One lint-rule package concentrated ~2,075 mutants into a single Stryker cell: one serial CI job, one timeout, no incremental progress on failure. A mutation score for the whole package cannot be observed in reasonable wall-clock time, so the mutation gate degrades into a ritual that either times out or gets exempted. Splitting the package naively faces the opposite constraint: consumers pin rule ids in configs and disable comments, so any namespace migration silently invalidates every suppression.
@@ -31,7 +35,7 @@ The contract that makes this safe is mechanical, two-deep:
 1. The aggregate test asserts the exported rule count and id set against a pre-split literal.
 2. The base-preset test asserts the wired error set equals the union of the leaves' recommended sets re-keyed — both sides read live plugin objects, so neither can drift alone.
 
-Each leaf owns its own Stryker config and enters the mutation matrix as an independent parallel cell; the discovery predicate that enumerates cells (workspace importers owning a Stryker config) picks them up with no per-cell CI wiring. The aggregate, owning no rules, leaves the matrix.
+Each leaf owns its own Stryker config and `mutation` script, so the Mutation workflow's timing planner packs it into a job, or shards it, with no CI wiring that names a package. The aggregate owns no rules, so it has no `mutation` script.
 
 Gate the aggregate's packaging invariant on the **built artifact, not the manifest**. Asserting that leaves sit in `devDependencies` tests the declaration, not the outcome — tsdown bundles devDependencies and externalizes dependencies, so the categorization only matters through its effect on the emitted bundle. The honest gate reads the built `dist` bytes and fails when any import or require specifier names a private leaf (the `check-dist-no-private-imports` guard, wired into the aggregate's build after bundling). Red-green proof: green on the real bundle, exit 1 with a planted leak, green again after rebuild.
 
@@ -53,7 +57,6 @@ After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 
 
 ## Related
 
-- docs/solutions/architecture-patterns/machine-stream-is-a-file.md
 - docs/solutions/build-errors/tsdown-private-dependency-bare-import-dist.md
-- docs/solutions/build-errors/changeset-gate-transitive-build-hash.md
+- docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md
 - docs/solutions/build-errors/a-disable-comment-names-the-config-key.md

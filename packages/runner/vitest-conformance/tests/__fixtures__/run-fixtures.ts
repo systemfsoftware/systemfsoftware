@@ -1,0 +1,487 @@
+/**
+ * Runs nested Vitest over the probe fixtures and hands back the JSON report it produced (KTD14).
+ *
+ * The fork's runner behaviour is only observable from the outside: a probe file written the lazy way
+ * either passes, fails with a named refusal, or fails as leaked state. Each feature starts one nested run
+ * and asserts on the report, so every claim here is about what the runner did with a suite, not about how
+ * the runner is built.
+ *
+ * The run is in-process through `vitest/node` on the worker-threads pool: no child process, no browser.
+ * Fixtures resolve `@systemfsoftware/vitest` to this worktree's fork source directly, so a report always describes
+ * the code under conformance rather than an installed copy.
+ *
+ * Fixtures live in `tests/__fixtures__/probes/**`. A glob handed to {@link runFixtures} is matched relative
+ * to that directory; a glob that already starts with `tests/` or `/` is matched relative to the package root.
+ * Every fixture suite carries the `*.test.ts` suffix: it is a Vitest suite, and that suffix is what the repo's
+ * lint reads as a place where the fork's `it.effect` bodies may hold `expect` calls.
+ */
+import { Effect, Function, Option, Schema } from 'effect'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { ProvidedContext, UserConsoleLog } from 'vitest'
+import { startVitest } from 'vitest/node'
+import type { SerializedError, TestCase, TestModule } from 'vitest/node'
+
+const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
+// The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
+const forkEntry = fileURLToPath(new URL('../../../vitest/src/mod.ts', import.meta.url))
+const forkFailure = fileURLToPath(new URL('../../../vitest/src/failure.ts', import.meta.url))
+const forkGuard = fileURLToPath(new URL('../../../vitest/src/guard.ts', import.meta.url))
+const forkIntegration = fileURLToPath(new URL('../../../vitest/src/integration.ts', import.meta.url))
+const guardSetupFiles = ['@systemfsoftware/vitest/guard']
+const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', import.meta.url))
+
+/**
+ * Where a fixture appends evidence the report cannot carry, one file per glob, named from the fixture's own
+ * stem: a test's scope finalizer runs after its report entry is written, so only a side file can show it ran.
+ */
+export const evidenceFilePath = (glob: string): string =>
+  join(tmpdir(), `vitest-conformance-${basename(glob, '.test.ts')}.evidence.txt`)
+
+export const probeSource = (file: string): string =>
+  readFileSync(fileURLToPath(new URL(`./probes/${file}`, import.meta.url)), 'utf8')
+
+const evidenceIn = (files: ReadonlyArray<string>): string =>
+  files.filter((file) => existsSync(file)).map((file) => readFileSync(file, 'utf8')).join('')
+
+const AssertionSchema = Schema.Struct({
+  title: Schema.String,
+  fullName: Schema.String,
+  ancestorTitles: Schema.Array(Schema.String),
+  status: Schema.Literals(['passed', 'failed', 'skipped', 'pending', 'todo', 'disabled']),
+  failureMessages: Schema.Array(Schema.String),
+  meta: Schema.Record(Schema.String, Schema.Unknown),
+})
+
+/** One assertion of the nested report, as the JSON reporter writes it. */
+export interface JsonAssertionResult extends Schema.Schema.Type<typeof AssertionSchema> {}
+
+const TestFileSchema = Schema.Struct({
+  name: Schema.String,
+  status: Schema.Literals(['passed', 'failed']),
+  message: Schema.String,
+  assertionResults: Schema.Array(AssertionSchema),
+})
+
+export interface JsonTestFile extends Schema.Schema.Type<typeof TestFileSchema> {}
+
+const ReportShape = Schema.Struct({
+  success: Schema.Boolean,
+  numTotalTests: Schema.Finite,
+  numPassedTests: Schema.Finite,
+  numFailedTests: Schema.Finite,
+  testResults: Schema.Array(TestFileSchema),
+})
+
+/** The nested Vitest report, narrowed to the fields the features assert on. */
+export interface JsonReport extends Schema.Schema.Type<typeof ReportShape> {}
+
+/** One console line the nested run intercepted, as Vitest reported it: `stdout` for an Effect log. */
+export interface ConsoleLine {
+  readonly type: 'stdout' | 'stderr'
+  readonly content: string
+}
+
+/**
+ * One error the nested run reported, as Vitest's reporter exposed it — the serialized fields of its `TestError`,
+ * the same fields a consumer of a real run receives.
+ */
+/**
+ * One error as Vitest's reporter received it: the serialized plain object, carrying every field the thrown error
+ * serialized — `_tag` and its own structured fields on top of the message and stack. Vitest builds it with
+ * `serializeValue`, which reads an Error's `toJSON`, so an Effect tagged error arrives with its own fields intact.
+ */
+export type RawError = SerializedError
+
+export const WitnessShape = Schema.Struct({ rendered: Schema.String, value: Schema.Json })
+
+export const PropertyRunShape = Schema.Struct({
+  name: Schema.String,
+  site: Schema.NullOr(Schema.String),
+  seed: Schema.Int,
+  runs: Schema.Int,
+})
+
+export const RefutedErrorShape = Schema.TaggedStruct('PropertyRefuted', {
+  property: PropertyRunShape,
+  counterexample: WitnessShape,
+  shrinks: Schema.Int,
+  replay: Schema.String,
+})
+
+export const NonBooleanErrorShape = Schema.TaggedStruct('NonBooleanVerdict', {
+  property: PropertyRunShape,
+  drawn: WitnessShape,
+  returned: Schema.Array(Schema.String),
+  replay: Schema.String,
+})
+
+export const CoverageClassShape = Schema.Struct({
+  label: Schema.String,
+  hits: Schema.Int,
+  runs: Schema.Int,
+  minimum: Schema.Finite,
+})
+
+export const CoverageErrorShape = Schema.TaggedStruct('CoverageBelowMinimum', {
+  property: PropertyRunShape,
+  classes: Schema.Array(CoverageClassShape),
+  replay: Schema.String,
+})
+
+const FrozenOutputShape = Schema.Struct({ member: Schema.String, output: WitnessShape })
+const FrozenShape = Schema.TaggedStruct('Frozen', { outputs: Schema.Array(FrozenOutputShape) })
+const NeverCalledShape = Schema.TaggedStruct('NeverCalled', {})
+const VacuousRunShape = Schema.Struct({
+  property: PropertyRunShape,
+  frozen: Schema.Union([FrozenShape, NeverCalledShape]),
+})
+const VacuousSubjectShape = Schema.Struct({ label: Schema.String, properties: Schema.Array(VacuousRunShape) })
+
+export const VacuousErrorShape = Schema.TaggedStruct('VacuousProperty', {
+  subjects: Schema.Array(VacuousSubjectShape),
+  exempt: Schema.Array(Schema.Struct({ name: Schema.String, kind: Schema.String })),
+  replay: Schema.String,
+})
+
+export interface CapturedError {
+  readonly testName: string
+  /** The error object untouched, as the reporter received it: every field it carried, not only the message. */
+  readonly raw: RawError
+  readonly name: string
+  readonly message: string
+  readonly stack: string | undefined
+  readonly actual: string | undefined
+  readonly expected: string | undefined
+  readonly diff: string | undefined
+}
+
+/** A nested run plus what it exposed beyond the report: the seed it shuffled with, the evidence file, its console. */
+export interface ProbeRun {
+  readonly report: JsonReport
+  /** The shuffle seed the run used, or null when the run did not shuffle. */
+  readonly seed: number | null
+  /**
+   * What the fixtures appended to the file named by {@link evidenceFilePath}, which holds a fact the report
+   * cannot carry: a test's scope finalizer runs after its report entry is written. Empty when nothing wrote.
+   */
+  readonly evidence: string
+  /**
+   * Every console line the nested run's tests wrote, in the order Vitest reported them. The report carries
+   * outcomes only, so this is the one way to observe what the runner logged before it threw (KTD14).
+   */
+  readonly console: ReadonlyArray<ConsoleLine>
+  /** Every error the nested run reported, as its reporter exposed it. Empty when no test failed. */
+  readonly errors: ReadonlyArray<CapturedError>
+  /**
+   * Every error a test module reported at file end, as its reporter exposed it. A module-level `afterAll` throw —
+   * the fork's file-end vacuous verdict — lands here rather than on any test case (KTD8).
+   */
+  readonly moduleErrors: ReadonlyArray<RawError>
+}
+
+export interface ProbeRunOptions {
+  readonly globs: ReadonlyArray<string>
+  /** Replays a specific shuffle order; omit to let the runner draw one. */
+  readonly seed?: number | undefined
+  /** Shuffles within suites; the fork's `describe` defaults this on, so tests opt out explicitly. */
+  readonly shuffle?: boolean | undefined
+  readonly env?: Readonly<Record<string, string>> | undefined
+  /** The values the nested run publishes under `inject`; omit to leave every provided context unset. */
+  readonly provide?: Partial<ProvidedContext> | undefined
+  /** The worker pool the nested run uses; omit for `threads`, the in-process default. `forks` runs each file
+   * in a child process, which is what a cross-process journey observes. */
+  readonly pool?: 'threads' | 'forks' | undefined
+  /** Leaves the seed store on for the nested run. Off by default, because a probe run persists no store (KTD6);
+   * a scenario that asks for recording keeps its own budget and gets the built-in `record` default. */
+  readonly record?: boolean | undefined
+}
+
+/** Every nested-run failure carries this: what failed, and why. */
+export class ProbeFailure extends Schema.TaggedError<ProbeFailure>()('ProbeFailure', {
+  stage: Schema.String,
+  detail: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
+}) {}
+
+const claimFileName = (file: JsonTestFile): string => file.name
+
+/** Every test file of the nested run, by the path Vitest recorded for it. */
+export const fileNamesOf = (report: JsonReport): ReadonlyArray<string> => report.testResults.map(claimFileName)
+
+/** Every assertion of the nested run, flattened across files. */
+export const namesOf = (report: JsonReport): ReadonlyArray<string> =>
+  report.testResults.flatMap((file) => file.assertionResults.map((assertion) => assertion.fullName))
+
+export const fileOf: {
+  (suffix: string): (report: JsonReport) => JsonTestFile
+  (report: JsonReport, suffix: string): JsonTestFile
+} = Function.dual(2, (report: JsonReport, suffix: string): JsonTestFile => {
+  const found = report.testResults.find((file) => file.name.endsWith(suffix))
+  if (found !== undefined) return found
+  throw new ProbeFailure({
+    stage: 'locate file',
+    detail: `the nested run reported no file ending in ${JSON.stringify(suffix)}; it reported ${
+      fileNamesOf(report).length
+    } file(s)`,
+  })
+})
+
+export const assertionOf: {
+  (fullName: string): (report: JsonReport) => JsonAssertionResult
+  (report: JsonReport, fullName: string): JsonAssertionResult
+} = Function.dual(2, (report: JsonReport, fullName: string): JsonAssertionResult => {
+  const found = report
+    .testResults.flatMap((file) => file.assertionResults)
+    .find((assertion) => assertion.fullName === fullName)
+  if (found !== undefined) return found
+  throw new ProbeFailure({
+    stage: 'locate assertion',
+    detail: `the nested run reported no test named ${JSON.stringify(fullName)}; it reported ${
+      namesOf(report).length
+    } assertion(s)`,
+  })
+})
+
+/** The one error the named test reported, as Vitest's reporter exposed it. */
+export const errorOf: {
+  (fullName: string): (run: ProbeRun) => CapturedError
+  (run: ProbeRun, fullName: string): CapturedError
+} = Function.dual(2, (run: ProbeRun, fullName: string): CapturedError => {
+  const found = run.errors.find((error) => error.testName === fullName)
+  if (found !== undefined) return found
+  throw new ProbeFailure({
+    stage: 'locate error',
+    detail: `the nested run captured no error for ${
+      JSON.stringify(fullName)
+    }; it captured ${run.errors.length} error(s) for ${JSON.stringify(run.errors.map((error) => error.testName))}`,
+  })
+})
+
+/** Every failure message the named assertion collected, joined for a `toContain` check. */
+export const messagesOf: {
+  (fullName: string): (report: JsonReport) => string
+  (report: JsonReport, fullName: string): string
+} = Function.dual(2, (report: JsonReport, fullName: string): string =>
+  report
+    .testResults.flatMap((file) => file.assertionResults)
+    .filter((assertion) => assertion.fullName === fullName)
+    .flatMap((assertion) => assertion.failureMessages)
+    .join('\n'))
+
+/**
+ * The shape of one `Refuted` seed-store line (KTD6): the fork keeps its line grammar internal, so the harness
+ * mirrors the fields a failing property writes and decodes through them rather than parsing the text.
+ */
+export const SeedStoreRefutedShape = Schema.TaggedStruct('Refuted', {
+  property: Schema.String,
+  seed: Schema.Int,
+  attempt: Schema.Int,
+  size: Schema.Int,
+  path: Schema.Array(Schema.Int),
+  failure: Schema.Literals(['ReturnedFalse', 'PropertyError']),
+})
+
+export interface SeedStoreRefutedEntry extends Schema.Schema.Type<typeof SeedStoreRefutedShape> {}
+
+const SeedStoreLine = Schema.fromJsonString(SeedStoreRefutedShape)
+
+/** The path of the seed store a probe glob writes beside itself (KTD6). */
+export const seedStoreFileOf = (glob: string): string =>
+  fileURLToPath(new URL(`./probes/__property_seeds__/${basename(glob)}.jsonl`, import.meta.url))
+
+/** The `__property_seeds__` directory {@link seedStoreFileOf} lives in. */
+export const seedStoreDirOf = (glob: string): string => dirname(seedStoreFileOf(glob))
+
+/** Deletes the store a probe glob wrote, and its `__property_seeds__` directory when that leaves it empty. */
+export const removeSeedStore = (glob: string): void => {
+  const file = seedStoreFileOf(glob)
+  const dir = seedStoreDirOf(glob)
+  rmSync(file, { force: true })
+  if (existsSync(dir) && readdirSync(dir).length === 0) rmSync(dir, { recursive: true, force: true })
+}
+
+/** Every `Refuted` entry the probe glob's seed store holds, decoded through the line's JSON schema. */
+export const readSeedStore = (glob: string): Effect.Effect<ReadonlyArray<SeedStoreRefutedEntry>, ProbeFailure> =>
+  Effect.gen(function*() {
+    const text = yield* Effect.tryPromise({
+      try: () => readFile(seedStoreFileOf(glob), 'utf8'),
+      catch: (cause) =>
+        new ProbeFailure({ stage: 'store', detail: `the seed store beside ${glob} could not be read`, cause }),
+    })
+    const lines = text.split('\n').filter((line) => line.length > 0)
+    return yield* Effect.forEach(
+      lines,
+      (line) =>
+        Schema.decodeEffect(SeedStoreLine)(line).pipe(
+          Effect.mapError(() =>
+            new ProbeFailure({ stage: 'store', detail: `the seed store beside ${glob} holds an undecodable line` })
+          ),
+        ),
+      { concurrency: 1 },
+    )
+  })
+
+const asInclude = (glob: string): string => {
+  if (glob.startsWith('/') || glob.startsWith('tests/')) return glob
+  return `tests/__fixtures__/probes/${glob}`
+}
+
+const CHECK_DEFAULTS = '@systemfsoftware/vitest:property-check'
+
+const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null
+
+const checkDefaultsOf = (provide: Partial<ProvidedContext> | undefined): object =>
+  Option.getOrElse(Option.filter(Option.fromNullishOr(provide?.[CHECK_DEFAULTS]), isObject), () => ({}))
+
+/**
+ * The provided context every nested probe run publishes: the scenario's own property-check budget, with recording
+ * turned off, because a probe run persists no seed store by default (KTD6). A scenario's `runs` and `maxShrinks`
+ * survive.
+ */
+const withoutRecording = (provide: Partial<ProvidedContext> | undefined): Partial<ProvidedContext> => ({
+  ...provide,
+  [CHECK_DEFAULTS]: { ...checkDefaultsOf(provide), record: false },
+})
+
+/** The provided context a nested probe run publishes: recording off unless the scenario asked to keep its store. */
+const recordingBudgetOf = (
+  provide: Partial<ProvidedContext> | undefined,
+  record: boolean | undefined,
+): Partial<ProvidedContext> =>
+  record === true ? { ...provide, [CHECK_DEFAULTS]: { ...checkDefaultsOf(provide) } } : withoutRecording(provide)
+
+/** Runs the named probe fixtures in one nested Vitest run and returns everything it exposed. */
+export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, ProbeFailure> =>
+  Effect.gen(function*() {
+    if (options.globs.length === 0) {
+      return yield* new ProbeFailure({ stage: 'prepare', detail: 'probes: name at least one fixture glob' })
+    }
+    const evidenceFiles = options.globs.map(evidenceFilePath)
+    const consoleLines: Array<ConsoleLine> = []
+    const capturedErrors: Array<CapturedError> = []
+    const moduleErrors: Array<RawError> = []
+    const report = yield* Effect.acquireUseRelease(
+      Effect.gen(function*() {
+        const workdir = yield* Effect.tryPromise({
+          try: () => mkdtemp(join(tmpdir(), 'vitest-conformance-')),
+          catch: (cause) => new ProbeFailure({ stage: 'prepare', detail: 'probes: no report directory', cause }),
+        })
+        const outputFile = join(workdir, 'report.json')
+        evidenceFiles.forEach((file) => rmSync(file, { force: true }))
+        const vitest = yield* Effect.tryPromise({
+          try: () =>
+            startVitest(
+              'test',
+              [],
+              {
+                root: packageRoot,
+                config: false,
+                include: options.globs.map(asInclude),
+                run: true,
+                watch: false,
+                pool: options.pool ?? 'threads',
+                passWithNoTests: false,
+                bail: 0,
+                silent: true,
+                setupFiles: guardSetupFiles,
+                reporters: [
+                  ['json', { outputFile }],
+                  {
+                    onUserConsoleLog: (log: UserConsoleLog): void => {
+                      consoleLines.push({ type: log.type, content: log.content })
+                    },
+                    onTestCaseResult: (testCase: TestCase): void => {
+                      const errors = testCase.result().errors ?? []
+                      errors.forEach((error) => {
+                        capturedErrors.push({
+                          testName: testCase.fullName,
+                          raw: error,
+                          name: error.name ?? 'Error',
+                          message: error.message,
+                          stack: error.stack,
+                          actual: error.actual,
+                          expected: error.expected,
+                          diff: error.diff,
+                        })
+                      })
+                    },
+                    onTestModuleEnd: (testModule: TestModule): void => {
+                      testModule.errors().forEach((error) => {
+                        moduleErrors.push(error)
+                      })
+                    },
+                  },
+                ],
+                testTimeout: 60_000,
+                hookTimeout: 60_000,
+                sequence: {
+                  shuffle: options.shuffle ?? false,
+                  ...(options.seed === undefined ? {} : { seed: options.seed }),
+                },
+                provide: recordingBudgetOf(options.provide, options.record),
+                ...(options.env === undefined ? {} : { env: { ...options.env } }),
+              },
+              {
+                resolve: {
+                  alias: {
+                    '@systemfsoftware/vitest/failure': forkFailure,
+                    '@systemfsoftware/vitest/integration': forkIntegration,
+                    '@systemfsoftware/vitest/guard': forkGuard,
+                    '@systemfsoftware/vitest/TestClock': forkTestClock,
+                    '@systemfsoftware/vitest': forkEntry,
+                    'effect/TestClock': forkTestClock,
+                  },
+                },
+              },
+            ),
+          catch: (cause) => new ProbeFailure({ stage: 'start', detail: 'nested run failed to start', cause }),
+        })
+        const seed = vitest.getSeed()
+        yield* Effect.tryPromise({
+          try: () => vitest.close(),
+          catch: (cause) => new ProbeFailure({ stage: 'close', detail: 'nested run failed to close', cause }),
+        })
+        return {
+          cleanup: Effect.promise(() =>
+            rm(workdir, { recursive: true, force: true }).then(() => {
+              evidenceFiles.forEach((file) => rmSync(file, { force: true }))
+            })
+          ),
+          evidenceFiles,
+          outputFile,
+          seed,
+        }
+      }),
+      (run) =>
+        Effect.gen(function*() {
+          const json = yield* Effect.tryPromise({
+            try: () => readFile(run.outputFile, 'utf8'),
+            catch: (cause) => new ProbeFailure({ stage: 'report', detail: 'nested run wrote no JSON report', cause }),
+          })
+          const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(ReportShape))(json).pipe(
+            Effect.mapError(() =>
+              new ProbeFailure({ stage: 'report', detail: 'nested report has an unexpected shape' })
+            ),
+          )
+          const evidence = evidenceIn(run.evidenceFiles)
+          return {
+            console: [...consoleLines],
+            errors: [...capturedErrors],
+            evidence,
+            moduleErrors,
+            report: decoded,
+            seed: run.seed,
+          }
+        }),
+      (run, exit) => run.cleanup.pipe(Effect.andThen(exit)),
+    )
+    return report
+  })
+
+/** Runs the named probe fixtures in one nested Vitest run and returns its JSON report. */
+export const runFixtures = (globs: ReadonlyArray<string>): Effect.Effect<JsonReport, ProbeFailure> =>
+  runProbes({ globs }).pipe(Effect.map((run) => run.report))

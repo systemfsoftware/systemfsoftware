@@ -5,7 +5,10 @@
 ```ts
 
 // @public
-export function createPackage(files: Record<string, string | Uint8Array>, packageName?: string, packageVersion?: string): Package;
+export const createPackage: {
+    (packageName?: string, packageVersion?: string): (files: Record<string, string | Uint8Array>) => Package;
+    (files: Record<string, string | Uint8Array>, packageName?: string, packageVersion?: string): Package;
+};
 
 // @public (undocumented)
 export function createPackageFromTarballData(tarball: Uint8Array): Package;
@@ -14,8 +17,17 @@ export function createPackageFromTarballData(tarball: Uint8Array): Package;
 export type DirectoryJSON = Record<string, string | Uint8Array | null>;
 
 // @public (undocumented)
-export class Package {
-    constructor(files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string);
+export const makePackage: {
+    (packageName: string, packageVersion: string, resolvedUrl?: string): (files: Record<string, string | Uint8Array>) => Package;
+    (files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+};
+
+// @public (undocumented)
+export interface Package {
+    // Warning: (ae-forgotten-export) The symbol "TypeId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly [TypeId]: TypeId;
     // (undocumented)
     directoryExists(path: string): boolean;
     // (undocumented)
@@ -34,17 +46,32 @@ export class Package {
     tryReadBytes(path: string): string | Uint8Array | undefined;
     // (undocumented)
     tryReadFile(path: string): string | undefined;
+    // (undocumented)
     withOverlay(other: Package): Package;
 }
+
+// @public (undocumented)
+export const Package: {
+    make: {
+        (packageName: string, packageVersion: string, resolvedUrl?: string): (files: Record<string, string | Uint8Array>) => Package;
+        (files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+    };
+};
 
 // @public
 export function packPackage(pkg: Package): Uint8Array;
 
 // @public
-export function packTree(files: Record<string, string | Uint8Array>, packageName: string): Uint8Array;
+export const packTree: {
+    (packageName: string): (files: Record<string, string | Uint8Array>) => Uint8Array;
+    (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array;
+};
 
 // @public
-export function toDirectoryJSON(files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON;
+export const toDirectoryJSON: {
+    (packageName?: string): (files: Record<string, string | Uint8Array>) => DirectoryJSON;
+    (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON;
+};
 
 // (No @packageDocumentation comment for this package)
 

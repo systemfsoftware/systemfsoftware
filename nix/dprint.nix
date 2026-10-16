@@ -18,14 +18,6 @@ let
       target = "aarch64-unknown-linux-gnu";
       sha256 = "6b86329e17678ff3358f88d69a3774d371b601c665cc8cebbf2a4e1234a6d289";
     };
-    x86_64-darwin = {
-      target = "x86_64-apple-darwin";
-      sha256 = "fdbffa16cf0890ca30e958ffdabe7748e733867651a438ede1501f0e1a7b5e91";
-    };
-    aarch64-darwin = {
-      target = "aarch64-apple-darwin";
-      sha256 = "1d6a8fb14d66cba0f049738edd4ab3b1afc1de6d936cd32e483e33284cfd1ade";
-    };
   };
 
   system = stdenvNoCC.hostPlatform.system;

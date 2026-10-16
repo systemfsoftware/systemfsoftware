@@ -1,3 +1,4 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
 import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
@@ -17,9 +18,12 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
-    } else if (typeof entry === 'object' && entry !== null) {
+    } else if (typeof entry === 'object' && Boolean(entry)) {
       const { default: defaultEntry, types: _existingTypes, ...rest } = entry
-      const withDefault = typeof defaultEntry === 'string' ? { default: defaultEntry } : {}
+      let withDefault: Record<string, string> = {}
+      if (typeof defaultEntry === 'string') {
+        withDefault = { default: defaultEntry }
+      }
       exports[subpath] = { ...rest, types, ...withDefault }
     }
   }
@@ -27,6 +31,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
+  ...quietBuild,
   // The root entry is the whole public surface. Declaring `exports` here is what
   // makes the build own the exports map, so a hand-edited map cannot drift from
   // what the build actually emits.
@@ -34,7 +39,7 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   clean: true,
-  exports: { customExports: injectTypes },
+  exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   deps: {

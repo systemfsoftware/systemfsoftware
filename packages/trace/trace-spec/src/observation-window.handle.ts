@@ -1,0 +1,167 @@
+import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
+import type { Attributes, AttributeValue as OtelAttributeValue } from '@opentelemetry/api'
+import { SpanStatusCode } from '@opentelemetry/api'
+import {
+  AlwaysOnSampler,
+  BasicTracerProvider,
+  type ReadableSpan,
+  type SpanProcessor,
+} from '@opentelemetry/sdk-trace-base'
+import { Handle } from '@systemfsoftware/effect-cell-types'
+import type { Span } from '@systemfsoftware/trace-taxonomy'
+import { Context, Effect } from 'effect'
+import { dual } from 'effect/Function'
+import { EmptyObservationError } from './EmptyObservationError.schema.js'
+import { Observation } from './Observation.service.js'
+import type { ObservationWindowSpec } from './ObservationWindowSpec.schema.js'
+import type { SpanEvent, SpanLink, SpanRecord, Status } from './TraceGraph.schema.js'
+
+export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow')
+export type TypeId = typeof TypeId
+
+/**
+ * The finished-span storage a window reads back through.
+ */
+interface SpanRecordStore {
+  readonly getFinishedSpans: () => ReadonlyArray<ReadableSpan>
+}
+
+const ObservationWindow = Handle.make<
+  { readonly serviceName: string },
+  { readonly store: SpanRecordStore; readonly provider: BasicTracerProvider }
+>()(TypeId)
+
+export type ObservationWindow = Handle.Of<typeof ObservationWindow>
+
+/**
+ * Records every finished span the moment it ends, and answers `shutdown`
+ * inline. The OpenTelemetry `InMemorySpanExporter` defers its result callback
+ * to a `setTimeout`, a real timer the kernel must fail as an escaped schedule;
+ * a window records nothing that waits, so it records synchronously.
+ */
+const spanRecorder = (): { readonly processor: SpanProcessor; readonly store: SpanRecordStore } => {
+  const finishedSpans: Array<ReadableSpan> = []
+  let stopped = false
+  return {
+    processor: {
+      onStart: () => undefined,
+      onEnd: (span) => {
+        if (!stopped) finishedSpans.push(span)
+      },
+      shutdown: () => {
+        stopped = true
+        finishedSpans.length = 0
+        return Promise.resolve()
+      },
+      forceFlush: () => Promise.resolve(),
+    },
+    store: { getFinishedSpans: () => finishedSpans },
+  }
+}
+
+export const isObservationWindow = ObservationWindow.is
+
+export const make = (spec: ObservationWindowSpec): ObservationWindow => {
+  const { processor, store } = spanRecorder()
+  const provider = new BasicTracerProvider({
+    sampler: new AlwaysOnSampler(),
+    spanProcessors: [processor],
+  })
+  return ObservationWindow.make({ serviceName: spec.serviceName }, { store, provider })
+}
+
+export const shutdown = (self: ObservationWindow): Effect.Effect<void> =>
+  Effect.promise(() => ObservationWindow.slot(self).provider.shutdown())
+
+const SCALAR_TYPES: Record<string, true> = { string: true, number: true, boolean: true }
+
+const isScalar = (value: unknown): value is string | number | boolean => SCALAR_TYPES[typeof value] === true
+
+type OtelScalarArray = ReadonlyArray<string | number | boolean | null | undefined>
+
+const scalarArrayOrNull = (value: OtelAttributeValue): Span.AttributeValue | null =>
+  Array.isArray(value) ? (value satisfies OtelScalarArray).filter(isScalar) : null
+
+const definedOrEmpty = (value: OtelAttributeValue | undefined): OtelAttributeValue => value ?? []
+
+const attributeValue = (value: OtelAttributeValue | undefined): Span.AttributeValue | null =>
+  isScalar(value) ? value : scalarArrayOrNull(definedOrEmpty(value))
+
+const isPresent = (
+  entry: readonly [string, Span.AttributeValue | null],
+): entry is readonly [string, Span.AttributeValue] => entry[1] !== null
+
+const attributeRecordOf = (attributes: Attributes): Record<string, Span.AttributeValue> =>
+  Object.fromEntries(
+    Object.entries(attributes)
+      .map((entry): readonly [string, Span.AttributeValue | null] => [entry[0], attributeValue(entry[1])])
+      .filter(isPresent),
+  )
+
+const STATUS_BY_CODE: Record<number, Status> = {
+  [SpanStatusCode.OK]: 'ok',
+  [SpanStatusCode.ERROR]: 'error',
+  [SpanStatusCode.UNSET]: 'unset',
+}
+
+const statusOf = (code: SpanStatusCode): Status => STATUS_BY_CODE[code] ?? 'unset'
+
+const errorTypeOf = (attributes: Record<string, Span.AttributeValue>): string | null => {
+  const value = attributes['error.type']
+  return typeof value === 'string' ? value : null
+}
+
+const parentOf = (span: ReadableSpan): string | null => {
+  const parent = span.parentSpanContext
+  return parent === undefined ? null : parent.spanId
+}
+
+const eventsOf = (span: ReadableSpan): ReadonlyArray<SpanEvent> =>
+  span.events.map((event): SpanEvent => ({ name: event.name, attributes: attributeRecordOf(event.attributes ?? {}) }))
+
+const linksOf = (span: ReadableSpan): ReadonlyArray<SpanLink> =>
+  span.links.map((link): SpanLink => ({ traceId: link.context.traceId, spanId: link.context.spanId }))
+
+const millisOf = (duration: readonly [number, number]): number => duration[0] * 1_000 + duration[1] / 1_000_000
+
+const spanRecordOf = (span: ReadableSpan): SpanRecord => {
+  const attributes = attributeRecordOf(span.attributes)
+  return {
+    traceId: span.spanContext().traceId,
+    spanId: span.spanContext().spanId,
+    parentSpanId: parentOf(span),
+    name: span.name,
+    status: statusOf(span.status.code),
+    errorType: errorTypeOf(attributes),
+    startMillis: millisOf(span.startTime),
+    durationMillis: millisOf(span.duration),
+    attributes,
+    events: eventsOf(span),
+    links: linksOf(span),
+  }
+}
+
+const emptyObservation = (traceId: string): EmptyObservationError =>
+  new EmptyObservationError({
+    traceId,
+    detail: 'the observation window closed with no span carrying the stimulated trace id',
+  })
+
+const recordsOf = (self: ObservationWindow, traceId: string): ReadonlyArray<SpanRecord> =>
+  ObservationWindow.slot(self).store.getFinishedSpans()
+    .filter((span) => span.spanContext().traceId === traceId)
+    .map(spanRecordOf)
+
+export const collect: {
+  (traceId: string): (self: ObservationWindow) => Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError>
+  (self: ObservationWindow, traceId: string): Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError>
+} = dual(2, (self: ObservationWindow, traceId: string) =>
+  Effect.suspend(() => {
+    const records = recordsOf(self, traceId)
+    return records.length > 0 ? Effect.succeed(records) : Effect.fail(emptyObservation(traceId))
+  }))
+
+export const context = (self: ObservationWindow): Context.Context<Observation | OtelTracer.OtelTracerProvider> =>
+  Context.make(Observation, { collect: (traceId) => collect(self, traceId) }).pipe(
+    Context.add(OtelTracer.OtelTracerProvider, ObservationWindow.slot(self).provider),
+  )

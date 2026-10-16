@@ -69,10 +69,7 @@ const pkgDirOf = (pkgName) => {
   throw new Error(`package not found: ${pkgName}`)
 }
 
-const reportPathOf = (dir) => {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, dir, 'stryker.config.json'), 'utf8'))
-  return path.join(ROOT, dir, cfg.jsonReporter?.fileName ?? 'reports/mutation-report.json')
-}
+const reportPathOf = (dir) => path.join(ROOT, dir, 'reports/mutation/mutation.json')
 
 const run = (pkg, opts) =>
   new Promise((resolve) => {

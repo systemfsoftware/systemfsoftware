@@ -1,0 +1,39 @@
+import { Cause, Exit } from 'effect'
+
+import { DisparityFailure } from './DisparityFailure.schema.js'
+
+export { DisparityFailure }
+
+export interface DisparityRecord<Input = unknown> {
+  readonly input: Input
+  readonly outputA: string
+  readonly outputB: string
+  readonly trace: string
+  readonly reproSnippet: string
+}
+
+const stringify = <V = unknown>(value: V): string | undefined => {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return undefined
+  }
+}
+
+export const renderUnknown = <V = unknown>(value: V): string => stringify(value) ?? String(value)
+
+export const renderExit = <A, E>(exit: Exit.Exit<A, E>): string =>
+  Exit.isSuccess(exit) ? renderUnknown(exit.value) : Cause.pretty(exit.cause)
+
+export const formatDisparity = (record: DisparityRecord): string => {
+  const lines = [
+    `Differential test failed!`,
+    `Input: ${renderUnknown(record.input)}`,
+    `Output A: ${record.outputA}`,
+    `Output B: ${record.outputB}`,
+    `Trace: ${record.trace}`,
+    `Reproduction Snippet:`,
+    record.reproSnippet,
+  ]
+  return lines.join('\n')
+}

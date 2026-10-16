@@ -1,253 +1,265 @@
 # @systemfsoftware/effect-cell-types
 
-The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, a `Result` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships exactly one runtime value — the identity constructor `make` — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
+Build [Effect](https://effect.website) services as cells: a pure decision with I/O on either side of it, where the compiler checks the parts that are easy to get wrong.
 
-## The contract
-
-```ts
-import type { Workflow } from '@systemfsoftware/effect-cell-types'
-
-type Decide = Workflow<Command, Decision, Error>
-//          = ((command: Command) => Result<Decision, Error>) & WorkflowBrand
-```
-
-When both channels are inhabited, `Workflow<Command, Decision, Error>` is the function type
-`(command: Command) => Result<Decision, Error>` carrying the nominal `WorkflowBrand`
-conjunct — a phantom readonly TypeId-keyed field that no runtime property backs. The brand
-is what makes the workbook nominal: `Workflow.make` is the only constructor that applies
-it, and every surface that runs a decision — the `decide` member a `Cell.layer` spec
-demands — requires it, so a decision that skipped `make` is a compile error at the call site that would have run it, with the brand named in the diagnostic. A `never` channel does
-not silently collapse to that function: it resolves to a marker interface that no function
-can satisfy, so the mistake is a compile error with the remediation attached (below). The
-success channel is shaped the same way: `Workflow.make` refuses a decision channel that is
-not a tagged union of at least two schema tagged classes sharing one TypeId — a single
-outcome, an untagged variant, or variants with divergent family brands each resolve to a
-marker interface whose property name is the remediation.
-
-## The constructor
-
-Executors build a workflow from the command's schema class and a decider over that class — runtime identity, one assertion across the branded return:
-
-```ts
-import { make } from '@systemfsoftware/effect-cell-types'
-import { Result } from 'effect'
-import * as S from 'effect/Schema'
-
-export class DecideInput extends S.Class<DecideInput>('DecideInput')({
-  exitSuccess: S.Boolean,
-}) {}
-
-export const decide = make(
-  DecideInput,
-  (input) => (input.exitSuccess
-    ? Result.succeed(new RestartDecisionContinue())
-    : Result.fail(new RestartDecisionExhausted())),
-)
-```
-
-The command is constrained on the **value**, not on a type parameter inferred from the decider's parameter, and that is the whole mechanism. A constraint on such a parameter is a structural predicate, and TypeScript cannot express "this type came from a class declaration" — so a marker placed there is just a property, and `interface Fake extends Marker {}` satisfies it. A declared type produces no value, so it cannot reach an argument position at all: an interface at the command position is refused with "only refers to a type, but is being used as a value here". `Schema.Class` and `Schema.TaggedClass` are both accepted; a `Schema.Struct`, a plain class, an object literal and a primitive are each refused.
-
-No type argument needs writing: the command type comes from the class, so the decider's parameter needs no annotation. The `never`-channel conditional still lives on the **return** type, so a total decision (`Result<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
-
-## Worked example
-
-`decideRestart` in `@systemfsoftware/effect-daemon-spec` (`src/internal/restart-decision.workflow.ts`) is the real consumer — a supervisor deciding what to do when a child exits. The sibling schema file, which defines `DecideInput` and `RestartStrategy`, is elided here.
-
-```ts
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Result } from 'effect'
-import * as Match from 'effect/Match'
-import * as S from 'effect/Schema'
-
-const RestartDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon/RestartDecision',
-)
-type RestartDecisionTypeId = typeof RestartDecisionTypeId
-
-export class RestartDecisionContinue extends S.TaggedClass<RestartDecisionContinue>()('Continue', {}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-export class RestartDecisionRestart extends S.TaggedClass<RestartDecisionRestart>()('Restart', {
-  indices: S.NonEmptyArray(S.Int),
-}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhausted>()('Exhausted', {}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-const restartIndicesFor = (
-  strategy: RestartStrategy,
-  failedIndex: number,
-  total: number,
-): readonly [number, ...readonly number[]] =>
-  Match.value(strategy).pipe(
-    Match.when('one_for_one', () => [failedIndex] as const),
-    Match.when(
-      'one_for_all',
-      () => [0, ...Array.from({ length: Math.max(0, total - 1) }, (_, i) => i + 1)] as const,
-    ),
-    Match.when(
-      'rest_for_one',
-      () =>
-        [
-          failedIndex,
-          ...Array.from({ length: Math.max(0, total - failedIndex - 1) }, (_, i) => failedIndex + 1 + i),
-        ] as const,
-    ),
-    Match.exhaustive,
-  )
-
-export const decideRestart = Workflow.make(
-  DecideInput,
-  (input): Result.Result<
-    RestartDecisionContinue | RestartDecisionRestart,
-    RestartDecisionExhausted
-  > =>
-    Match.value(input).pipe(
-      Match.when({ exitSuccess: true }, () => Result.succeed(new RestartDecisionContinue())),
-      Match.when(
-        { exitSuccess: false, intensityExceeded: true },
-        () => Result.fail(new RestartDecisionExhausted()),
-      ),
-      Match.orElse(() =>
-        Result.succeed(
-          new RestartDecisionRestart({
-            indices: restartIndicesFor(input.strategy, input.failedIndex, input.totalChildren),
-          }),
-        )
-      ),
-    ),
-)
-```
-
-The shape to copy: one exported decision built by `Workflow.make`, taking the command's
-schema class and a decider over that class, whose body returns `Result` values via
-`Result.succeed` and `Result.fail`. The command channel comes from the class, the decision
-and error channels are inferred from the annotated return, and `make` is the only door to
-the `WorkflowBrand` conjunct — annotating a function `Workflow<…>` directly is still refused
-wherever the brand is demanded, because a workflow that never passed through `make` is not a
-decision anything may run. The error channel is a real variant (`RestartDecisionExhausted`) —
-giving up is a decision the caller must branch on, so declaring the error channel `never` is
-rejected, not allowed.
-
-## What it rejects at compile time
-
-All six violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
-
-| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                               |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                                    |
-| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input                   |
-| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                                   |
-| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; fold the function into its owning module                                            |
-| An untagged error variant                 | `Type '...' is not assignable to type 'UntaggedError'`                                    | an error variant needs a `_tag` a consumer can dispatch on; declare the errors as `S.TaggedError` instances                      |
-| A single-variant decision channel         | `Type '...' is not assignable to type 'SingleVariantDecision'`                            | a decision chooses between at least two distinguishable outcomes; one variant is a calculation wearing a decision's shape        |
-| An untagged decision variant              | `Type '...' is not assignable to type 'UntaggedDecision'`                                 | a decision variant needs a `_tag` a consumer can dispatch on; declare the variants as `S.TaggedClass` instances                  |
-| Decision variants with no shared TypeId   | `Type '...' is not assignable to type 'UnsharedTypeId'`                                   | one decision family carries one TypeId — a `Symbol.for` brand on every variant class                                             |
-| A bare decider in a `Cell.layer` spec     | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies the `decide` member; a lambda that skipped `make` is not a decision a description may run |
-| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle                    |
-
-The two `never` cases are where the content-vs-filename distinction pays off. `Workflow<C, never, E>` resolves to `UninhabitedDecision` and `Workflow<C, D, never>` to `UninhabitedError` — interfaces whose only property is required and whose _type_ is the remediation, so the compile error points at the fix:
-
-```ts
-export interface UninhabitedDecision {
-  readonly __WORKFLOW_DECISION_CHANNEL_IS_NEVER__:
-    'this workflow can never succeed; give it a decision variant it can return'
-}
-
-export interface UninhabitedError {
-  readonly __WORKFLOW_ERROR_CHANNEL_IS_NEVER__:
-    'this workflow cannot fail, so it decides nothing; give it an error variant or fold the function into its owning module'
-}
-
-export interface UntaggedError {
-  readonly __WORKFLOW_ERROR_CHANNEL_CARRIES_NO_TAG__:
-    'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
-}
-
-export interface SingleVariantDecision {
-  readonly __WORKFLOW_DECISION_CHANNEL_HAS_ONE_VARIANT__:
-    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or fold the function into its owning module'
-}
-
-export interface UntaggedDecision {
-  readonly __WORKFLOW_DECISION_CHANNEL_CARRIES_NO_TAG__:
-    'a decision variant carries no _tag the consumer can dispatch on; declare the variants as S.TaggedClass instances'
-}
-
-export interface UnsharedTypeId {
-  readonly __WORKFLOW_DECISION_VARIANTS_DO_NOT_SHARE_A_TYPE_ID__:
-    'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
-}
-```
-
-The `never` checks use `[Decision] extends [never]`, not `Decision extends never`: the tuple wrap stops conditional-type distribution, without which `never` satisfies the conditional vacuously and the marker is never reached.
-
-## Result.gen bodies work — and are checked more tightly
-
-A `Workflow.make` body may be a `Result.gen` generator, so long as it stays one path:
-the failing outcome rides an arm of an exhaustive dispatch, and the generator yields
-the outcome once:
-
-```ts
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Result } from 'effect'
-import * as Match from 'effect/Match'
-import * as S from 'effect/Schema'
-
-class Decision {}
-class Err {
-  constructor(readonly reason: string) {}
-}
-class Input extends S.Class<Input>('Input')({ valid: S.Boolean }) {}
-
-const decide = Workflow.make(
-  Input,
-  (input): Result.Result<Decision, Err> =>
-    Result.gen(function*() {
-      const outcome = Match.value(input).pipe(
-        Match.when({ valid: false }, () => Result.fail(new Err('invalid input'))),
-        Match.orElse(() => Result.succeed(new Decision())),
-      )
-      return yield* outcome
-    }),
-)
-```
-
-A conditional `yield*` — an `if` or ternary that places a failing `yield*` on one path —
-opens a second path inside the decision and is refused by the `make-body-purity` lint
-rule; the failure must live on one path of the dispatch (or a first-statement guard that
-converges immediately), never behind a mid-body branch.
-
-`Result.gen` infers its error channel from the union of the `Result`s the body yields,
-so the failing arm above makes the inference exactly `Err` and the declaration holds. A
-body with **no** failing yield infers `unknown`, which does not satisfy a declared error
-type — so an unreachable error channel is rejected rather than silently allowed:
-
-```ts
-const decide = Workflow.make(
-  Input,
-  (input): Result.Result<Decision, Err> =>
-    Result.gen(function*() {
-      return new Decision()
-    }),
-)
-// tsc: Type 'Result<Decision, unknown>' is not assignable to type 'Result<Decision, Err>'
-```
-
-If the workflow genuinely cannot fail, the error channel says so — and that is a plain function inside its owning module, not a workflow.
-
-## A wrong channel breaks the whole consumer cone
-
-Measured on the real consumer: when `decideRestart`'s error channel was set to `never`, `tsc` produced errors in the workflow file, 11 in its property test, and 4 in a downstream executor (`supervisor-body.executor.ts`). A lint rule flags one file; a type breaks every consumer. The workflow file, its tests, and everything that calls it fail together, at compile time, before anything runs.
+A cell reads what it needs, decides, and writes the result. This package owns everything in between. It validates what was read against the workflow's command schema before the decision runs. It serializes the decision with the workflow's own schemas before any writing starts. And it only compiles the cell when the writer answers every outcome the decision can produce, plus malformed input. You write the reading, the pure decision, and one handler per outcome.
 
 ## Install
 
 ```bash
-pnpm add -D @systemfsoftware/effect-cell-types
+pnpm add @systemfsoftware/effect-cell-types 'effect@^4'
 ```
 
-A devDependency — consumers mostly use the types (`import type`), and the one runtime export, `make`, is an identity function. `effect` is a peer dependency: bring your own (you already have it).
+`effect` is a peer dependency. The package targets Effect 4 and runs anywhere Effect runs.
+
+## Quick start
+
+A stock reservation. The decision reserves the stock, backorders it, or refuses the request; the cell reads stock levels from an inventory service and books the reservation.
+
+```ts
+import { Cell, Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Context, Effect, Layer, Match, Result, Schema } from 'effect'
+
+// 1. The command, the outcomes, and the refusal are schemas.
+class ReserveStock extends Schema.TaggedClass<ReserveStock>()('ReserveStock', {
+  sku: Schema.String,
+  requested: Schema.Int,
+  onHand: Schema.Int,
+}) {
+  // Each field copied onto the cell's span, and the OpenTelemetry attribute key it is copied as.
+  static readonly [Workflow.InstrumentationBrand] = { sku: 'app.stock.sku', requested: 'app.stock.requested' } as const
+}
+
+// Every outcome of one decision carries the same family brand.
+const ReservationTypeId: unique symbol = Symbol.for('shop/Reservation')
+
+class Reserved extends Schema.TaggedClass<Reserved>()('Reserved', {
+  sku: Schema.String,
+  quantity: Schema.Int,
+}) {
+  readonly [ReservationTypeId] = ReservationTypeId
+}
+
+class Backordered extends Schema.TaggedClass<Backordered>()('Backordered', {
+  sku: Schema.String,
+  short: Schema.Int,
+}) {
+  readonly [ReservationTypeId] = ReservationTypeId
+}
+
+class InvalidQuantity extends Schema.TaggedError<InvalidQuantity>()('InvalidQuantity', {
+  requested: Schema.Int,
+}) {}
+
+// 2. The decision: synchronous and pure, with no services and no I/O.
+const reserveStock = Workflow.make({
+  command: ReserveStock,
+  decision: Schema.Union([Reserved, Backordered]),
+  error: InvalidQuantity,
+  decide: ({ sku, requested, onHand }) =>
+    Match.value(requested).pipe(
+      Match.when((n) => n <= 0, () => Result.fail(new InvalidQuantity({ requested }))),
+      Match.when((n) => n <= onHand, () => Result.succeed(new Reserved({ sku, quantity: requested }))),
+      Match.orElse(() => Result.succeed(new Backordered({ sku, short: requested - onHand }))),
+    ),
+})
+
+class Inventory extends Context.Service<Inventory, {
+  readonly onHand: (sku: string) => Effect.Effect<number>
+  readonly reserve: (sku: string, quantity: number) => Effect.Effect<void>
+}>()('Inventory') {}
+
+// 3. The cell: read the command, decide, write one handler per outcome.
+const reserveCell = Sandwich.named('inventory.reserve')((order: { readonly sku: string; readonly quantity: number }) =>
+  Effect.flatMap(Inventory, (inventory) =>
+    Effect.map(inventory.onHand(order.sku), (onHand) => ({
+      _tag: 'ReserveStock' as const,
+      sku: order.sku,
+      requested: order.quantity,
+      onHand,
+    })))
+)
+  .decide(reserveStock)
+  .write({
+    Reserved: ({ sku, quantity }) =>
+      Effect.flatMap(
+        Inventory,
+        (inventory) => Effect.as(inventory.reserve(sku, quantity), `reserved ${quantity} x ${sku}`),
+      ),
+    Backordered: ({ sku, short }) => Effect.succeed(`backordered ${sku}: ${short} short`),
+    InvalidQuantity: ({ requested }) => Effect.succeed(`refused: cannot reserve ${requested}`),
+    CommandRejected: ({ issue }) => Effect.fail(new Error(issue)),
+  })
+
+// 4. Wire the services once, then run the cell as often as you like.
+const InventoryInMemory = Layer.sync(Inventory, () => {
+  const stock = new Map([['mug', 3]])
+  return {
+    onHand: (sku) => Effect.sync(() => stock.get(sku) ?? 0),
+    reserve: (sku, quantity) => Effect.sync(() => stock.set(sku, (stock.get(sku) ?? 0) - quantity)),
+  }
+})
+
+const program = Effect.gen(function*() {
+  const context = yield* Layer.build(InventoryInMemory)
+  const reserve = Cell.provideContext(reserveCell, context)
+  return yield* Effect.forEach(
+    [{ sku: 'mug', quantity: 2 }, { sku: 'mug', quantity: 2 }, { sku: 'mug', quantity: 0 }],
+    (order) => reserve.run(order),
+  )
+})
+
+Effect.runPromise(Effect.scoped(program)).then(console.log)
+// [ 'reserved 2 x mug', 'backordered mug: 1 short', 'refused: cannot reserve 0' ]
+```
+
+A quantity of `1.5` never reaches the decision. It fails the command schema, so the `CommandRejected` handler runs with the schema's message, `Expected an integer at ["requested"]`.
+
+Delete any one handler from `.write({ ... })` and the file no longer compiles. Add a handler for a tag the decision can never produce and it no longer compiles either.
+
+## How a run works
+
+Every run is one pass through five phases. You write three of them; the library runs the other two from the workflow's schemas, so neither can be skipped.
+
+```mermaid
+flowchart LR
+  R[read] --> D{decode with the command schema}
+  D -- invalid --> CR[CommandRejected handler]
+  D -- valid --> W[decide]
+  W --> E[encode with the decision or error schema]
+  E --> H[the handler for that tag]
+```
+
+| Phase    | Written by | What happens                                                                                          |
+| -------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| `read`   | you        | an `Effect` that gathers the command in its serialized (`Encoded`) form; it may use services and fail |
+| `decode` | library    | the workflow's command schema validates what `read` returned; a failure goes to `CommandRejected`     |
+| `decide` | you        | the workflow's pure `decide` function returns a `Result` of a decision or a domain error              |
+| `encode` | library    | the decision or error is serialized with its own schema, so handlers never see domain class instances |
+| `write`  | you        | the handler whose key is the outcome's `_tag` runs; its answer is the cell's answer                   |
+
+Each handler receives the encoded outcome and, as its second argument, exactly what `read` returned. A cell's answer is whatever its handlers return, and its error and service channels are the union of what `read` and every handler can fail with or need. The phases are recorded on the cell as `cell.phases`.
+
+## Decisions
+
+`Workflow.make({ command, decision, error, decide })` is the only way to build a decision, and `.decide(...)` accepts nothing else. The value it returns is still a plain function, `(command) => Result<Decision, Error>`, so you can call it directly and property-test it without a cell.
+
+A decision takes one of two shapes:
+
+- **One outcome per run.** `decision` is a union of tagged classes, like `Reserved | Backordered` above. The decision must choose between at least two outcomes, counting its errors, so a single success class is fine when `error` can happen. Use `error: Schema.Never` for a decision that cannot fail.
+- **A list of events per run.** `decision` is `Schema.Array(Schema.Union([...]))`. The run produces zero or more past-tense facts, and the cell's answer is the list of handler answers, in order. Handlers run one after another and the first failure stops the rest; earlier handlers have already done their work.
+
+```ts
+const placeOrder = Workflow.make({
+  command: PlaceOrder,
+  decision: Schema.Array(Schema.Union([OrderPlaced, ReceiptRequested])),
+  error: Schema.Never,
+  decide: ({ orderId, email }) =>
+    Result.succeed([
+      new OrderPlaced({ orderId }),
+      ...(email === undefined ? [] : [new ReceiptRequested({ orderId, email })]),
+    ]),
+})
+// a cell over placeOrder answers ['placed o-1', 'receipt to ada@example.com']
+```
+
+The compiler refuses a decision that breaks these rules. Each refusal names the fix in the error message:
+
+| You wrote                                                        | The error names                               |
+| ---------------------------------------------------------------- | --------------------------------------------- |
+| a `decide` that returns an `Effect` instead of a `Result`        | a `Result` mismatch                           |
+| a `decision` of `Schema.Boolean`, or an outcome without a `_tag` | `UntaggedDecision`                            |
+| one success class and `error: Schema.Never`                      | `SingleVariantDecision`                       |
+| outcome classes without a shared family brand                    | `UnsharedTypeId`                              |
+| an outcome that is an `S.TaggedError`                            | `ErrorClassDecision`                          |
+| an error without a `_tag`                                        | `UntaggedError`                               |
+| a `decision` of `Schema.Never`                                   | `UninhabitedDecision`                         |
+| a command class without `[Workflow.InstrumentationBrand]`        | the missing `[InstrumentationBrand]` property |
+| a brand key that is not a field of the command                   | `InvalidInstrumentationKey`                   |
+| a brand value that is not a lowercase, dotted OpenTelemetry key  | `InvalidInstrumentationValue`                 |
+| a `read` whose result cannot be the command's `Encoded` form     | `ReadNotEncoded` or a type mismatch           |
+| a `write` missing a handler, or a handler typed on the class     | a missing property or parameter mismatch      |
+| a `write` with a handler for a tag no outcome carries            | `HandlerForNoVariant` on that key             |
+
+## Services
+
+Build the services once, where your program starts, and hand the result to the cell with `Cell.provideContext`. The context is not rebuilt on each run, so a scoped resource (a connection pool, a file handle) opens once and closes when the scope that built it closes.
+
+```ts
+const program = Effect.gen(function*() {
+  const context = yield* Layer.build(AppLayer) // once
+  const reserve = Cell.provideContext(reserveCell, context)
+  // run `reserve` as many times as needed
+})
+Effect.runPromise(Effect.scoped(program))
+```
+
+## Polling and retries
+
+A cell is always one pass. To poll or retry, repeat `cell.run` with Effect's own schedules and let the decision's tag say when to stop:
+
+```ts
+import { Effect, Predicate, Schedule } from 'effect'
+
+const awaitReady = (target: Target) =>
+  probeCell.run(target).pipe(
+    Effect.repeat({ schedule: Schedule.spaced('500 millis'), until: Predicate.isTagged('Ready') }),
+    Effect.timeoutOrElse({ duration: '30 seconds', orElse: () => Effect.succeed({ _tag: 'TimedOut' as const }) }),
+  )
+```
+
+Each pass is its own run, with its own span and duration sample.
+
+## Composing cells
+
+Cells are pipeable and combine with the functions on `Cell`:
+
+| Function                                         | What it does                                                                                  |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `map`, `mapInput`                                | change a cell's answer, or adapt its input                                                    |
+| `andThen`                                        | feed one cell's answer to the next cell, or pick the next cell from the answer                |
+| `flatMap`                                        | run a second cell on the same input, chosen from the first answer                             |
+| `zip`, `zipWith`                                 | run two cells on the same input and pair or combine their answers                             |
+| `gate`                                           | run a second cell only when the first answers `Option.some`                                   |
+| `collect`, `collectAll`                          | run a cell over a list; stop at the first failure, or keep every outcome                      |
+| `mapError`, `orElse`, `tap`, `match`             | react to failures of `read` or a handler, observe answers, or fold both into one              |
+| `provideContext`                                 | supply services built once                                                                    |
+| `succeed`, `fail`, `fromEffect`, `suspend`, `id` | cells that answer a constant, fail, lift an `Effect`, build lazily, or pass the input through |
+| `Do`, `bind`, `bindTo`, `let`                    | collect several cells' answers into one named record                                          |
+
+```ts
+import { Cell } from '@systemfsoftware/effect-cell-types'
+import { pipe } from 'effect'
+
+const summary = pipe(
+  Cell.Do,
+  Cell.bind('reservation', () => reserveCell),
+  Cell.let('length', ({ reservation }) => reservation.length),
+)
+// with Inventory provided, summary.run({ sku: 'mug', quantity: 2 }) answers { reservation: 'reserved 2 x mug', length: 16 }
+```
+
+Only failures of `read` and of handlers reach `mapError`, `orElse`, and the failure side of `match`. A domain error from the decision is an outcome with its own handler, so it arrives as an answer.
+
+Let a refusal's handler answer the refusal, and fail only when the handler's own work fails. A failed handler records the run as `infrastructure` and hands the refusal to the fallbacks, retries, and transactions built for runs that did not finish. When a published function must fail with the refusal, the code that runs the cell matches the answer by `_tag` and fails there.
+
+## Telemetry
+
+The name given to `Sandwich.named` must be a string literal without a unit suffix; the compiler rejects `'order_ms'` or a variable of type `string`. Each run then records:
+
+- a span with that name, with child spans `<name>.read` and `<name>.write`;
+- on that span, each command field in the `[Workflow.InstrumentationBrand]` map under its mapped key. Map only fields holding a string, number, or boolean: an object is copied as a raw object, which OTLP backends reject;
+- the span attribute `app.<name>.decision` or `app.<name>.failure`, holding the outcome's tag, plus the fields an outcome class maps with its own `[Workflow.InstrumentationBrand]`;
+- a duration histogram `app.<name>.duration` in seconds, labelled `result_class`: `success` when a decision was written, `failure` for a domain error or `CommandRejected`, `infrastructure` when `read` or a handler failed.
+
+`Workflow.SpanAttributes<typeof Command>` is the attribute record a command's map declares, so a span declaration elsewhere can be typed against it.
+
+The histogram uses `Sandwich.DEFAULT_DURATION_BOUNDARIES` unless you pass `{ boundaries }` as the second argument to `Sandwich.named`. The buckets belong to the name: two cells sharing a name share one histogram, and the boundaries declared first win.
+
+## Contributing
+
+The package lives in the [systemfsoftware monorepo](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-cell-types). Issues and pull requests are welcome there; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for how changes are checked and released.
+
+## License
+
+[Apache-2.0](./LICENSE)

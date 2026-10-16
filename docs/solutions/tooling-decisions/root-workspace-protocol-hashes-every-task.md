@@ -43,7 +43,7 @@ Turbo folds the workspace-root internal dependency set into `hashOfInternalDepen
 ## Solution
 
 1. Empty the root of every `workspace:` specifier. Consumers that run `stryker` declare the CLI and plugin set as their own developmentDependencies.
-2. Packages that `all` production-depends on must not `workspace:`-depend the CLI. They take published versions through a named catalog (`catalog:stryker`), the same mechanism as `catalog:attw`. See docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md.
+2. Packages that `all` production-depends on must not `workspace:`-depend the CLI. They take published versions through a named catalog (`catalog:stryker`), the same mechanism as `catalog:attw`.
 3. Packages outside that production fan-in (`daemon-spec`, `hex-schema`, omp plugins) keep `workspace:^` so they still mutate against the in-tree fork.
 4. Own-org registry pins skip the 24h `minimumReleaseAge` cutoff via `minimumReleaseAgeExclude: ["@systemfsoftware/*"]`. Third-party exclusions stay refused.
 
@@ -64,6 +64,5 @@ Turbo folds the workspace-root internal dependency set into `hashOfInternalDepen
 
 ## Related
 
-- docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
 - docs/solutions/tooling-decisions/turbo-cache-requires-complete-input-hash.md
 - GitHub issue 285

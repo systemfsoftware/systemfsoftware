@@ -65,9 +65,3 @@ A hook or runner command string containing `deno run` with **no** `--config` fla
 ## Verification
 
 The two-sided probe that settles the mechanism, run from a foreign cwd on a script under a config-less directory: without `--config`, the run fails with `Import "@std/path" not a dependency`; with `--config <plugin>/deno.jsonc`, it resolves. The post-fix smoke: both hook commands, executed from a foreign cwd, exit 0 on contentless payloads (branch `oxlint-guard-cleanup`, PR pending).
-
-## Related
-
-- `docs/solutions/runtime-errors/hook-subprocess-drops-path.md` — the child-environment invariant: bridge env keys (including `CLAUDE_PLUGIN_ROOT`) are stamped onto the hook child, which is what makes the absolute interpolated path valid
-- `docs/solutions/integration-issues/settings-catalog-cannot-see-plugin-hooks.md` — a plugin's hook file is only active when the plugin is enabled; the plugin root env names the root
-- `docs/solutions/build-errors/install-time-tool-resolution-must-not-use-path.md` — the sibling discipline: an executed tool is resolved by a mechanism outside the ambient environment, not left to lookup

@@ -7,8 +7,10 @@
 import * as Rx from 'rxjs';
 import { Stream } from 'effect';
 
+// Warning: (ae-forgotten-export) The symbol "AnyError" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const fromObservable: <E>(onError: (error: unknown) => E) => <A>(observable: Rx.Observable<A>) => Stream.Stream<A, E>;
+export const fromObservable: <E>(onError: (error: AnyError) => E) => <A>(observable: Rx.Observable<A>) => Stream.Stream<A, E>;
 
 // (No @packageDocumentation comment for this package)
 

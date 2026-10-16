@@ -1,3 +1,7 @@
+---
+problem_type: architecture_pattern
+---
+
 # An Escape Hatch Is An Unfalsified Hypothesis
 
 Decision: a prohibition ships no allowlist, no per-package disable and no filename exemption until

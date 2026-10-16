@@ -1,3 +1,7 @@
+---
+problem_type: architecture_pattern
+---
+
 # A Rename Branch Meets an Upstream Refactor: Port Under the Conforming Name
 
 ## Context

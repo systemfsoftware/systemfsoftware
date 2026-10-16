@@ -11,8 +11,11 @@ interface ITestCase {
   run: () => unknown;
 }
 
-const EXPECTED_CASES = 205;
+const EXPECTED_CASES = 216;
 const UNIT_CASES = new Set([
+  "case_vite_compiler_watch_resources_are_bounded_by_scope",
+  "case_vite_compiler_watch_fallback_work_is_bounded",
+  "case_vite_compiler_watch_tracks_subscription_and_alias_boundaries",
   "case_adapter_entrypoints_support_node_cjs_require",
   "case_adapter_entrypoints_support_node_esm_default_import",
   "case_bun_adapter_excludes_nul_virtual_ids",

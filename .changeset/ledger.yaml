@@ -47,6 +47,19 @@
   dir: packages/oxlint-plugin/all
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/all@2.1.0":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - oxlint-preset-cell-rules-retired
+"@systemfsoftware/all@2.1.1":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - effect-rc116-vitest5-deps
+    - rare-bars-sip
+"@systemfsoftware/all@2.1.2":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -137,6 +150,91 @@
     - effect-rc112
     - modern-ends-know
     - projections-collapsed-into-ports
+"@systemfsoftware/conformance-spec@0.1.0":
+  dir: packages/conformance-spec
+  intents:
+    - calm-fishes-sit
+    - lazy-pens-remain
+"@systemfsoftware/conformance-spec@0.2.0":
+  dir: packages/sim/conformance-spec
+  intents:
+    - famous-camels-kiss
+"@systemfsoftware/conformance-spec@1.0.0":
+  dir: packages/sim/conformance-spec
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/differential-spec@0.1.0":
+  dir: packages/differential-spec
+  intents:
+    - differential-spec-harness
+"@systemfsoftware/differential-spec@0.1.1":
+  dir: packages/differential-spec
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/differential-spec@0.2.0":
+  dir: packages/differential-spec
+  intents:
+    - loose-plants-show
+"@systemfsoftware/differential-spec@0.3.0":
+  dir: packages/differential-spec
+  intents:
+    - dry-apes-hammer
+    - famous-moles-beg
+    - weak-houses-pretend
+"@systemfsoftware/differential-spec@0.4.0":
+  dir: packages/differential-spec
+  intents:
+    - tame-jeans-tickle
+"@systemfsoftware/differential-spec@0.5.0":
+  dir: packages/differential-spec
+  intents:
+    - good-cooks-dance
+    - hungry-kiwis-change
+    - runner-rename-runtime
+    - weak-jeans-dress
+"@systemfsoftware/differential-spec@0.6.0":
+  dir: packages/sim/differential-spec
+  intents:
+    - good-cooks-dance
+    - good-dodos-beg
+    - hungry-kiwis-change
+    - runner-rename-runtime
+    - weak-houses-pretend
+    - weak-jeans-dress
+"@systemfsoftware/differential-spec@0.6.1":
+  dir: packages/sim/differential-spec
+  intents:
+    - cell-types-runtime-dependency
+"@systemfsoftware/differential-spec@1.0.0":
+  dir: packages/sim/differential-spec
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/discern@0.0.0":
+  dir: packages/discern
+  intents:
+    - discern-fork-debut
+    - weak-houses-pretend
+"@systemfsoftware/discern@0.1.0":
+  dir: packages/discern
+  intents:
+    - discern-cell-kinds
+"@systemfsoftware/discern@0.2.0":
+  dir: packages/discern
+  intents:
+    - good-dodos-teach
+"@systemfsoftware/discern@0.3.0":
+  dir: packages/discern
+  intents:
+    - clean-trains-smash
+    - smooth-emus-tease
+"@systemfsoftware/discern@0.3.1":
+  dir: packages/discern
+  intents:
+    - orange-apes-think
+"@systemfsoftware/discern@1.0.0":
+  dir: packages/discern
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -181,6 +279,34 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-atom-react@0.8.2":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-atom-react@0.8.3":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-atom-react@0.8.4":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-atom-react@0.9.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - famous-oranges-camp
+"@systemfsoftware/effect-atom-react@0.9.1":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-atom-react@1.0.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - curvy-poets-hide
+"@systemfsoftware/effect-atom-react@2.0.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -235,11 +361,78 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-atom@3.2.2":
+  dir: packages/atom/effect-atom
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-atom@3.2.3":
+  dir: packages/atom/effect-atom
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-atom@3.3.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - eliminate-bare-classes-and-enforce-ban-classes
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-atom@4.0.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - few-steaks-cheat
+"@systemfsoftware/effect-atom@4.0.1":
+  dir: packages/atom/effect-atom
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-atom@5.0.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - curvy-poets-hide
+"@systemfsoftware/effect-atom@5.1.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - short-eggs-reflect
+"@systemfsoftware/effect-atom@5.2.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - atom-registry-hydration
+"@systemfsoftware/effect-atom@6.0.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
     - modern-ends-know
     - workflow-brand-forced
+"@systemfsoftware/effect-cell-types@10.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - otel-instrumentation-map
+    - schema-edged-cells
+"@systemfsoftware/effect-cell-types@10.1.0":
+  dir: packages/effect-cell-types
+  intents:
+    - twelve-days-throw
+"@systemfsoftware/effect-cell-types@10.1.1":
+  dir: packages/effect-cell-types
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-cell-types@10.2.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-kinds
+    - wild-roses-fly
+"@systemfsoftware/effect-cell-types@10.3.0":
+  dir: packages/effect-cell-types
+  intents:
+    - ancient-flowers-cheer
+"@systemfsoftware/effect-cell-types@11.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - tall-kiwis-visit
+"@systemfsoftware/effect-cell-types@12.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -315,6 +508,106 @@
   dir: packages/effect-cell-types
   intents:
     - effect-cell-types-minor-honest-channels
+"@systemfsoftware/effect-cell-types@8.2.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-sandwich-chain
+"@systemfsoftware/effect-cell-types@8.3.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-adt-parity
+"@systemfsoftware/effect-cell-types@8.3.1":
+  dir: packages/effect-cell-types
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-cell-types@8.3.2":
+  dir: packages/effect-cell-types
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-cell-types@9.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - named-cell-instrumentation
+    - sandwich-cell-portable-type
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-daemon-cluster@0.1.0":
+  dir: packages/effect-daemon-cluster
+  intents:
+    - modern-knives-double
+"@systemfsoftware/effect-daemon-cluster@0.2.0":
+  dir: packages/daemon/effect-daemon-cluster
+  intents:
+    - modern-knives-double
+"@systemfsoftware/effect-daemon-cluster@0.2.1":
+  dir: packages/daemon/effect-daemon-cluster
+  intents:
+    - cell-types-runtime-dependency
+"@systemfsoftware/effect-daemon-cluster@1.0.0":
+  dir: packages/daemon/effect-daemon-cluster
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-daemon-conformance@0.1.0":
+  dir: packages/effect-daemon-conformance
+  intents:
+    - lazy-emus-stand
+"@systemfsoftware/effect-daemon-conformance@0.2.0":
+  dir: packages/daemon/effect-daemon-conformance
+  intents:
+    - giant-maps-divide
+    - lazy-emus-stand
+"@systemfsoftware/effect-daemon-conformance@1.0.0":
+  dir: packages/daemon/effect-daemon-conformance
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-daemon-microvm@0.1.0":
+  dir: packages/effect-daemon-microvm
+  intents:
+    - friendly-camels-scream
+"@systemfsoftware/effect-daemon-microvm@0.2.0":
+  dir: packages/daemon/effect-daemon-microvm
+  intents:
+    - early-stars-drum
+    - friendly-camels-scream
+"@systemfsoftware/effect-daemon-microvm@0.2.1":
+  dir: packages/daemon/effect-daemon-microvm
+  intents:
+    - cell-types-runtime-dependency
+"@systemfsoftware/effect-daemon-microvm@1.0.0":
+  dir: packages/daemon/effect-daemon-microvm
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-daemon-process@0.1.0":
+  dir: packages/effect-daemon-process
+  intents:
+    - wild-mice-double
+"@systemfsoftware/effect-daemon-process@0.2.0":
+  dir: packages/daemon/effect-daemon-process
+  intents:
+    - wild-mice-double
+"@systemfsoftware/effect-daemon-process@1.0.0":
+  dir: packages/daemon/effect-daemon-process
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-daemon-socket@0.1.0":
+  dir: packages/effect-daemon-socket
+  intents:
+    - heavy-swans-cheat
+"@systemfsoftware/effect-daemon-socket@0.2.0":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - heavy-swans-cheat
+"@systemfsoftware/effect-daemon-socket@0.2.1":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - cell-types-runtime-dependency
+"@systemfsoftware/effect-daemon-socket@0.2.2":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - socket-conformance-budget
+"@systemfsoftware/effect-daemon-socket@1.0.0":
+  dir: packages/daemon/effect-daemon-socket
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -345,6 +638,22 @@
     - loop-tags-ship-as-values
     - peer-ranges-accept-compatible-rc
     - published-types-omit-internal
+"@systemfsoftware/effect-daemon-spec@3.0.11":
+  dir: packages/effect-daemon-spec
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-daemon-spec@3.0.12":
+  dir: packages/effect-daemon-spec
+  intents:
+    - schema-filter-constructive-generation-cross-field
+"@systemfsoftware/effect-daemon-spec@3.0.13":
+  dir: packages/effect-daemon-spec
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-daemon-spec@3.0.14":
+  dir: packages/effect-daemon-spec
+  intents:
+    - unknown-holes-are-generic-defaults
 "@systemfsoftware/effect-daemon-spec@3.0.2":
   dir: packages/core/effect/daemon-spec
   intents:
@@ -377,6 +686,44 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-daemon-spec@4.0.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - daemon-restart-span-key
+    - supervisor-rejects-cool-down
+"@systemfsoftware/effect-daemon-spec@4.1.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - fiery-poets-beg
+"@systemfsoftware/effect-daemon-spec@4.1.1":
+  dir: packages/effect-daemon-spec
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-daemon-spec@4.2.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - brave-owls-escalate
+    - curly-keys-stay
+    - daemon-liveness-tick
+    - tame-doors-scream
+"@systemfsoftware/effect-daemon-spec@5.0.0":
+  dir: packages/daemon/effect-daemon-spec
+  intents:
+    - brave-owls-escalate
+    - clean-trains-smash
+    - curly-keys-stay
+    - daemon-liveness-tick
+    - tame-doors-scream
+    - weak-houses-pretend
+"@systemfsoftware/effect-daemon-spec@5.1.0":
+  dir: packages/daemon/effect-daemon-spec
+  intents:
+    - supervisor-classify-child-exit
+"@systemfsoftware/effect-daemon-spec@6.0.0":
+  dir: packages/daemon/effect-daemon-spec
+  intents:
+    - chilly-camels-wink
+    - heavy-boxes-marry
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -419,6 +766,56 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-gherkin-spec@4.1.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - vitest-5-peers
+"@systemfsoftware/effect-gherkin-spec@4.2.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - some-numbers-swim
+"@systemfsoftware/effect-gherkin-spec@4.2.1":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-gherkin-spec@4.2.2":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-gherkin-spec@4.2.3":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - gherkin-registrar-extraction
+"@systemfsoftware/effect-gherkin-spec@4.3.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - rich-rockets-occur
+"@systemfsoftware/effect-gherkin-spec@4.3.1":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-gherkin-spec@4.4.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - clever-carrots-run
+"@systemfsoftware/effect-gherkin-spec@5.0.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - fork-under-own-name
+    - kind-rats-kiss
+    - sweet-horses-trade
+"@systemfsoftware/effect-gherkin-spec@6.0.0":
+  dir: packages/gherkin/effect-gherkin-spec
+  intents:
+    - calm-shoes-obey
+    - fork-under-own-name
+    - kind-rats-kiss
+    - sweet-horses-trade
+    - weak-houses-pretend
+"@systemfsoftware/effect-gherkin-spec@7.0.0":
+  dir: packages/gherkin/effect-gherkin-spec
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -458,6 +855,138 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-memfs@2.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-bytesize
+"@systemfsoftware/effect-memfs@2.0.1":
+  dir: packages/effect-memfs
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-memfs@2.0.2":
+  dir: packages/effect-memfs
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-memfs@3.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-namespace-barrel
+"@systemfsoftware/effect-memfs@3.0.1":
+  dir: packages/effect-memfs
+  intents:
+    - cell-consumers-follow
+"@systemfsoftware/effect-memfs@3.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - six-cities-dream
+"@systemfsoftware/effect-memfs@3.1.1":
+  dir: packages/effect-memfs
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-memfs@4.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-cell-kinds
+"@systemfsoftware/effect-memfs@4.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - hungry-mugs-wonder
+    - smart-flies-end
+"@systemfsoftware/effect-memfs@5.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - breezy-pears-visit
+    - clean-trains-smash
+"@systemfsoftware/effect-memfs@5.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-open-file-failures
+"@systemfsoftware/effect-memfs@6.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-microsandbox@0.1.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - ready-probes-dial
+    - spotty-cars-hammer
+    - thin-baths-crash
+"@systemfsoftware/effect-microsandbox@0.2.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - moody-pens-carry
+"@systemfsoftware/effect-microsandbox@1.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - microsandbox-otel-span-keys
+    - microsandbox-structured-logs
+"@systemfsoftware/effect-microsandbox@2.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - better-teams-wear
+"@systemfsoftware/effect-microsandbox@2.0.1":
+  dir: packages/effect-microsandbox
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-microsandbox@3.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - microvm-cell-kinds
+"@systemfsoftware/effect-microsandbox@3.1.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - shaggy-zebras-bathe
+"@systemfsoftware/effect-microsandbox@4.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - clean-trains-smash
+    - curvy-kings-kiss
+"@systemfsoftware/effect-microsandbox@4.0.1":
+  dir: packages/effect-microsandbox
+  intents:
+    - honest-lamps-sell
+"@systemfsoftware/effect-microsandbox@5.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-readiness@0.1.0":
+  dir: packages/effect-readiness
+  intents:
+    - ready-probes-dial
+"@systemfsoftware/effect-readiness@0.1.1":
+  dir: packages/effect-readiness
+  intents:
+    - readiness-probe-input
+    - readiness-service-layer-boundaries
+"@systemfsoftware/effect-readiness@0.2.0":
+  dir: packages/effect-readiness
+  intents:
+    - cyan-ears-flow
+"@systemfsoftware/effect-readiness@0.2.1":
+  dir: packages/effect-readiness
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-readiness@0.3.0":
+  dir: packages/effect-readiness
+  intents:
+    - readiness-cell-kinds
+"@systemfsoftware/effect-readiness@0.3.1":
+  dir: packages/effect-readiness
+  intents:
+    - quiet-squids-guess
+"@systemfsoftware/effect-readiness@0.4.0":
+  dir: packages/effect-readiness
+  intents:
+    - clean-trains-smash
+    - neat-dodos-bathe
+"@systemfsoftware/effect-readiness@0.5.0":
+  dir: packages/effect-readiness
+  intents:
+    - readiness-responded-status-code
+"@systemfsoftware/effect-readiness@1.0.0":
+  dir: packages/effect-readiness
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -496,6 +1025,26 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-discovery@1.0.4":
+  dir: packages/effect-schema-discovery
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-schema-discovery@1.0.5":
+  dir: packages/effect-schema-discovery
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-schema-discovery@1.0.6":
+  dir: packages/effect-schema-discovery
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-discovery@1.0.7":
+  dir: packages/schema/effect-schema-discovery
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-discovery@2.0.0":
+  dir: packages/schema/effect-schema-discovery
+  intents:
+    - schema-discovery-identity
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -510,6 +1059,18 @@
   dir: packages/core/effect/schema/extensions
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-schema-extensions@0.9.10":
+  dir: packages/effect-schema-extensions
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-schema-extensions@0.9.11":
+  dir: packages/effect-schema-extensions
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-extensions@0.9.12":
+  dir: packages/schema/effect-schema-extensions
+  intents:
+    - weak-houses-pretend
 "@systemfsoftware/effect-schema-extensions@0.9.2":
   dir: packages/core/effect/schema/extensions
   intents:
@@ -540,6 +1101,14 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-extensions@0.9.9":
+  dir: packages/effect-schema-extensions
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-schema-extensions@1.0.0":
+  dir: packages/schema/effect-schema-extensions
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -582,6 +1151,40 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-law@2.2.0":
+  dir: packages/effect-schema-law
+  intents:
+    - schema-v4-arbitrary
+    - vitest-5-peers
+"@systemfsoftware/effect-schema-law@2.2.1":
+  dir: packages/effect-schema-law
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-schema-law@2.3.0":
+  dir: packages/effect-schema-law
+  intents:
+    - wacky-kings-create
+"@systemfsoftware/effect-schema-law@2.3.1":
+  dir: packages/effect-schema-law
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-law@2.4.0":
+  dir: packages/effect-schema-law
+  intents:
+    - young-moose-deny
+"@systemfsoftware/effect-schema-law@3.0.0":
+  dir: packages/effect-schema-law
+  intents:
+    - fork-under-own-name
+"@systemfsoftware/effect-schema-law@4.0.0":
+  dir: packages/schema/effect-schema-law
+  intents:
+    - fork-under-own-name
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-law@5.0.0":
+  dir: packages/schema/effect-schema-law
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -591,6 +1194,30 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-recursion-budget@0.1.0":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - schema-v4-arbitrary
+"@systemfsoftware/effect-schema-recursion-budget@0.1.1":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-schema-recursion-budget@1.0.0":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - happy-deer-fall
+"@systemfsoftware/effect-schema-recursion-budget@1.0.1":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-recursion-budget@1.0.2":
+  dir: packages/schema/effect-schema-recursion-budget
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-recursion-budget@2.0.0":
+  dir: packages/schema/effect-schema-recursion-budget
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -638,6 +1265,88 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-vite@2.2.0":
+  dir: packages/effect-schema-vite
+  intents:
+    - vitest-5-peers
+"@systemfsoftware/effect-schema-vite@2.2.1":
+  dir: packages/effect-schema-vite
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/effect-schema-vite@2.2.3":
+  dir: packages/effect-schema-vite
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-vite@2.2.6":
+  dir: packages/schema/effect-schema-vite
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-schema-vite@2.3.0":
+  dir: packages/schema/effect-schema-vite
+  intents:
+    - schema-vite-law-source
+"@systemfsoftware/effect-schema-vite@3.0.0":
+  dir: packages/schema/effect-schema-vite
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-sim-kernel@0.1.0":
+  dir: packages/effect-sim-kernel
+  intents:
+    - cool-dodos-greet
+    - mighty-beds-yell
+    - quiet-melons-roll
+    - witty-lions-queue
+"@systemfsoftware/effect-sim-kernel@0.1.1":
+  dir: packages/effect-sim-kernel
+  intents:
+    - bright-kings-taste
+    - gentle-horses-hope
+"@systemfsoftware/effect-sim-kernel@0.2.0":
+  dir: packages/sim/effect-sim-kernel
+  intents:
+    - bright-kings-taste
+    - gentle-horses-hope
+    - witty-lions-queue
+"@systemfsoftware/effect-sim-kernel@1.0.0":
+  dir: packages/sim/effect-sim-kernel
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/effect-spec-runtime@0.0.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - effect-spec-runtime
+"@systemfsoftware/effect-spec-runtime@0.1.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - cozy-waves-give
+"@systemfsoftware/effect-spec-runtime@0.1.1":
+  dir: packages/effect-spec-runtime
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/effect-spec-runtime@0.2.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - tough-tigers-unite
+"@systemfsoftware/effect-spec-runtime@0.3.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - ancient-clocks-hug
+    - fork-under-own-name
+    - little-deers-stand
+    - pretty-poets-fail
+    - witty-lions-queue
+"@systemfsoftware/effect-spec-runtime@0.3.1":
+  dir: packages/effect-spec-runtime
+  intents:
+    - silent-swans-sneeze
+"@systemfsoftware/effect-spec-runtime@1.0.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/gritlint@0.1.0":
+  dir: npm/gritlint
+  intents:
+    - lucky-tools-flash
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -660,6 +1369,18 @@
   dir: packages/core/hex/hex-schema
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/hex-schema@1.8.10":
+  dir: packages/hex-schema
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/hex-schema@1.8.11":
+  dir: packages/hex-schema
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/hex-schema@1.8.12":
+  dir: packages/schema/hex-schema
+  intents:
+    - weak-houses-pretend
 "@systemfsoftware/hex-schema@1.8.2":
   dir: packages/core/hex/hex-schema
   intents:
@@ -690,6 +1411,14 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/hex-schema@1.8.9":
+  dir: packages/hex-schema
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/hex-schema@2.0.0":
+  dir: packages/schema/hex-schema
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
@@ -711,6 +1440,35 @@
   dir: packages/npm-package
   intents:
     - api-extractor-rollout
+"@systemfsoftware/npm-package@0.2.5":
+  dir: packages/npm-package
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/npm-package@0.2.6":
+  dir: packages/npm-package
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/npm-package@0.3.0":
+  dir: packages/npm-package
+  intents:
+    - eliminate-bare-classes-and-enforce-ban-classes
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/npm-package@0.4.0":
+  dir: packages/npm-package
+  intents:
+    - wacky-toys-decide
+"@systemfsoftware/npm-package@0.4.1":
+  dir: packages/npm-package
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/npm-package@0.4.2":
+  dir: packages/npm-package
+  intents:
+    - cell-types-runtime-dependency
+"@systemfsoftware/npm-package@1.0.0":
+  dir: packages/npm-package
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -810,6 +1568,122 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/omp-typescript-discipline@1.0.5":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/omp-typescript-discipline@1.0.6":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/omp-typescript-discipline@1.0.7":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - dull-mangos-sneeze
+"@systemfsoftware/oxlint-config-cell-architecture@1.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-cell-architecture@1.0.1":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - ban-unknown-except-generic-default
+    - eliminate-bare-classes-and-enforce-ban-classes
+"@systemfsoftware/oxlint-config-cell-architecture@1.0.3":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-config-cell-architecture@2.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - blueprint-handle-rules
+"@systemfsoftware/oxlint-config-cell-architecture@3.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - loud-tips-jog
+"@systemfsoftware/oxlint-config-cell-architecture@3.1.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - presets-cell-file-rule
+"@systemfsoftware/oxlint-config-cell-architecture@4.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/oxlint-config-dmmf@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-dmmf@1.1.2":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-config-dmmf@1.2.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - fluffy-geckos-enjoy
+"@systemfsoftware/oxlint-config-dmmf@1.3.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - presets-schema-import-rule
+"@systemfsoftware/oxlint-config-dmmf@2.0.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/oxlint-config-recommended@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - ban-unknown-except-generic-default
+    - eliminate-bare-classes-and-enforce-ban-classes
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-recommended@1.1.1":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - ban-raw-span-name-emit
+    - trace-test-requires-taxonomy
+"@systemfsoftware/oxlint-config-recommended@2.0.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - bumpy-pans-post
+"@systemfsoftware/oxlint-config-recommended@2.0.1":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - chilly-grapes-count
+"@systemfsoftware/oxlint-config-recommended@2.0.2":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-config-recommended@3.0.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - blueprint-handle-rules
+    - strong-socks-punch
+"@systemfsoftware/oxlint-config-recommended@3.1.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - fresh-stars-marry
+    - khaki-walls-argue
+    - loud-tips-jog
+    - runner-rename-runtime
+"@systemfsoftware/oxlint-config-recommended@3.2.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - fluffy-geckos-enjoy
+"@systemfsoftware/oxlint-config-recommended@3.3.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - presets-schema-import-rule
+"@systemfsoftware/oxlint-config-recommended@3.4.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - contract-suffix-retired
+"@systemfsoftware/oxlint-config-recommended@4.0.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-rule-authoring
+  intents:
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-config@0.1.0":
   dir: packages/oxlint-plugin/oxlint-config
   intents:
@@ -819,6 +1693,39 @@
   dir: packages/oxlint-plugin/make-boundary
   intents:
     - make-boundary-constructor-set
+"@systemfsoftware/oxlint-plugin-cell-architecture@1.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-plugin-cell-architecture@1.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - ban-unknown-except-generic-default
+    - eliminate-bare-classes-and-enforce-ban-classes
+"@systemfsoftware/oxlint-plugin-cell-architecture@2.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - retire-role-suffix-vocabulary
+"@systemfsoftware/oxlint-plugin-cell-architecture@2.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-cell-architecture@3.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - blueprint-handle-rules
+"@systemfsoftware/oxlint-plugin-cell-architecture@4.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - loud-tips-jog
+"@systemfsoftware/oxlint-plugin-cell-architecture@4.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - cell-file-one-export-rule
+"@systemfsoftware/oxlint-plugin-cell-architecture@5.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -861,6 +1768,31 @@
   dir: packages/oxlint-plugin/oxlint-plugin-cell-vocabulary
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@5.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - workflow-rules-read-options
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - wise-trains-hammer
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@6.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - decision-imports-schema-files
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@7.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - big-eagles-melt
+    - heavy-boxes-marry
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -929,6 +1861,18 @@
   intents:
     - fanout-rule-retired
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - oxlint-no-pseudo-gherkin
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.3":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -964,6 +1908,39 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
   intents:
     - runtime-construction-placement
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.1.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.1.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/oxlint-plugin-effect-platform@1.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-plugin-effect-platform@1.3.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - provide-context-once
+"@systemfsoftware/oxlint-plugin-effect-platform@1.3.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-effect-platform@1.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - happy-crabs-wave
+    - thick-beds-shave
+"@systemfsoftware/oxlint-plugin-effect-platform@1.4.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - little-cooks-buy
+"@systemfsoftware/oxlint-plugin-effect-platform@2.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -1023,6 +2000,36 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
   intents:
     - scoping-rebuild-cascade
+"@systemfsoftware/oxlint-plugin-effect-schema@5.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-v4-arbitrary
+"@systemfsoftware/oxlint-plugin-effect-schema@5.5.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-filter-constructive-generation-cross-field
+"@systemfsoftware/oxlint-plugin-effect-schema@5.5.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/oxlint-plugin-effect-schema@5.5.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-effect-schema@5.6.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - ancient-donkeys-dream
+    - sharp-shirts-worry
+"@systemfsoftware/oxlint-plugin-effect-schema@5.7.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-file-operations-rule
+"@systemfsoftware/oxlint-plugin-effect-schema@6.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - big-eagles-melt
+    - heavy-boxes-marry
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -1083,6 +2090,14 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
   intents:
     - oxlint-plugin-effect-workflow-patch-variant-name-set-split
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.1.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.1.3":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -1126,6 +2141,14 @@
   dir: packages/oxlint-plugin/oxlint-plugin-property-testing
   intents:
     - fanout-rule-retired
+"@systemfsoftware/oxlint-plugin-property-testing@2.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - schema-v4-arbitrary
+"@systemfsoftware/oxlint-plugin-property-testing@2.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -1156,6 +2179,72 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin-recommended@1.3.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - effect-rc116-vitest5-deps
+    - rare-bars-sip
+"@systemfsoftware/oxlint-plugin-recommended@1.3.3":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/oxlint-plugin-test-discipline@3.6.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - differential-test-altitude
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-plugin-test-discipline@3.7.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - require-integration-environment-layer
+"@systemfsoftware/oxlint-plugin-test-discipline@3.8.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - ban-raw-span-name-emit
+    - trace-test-requires-taxonomy
+"@systemfsoftware/oxlint-plugin-test-discipline@3.8.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-test-discipline@3.9.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - real-knives-shout
+"@systemfsoftware/oxlint-plugin-test-discipline@4.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - fast-stars-heal
+    - fresh-stars-marry
+    - little-kings-run
+    - lucky-buses-whisper
+    - lucky-lions-shave
+    - test-discipline-own-runner-name
+    - weak-pots-doubt
+"@systemfsoftware/oxlint-plugin-test-discipline@4.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - in-source-subject-fix-text
+"@systemfsoftware/oxlint-plugin-test-discipline@4.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - contract-suffix-retired
+"@systemfsoftware/oxlint-plugin-test-discipline@5.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - big-eagles-melt
+    - heavy-boxes-marry
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.11":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - puny-socks-dream
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.12":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -1239,6 +2328,18 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-placement
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-test-placement@3.5.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - oxlint-no-pseudo-gherkin
+"@systemfsoftware/oxlint-plugin-test-placement@3.5.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-test-placement@3.5.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -1299,6 +2400,14 @@
   dir: packages/oxlint-plugin/oxlint-plugin
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin@4.0.3":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin@4.0.4":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - stryker-version-bump
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -1332,6 +2441,26 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/rx-effect@0.7.6":
+  dir: packages/rx-effect
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/rx-effect@0.7.7":
+  dir: packages/rx-effect
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/rx-effect@0.7.8":
+  dir: packages/rx-effect
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/rx-effect@0.7.9":
+  dir: packages/rx-effect
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/rx-effect@1.0.0":
+  dir: packages/rx-effect
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/storybook-gherkin@1.0.0":
   dir: packages/storybook-gherkin
   intents:
@@ -1375,6 +2504,40 @@
   dir: packages/storybook-gherkin
   intents:
     - api-extractor-rollout
+"@systemfsoftware/storybook-gherkin@3.0.5":
+  dir: packages/storybook-gherkin
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/storybook-gherkin@3.0.6":
+  dir: packages/storybook-gherkin
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/storybook-gherkin@3.0.7":
+  dir: packages/storybook-gherkin
+  intents:
+    - unknown-holes-are-generic-defaults
+"@systemfsoftware/storybook-gherkin@4.0.0":
+  dir: packages/storybook-gherkin
+  intents:
+    - short-laws-draw
+"@systemfsoftware/storybook-gherkin@4.0.1":
+  dir: packages/storybook-gherkin
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/storybook-gherkin@4.0.2":
+  dir: packages/storybook-gherkin
+  intents:
+    - tough-foxes-repair
+"@systemfsoftware/storybook-gherkin@4.0.3":
+  dir: packages/gherkin/storybook-gherkin
+  intents:
+    - clean-trains-smash
+    - tough-foxes-repair
+    - weak-houses-pretend
+"@systemfsoftware/storybook-gherkin@5.0.0":
+  dir: packages/gherkin/storybook-gherkin
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -2192,6 +3355,62 @@
   dir: packages/stryker-js/stryker-test-contribution
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/trace-spec@0.0.0":
+  dir: packages/trace-spec
+  intents:
+    - trace-spec
+"@systemfsoftware/trace-spec@0.1.0":
+  dir: packages/trace-spec
+  intents:
+    - frank-plums-hang
+"@systemfsoftware/trace-spec@0.2.0":
+  dir: packages/trace-spec
+  intents:
+    - trace-spec-remote-observation
+"@systemfsoftware/trace-spec@0.2.1":
+  dir: packages/trace-spec
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/trace-spec@0.3.0":
+  dir: packages/trace-spec
+  intents:
+    - angry-falcons-travel
+    - trace-spec-cell-kinds
+"@systemfsoftware/trace-spec@0.4.0":
+  dir: packages/trace-spec
+  intents:
+    - calm-tools-end
+    - fork-under-own-name
+    - shaggy-olives-bathe
+"@systemfsoftware/trace-spec@0.5.0":
+  dir: packages/trace/trace-spec
+  intents:
+    - angry-geckos-fly
+    - calm-tools-end
+    - fork-under-own-name
+    - mean-ravens-sing
+    - shaggy-olives-bathe
+    - weak-houses-pretend
+"@systemfsoftware/trace-spec@1.0.0":
+  dir: packages/trace/trace-spec
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/trace-taxonomy@0.0.0":
+  dir: packages/trace-taxonomy
+  intents:
+    - declared-span-taxonomy
+"@systemfsoftware/trace-taxonomy@0.0.1":
+  dir: packages/trace-taxonomy
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/trace-taxonomy@0.0.2":
+  dir: packages/trace/trace-taxonomy
+  intents:
+    - weak-houses-pretend
+"@systemfsoftware/trace-taxonomy@1.0.0":
+  dir: packages/trace/trace-taxonomy
+  intents:
+    - heavy-boxes-marry
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
@@ -2204,3 +3423,53 @@
   dir: packages/toolchain/tsconfig
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/tsconfig@1.3.5":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - effect-rc116-vitest5-deps
+"@systemfsoftware/tsconfig@1.3.6":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - stryker-version-bump
+"@systemfsoftware/tsconfig@2.0.0":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - wacky-cooks-cheer
+"@systemfsoftware/tsconfig@2.0.1":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - chilly-grapes-count
+"@systemfsoftware/vitest-config@0.1.0":
+  dir: packages/toolchain/vitest-config
+  intents:
+    - property-failures-as-data
+"@systemfsoftware/vitest@0.0.0":
+  dir: packages/vitest
+  intents:
+    - curly-bees-enjoy
+    - runner-rename-runtime
+    - thick-cooks-sell
+    - witty-lions-queue
+"@systemfsoftware/vitest@0.1.0":
+  dir: packages/vitest
+  intents:
+    - pretty-rocks-explode
+"@systemfsoftware/vitest@0.2.0":
+  dir: packages/runner/vitest
+  intents:
+    - pretty-rocks-explode
+    - runner-rename-runtime
+    - sweet-doors-destroy
+    - witty-lions-queue
+"@systemfsoftware/vitest@0.3.0":
+  dir: packages/runner/vitest
+  intents:
+    - vitest-replay-codec
+"@systemfsoftware/vitest@1.0.0":
+  dir: packages/runner/vitest
+  intents:
+    - heavy-boxes-marry
+"@systemfsoftware/vitest@2.0.0":
+  dir: packages/runner/vitest
+  intents:
+    - property-failures-as-data

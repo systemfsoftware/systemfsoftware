@@ -1,5 +1,4 @@
-import base from '@systemfsoftware/oxlint-config/base'
+import recommended from '@systemfsoftware/oxlint-config-recommended'
 import { defineConfig } from 'oxlint'
-export default defineConfig({
-  extends: [base],
-})
+
+export default defineConfig({ extends: [recommended] })

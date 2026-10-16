@@ -164,7 +164,7 @@ export const Branch4: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Litera
 export const Branch5: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b5'), next: ExprSchema }))
 export const Branch6: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b6'), next: ExprSchema }))
 export const Branch7: S.Schema<Expr> = S.suspend(() =>
-  S.Struct({ type: S.Literal('b7'), next: ExprSchema }).annotate({ toArbitrary: () => (fc) => fc.constant({}) }),
+  S.Struct({ type: S.Literal('b7'), next: ExprSchema }).annotate({ toCodecArbitrary: () => Schema.link() }),
 )
 
 ExprSchema = S.Union([Branch1, Branch2, Branch3, Branch4, Branch5, Branch6, Branch7])`
@@ -297,7 +297,7 @@ ruleTester.run('schema-recursive-union-budget', schemaRecursiveUnionBudget, {
       filename: DOMAIN_FILE,
     },
     {
-      name: 'Should_StaySilent_When_MemberCarriesToArbitrary',
+      name: 'Should_StaySilent_When_MemberCarriesToCodecArbitrary',
       code: ANNOTATED_MEMBER_UNION,
       filename: DOMAIN_FILE,
     },
@@ -308,7 +308,7 @@ ruleTester.run('schema-recursive-union-budget', schemaRecursiveUnionBudget, {
     },
     {
       name: 'Should_StaySilent_When_RecursionPointCarriesItsOwnDerivation',
-      code: recursionPoint('.annotate({ toArbitrary: () => (fc) => fc.constant({}) })'),
+      code: recursionPoint('.annotate({ toCodecArbitrary: () => Schema.link() })'),
       filename: DOMAIN_FILE,
     },
     {

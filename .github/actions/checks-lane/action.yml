@@ -1,0 +1,289 @@
+name: systemfsoftware checks lane
+description: systemfsoftware's steps for each phase of reusable-checks.yml
+inputs:
+  lane:
+    description: plan, static, gritlint, test, test-after, timings, gate or docs
+    required: true
+  job:
+    description: The test job from the plan, as JSON
+    required: false
+    default: "{}"
+  profile:
+    description: Conformance profile, `local` or `per-change`
+    required: false
+    default: per-change
+runs:
+  using: composite
+  steps:
+    - uses: denoland/setup-deno@v2
+      if: inputs.lane == 'plan' || inputs.lane == 'timings'
+    - if: inputs.lane == 'plan'
+      shell: bash -e {0}
+      run: corepack enable
+    - name: The scripts/tools suite, including the planner on a foreign workspace
+      if: inputs.lane == 'plan'
+      shell: bash -e {0}
+      run: deno test --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run scripts/tools/
+
+    - name: Static lane environment
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: printf 'CI=true\nOXLINT_FORMAT=github\nTSGO_FORMAT=github-actions\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
+    - uses: ./.github/actions/install-deps
+      if: inputs.lane == 'static'
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'static'
+    - name: dprint from the flake
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
+    - uses: denoland/setup-deno@v2
+      if: inputs.lane == 'static'
+    - name: Turbo cache
+      if: inputs.lane == 'static'
+      uses: actions/cache@v6
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-checks-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-checks-
+          turbo-${{ runner.os }}-
+    - name: Commit graph for repo-checks (commits only, trees on demand)
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
+    - name: Each repo check fails on a planted violation
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: |
+        bin="$(nix build --no-link --print-out-paths .#repo-checks)/bin/repo-checks"
+        orig="$(git rev-parse HEAD)"
+        commit() { git -c user.name=plant -c user.email=plant@localhost commit -q --no-verify -m "$1"; }
+        restore() { git reset -q --hard "$orig"; }
+        expect_violation() {
+          status=0
+          "$bin" "$@" || status=$?
+          test "$status" -eq 1 || { echo "::error::repo-checks $* must exit 1 on its planted violation, got $status" >&2; exit 1; }
+          restore
+        }
+
+        echo '::group::subtrees: a committed edit inside a vendored subtree'
+        vendored="$(git ls-files -- repos/constitution | sed -n 1p)"
+        printf '\nplanted\n' >> "$vendored"
+        git add "$vendored" && commit 'plant: edit a vendored subtree'
+        expect_violation subtrees
+        echo '::endgroup::'
+
+        echo '::group::release-age: a third-party package exempted from the cutoff'
+        sed -i '/^minimumReleaseAgeExclude:$/a\  - effect' pnpm-workspace.yaml
+        expect_violation release-age
+        echo '::endgroup::'
+
+        echo '::group::project-membership: a tracked source no project includes'
+        printf 'export const planted = 1\n' > packages/effect-readiness/planted.ts
+        git add packages/effect-readiness/planted.ts
+        expect_violation project-membership
+        echo '::endgroup::'
+
+        echo '::group::single-plan: two plans added in one change'
+        printf '# a\n' > docs/plans/planted-a-plan.md
+        printf '# b\n' > docs/plans/planted-b-plan.md
+        git add docs/plans && commit 'plant: two plans'
+        expect_violation single-plan --plans docs/plans --base "$orig"
+        echo '::endgroup::'
+
+        echo '::group::packed-manifest: a catalog flip that no pending intent releases'
+        find .changeset -maxdepth 1 -name '*.md' ! -name README.md -delete
+        sed -i 's/^  vitest: .*/  vitest: ^5.0.2/' pnpm-workspace.yaml
+        git add -A .changeset pnpm-workspace.yaml && commit 'plant: flip a catalog range with no intent'
+        expect_violation packed-manifest --base "$orig"
+        echo '::endgroup::'
+    - name: The deno-locks check names a lock missing the effect specifier its entry points import
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: |
+        cp scripts/deno.lock "$RUNNER_TEMP/deno.lock"
+        jq '.specifiers |= with_entries(select(.key | startswith("npm:effect@") | not))' "$RUNNER_TEMP/deno.lock" > scripts/deno.lock
+        status=0
+        out="$(scripts/tools/deno-locks.sh 2>&1)" || status=$?
+        cp "$RUNNER_TEMP/deno.lock" scripts/deno.lock
+        if [ "$status" -ne 1 ] || ! grep -qF 'title=deno-lock-stale::scripts/deno.lock' <<<"$out" ||
+          ! grep -qF 'The lockfile is out of date' <<<"$out" || grep -qF 'deno-lock-unresolvable' <<<"$out"; then
+          token="planted-$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
+          printf '%s\n' "$out"
+          echo "::$token::"
+          echo "::error::scripts/tools/deno-locks.sh must exit 1 naming deno-lock-stale and deno's out-of-date lockfile on a planted stale lock, got exit $status" >&2
+          exit 1
+        fi
+    - name: stryker refuses a mutation run outside CI
+      if: inputs.lane == 'static'
+      shell: bash -e {0}
+      run: |
+        status=0
+        out="$(env -u GITHUB_ACTIONS -u ALLOW_LOCAL_MUTATION STRYKER_MODE=machine NO_COLOR=1 \
+          timeout 300 corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
+        printf '%s\n' "$out"
+        test "$status" -ne 0 || { echo '::error::a mutation run outside CI must exit non-zero' >&2; exit 1; }
+        printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
+          { echo '::error::the run did not end in a refused event for mutation-runs-on-main-ci' >&2; exit 1; }
+
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'docs'
+    - name: Commit graph for single-plan, after the depth-1 fetch (commits only, trees on demand)
+      if: inputs.lane == 'docs'
+      shell: bash -e {0}
+      run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'gritlint'
+
+    # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
+    - name: Sandboxed gritlint store path
+      id: closure
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      run: |
+        out="$(nix eval --raw .#gritlint.outPath)"
+        echo "out=$out" >> "$GITHUB_OUTPUT"
+        echo "key=gritlint-closure-${out#/nix/store/}" >> "$GITHUB_OUTPUT"
+    - name: gritlint closure cache
+      id: closure-cache
+      if: inputs.lane == 'gritlint'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/gritlint-closure
+        key: ${{ steps.closure.outputs.key }}
+    - name: Load the cached closure
+      if: inputs.lane == 'gritlint' && steps.closure-cache.outputs.cache-hit == 'true'
+      shell: bash -e {0}
+      env:
+        OUT: ${{ steps.closure.outputs.out }}
+      run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/gritlint-closure" "$OUT"
+    - name: Build the sandboxed gritlint and export its closure
+      if: inputs.lane == 'gritlint' && steps.closure-cache.outputs.cache-hit != 'true'
+      shell: bash -e {0}
+      env:
+        OUT: ${{ steps.closure.outputs.out }}
+      run: |
+        built="$(nix build --no-link --print-out-paths .#gritlint)"
+        test "$built" = "$OUT" || { echo "built $built, evaluated $OUT" >&2; exit 1; }
+        nix copy --to "file://$RUNNER_TEMP/gritlint-closure?compression=zstd" "$OUT"
+    - name: Save the closure cache
+      if: inputs.lane == 'gritlint' && steps.closure-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/gritlint-closure
+        key: ${{ steps.closure.outputs.key }}
+    - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      run: |
+        if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+    - name: Sandboxed check fails on a planted violation and passes once fixed
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      env:
+        OUT: ${{ steps.closure.outputs.out }}
+      run: |
+        bin="$OUT/bin/gritlint"
+        fixture="$RUNNER_TEMP/gritlint-fixture"
+        mkdir -p "$fixture/packages/app"
+        cd "$fixture"
+        printf '{"packs": {"typecheck-build-mode": {}}}\n' > gritlint.json
+        printf '{"files": [], "references": [{"path": "./tsconfig.app.json"}]}\n' > packages/app/tsconfig.json
+        printf '{"name": "app", "scripts": {"typecheck": "tsc --noEmit"}}\n' > packages/app/package.json
+        status=0
+        "$bin" check || status=$?
+        test "$status" -eq 1 || { echo "a planted violation must exit 1, got $status" >&2; exit 1; }
+        printf '{"name": "app", "scripts": {"typecheck": "tsc -b"}}\n' > packages/app/package.json
+        "$bin" check
+        cell="$RUNNER_TEMP/gritlint-cell-fixture"
+        mkdir -p "$cell/packages/app/src"
+        cd "$cell"
+        printf '{"packs": {"cell-architecture": {}}}\n' > gritlint.json
+        printf '%s\n' \
+          "import * as Context from 'effect/Context'" \
+          "import { readFile } from 'node:fs/promises'" \
+          "export class Clock extends Context.Service<Clock, { readonly read: typeof readFile }>()('app/Clock') {}" \
+          > packages/app/src/clock.service.ts
+        status=0
+        "$bin" check --format json > findings.json || status=$?
+        test "$status" -eq 1 || { echo "a service module importing node:fs/promises must exit 1, got $status" >&2; exit 1; }
+        jq -e '[.findings[].ruleId] == ["cell-architecture/service-exports-no-layer"]' findings.json \
+          || { echo "expected one cell-architecture/service-exports-no-layer finding" >&2; cat findings.json >&2; exit 1; }
+        echo "planted: refused with $(jq -c '.findings[] | {ruleId, location}' findings.json), exit $status"
+        rm packages/app/src/clock.service.ts findings.json
+        "$bin" check
+        echo "removed: clean, exit 0"
+    - name: This repository's conventions
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      run: ./bin/gritlint check
+    - name: This repository's check refuses a service module planted in a real package and passes once it is removed
+      if: inputs.lane == 'gritlint'
+      shell: bash -e {0}
+      run: |
+        plant=packages/effect-readiness/src/planted-clock.service.ts
+        findings="$RUNNER_TEMP/gritlint-repo-plant.json"
+        trap 'rm -f "$plant"' EXIT
+        printf '%s\n' \
+          "import * as Context from 'effect/Context'" \
+          "import { readFile } from 'node:fs/promises'" \
+          "export class PlantedClock extends Context.Service<PlantedClock, { readonly read: typeof readFile }>()('effect-readiness/PlantedClock') {}" \
+          > "$plant"
+        status=0
+        ./bin/gritlint check --format json > "$findings" || status=$?
+        test "$status" -eq 1 || { echo "this repository's check must refuse $plant with exit 1, got $status" >&2; cat "$findings" >&2; exit 1; }
+        jq -e --arg p "$plant" '[.findings[] | {ruleId, path: .location.path}] == [{ruleId: "cell-architecture/service-exports-no-layer", path: $p}]' "$findings" \
+          || { echo "expected one cell-architecture/service-exports-no-layer finding at $plant" >&2; cat "$findings" >&2; exit 1; }
+        echo "planted in the repository: refused with $(jq -c '.findings[] | {ruleId, location}' "$findings"), exit $status"
+        rm "$plant"
+        ./bin/gritlint check
+        echo "removed from the repository: clean, exit 0"
+
+    - name: Test lane environment
+      if: inputs.lane == 'test'
+      shell: bash -e {0}
+      run: printf 'CI=true\n' >> "$GITHUB_ENV"
+    - name: Local conformance profile
+      if: inputs.lane == 'test' && inputs.profile == 'local'
+      shell: bash -e {0}
+      run: printf 'CONFORMANCE_PROFILE=local\n' >> "$GITHUB_ENV"
+    - uses: ./.github/actions/install-deps
+      if: inputs.lane == 'test'
+    - uses: ./.github/actions/grant-kvm
+      if: inputs.lane == 'test'
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'test'
+    - uses: denoland/setup-deno@v2
+      if: inputs.lane == 'test'
+    - name: Turbo cache
+      if: inputs.lane == 'test'
+      uses: actions/cache@v6
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-test-${{ fromJSON(inputs.job).id }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-test-${{ fromJSON(inputs.job).id }}-
+          turbo-${{ runner.os }}-checks-
+          turbo-${{ runner.os }}-
+    - name: Cache Playwright browsers
+      if: inputs.lane == 'test' && fromJSON(inputs.job).browser
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
+    - name: Install Playwright chromium
+      if: inputs.lane == 'test' && fromJSON(inputs.job).browser
+      shell: bash -e {0}
+      run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
+    - name: Build
+      if: inputs.lane == 'test'
+      shell: bash -e {0}
+      env:
+        FILTERS: ${{ fromJSON(inputs.job).filters }}
+      run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $FILTERS

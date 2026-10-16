@@ -10,126 +10,89 @@ allowBuilds:
   ssh2: false
   unrs-resolver: false
 catalog:
-  typescript: ^7
-  "@systemfsoftware/arethetypeswrong-cli": ^4.1.0
-  "@effect/platform-node": 4.0.0-rc.112
-  "@effect/platform-node-shared": 4.0.0-rc.112
-  effect: 4.0.0-rc.112
-  "@effect/vitest": 4.0.0-rc.112
-  fast-check: ^4
-  vitest: ^4
-  "@vitest/snapshot": ^4
-  "@vitest/coverage-v8": ^4
-  "@vitest/coverage-istanbul": ^4
-  vite-tsconfig-paths: ^6.1.1
-  vite: ^8
-  tsdown: ^0.22.14
+  typescript: ^7.0.2
+  microsandbox: 0.7.2
+  "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
+  "@effect/platform-node": ^4.0.1
+  "@effect/platform-node-shared": ^4.0.1
+  effect: ^4.0.1
+  "@effect/sql-pglite": ^4.0.1
+  "@effect/tsgo": ^0.50.0
+  "@effect/opentelemetry": ^4.0.1
+  "@opentelemetry/sdk-trace-base": ^2.11.0
+  "@opentelemetry/api": ^1.9.0
+  "@opentelemetry/resources": ^2.11.0
+  "@opentelemetry/semantic-conventions": ^1.43.0
+  fast-check: ^4.9.0
+  vitest: ^5.0.1
+  "@vitest/coverage-v8": ^5.0.1
+  "@vitest/coverage-istanbul": ^5.0.1
+  vite: ^8.2.1
+  tsdown: ^0.23.0
   rimraf: ^6.1.3
-  "@types/node": ^24
-  tstyche: ^7.1.0
-  testcontainers: ^12.1.0
-  "@microsoft/api-extractor": ^7.58.7
-  "@noble/hashes": 2.4.0
-  oxc-parser: ^0.140.0
-  "@oxc-parser/binding-wasm32-wasi": ^0.140.0
-  "@oxc-project/types": ^0.140.0
-  "@std/jsonc": jsr:^1.0.2
-  "@std/path": jsr:^1.0.0
-  "@std/fs": jsr:^1.0.6
-  "@testing-library/dom": ^10.4.1
-  "@testing-library/jest-dom": ^7.0.1
-  "@testing-library/react": ^16.3.2
-  "@types/react": ^19.2.18
-  "@types/react-dom": ^19.2.4
-  "@types/scheduler": ^0.26.0
-  jsdom: ^30.0.1
-  react: ^19.2.8
-  react-dom: ^19.2.8
-  react-error-boundary: ^6.1.2
-  scheduler: ^0.27.0
-  storybook: ^10.5.0
-  type-fest: ^5.8.0
-  "@storybook/addon-vitest": ^10.5.0
-  "@storybook/react-vite": ^10.5.0
-  "@vitest/browser": ^4
-  "@vitest/browser-playwright": ^4
-  playwright: ^1
+  "@types/node": ^26.6.5
+  tstyche: ^7.2.5
+  "@microsoft/api-extractor": ^7.59.1
+  oxc-parser: ^0.150.0
+  "@oxc-project/types": ^0.150.0
+  "@testing-library/dom": ^10.4.2
+  "@testing-library/react": ^16.3.3
+  "@types/react": ^19.3.0
+  "@types/react-dom": ^19.3.0
+  "@types/scheduler": ^0.28.0
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  react-error-boundary: ^6.1.5
+  scheduler: ^0.28.0
+  storybook: ^10.6.0
+  type-fest: ^5.10.0
+  "@storybook/addon-vitest": ^10.6.0
+  "@storybook/react-vite": ^10.6.0
+  "@vitest/browser": ^5.0.1
+  "@vitest/browser-playwright": ^5.0.1
+  playwright: ^1.63.0
+  "@systemfsoftware/vitest-config": workspace:^
 catalogMode: prefer
 catalogs:
   peers:
-    effect: 4.0.0-rc.112
-    "@effect/vitest": 4.0.0-rc.112
+    effect: ^4
   oxlint:
-    oxlint: ^1.77.0
-    "@oxlint/plugins": ^1.77.0
+    oxlint: ~1.82.0
+    "@oxlint/plugins": ~1.82.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    semver: ^7.8.5
-    "@systemfsoftware/stryker-js-cli": ^4.0.1
-    "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
-    "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1
-    "@systemfsoftware/stryker-plugins": ^1.0.1
-    "@systemfsoftware/stryker-test-contribution": ^1.0.1
-    "mutation-testing-elements": 3.7.3
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
+    "@systemfsoftware/stryker-js": latest
+    "@systemfsoftware/stryker-js-typescript-checker": latest
+    "@systemfsoftware/stryker-js-vitest-runner": latest
+    "mutation-testing-elements": 3.9.0
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"
 overrides:
-  fast-check: ^4
-  vite: ^8
+  fast-check: "catalog:"
+  vite: "catalog:"
   # storybook's csf-plugin resolves esbuild 0.27 in its peer context while tsx
   # uses 0.28; the split forks vite and therefore vitest into two physical builds
   # per peer context. One esbuild keeps one vitest (issue #304 guard).
   esbuild: ^0.28.2
 packages:
-  - packages/atom/
-  - packages/atom/effect-atom/
-  - packages/atom/effect-atom-react/
-  - packages/oxlint-plugin/
-  - packages/stryker-js/
-  - packages/toolchain/
-  - packages/effect-gherkin-spec/
-  - packages/storybook-gherkin/
-  - packages/effect-schema-discovery/
-  - packages/effect-schema-recursion-budget/
-  - packages/effect-schema-extensions/
-  - packages/effect-schema-law/
-  - packages/effect-schema-vite/
-  - packages/effect-cell-types/
-  - packages/effect-daemon-spec/
-  - packages/effect-memfs/
-  - packages/hex-schema/
-  - packages/npm-package/
-  - packages/rx-effect/
-  - packages/oxlint-plugin/import-origin/
-  - packages/oxlint-plugin/make-boundary/
-  - packages/oxlint-plugin/oxlint-plugin/
-  - packages/oxlint-plugin/oxlint-plugin-recommended/
-  - packages/oxlint-plugin/oxlint-plugin-cell-vocabulary/
-  - packages/oxlint-plugin/oxlint-plugin-effect-dmmf/
-  - packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/
-  - packages/oxlint-plugin/oxlint-plugin-effect-native/
-  - packages/oxlint-plugin/oxlint-plugin-effect-schema/
-  - packages/oxlint-plugin/oxlint-plugin-effect-workflow/
-  - packages/oxlint-plugin/oxlint-plugin-property-testing/
-  - packages/oxlint-plugin/oxlint-plugin-structure/
-  - packages/oxlint-plugin/oxlint-plugin-tag-discipline/
-  - packages/oxlint-plugin/oxlint-plugin-test-hygiene/
-  - packages/oxlint-plugin/oxlint-plugin-test-placement/
-  - packages/oxlint-plugin/oxlint-config/
-  - packages/oxlint-plugin/all/
-  - packages/stryker-js/stryker-js/
-  - packages/stryker-js/stryker-js-cli/
-  - packages/stryker-js/stryker-js-engine/
-  - packages/stryker-js/stryker-js-html-reporter/
-  - packages/stryker-js/stryker-js-instrumenter/
-  - packages/stryker-js/stryker-js-typescript-checker/
-  - packages/stryker-js/stryker-js-vitest-runner/
-  - packages/stryker-js/stryker-plugins/
-  - packages/stryker-js/stryker-test-contribution/
-  - packages/toolchain/tsconfig/
-  - packages/toolchain/tsdown-config/
-  - packages/toolchain/vitest-config/
+  - packages/*
+  - packages/atom/*
+  - packages/daemon/*
+  - packages/gherkin/*
+  - packages/oxlint-plugin/*
+  - packages/oxlint-presets/*
+  - packages/runner/*
+  - packages/schema/*
+  - packages/sim/*
+  - packages/toolchain/*
+  - packages/trace/*
   - omp/plugins/*
-config:
-  confirm-modules-purge: false
+patchedDependencies:
+  rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
+supportedArchitectures:
+  os: [linux]
+  cpu: [x64, arm64]
+  libc: [glibc]

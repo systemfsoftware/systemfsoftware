@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/rx-effect",
   "license": "Apache-2.0",
-  "version": "0.7.5",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -26,6 +26,7 @@
   "type": "module",
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/rx-effect.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -36,21 +37,23 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
@@ -67,6 +70,7 @@
     "rxjs": "^7"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/rx-effect.d.ts",

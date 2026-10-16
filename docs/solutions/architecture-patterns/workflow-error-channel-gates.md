@@ -3,12 +3,12 @@ title: Workflow Error Channel Gates
 module: effect-cell-types
 component: workflow-error-channel
 tags: [effect-ts, constitution, workflow, tagged-error, match-exhaustive]
-problem_type: architecture-pattern
+problem_type: architecture_pattern
 track: knowledge
 applies_when:
   symptoms:
     - A `*.workflow.ts` file returns `Either<Decision, never>` and was accepted as a workflow
-    - A workflow's error variant extends `S.TaggedClass` instead of `S.TaggedError`
+    - A workflow's decision variant extends `S.TaggedError`, an error class on the success channel (refused by `Workflow.ErrorClassDecision`)
     - '`Match.value(primitive).pipe(Match.when, Match.orElse)` is used where `Match.exhaustive` would suffice'
   root_cause: workflow implementation drift from the workflow error-channel gates (inhabited, tagged error variants via exhaustive closed-union dispatch and one producer per variant)
   resolution_type: pattern-alignment
@@ -29,7 +29,7 @@ mutator cannot kill what the type system refuses to name.
 
 Apply the three gates that govern the error channel of a workflow:
 
-**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `packages/effect-daemon-spec/src/LeaderLock.schema.ts`:
+**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `SandboxBootError` in `@systemfsoftware/effect-microsandbox`:
 
 ```ts
 // RIGHT
@@ -43,6 +43,8 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 }) {}
 ```
 
+> **Superseded (2026-09-26).** The only channel-placement rule `Workflow.make` enforces is that no decision variant is a `Schema.TaggedError` (refused with the `Workflow.ErrorClassDecision` marker, whatever the error channel, `Schema.Never` included). An error variant may be a `TaggedClass` or a `TaggedError`, and a refusal may sit on either channel: put it on the error channel when an operator would count the outcome as the use case failing.
+
 **Gate B — primitive dispatch over open shapes uses `Match.value` with terminal `orElse`; closed unions use `Match.tag` + `Match.exhaustive`.** A primitive (number, string) is an open shape — `Match.value(result.code).pipe(Match.when(2, ...), Match.when(0, ...), Match.orElse(...))` is legal because the primitive has infinitely many values. A closed tagged union (e.g. `ExitBlock | ExitParse | ExitOther`) is not — dispatch must terminate with `Match.exhaustive` so adding a variant forces a compile error.
 
 One interpreter can carry BOTH shapes layered: a primitive (`result.code` → `orElse` is legal)
@@ -54,7 +56,7 @@ dispatch is unfalsifiable — `Match.orElse` on a primitive swallows any new exi
 
 ## Why This Matters
 
-Constitution `CONST-P1` (Purity) and `CONST-D2` (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating `CONST-D2`). The mistake reproduces because nothing in the build chain catches it.
+Constitution `CONST-P1` (Purity) and `CONST-D2` (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` checks the error schema at construction time (`UntaggedError` refuses an untagged error; decisions that cannot fail declare `error: Schema.Never`), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating `CONST-D2`). The mistake reproduces because nothing in the build chain catches it.
 
 The 100% mutation gate is the other failure mode this prevents: a workflow that swallows `Either.left` to `null` is unfalsifiable. The mutator changes the parse path to always succeed and the test still passes because the workflow never branched on the failure in the first place.
 
@@ -137,12 +139,12 @@ const decision = Either.match(verdict, {
 ## Verification
 
 - `grep -n 'Either<.*, never>' packages/**/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
-- `grep -n 'extends S.TaggedClass' packages/**/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
+- The compiler refuses a decision variant that extends `S.TaggedError` (`Workflow.ErrorClassDecision`); an error variant may extend either `S.TaggedClass` or `S.TaggedError`.
 - Property tests (where they exist) assert the error channel: `Either.isLeft(...)` cases prove the failure variant is reachable, not just theoretically defined.
 
 ## See Also
 
-- The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
+- The `Workflow` constructor's `UntaggedError`, `SingleVariantDecision` and `ErrorClassDecision` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` `CONST-D2` (Each Error Its Own Variant) and `CONST-T3` (Mutation Is the Measure)
-- `packages/effect-daemon-spec/src/LeaderLock.schema.ts` — reference usage of `S.TaggedError` in the monorepo
+- `SandboxBootError` and its sibling `MicroVM` errors in `@systemfsoftware/effect-microsandbox` — reference usage of `S.TaggedError` in the monorepo

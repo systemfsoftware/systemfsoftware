@@ -30,7 +30,7 @@ export const UNION_MEMBER = 'Union' as const
 
 export const ANNOTATE_MEMBER = 'annotate' as const
 
-export const ANNOTATION_MEMBER = 'toArbitrary' as const
+export const ANNOTATION_MEMBER = 'toCodecArbitrary' as const
 
 export const BUDGET_MEMBER = 'recursionBudget' as const
 

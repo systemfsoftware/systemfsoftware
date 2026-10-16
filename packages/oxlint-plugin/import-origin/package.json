@@ -12,9 +12,9 @@
   "description": "Import-origin resolver for oxlint rules: what module and exported name does this AST reference ultimately denote? Shared by the plugins that gate on import origin.",
   "type": "module",
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown -l warn",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
@@ -30,9 +31,19 @@
   },
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

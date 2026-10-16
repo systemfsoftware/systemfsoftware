@@ -13,7 +13,7 @@ applies_when:
 related_components:
   - oxlint-import-origin
   - oxlint-make-boundary
-  - oxlint-plugin-effect-workflow
+  - oxlint-plugin-dmmf-workflow
   - oxlint-plugin-effect-schema
 tags: [oxlint-plugin, tsdown-bundling, devdependency-bundling, drift-test, mirror-rot, standalone-artifacts]
 ---
@@ -22,7 +22,7 @@ tags: [oxlint-plugin, tsdown-bundling, devdependency-bundling, drift-test, mirro
 
 ## Context
 
-Oxlint plugin packages need the same internal logic — the `ImportOrigin` resolver and the `MakeBoundary` locator — because each plugin publishes a standalone artifact and plugins must not depend on each other. The logic reaches them as private workspace packages, one per concern: `@systemfsoftware/oxlint-import-origin` (`packages/oxlint-plugin/import-origin`) and `@systemfsoftware/oxlint-make-boundary` (`packages/oxlint-plugin/make-boundary`).
+Oxlint plugin packages need the same internal logic — the `ImportOrigin` resolver and the `MakeBoundary` locator — because each plugin publishes a standalone artifact and plugins must not depend on each other. The logic reaches them as private workspace packages, one per concern: `@systemfsoftware/oxlint-import-origin` and `@systemfsoftware/oxlint-make-boundary`.
 
 ## Failure mechanism
 
@@ -35,7 +35,7 @@ Oxlint plugin packages need the same internal logic — the `ImportOrigin` resol
 **Artifact independence is a packaging property, not a source property.** Published artifacts stay standalone when shared source is compiled into them at build time; the source of truth stays single.
 
 - Shared module → private workspace package, `private: true` — one package per concern, not one "shared" package named for neither.
-- Consumer declares it under `devDependencies` and the bundler inlines it into `dist` (tsdown bundles everything outside `dependencies`/`peerDependencies`; `deps.onlyBundle: false` only silences the hint). Both live consumers read this way: `oxlint-plugin-effect-schema` declares `@systemfsoftware/oxlint-import-origin`, and `oxlint-plugin-effect-workflow` declares `@systemfsoftware/oxlint-make-boundary`.
+- Consumer declares it under `devDependencies` and the bundler inlines it into `dist` (tsdown bundles everything outside `dependencies`/`peerDependencies`; `deps.onlyBundle: false` only silences the hint). Every live consumer reads this way: `oxlint-plugin-effect-schema`, `oxlint-plugin-effect-platform` and `oxlint-plugin-cell-architecture` declare `@systemfsoftware/oxlint-import-origin`, and `oxlint-plugin-dmmf-workflow` declares `@systemfsoftware/oxlint-make-boundary`.
 - `dependencies` would externalize the module and force the private package to be published — exactly the coupling to avoid.
 
 ## Guidance
@@ -44,7 +44,7 @@ Oxlint plugin packages need the same internal logic — the `ImportOrigin` resol
 - Bundle via devDependency; never list the private package under `dependencies` of a published package.
 - Delete the mirrors and the drift test in the same change; a pin whose mirrors are gone is dead weight, and a mirror whose pin is gone is an unobserved drift surface.
 - Vocabulary-specific logic extracted from a shared module belongs to the package whose vocabulary it encodes (the schema predicate lives in the schema plugin), not to the shared module.
-- A shared package with no tests of its own must not own a mutation config: CI enrollment predicates keyed on config presence would run a test-less package vacuously red — a mechanism this workspace asserts and has never measured. Its behavior is graded through the consumers' suites, and the package's own AGENTS.md carries the tradeoff under a shell gate asserting that no `stryker.config.json` and no test directory exist.
+- A shared package with no tests of its own must not own a mutation config: CI enrollment predicates keyed on config presence would run a test-less package vacuously red — a mechanism this workspace asserts and has never measured. Its behavior is graded through the consumers' suites, and the plugin family's AGENTS.md carries the tradeoff as `IO4`, under a shell gate asserting that neither shared package has a `stryker.config.json`.
 
 ## Why This Works
 

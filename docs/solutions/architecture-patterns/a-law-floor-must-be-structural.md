@@ -1,6 +1,10 @@
+---
+problem_type: architecture_pattern
+---
+
 # A Law Floor Must Be Structural — A Rebuilt Stock Twin Is Not Stock
 
-Decision: when a generated law needs a "good enough" floor for a numeric
+Decision: when a property needs a "good enough" floor for a numeric
 property (a deep-value share, a reachability count), the floor must be
 computable from the schema's own declared policy or from structural constants
 — never from a share measured on one balanced fixture, and never from a

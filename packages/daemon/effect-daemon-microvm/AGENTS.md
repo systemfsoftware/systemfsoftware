@@ -1,0 +1,24 @@
+# AGENTS.md — `@systemfsoftware/effect-daemon-microvm`
+
+The microVM medium for `@systemfsoftware/effect-daemon-spec`: one incarnation is one sandbox booted
+through `@systemfsoftware/effect-microsandbox`, running one workload. The package also ships the
+conformance driver that proves the medium against the fiber reference. Root `AGENTS.md` governs.
+
+## Rules
+
+| ID    | Rule                                                                                                                                                                                                                                                                                                                                               | Gate                                                                                                                                                  |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MV-A1 | `etc/effect-daemon-microvm.api.md` is the committed public API snapshot. A change to anything exported by `src/mod.ts` requires `build`, then `api:update`, then committing `etc/*.api.md`. A new `ae-forgotten-export` warning is fixed by exporting the type or inlining it — never suppressed.                                                  | `pnpm --filter @systemfsoftware/effect-daemon-microvm api:check`                                                                                      |
+| MV-A2 | The `integration` project runs only where hardware virtualization exists. Locally without an accessible `/dev/kvm` every suite skips with the reason in its title; in CI (`CI` set) a missing `/dev/kvm` fails the `integration` project from its `globalSetup`, `vitest-kvm-preflight.ts` — it never skips, and the other projects never load it. | `env -u CI pnpm --filter @systemfsoftware/effect-daemon-microvm test` (skips) and the same with `CI=1` (fails without KVM)                            |
+| MV-A4 | Every integration scenario runs against a real microVM; no fake stands in for the medium's oracle.                                                                                                                                                                                                                                                 | `review` — the reviewer confirms each `tests/*.integration.test.ts` scenario boots a sandbox through `MicroVMMedium.port` or proves a driver over one |
+| MV-A5 | The fixture image is pinned by content digest, and the digest's provenance is recorded in `README.md`.                                                                                                                                                                                                                                             | `review` — the reviewer matches the digest in `tests/__fixtures__/child-script.ts` against the retrieval recorded in `README.md`                      |
+| MV-A6 | The fixture's step lines are `MicroVMMedium.ChildStepLines`; a fixture script is built from that table, never transcribed from it.                                                                                                                                                                                                                 | `review` — the reviewer confirms no step label is spelled out beside the table                                                                        |
+| MV-A7 | The mutated set is exactly `src/**/*.workflow.ts`: the medium's decisions are `src/MicroVMMedium/{plan-vm-teardown,classify-workload-exit}.workflow.ts`, and the shells that call them are not mutated.                                                                                                                                            | The Mutation `plan` job (`test-timings plan --task mutation`) refuses a config that sets its own `mutate`                                             |
+
+## Verification
+
+```bash
+pnpm --filter @systemfsoftware/effect-daemon-microvm typecheck
+pnpm --filter @systemfsoftware/effect-daemon-microvm test
+pnpm --filter @systemfsoftware/effect-daemon-microvm build
+```

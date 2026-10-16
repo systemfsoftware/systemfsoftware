@@ -1,0 +1,7 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": ["src"],
+  "compilerOptions": {
+    "customConditions": []
+  }
+}

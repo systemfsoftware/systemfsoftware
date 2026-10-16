@@ -1,3 +1,4 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
 import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
@@ -17,9 +18,12 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
-    } else if (typeof entry === 'object' && entry !== null) {
+    } else if (typeof entry === 'object' && Boolean(entry)) {
       const { default: defaultEntry, types: _existingTypes, ...rest } = entry
-      const withDefault = typeof defaultEntry === 'string' ? { default: defaultEntry } : {}
+      let withDefault: Record<string, string> = {}
+      if (typeof defaultEntry === 'string') {
+        withDefault = { default: defaultEntry }
+      }
       exports[subpath] = { ...rest, types, ...withDefault }
     }
   }
@@ -27,15 +31,16 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
+  ...quietBuild,
   entry: { index: './src/mod.ts' },
   format: 'esm',
   dts: true,
   exports: {
+    devExports: '@systemfsoftware/source',
     customExports: injectTypes,
   },
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
-  clean: false,
   define: { 'import.meta.vitest': 'undefined' },
 })

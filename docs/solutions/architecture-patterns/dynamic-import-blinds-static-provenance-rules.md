@@ -1,8 +1,10 @@
 ---
 title: A Dynamic-Import Binding Leaves a Static Import Tracker Blind
+date: "2026-09-06"
 track: knowledge
 problem_type: architecture_pattern
-module: oxlint
+category: architecture-patterns
+module: packages/oxlint-plugin/oxlint-plugin-test-discipline
 component: property-testing rules
 tags: [dynamic-import, fail-open, lint-gate, in-source-tests, opaque-verdict]
 severity: high

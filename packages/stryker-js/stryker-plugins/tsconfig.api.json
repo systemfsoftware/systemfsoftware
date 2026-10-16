@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.build.json",
-  "compilerOptions": {
-    "resolveJsonModule": false
-  },
-  "include": [
-    "dist/index.d.ts"
-  ]
-}

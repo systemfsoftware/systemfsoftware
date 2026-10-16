@@ -32,7 +32,7 @@ A lint suppression comment can be dead on arrival and nothing warns. Four per-li
 
 ## Architectural invariants
 
-**A suppression comment is executable configuration; its id must be verified against the runtime, not read off a constant.** The only evidence that a disable works is differential: with the offending line present and the disable removed, lint fails; with the disable restored, lint passes. A disable that has never been differentially tested is an unfalsified hypothesis — the same polarity trap this corpus records in `an-escape-hatch-is-an-unfalsified-hypothesis.md`, and the reason `a-port-beat-every-exemption-for-banned-imports.md` vetoes disables as fixes.
+**A suppression comment is executable configuration; its id must be verified against the runtime, not read off a constant.** The only evidence that a disable works is differential: with the offending line present and the disable removed, lint fails; with the disable restored, lint passes. A disable that has never been differentially tested is an unfalsified hypothesis — the same polarity trap this corpus records in `an-escape-hatch-is-an-unfalsified-hypothesis.md`, and the reason a disable is never accepted as the fix for a banned import.
 
 Corollary: when a rule is delivered through an aggregate that renames rule ids, the disable id is the **config key** (what the enabled-rules map spells), never the plugin object's self-reported name and never the npm package name.
 

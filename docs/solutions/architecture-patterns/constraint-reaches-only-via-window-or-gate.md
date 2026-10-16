@@ -76,9 +76,7 @@ Three instances, each with the mechanism that failed and the reason nothing comp
 ## Related
 
 - `docs/solutions/architecture-patterns/constructor-rule-boundary.md` — the same reach question one level down — which observer can see a given cell property, and why a type and a rule are complementary rather than substitutes
-- `docs/solutions/logic-errors/shared-ast-helper-vacuums-its-consumers.md` — a gate that ran and reported success while its subject had been emptied underneath it
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — a gate that checks form is a ritual: it occupies the gate slot without deciding the property it appears to decide
 - `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md` — `warn` severity is silence to an agent — a rule at `warn` satisfies neither mechanism
-- `docs/solutions/integration-issues/comment-checker-hook-silently-bypasses-on-patch-mode-edit.md` — a skip indistinguishable from a pass — the emission was never gated
 - Issue #138 — the emptied mutation glob; the gate-lost-its-subject instance above.
 - Issue #139 — the over-claiming rule message; the window instance above.

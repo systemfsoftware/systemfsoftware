@@ -1,0 +1,442 @@
+import { NodeRuntime } from '@effect/platform-node'
+import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
+import { MicroVM } from '@systemfsoftware/effect-microsandbox'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import images from '@systemfsoftware/microvm-test-images' with { type: 'json' }
+import { Config, Crypto, Deferred, Effect, Fiber, Layer, Match, Random, Schema } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
+import type * as Scope from 'effect/Scope'
+import { Sandbox } from 'microsandbox'
+import assert from 'node:assert'
+import { Buffer } from 'node:buffer'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+
+export class HostListenerError extends Schema.TaggedError<HostListenerError>()(
+  'HostListenerError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class SandboxListingError extends Schema.TaggedError<SandboxListingError>()(
+  'SandboxListingError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class EscapeHatchDefect extends Schema.TaggedError<EscapeHatchDefect>()(
+  'EscapeHatchDefect',
+  {},
+) {}
+
+const sandboxPrefix = 'effect-microsandbox-'
+
+const recordGone = (name: string): Effect.Effect<boolean> =>
+  Effect.match(
+    Effect.tryPromise({ try: () => Sandbox.get(name), catch: () => undefined }),
+    { onFailure: () => true, onSuccess: () => false },
+  )
+
+const alpine = MicroVM.spec(images.alpine).withExposedPorts([8080])
+const portless = MicroVM.spec(images.alpine)
+
+const randomToken: Effect.Effect<string, never, Crypto.Crypto> = Effect.map(
+  Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomBytes(16))),
+  (bytes) => Buffer.from(bytes).toString('hex'),
+)
+
+/**
+ * Byte-exact expectation for `yes "$SEED" | head -c <size>`: busybox `yes` writes
+ * `SEED\n` forever and `head -c` truncates that stream to exactly `size` bytes.
+ */
+const yesOutput = (seed: string, size: number): Buffer => {
+  const line = Buffer.from(`${seed}\n`)
+  const out = Buffer.alloc(size)
+  for (let offset = 0; offset < size; offset += line.length) line.copy(out, offset)
+  return out
+}
+
+const assertBytes = (label: string, actual: Uint8Array, expected: Uint8Array): void => {
+  assert.equal(actual.length, expected.length, `${label}: byte length`)
+  assert.equal(Buffer.compare(actual, expected), 0, `${label}: bytes must match`)
+}
+
+const portOf = (server: Server): number => {
+  const address = server.address()
+  return address === null || typeof address === 'string' ? 0 : address.port
+}
+
+interface HostListener {
+  readonly requestCount: () => number
+  readonly url: string
+}
+
+type HostReply = (request: IncomingMessage, response: ServerResponse, server: Server) => void
+
+const openListener = (reply: HostReply): Effect.Effect<HostListener, never, Scope.Scope> =>
+  Effect.gen(function*() {
+    let requests = 0
+    const server = yield* Effect.acquireRelease(
+      Effect.callback<Server, HostListenerError>((resume) => {
+        const server = createServer((request, response) => {
+          requests = requests + 1
+          reply(request, response, server)
+        })
+        server.once('error', (cause) => resume(Effect.fail(new HostListenerError({ cause }))))
+        server.listen(0, '127.0.0.1', () => {
+          server.unref()
+          resume(Effect.succeed(server))
+        })
+      }).pipe(Effect.orDie),
+      (server) =>
+        Effect.sync(() => {
+          server.closeAllConnections()
+          server.close()
+        }),
+    )
+    return { requestCount: () => requests, url: `http://host.microsandbox.internal:${portOf(server)}/` }
+  })
+
+const exitCodeOf = (completion: MicroVM.JobCompletion): number =>
+  Match.value(completion.status).pipe(
+    Match.tag('JobExited', (exited) => exited.code),
+    Match.tag('JobSignaled', () => assert.fail('expected JobExited, got JobSignaled')),
+    Match.exhaustive,
+  )
+
+const assertFetchFailed = (label: string, completion: MicroVM.JobCompletion): void => {
+  assert.notEqual(exitCodeOf(completion), 0, `${label}: a failed fetch must exit with a non-zero code`)
+}
+
+const assertSignaled = (label: string, completion: MicroVM.JobCompletion): void => {
+  const verdict = Match.value(completion.status).pipe(
+    Match.tag('JobSignaled', () => 'signaled'),
+    Match.tag('JobExited', (exited) => `exited with ${exited.code}`),
+    Match.exhaustive,
+  )
+  assert.equal(verdict, 'signaled', `${label}: a signal death must classify as JobSignaled`)
+}
+
+const listSandboxPage = (cursor: string | undefined) =>
+  Effect.tryPromise({
+    try: () => (cursor === undefined ? Sandbox.list() : Sandbox.listWith((list) => list.cursor(cursor))),
+    catch: (cause) => new SandboxListingError({ cause }),
+  }).pipe(Effect.orDie)
+
+const sandboxNamesFrom = (cursor: string | undefined): Effect.Effect<ReadonlyArray<string>> =>
+  Effect.gen(function*() {
+    const page = yield* listSandboxPage(cursor)
+    const names = page.sandboxes.map((sandbox) => sandbox.name)
+    const rest = yield* Effect.suspend(() =>
+      page.nextCursor === undefined
+        ? Effect.succeed<ReadonlyArray<string>>([])
+        : sandboxNamesFrom(page.nextCursor)
+    )
+    return [...names, ...rest]
+  })
+
+const assertNoLeftovers = (label: string): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const names = yield* sandboxNamesFrom(undefined)
+    const leftovers = names.filter((name) => name.startsWith(sandboxPrefix))
+    assert.deepStrictEqual(leftovers, [], `${label}: no ${sandboxPrefix}* sandbox may remain`)
+  })
+
+/**
+ * Interruption points for the VM-release journey (R26): delays, in
+ * milliseconds, measured from the moment a boot starts. The delays span the
+ * whole boot so a run probes starting before, during, and after the sandbox
+ * exists on the host.
+ */
+const INTERRUPTION_CANDIDATES = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512] as const
+const INTERRUPTIONS_PER_RUN = 5
+
+const interruptionPointsFor = (seed: number): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.replicateEffect(Random.choice(INTERRUPTION_CANDIDATES), INTERRUPTIONS_PER_RUN).pipe(Random.withSeed(seed))
+
+const interruptBootAt = (
+  point: number,
+): Effect.Effect<
+  void,
+  never,
+  Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
+> =>
+  Effect.gen(function*() {
+    yield* Effect.logInfo(`[smoke] J14: boot starting, interruption scheduled at ${point}ms`)
+    const boot = yield* Effect.forkChild(
+      Effect.scoped(alpine.withEnv({ SMOKE_JOURNEY: 'j14' }).scoped.pipe(Effect.andThen(Effect.never))),
+    )
+    yield* Effect.sleep(point)
+    yield* Fiber.interrupt(boot)
+    yield* assertNoLeftovers(`J14@${point}ms`)
+  })
+
+const j1 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J1: scoped boot, mapped port, record cleanup')
+    const spec = alpine.withEnv({ SMOKE_JOURNEY: 'j1' })
+    const vm = yield* spec.scoped
+    const pinged = yield* MicroVM.ping(vm)
+    assert.ok(pinged, 'ping must return true')
+    const out = yield* MicroVM.exec(vm, 'echo', ['hello'])
+    assert.equal(out.code, 0)
+    assert.ok(out.stdout.includes('hello'), 'guest must echo the exec payload')
+    const hostPort = yield* MicroVM.port(vm, 8080)
+    assert.ok(hostPort > 0, 'guest port 8080 must map to a positive host port')
+    const url = yield* MicroVM.url(vm, 8080, '/ping')
+    assert.equal(url, `http://127.0.0.1:${hostPort}/ping`)
+    return vm.name
+  }),
+)
+
+const j2 = Effect.gen(function*() {
+  yield* Effect.logInfo('[smoke] J2: interrupting booted VM, awaiting finalizer')
+  const spec = portless
+  const booted = yield* Deferred.make<string>()
+  const fiber = yield* Effect.forkChild(
+    Effect.scoped(
+      Effect.flatMap(spec.scoped, (vm) => Deferred.succeed(booted, vm.name).pipe(Effect.andThen(Effect.never))),
+    ),
+  )
+  const name = yield* Deferred.await(booted)
+  yield* Fiber.interrupt(fiber)
+  return name
+})
+
+const j3 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J3: one layer build, two sequential VM lifecycles')
+    const spec = alpine.withEnv({ SMOKE_JOURNEY: 'j3' })
+    const first = yield* Effect.scoped(
+      Effect.flatMap(spec.scoped, (vm) => vm.pipe(MicroVM.exec('echo', ['first']))),
+    )
+    assert.equal(first.code, 0)
+    assert.ok(first.stdout.includes('first'))
+    const second = yield* Effect.scoped(
+      Effect.flatMap(spec.scoped, (vm) => vm.pipe(MicroVM.exec('echo', ['second']))),
+    )
+    assert.equal(second.code, 0)
+    assert.ok(second.stdout.includes('second'))
+  }),
+)
+
+const j4 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J4: dual parity, unmapped-port refusal, driver encapsulation, escape-hatch cause')
+    const vm = yield* alpine.withEnv({ SMOKE_JOURNEY: 'j4' }).scoped
+    const portFirst = yield* MicroVM.port(vm, 8080)
+    const portLast = yield* vm.pipe(MicroVM.port(8080))
+    assert.equal(portFirst, portLast)
+    const urlFirst = yield* MicroVM.url(vm, 8080, '/ping')
+    const urlLast = yield* vm.pipe(MicroVM.url(8080, '/ping'))
+    assert.equal(urlFirst, urlLast)
+    const refusal = yield* Effect.flip(MicroVM.port(vm, 9999))
+    const refusedGuest = Match.value(refusal).pipe(
+      Match.tag('PortAllocationError', (error) => error.guestPort),
+      Match.exhaustive,
+    )
+    assert.equal(refusedGuest, 9999)
+    assert.ok(!('sandbox' in vm), 'native driver must not be reachable from the handle surface')
+    const echoed = yield* MicroVM.use(vm, (sandbox) => Promise.resolve(sandbox.name))
+    assert.equal(echoed, vm.name)
+    const defect = new EscapeHatchDefect()
+    const useRefusal = yield* Effect.flip(MicroVM.use(vm, () => Promise.reject(defect)))
+    const preserved = Match.value(useRefusal).pipe(
+      Match.tag('SandboxBootError', (error) => error.cause),
+      Match.exhaustive,
+    )
+    assert.equal(preserved, defect)
+  }),
+)
+
+const payloadSize = 2 * 1024 * 1024
+
+const j5 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J5: job stdout payload, host-random seed, byte-exact')
+    const seed = yield* randomToken
+    const completion = yield* MicroVM.job(images.alpine, ['sh', '-c', `yes "$SEED" | head -c ${payloadSize}`])
+      .withEnv({ SEED: seed })
+      .run
+    assert.equal(exitCodeOf(completion), 0, 'payload job must exit 0')
+    assertBytes('J5 stdout', completion.stdout, yesOutput(seed, payloadSize))
+    assert.equal(completion.stderr.length, 0, 'payload job must leave stderr empty')
+  }),
+)
+
+const j6 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J6: job stderr payload with exit 42')
+    const seed = yield* randomToken
+    const completion = yield* MicroVM.job(images.alpine, [
+      'sh',
+      '-c',
+      `yes "$SEED" | head -c ${payloadSize} >&2; exit 42`,
+    ])
+      .withEnv({ SEED: seed })
+      .run
+    assert.equal(exitCodeOf(completion), 42, 'workload must report exit 42')
+    assertBytes('J6 stderr', completion.stderr, yesOutput(seed, payloadSize))
+    assert.equal(completion.stdout.length, 0, 'stderr payload must not reach stdout')
+  }),
+)
+
+const j7 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J7: one-shot host resource, replay cannot reproduce the token')
+    const token = yield* randomToken
+    const body = `${token}\n`
+    const listener = yield* openListener((_request, response, server) => {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end(body, () => {
+        server.close()
+      })
+    })
+    const first = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
+      .withHostAccess(true)
+      .run
+    assert.equal(exitCodeOf(first), 0, 'opted-in job must fetch the one-shot body')
+    assertBytes('J7 one-shot body', first.stdout, Buffer.from(body))
+    const replay = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
+      .withHostAccess(true)
+      .run
+    assertFetchFailed('J7 replay', replay)
+    assert.equal(Buffer.from(replay.stdout).includes(body), false, 'replay must not reproduce the token')
+  }),
+)
+
+const j8 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J8: host-opted fetch equals stdout with exit 0')
+    const token = yield* randomToken
+    const body = `${token}\n`
+    const listener = yield* openListener((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end(body)
+    })
+    const completion = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url])
+      .withHostAccess(true)
+      .run
+    assert.equal(exitCodeOf(completion), 0, 'host-opted fetch must exit 0')
+    assertBytes('J8 host body', completion.stdout, Buffer.from(body))
+    assert.ok(listener.requestCount() >= 1, 'guest must reach the host listener')
+  }),
+)
+
+const j9 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J9: identical argv without opt-in stays off the host')
+    const token = yield* randomToken
+    const body = `${token}\n`
+    const listener = yield* openListener((_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/plain' })
+      response.end(body)
+    })
+    const completion = yield* MicroVM.job(images.alpine, ['wget', '-T', '5', '-qO-', listener.url]).run
+    assertFetchFailed('J9 denied', completion)
+    assert.equal(Buffer.from(completion.stdout).includes(body), false, 'denied guest must not receive the body')
+    assert.equal(listener.requestCount(), 0, 'denied guest must not reach the host listener')
+  }),
+)
+
+const j10 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J10: withWorkdir pins the default workload cwd')
+    const completion = yield* MicroVM.job(images.alpine, ['pwd']).withWorkdir('/etc').run
+    assert.equal(exitCodeOf(completion), 0, 'pwd must exit 0')
+    assertBytes('J10 pwd', completion.stdout, Buffer.from('/etc\n'))
+  }),
+)
+
+const j11 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J11: signal deaths classify as JobSignaled')
+    const terminated = yield* MicroVM.job(images.alpine, ['sh', '-c', 'kill -TERM $$']).run
+    assertSignaled('J11 SIGTERM', terminated)
+    const killed = yield* MicroVM.job(images.alpine, ['sh', '-c', 'kill -KILL $$']).run
+    assertSignaled('J11 SIGKILL', killed)
+  }),
+)
+
+const j12 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J12: interrupt a host-opted job after its first request')
+    let signalFirstRequest: (() => void) | undefined
+    const listener = yield* openListener((_request, response) => {
+      response.end('reached\n')
+      signalFirstRequest?.()
+    })
+    const awaitFirstRequest = Effect.callback<void>((resume) => {
+      signalFirstRequest = () => resume(Effect.void)
+    })
+    const waiter = yield* Effect.forkChild(awaitFirstRequest.pipe(Effect.timeout('30 seconds')))
+    const fiber = yield* Effect.forkChild(
+      Effect.scoped(
+        MicroVM.job(images.alpine, ['sh', '-c', `wget -T 5 -qO- ${listener.url}; sleep 300`])
+          .withHostAccess(true)
+          .run,
+      ),
+    )
+    yield* Fiber.join(waiter)
+    yield* Fiber.interrupt(fiber)
+    yield* assertNoLeftovers('J12')
+  }),
+)
+
+const j13 = Effect.gen(function*() {
+  yield* Effect.logInfo('[smoke] J13: end of journeys, no sandbox left behind')
+  yield* assertNoLeftovers('J13')
+})
+
+/** `.invalid` is reserved (RFC 2606) and never resolves, so the refusal reaches no registry. */
+const REFUSED_IMAGE = 'refusal.invalid/effect-microsandbox-refusal:0.0.0'
+
+const j14 = Effect.gen(function*() {
+  const seed = yield* Config.Number('SANDBOX_SMOKE_SEED').pipe(Config.withDefault(0))
+  const points = yield* interruptionPointsFor(seed)
+  yield* Effect.logInfo(
+    `[smoke] J14: VM release at seeded interruption points (seed=${seed}, points=${points.join(',')})`,
+  )
+  yield* Effect.forEach(points, interruptBootAt)
+  yield* assertNoLeftovers('J14')
+})
+
+const j15 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J15: a refused start is reported as a failure, never passed')
+    const refusal = yield* Effect.flip(MicroVM.spec(REFUSED_IMAGE).scoped).pipe(Effect.orDie)
+    const reported = Match.value(refusal).pipe(
+      Match.tag('VirtualizationUnsupportedError', () => 'virtualization refused'),
+      Match.tag('SandboxBootError', () => 'boot refused'),
+      Match.tag('LoopbackViolationError', () => 'plan refused'),
+      Match.orElse(() => assert.fail('expected the start to be refused, not to succeed')),
+    )
+    yield* Effect.logInfo(`[smoke] J15: start refused — ${reported}`)
+  }),
+)
+
+const main = Effect.gen(
+  function*() {
+    const j1Name = yield* j1
+    assert.ok(yield* recordGone(j1Name), 'scope close must destroy the sandbox record')
+    const j2Name = yield* j2
+    assert.ok(yield* recordGone(j2Name), 'interrupted scope must destroy the sandbox record')
+    yield* j3
+    yield* j4
+    yield* j5
+    yield* j6
+    yield* j7
+    yield* j8
+    yield* j9
+    yield* j10
+    yield* j11
+    yield* j12
+    yield* j14
+    yield* j15
+    yield* j13
+    yield* Effect.logInfo('[smoke] all journeys green')
+  },
+)
+
+NodeRuntime.runMain(Effect.provide(main, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber.layer)))

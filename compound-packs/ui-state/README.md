@@ -1,0 +1,14 @@
+# UI State Compound Pack
+
+Components render and dispatch only. How a React application holds state: server data lives in effect-atom atoms over Effect services, a component performs no I/O, every Effect the UI runs is an atom of one runtime built from a Layer, and display derivation is a named pure function. The pack governs application UI, meaning the components, hooks and view-models of an app or UI package. It does not govern the implementation of the effect-atom bindings (`packages/atom/effect-atom`, `packages/atom/effect-atom-react`), which are the runtime edge: `useAtomValue`'s own inline `Atom.map` (`packages/atom/effect-atom-react/src/hooks-value.ts:110`) is not a `view-models-are-pure-functions` finding.
+
+Rules:
+
+- `server-data-lives-in-atoms`: data from a server, an Effect service or another component is read through atoms, never copied into `useState`, `useReducer` or `useRef`, and no module imports a React server-state library. Incidents a, b and c (2026-10-11); incident g (2026-10-11) is the UI-local `useState` the rule allows.
+- `components-perform-no-io`: a `.tsx` module performs no I/O and names no I/O global, clock or timer. Incidents b, e and f (2026-10-11).
+- `components-dispatch-to-runtime-atoms`: every Effect the UI runs is a runtime atom of one runtime built at module scope; an event handler dispatches at most one command. Incidents c and d (2026-10-11).
+- `view-models-are-pure-functions`: sorting, filtering, grouping, formatting and status-to-label mapping are named pure functions in a `.ts` module, applied as `useAtomValue(atom, f)`. Incident h (2026-10-11).
+
+Two rules are partly mechanized in `@systemfsoftware/oxlint-config-recommended`: `no-restricted-imports` for the server-state libraries and `no-restricted-globals`/`no-restricted-properties` for `fetch` in `**/*.tsx`. Each lint is narrower than its rule, and review covers the rest. No lint tells server data from UI-local `useState`, so none exists. Under `src/`, the preset's `effecttsgo/global-date` already reports `new Date(x)`, `new Date()` and `Date.now()`, `effecttsgo/global-timers` reports `setTimeout` and `setInterval`, and effect-platform's `no-unported-time-source` reports `performance.now()`, in `.tsx` as in `.ts`.
+
+Owned elsewhere and cited, not restated: the Layer-choice atom, its failing default and how stories and the production entry seed it (storybook-testing `stories-compose-at-their-own-root.md`); services, Layers and the single composition root (cell-architecture `service-and-layer-boundaries.md`); `ManagedRuntime.make` inside a function body under `src/`, refused by effect-platform's `runtime-construction-placement` lint; and the property-test and mutation obligations on pure functions (storybook-testing `stories-are-the-ui-integration-tests.md`, mutation-discipline `kill-survivors-with-contract-properties.md`).

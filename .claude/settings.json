@@ -18,18 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-config-off-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-config.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-config-off-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --config \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/deno.jsonc\" --frozen --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-config.ts\"",
             "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'deliver-leaf-agents-md: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env --allow-read --allow-write \"$CLAUDE_PROJECT_DIR/.claude/hooks/deliver-leaf-agents-md.ts\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-protected-writes: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env --allow-read \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-protected-writes.ts\"",
-            "timeout": 5
           },
           {
             "type": "command",
@@ -43,33 +33,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-native-equivalent: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-native-equivalent.ts\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-git-subtree: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/agent-plugins/git-subtrees/src/guard-git-subtree.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-git-subtree: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --config \"$CLAUDE_PROJECT_DIR/agent-plugins/git-subtrees/deno.jsonc\" --frozen \"$CLAUDE_PROJECT_DIR/agent-plugins/git-subtrees/src/guard-git-subtree.ts\"",
             "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-local-mutation: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-local-mutation.ts\"",
-            "timeout": 5
           },
           {
             "type": "command",
             "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the command guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/pnpm-guard/src/command-guard.ts\"",
             "timeout": 15
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-native-equivalent: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-native-equivalent.ts\"",
-            "timeout": 5
           }
         ]
       }
@@ -80,8 +50,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-lint.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --config \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/deno.jsonc\" --frozen --allow-read --allow-run --allow-env \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-lint.ts\"",
             "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "comment-checker"
           }
         ]
       }

@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/npm-package",
-  "version": "0.2.4",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
@@ -31,31 +31,40 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
+    "mutation": "stryker run",
     "prepack": "pnpm build",
-    "api:check": "tsdown && api-extractor run",
+    "api:check": "tsdown -l warn && api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@andrewbranch/untar.js": "^1.0.3",
+    "@andrewbranch/untar.js": "^1.0.4",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "fflate": "^0.8.3"
   },
   "peerDependencies": {
     "effect": "catalog:peers"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
-    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
@@ -82,6 +91,7 @@
   },
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },

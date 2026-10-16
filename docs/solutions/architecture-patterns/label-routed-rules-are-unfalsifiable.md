@@ -1,3 +1,15 @@
+---
+problem_type: architecture_pattern
+---
+
+## Supersession note (2026-10-12)
+
+The mutated set is now `src/**/*.workflow.ts` alone, defined once in `@systemfsoftware/stryker-config`; the Mutation planner refuses a config that sets its own `mutate`, and a package with no workflow file is not enrolled (`docs/plans/2026-10-12-1517-refactor-workflow-only-mutation-planner-plan.md`). `*.schema.ts` files are no longer mutated. The defect this document names applies more widely than the note below says: logic outside a `*.workflow.ts` file, in a schema file or an unsuffixed module, is not mutated, and nothing reports that it stopped being measured. What keeps decisions inside the mutated set is the dmmf-workflow lint family (`make-file-location` puts every `Workflow.make` in a `<stem>.workflow.ts` file), not the mutation config.
+
+## Supersession note (2026-09-26)
+
+The recommendation below to mutate whole packages instead of a label-routed glob is superseded for runtime packages by `docs/plans/2026-09-27-0213-refactor-adt-operation-homes-plan.md`. On that date their mutation configs selected `src/**/*.workflow.ts` and `src/**/*.schema.ts` (the 2026-10-12 note above narrows the set to workflow files), so the defect this document named still applied: logic exported from an unsuffixed module is not mutated, and nothing reports that it stopped being measured. That harm is accepted for unsuffixed modules, where exported logic is a review finding rather than a lint failure. It is closed for suffixed shells: a cell file may export only its cell, cells, services, handles and drivers keep their helpers private, and `schema-file-exports-schemas-only` admits only operations over types the schema file declares.
+
 # A Label-Routed Rule Cannot Fail On The Case It Targets
 
 Decision: retire the role-suffix taxonomy. Route static analysis on keys the build derives, and
@@ -40,10 +52,10 @@ several genuinely derivable rules look label-only.
 Two files, byte-identical content, differing only in suffix, each holding
 `Effect.runSync(Effect.sync(() => Date.now()))`: the suffix-keyed purity rule fires on the file named
 for a cell role and stays silent on the other, so the purity rule evaporates on rename. The rule that
-held both selects on an import edge —
-`packages/oxlint-plugin/oxlint-plugin-effect-native/src/rules/no-date-now-in-effect.ts` sets a flag from
-`ImportDeclaration` and gates on it, touching the filename only to exclude tests. One repo, one
-runner, two selection strategies, and only one survives a rename.
+held both selects on an import edge — `no-date-now-in-effect`, since succeeded by `no-unported-time-source` in
+`@systemfsoftware/oxlint-plugin-effect-platform`, reads `ImportDeclaration` and touches the filename only to
+exclude tests and registered port files. One repo, one runner, two selection strategies, and only one
+survives a rename.
 
 The manifest boundary holds the same way. A package whose manifest does not declare `effect` cannot
 import it: `TS2307: Cannot find module 'effect'`, from the type checker, at the first import. The
@@ -67,7 +79,7 @@ that it stopped. Rename the file and the measurement evaporates, exactly as the 
 So the aiming question is the same question, and it has the same answer: aim at a boundary that
 cannot be left by renaming.
 
-That is a fact about this tree, not an argument: `packages/effect-daemon-spec` mutates
+That is a fact about this tree, not an argument: `@systemfsoftware/effect-daemon-spec` mutates
 `src/**/*.workflow.ts` and nothing else in `src`, so a decision that moves out of a workflow-named
 file leaves the mutated population silently and the run keeps reporting a clean score over what
 remains.
@@ -175,11 +187,12 @@ role-suffixed module still passes, because each reaches package code; a test rea
 runner was silently accepted before and is now reported.
 
 The same session found the one nearby label that **does** hold, and it holds because it is not a
-label. `Policy<A, E, R> = (self: Effect<A, E, R>) => Effect<A, E, R>` states its contract in the
-signature: a combinator whose return changes `A` or rewrites `E` is not assignable to it, pinned by
-the type test in `packages/effect-cell-types/test-types/Policy.tst.ts` rather than by a rule, and no
-filename is consulted. What binds is the door — an application site whose parameter is typed
-`Policy<A, E, R>`, such as `Cell.withPolicy` — never the file's name. A `*.policy.ts` suffix would
+label. `Policy<A, E, R> = (self: Effect<A, E, R>) => Effect<A, E, R>` stated its contract in the
+signature: a combinator whose return changes `A` or rewrites `E` was not assignable to it, pinned by
+the `Policy.tst.ts` type test rather than by a rule, and no filename was consulted. What bound was the
+door — an application site whose parameter was typed `Policy<A, E, R>`, such as `Cell.withPolicy` —
+never the file's name. Both have since left `@systemfsoftware/effect-cell-types`; the point stands for
+any contract carried by a parameter type. A `*.policy.ts` suffix would
 have added a rule that fires only on files already carrying the suffix, which is this document's
 opening sentence.
 

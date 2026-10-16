@@ -1,34 +1,23 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { vi } from '@systemfsoftware/vitest'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import {
-  HydrationBoundary,
-  RegistryContext,
-  RegistryProvider,
-  useAtomInitialValues,
-  useAtomRef,
-  useAtomRefProp,
-  useAtomRefresh,
-  useAtomSetResult,
-  useAtomSubscribe,
-  useAtomSuspense,
-  useAtomValue,
-} from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
+import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
-import { expect, vi } from 'vitest'
+import { findWidgetShowing } from './__fixtures__/find-widget.js'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Reading and changing shared values from on-screen widgets')
+  .live('renders real components in Chromium and advances the browser timer queue')
+  .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A writer who saves through the confirming setter knows when the save has finished',
@@ -39,13 +28,13 @@ Feature('Reading and changing shared values from on-screen widgets')
             let save: (n: number) => Effect.Effect<number, never> = () =>
               Effect.die(new Error('save called before the form rendered'))
             function Form() {
-              save = useAtomSetResult(draft)
+              save = AtomReact.useAtomSetResult(draft)
               return null
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Form),
               ),
             )
@@ -56,9 +45,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             const confirmed = yield* s.ctx.save()(42)
             return confirmed
           })),
-        Then('the save is confirmed with the stored draft')((s) => {
-          expect(s.saved).toBe(42)
-        }),
+        Then('the save is confirmed with the stored draft')((s, expect) => expect(s.saved).toBe(42)),
       ),
     )
 
@@ -69,24 +56,24 @@ Feature('Reading and changing shared values from on-screen widgets')
           Effect.sync(() => {
             const startingBalance = Atom.make(0)
             function Page() {
-              useAtomInitialValues([[startingBalance, 7]])
-              const balance = useAtomValue(startingBalance)
+              AtomReact.useAtomInitialValues([[startingBalance, 7]])
+              const balance = AtomReact.useAtomValue(startingBalance)
               return React.createElement('div', { 'data-testid': 'balance' }, balance)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.sync(() => true)),
-        Then('the seeded value is already on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
-          })
+        When('the page is shown')('shown', () => Effect.succeed(true)),
+        Then('the seeded value is already on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('balance')).pipe(
+            Effect.map((balance) => expect(balance).toHaveTextContent('7')),
+          )
         ),
       ),
     )
@@ -102,14 +89,14 @@ Feature('Reading and changing shared values from on-screen widgets')
               throw new Error('refresh called before the widget rendered')
             }
             function Widget() {
-              refresh = useAtomRefresh(reading)
-              const value = useAtomValue(reading, AsyncResult.getOrThrow)
+              refresh = AtomReact.useAtomRefresh(reading)
+              const value = AtomReact.useAtomValue(reading, Atom.AsyncResult.getOrThrow)
               return React.createElement('div', { 'data-testid': 'reading' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Widget),
               ),
             )
@@ -124,10 +111,10 @@ Feature('Reading and changing shared values from on-screen widgets')
               s.ctx.refresh()()
             })
           })),
-        Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
-          })
+        Then('the widget shows the recomputed reading')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'reading', text: '3' })).pipe(
+            Effect.map((reading) => expect(reading).toHaveTextContent('3')),
+          )
         ),
       ),
     )
@@ -139,14 +126,14 @@ Feature('Reading and changing shared values from on-screen widgets')
           Effect.sync(() => {
             const volume = Atom.make(3)
             const heard: number[] = []
-            const registry = AtomRegistry.make()
+            const registry = Atom.Registry.make()
             function Listener() {
-              useAtomSubscribe(volume, (v) => heard.push(v), { immediate: true })
+              AtomReact.useAtomSubscribe(volume, (v) => heard.push(v), { immediate: true })
               return null
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: registry },
                 React.createElement(Listener),
               ),
@@ -156,16 +143,16 @@ Feature('Reading and changing shared values from on-screen widgets')
         When('the value changes twice')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 5)
+              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 5)
             })
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 8)
+              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 8)
             })
             return s.ctx.heard
           })),
-        Then('the listener heard the starting value and both changes')((s) => {
+        Then('the listener heard the starting value and both changes')((s, expect) =>
           expect(s.heard).toEqual([3, 5, 8])
-        }),
+        ),
       ),
     )
 
@@ -174,17 +161,17 @@ Feature('Reading and changing shared values from on-screen widgets')
       Gherkin.Do.pipe(
         Given('a shared record with a view onto one of its fields')('ctx', () =>
           Effect.sync(() => {
-            const record = AtomRef.make({ name: 'ada', age: 36 })
-            let nameRef: AtomRef.AtomRef<string> = AtomRef.make('')
+            const record = Atom.Ref.make({ name: 'ada', age: 36 })
+            let nameRef: Atom.Ref.AtomRef<string> = Atom.Ref.make('')
             function View() {
-              nameRef = useAtomRefProp(record, 'name')
-              const name = useAtomRef(nameRef)
+              nameRef = AtomReact.useAtomRefProp(record, 'name')
+              const name = AtomReact.useAtomRef(nameRef)
               return React.createElement('div', { 'data-testid': 'name' }, name)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(View),
               ),
             )
@@ -193,14 +180,16 @@ Feature('Reading and changing shared values from on-screen widgets')
         When('the field is edited through the view')('done', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.nameRef().set('grace')
+              s.ctx.nameRef().pipe(Atom.Ref.set('grace'))
             })
           })),
-        Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('name')).toHaveTextContent('grace')
-            expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
-          })
+        Then('the view shows the new value and the rest of the record is untouched')((s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'name', text: 'grace' })).pipe(
+            Effect.map((name) =>
+              expect({ name: name.textContent, record: Atom.Ref.get(s.ctx.record) })
+                .toEqual({ name: 'grace', record: { name: 'grace', age: 36 } })
+            ),
+          )
         ),
       ),
     )
@@ -210,17 +199,23 @@ Feature('Reading and changing shared values from on-screen widgets')
       Gherkin.Do.pipe(
         Given('a form whose save button reports success or failure')('ctx', () =>
           Effect.sync(() => {
-            const draft = Atom.fn((n: number) => n > 0 ? Effect.succeed(n) : Effect.fail<'rejected'>('rejected'))
+            const saveDraft = (n: number): Effect.Effect<number, 'rejected'> => {
+              if (n > 0) {
+                return Effect.succeed(n)
+              }
+              return Effect.fail('rejected')
+            }
+            const draft = Atom.fn(saveDraft)
             let save: (n: number) => Effect.Effect<number, 'rejected'> = () =>
               Effect.die(new Error('save called before the form rendered'))
             function Form() {
-              save = useAtomSetResult(draft)
+              save = AtomReact.useAtomSetResult(draft)
               return null
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Form),
               ),
             )
@@ -230,16 +225,14 @@ Feature('Reading and changing shared values from on-screen widgets')
           'outcomes',
           (s) =>
             Effect.gen(function*() {
-              const accepted = yield* Effect.exit(s.ctx.save()(5))
-              const rejected = yield* Effect.exit(s.ctx.save()(-1))
+              const accepted = yield* s.ctx.save()(5)
+              const rejected = yield* Effect.flip(s.ctx.save()(-1))
               return { accepted, rejected }
             }),
         ),
-        Then('the first save is reported as accepted and the second as rejected')((s) => {
-          const acceptedValue = Exit.isSuccess(s.outcomes.accepted) ? s.outcomes.accepted.value : null
-          expect(acceptedValue).toBe(5)
-          expect(Exit.isFailure(s.outcomes.rejected)).toBe(true)
-        }),
+        Then('the first save is reported as accepted and the second as rejected')((s, expect) =>
+          expect(s.outcomes).toEqual({ accepted: 5, rejected: 'rejected' })
+        ),
       ),
     )
 
@@ -250,23 +243,23 @@ Feature('Reading and changing shared values from on-screen widgets')
           Effect.sync(() => {
             const base = Atom.make(7)
             function Widget() {
-              const tripled = useAtomValue(base, (n) => n * 3)
+              const tripled = AtomReact.useAtomValue(base, (n) => n * 3)
               return React.createElement('div', { 'data-testid': 'tripled' }, tripled)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Widget),
               ),
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the transformed value is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
-          })
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the transformed value is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('tripled')).pipe(
+            Effect.map((tripled) => expect(tripled).toHaveTextContent('21')),
+          )
         ),
       ),
     )
@@ -278,13 +271,13 @@ Feature('Reading and changing shared values from on-screen widgets')
           Effect.sync(() => {
             const failing = Atom.make(Effect.fail<'unavailable'>('unavailable'))
             function Widget() {
-              const result = useAtomSuspense(failing, { includeFailure: true })
+              const result = AtomReact.useAtomSuspense(failing, { includeFailure: true })
               return React.createElement('div', { 'data-testid': 'outcome' }, result._tag)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(
                   Suspense,
                   { fallback: React.createElement('div', { 'data-testid': 'pending' }, 'loading') },
@@ -294,11 +287,11 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the failure is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
-          })
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the failure is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('outcome')).pipe(
+            Effect.map((outcome) => expect(outcome).toHaveTextContent('Failure')),
+          )
         ),
       ),
     )
@@ -311,23 +304,23 @@ Feature('Reading and changing shared values from on-screen widgets')
           () =>
             Effect.sync(() => {
               const temperature = Atom.make(18).pipe(
-                Atom.serializable({ key: 'temperature', schema: Schema.Number }),
+                Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
               )
-              const registry = AtomRegistry.make()
-              registry.set(temperature, 18)
-              const savedPage = AtomRegistry.make()
-              savedPage.set(temperature, 23)
-              const saved = Hydration.dehydrate(savedPage)
+              const registry = Atom.Registry.make()
+              Atom.Registry.set(registry, temperature, 18)
+              const savedPage = Atom.Registry.make()
+              Atom.Registry.set(savedPage, temperature, 23)
+              const saved = Atom.Hydration.dehydrate(savedPage)
               function Page() {
-                const value = useAtomValue(temperature)
+                const value = AtomReact.useAtomValue(temperature)
                 return React.createElement('div', { 'data-testid': 'temperature' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: registry },
                   React.createElement(
-                    HydrationBoundary,
+                    AtomReact.HydrationBoundary,
                     { state: saved },
                     React.createElement(Page),
                   ),
@@ -336,11 +329,13 @@ Feature('Reading and changing shared values from on-screen widgets')
               return {}
             }),
         ),
-        When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
-          })),
-        Then('the newer saved value is what ends up on screen')(() => Effect.sync(() => true)),
+        When('the page settles after the saved data is committed')(
+          'settled',
+          () => Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '23' })),
+        ),
+        Then('the newer saved value is what ends up on screen')((s, expect) =>
+          expect(s.settled).toHaveTextContent('23')
+        ),
       ),
     )
 
@@ -350,14 +345,14 @@ Feature('Reading and changing shared values from on-screen widgets')
         Given('a page whose data source is shared only while shown')('ctx', () =>
           Effect.sync(() => {
             vi.useFakeTimers()
-            let registry: AtomRegistry.Registry = AtomRegistry.make()
+            let registry: Atom.Registry.Registry = Atom.Registry.make()
             function Probe() {
-              registry = React.useContext(RegistryContext)
+              registry = AtomReact.useRegistry()
               return null
             }
             const { unmount } = render(
               React.createElement(
-                RegistryProvider,
+                AtomReact.RegistryProvider,
                 null,
                 React.createElement(Probe),
               ),
@@ -370,9 +365,49 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
-        Then('the data source no longer answers')((s) => {
-          expect(() => s.ctx.registry().get(Atom.make(1))).toThrow('registry is disposed')
-        }),
+        Then('the data source no longer answers')((s, expect) =>
+          expect(() => Atom.Registry.get(s.ctx.registry(), Atom.make(1))).toThrow('registry is disposed')
+        ),
+      ),
+    )
+
+    scenario(
+      'A screen put right back after a blink keeps the value it showed',
+      Gherkin.Do.pipe(
+        Given('a page showing a value was taken down and put right back inside the blink of an eye')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              vi.useFakeTimers()
+              const savedValue = Atom.make(41)
+              let registry: Atom.Registry.Registry = Atom.Registry.make()
+              function Probe() {
+                registry = AtomReact.useRegistry()
+                return null
+              }
+              render(
+                React.createElement(
+                  React.StrictMode,
+                  null,
+                  React.createElement(
+                    AtomReact.RegistryProvider,
+                    null,
+                    React.createElement(Probe),
+                  ),
+                ),
+              )
+              Atom.Registry.set(registry, savedValue, 41)
+              return { readSavedValue: () => Atom.Registry.get(registry, savedValue) }
+            }),
+        ),
+        When('plenty of time passes with the page still up')('done', () =>
+          Effect.sync(() => {
+            vi.advanceTimersByTime(1000)
+            vi.useRealTimers()
+          })),
+        Then('the page still shows the same value, from a data source that never went away')((s, expect) =>
+          expect(s.ctx.readSavedValue()).toBe(41)
+        ),
       ),
     )
   })

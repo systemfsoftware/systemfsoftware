@@ -5,13 +5,28 @@
 ```ts
 
 // @public (undocumented)
+export namespace Blueprint {
+    export { Applied, Blueprint, Carrying, Conditional, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId$1 as IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
+}
+
+// @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, zip };
+    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
+}
+
+// @public (undocumented)
+export namespace Handle {
+    export { Definition, Handle, Indexed, Of, make$1 as make };
+}
+
+// @public (undocumented)
+export namespace Sandwich {
+    export { Cell, CommandRejected, DEFAULT_DURATION_BOUNDARIES, DecidedChain, ExcessHandlers, HandlerForNoVariant, HandlerRecord, Handlers, NamedCellOptions, Phases, ReadChain, ReadNotEncoded, ValidOperationName, WrittenCell, WrittenFrom, named };
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen$1 as andThen, make, total };
+    export { CheckCommandClass, CommandSchema, DecisionSchema, ErrorClassDecision, Inhabited, InstrumentationBrand, InstrumentationMap, InstrumentedCommandSchema, InvalidInstrumentationKey, InvalidInstrumentationValue, MadeWorkflow, MissingInstrumentationAnnotation, SingleVariantDecision, SpanAttributes, UninhabitedDecision, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemas, WorkflowSchemasKey, make };
 }
 
 // (No @packageDocumentation comment for this package)

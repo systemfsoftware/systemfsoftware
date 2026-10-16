@@ -2,9 +2,13 @@ node_modules/
 dist/
 .turbo/
 coverage/
+# Vitest run output — context.annotate attachments and browser failure screenshots
+.vitest/
 reports/
 # Test fixtures ship a prior mutation report as tracked input data
 !**/test/**/fixtures/**/reports/
+# Modules integration tests write to disk so the module loader can resolve them
+__tmp__/
 .stryker-tmp/
 temp/
 *.tsbuildinfo
@@ -31,3 +35,8 @@ docs/cell-taxonomy/
 .mcp.json
 # direnv-managed nix dev-shell state — machine-specific
 .direnv/
+# nix build outputs
+/result
+/result-*
+# Deno writes this beside the root package.json on any root-cwd run; tracked Deno trees pin their own deno.jsonc/deno.lock
+/deno.lock

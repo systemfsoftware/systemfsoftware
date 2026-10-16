@@ -48,9 +48,9 @@ $$
 - **Reach.** Read the manifest's export conditions (including any publish-time override that replaces them). No type-bearing entry ⇒ no importable surface ⇒ the note may name no symbol. An entry exists ⇒ confirm the specific symbol is reachable _through it_, not merely `export`ed somewhere.
 - **Movement.** Diff the committed API report across the branch, and first establish which kind of report it is. Declarations present ⇒ its verdict binds in both directions. Rollup only ⇒ its zero is uninformative and reach must be established from the entry module directly.
 
-**Bump follows the recomputation, not the effort.** A whole-module restructure behind an identical surface earns `none`. A three-character change to an exported default earns `major`. The self-refuting entry is the tell: a body that needs "purely internal" or "no behavioural change" to be accurate has admitted its own bump is `none`.
+**Bump follows the recomputation, not the effort.** For a package tagged at its current version, a whole-module restructure behind an identical surface earns at least `patch` once its packed tarball changes, because `none` holds only while the tarball stays byte-identical (`.changeset/README.md`). A three-character change to an exported default earns `major`. The self-refuting entry is the tell: a `minor` or `major` whose body needs the surface and runtime behaviour both unchanged to be accurate ("purely internal") has refuted its own bump, because that body admits `patch` at most.
 
-**The two errors are not symmetric.** A false `major` publishes a migration no consumer can perform, against names they cannot resolve — it costs every reader of that changelog a wasted investigation and destroys trust in the rest of the entry. A false `none` is a silent non-release: the version never ships and the observable change reaches nobody who reads notes to decide upgrades. Both are defects; only the second is the one a hash-keyed gate exists to catch, which is why the first passes every gate and must be caught by recomputation.
+**The two errors are not symmetric.** A false `major` publishes a migration no consumer can perform, against names they cannot resolve — it costs every reader of that changelog a wasted investigation and destroys trust in the rest of the entry; a false `minor` likewise announces surface no consumer can find. A false `none` is a silent non-release: the version never ships and the observable change reaches nobody who reads notes to decide upgrades. Both are defects; only the second can be caught by a gate — the Changeset Check `packed-manifest` job when a packed `package.json` moves, and the release tooling's tag check for any tagged tarball change (a digest mismatch, or a lightweight tag that records none), while the hash-keyed changeset gate accepts a `none` row — which is why the first passes every gate and must be caught by recomputation.
 
 ```
 # WRONG — surface claimed from the diff
@@ -61,6 +61,7 @@ gate names package  ->  read export conditions       -> importable? which entry?
                     ->  classify the API report      -> declarations, or rollup?
                     ->  diff that report             -> movement, or uninformative?
                     ->  body names only what a consumer observes through that entry
+                    ->  packed tarball vs the tag's digests -> any file differs? at least patch
                     ->  bump follows the observation
 ```
 
@@ -70,13 +71,14 @@ Recompute per package the gate named, never once for the batch — reach differs
 
 - **Reach check.** Resolve the manifest's effective export conditions. Absent type entry ⇒ reject every symbol-naming sentence in the draft.
 - **Report classification.** Establish declarations-versus-rollup before reading any zero as a verdict. This is the step that turns an instrument into evidence; skipping it makes a green reading indistinguishable from a blind one.
+- **Tarball floor.** For a package tagged at its current version, compare the packed tarball with the digests its tag records. Any differing file forbids `none`; a tag that records none forbids it too.
 - **Body audit.** Read the draft once as someone who has only ever installed the package. A sentence they cannot act on is noise at best and a false promise at worst.
 
 ### Code Smells
 
 - A changeset body containing a symbol name for a package whose `exports` carries no type-bearing entry.
 - "… are new exports for building it" — the phrase reports the source's exports, and appears verbatim where the surface has none.
-- A bump above `none` beside a sentence asserting the surface is unchanged.
+- A bump above `patch` beside a sentence asserting the surface and runtime behaviour are unchanged, or `none` on a tagged package whose packed tarball changed.
 - A single note carrying one body across many packages at mixed bumps: one prose block cannot be the changelog entry for surfaces that moved differently.
 - An API report's zero-line diff cited as evidence without the report's kind established.
 
@@ -84,6 +86,6 @@ Recompute per package the gate named, never once for the batch — reach differs
 
 - `docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md` — decides _whether_ an intent is required; this document decides what that intent may claim, and the two are deliberately disjoint.
 - `docs/solutions/build-errors/exports-types-rollup-drift.md` — the same entry-condition surface failing at resolution time rather than at authoring time.
-- `docs/solutions/build-errors/stale-api-report-outlives-toolchain.md` — the report as instrument, failing from staleness rather than from carrying no signatures.
+- [A turbo cache requires a complete input hash](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) — documents false-green failure when a task regenerates an artifact but the toolchain version is outside the cache key; applies to API reports compared against stale committed copies.
 - `docs/solutions/conventions/state-a-claims-epistemic-status.md` — the general discipline; a claimed export is an empirical claim about an artifact, defeated by re-measurement.
 - `docs/solutions/architecture-patterns/constraint-reaches-only-via-window-or-gate.md` — why a repo-local instrument reaches an adopter as zero bits, the same asymmetry that makes the note the only thing that does reach them.

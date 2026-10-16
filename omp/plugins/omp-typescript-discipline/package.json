@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-typescript-discipline",
   "license": "Apache-2.0",
-  "version": "1.0.4",
+  "version": "1.0.7",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP TypeScript discipline plugin: enforces project references for tooling files and pure tsconfig boundaries",
   "type": "module",
@@ -12,14 +12,11 @@
     "check": "deno task --cwd scripts check"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       "./package.json": "./package.json"
     },
     "provenance": true
-  },
-  "devDependencies": {
-    "@systemfsoftware/oxlint-config": "workspace:^",
-    "oxlint": "catalog:oxlint"
   },
   "repository": {
     "type": "git",

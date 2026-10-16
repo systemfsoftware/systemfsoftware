@@ -165,6 +165,7 @@ const LANES = [
     build: "pnpm run build:current",
     run:
       "pnpm --filter @ttsc/test-unplugin integration && " +
+      "pnpm run experimental:unplugin-perf && " +
       "pnpm --filter @ttsc/test-metro start",
   },
   {
@@ -174,22 +175,26 @@ const LANES = [
     needsGo: true,
     scope: "test-metro",
     build: "pnpm run build:current",
-    // The project-membership family plus the cheap predicate matrix, not the
-    // whole suite. The lane owns the Windows-only half of the adapter: the
+    // The project-membership family, predicate matrix and real native envelope
+    // cases. The lane owns the Windows-only half of the adapter: the
     // mutation broker, a child process that watches canonical directory
     // spellings while everything else speaks the walk's own, and short 8.3
     // temp paths, which make those two names for one directory share no common
     // prefix at all. It also proves that a POSIX filesystem supplied to a
     // Windows host keeps POSIX path semantics. Every other lane runs these
     // cases on Linux, where those branches are invisible (samchon/ttsc#1307,
-    // samchon/ttsc#1324).
+    // samchon/ttsc#1324). Native envelopes also exercise mixed-case automatic
+    // type resolution through the Go host, generated config and adapter;
+    // Linux-only coverage missed that case-insensitive regression in #1353.
     run:
       "pnpm --filter @ttsc/test-unplugin start -- " +
       "--include=membership --include=output_directory --include=the_walk " +
       "--include=new_source " +
       "--include=persistent_host --include=hashed_bundle --include=allowjs " +
       "--include=non_source_host_inputs --include=policy_reports " +
-      "--include=predicate_proofs && " +
+      "--include=compiler_inputs --include=subscription_and_alias " +
+      "--include=bun_native_host " +
+      "--include=predicate_proofs --include=real_native_envelope && " +
       // `packages/metro/**` selects this lane, so it has to run metro's own
       // walk-facing cases rather than only the adapter's. There is no
       // Windows-only branch in `@ttsc/metro` itself; what these cases add is
@@ -199,6 +204,19 @@ const LANES = [
       "pnpm --filter @ttsc/test-metro start -- " +
       "--include=cache_key --include=records_implicit_dependency_guards " +
       "--include=records_linked --include=adapters_policy",
+  },
+  {
+    id: "bundler-defenses-macos",
+    name: "bundler defenses (macOS resources)",
+    os: "macos-15",
+    needsGo: true,
+    scope: "test-unplugin",
+    build: "pnpm run build:current",
+    run:
+      "sudo sysctl -w kern.maxfiles=524288 && " +
+      "sudo sysctl -w kern.maxfilesperproc=262144 && " +
+      "ulimit -n 65536 && " +
+      "pnpm --filter @ttsc/test-unplugin integration --include=high_darwin_descriptors",
   },
   {
     id: "graph",
@@ -233,6 +251,7 @@ const E2E_LANE_IDS = [
   ...LINT_LANE_IDS,
   "bundler-defenses",
   "bundler-defenses-windows",
+  "bundler-defenses-macos",
   "graph",
   "evidence",
 ];
@@ -245,6 +264,7 @@ const TTSC_DOWNSTREAM_IDS = [
   ...LINT_LANE_IDS,
   "bundler-defenses",
   "bundler-defenses-windows",
+  "bundler-defenses-macos",
   "graph",
   "evidence",
 ];
@@ -255,6 +275,7 @@ const PLATFORM_IDS = [
   ...LINT_LANE_IDS,
   "bundler-defenses",
   "bundler-defenses-windows",
+  "bundler-defenses-macos",
   "graph",
 ];
 
@@ -524,7 +545,8 @@ function planForPaths(files) {
       // side of `os.Readlink`. The doubled terminator Windows writes is pinned
       // from a hand-built error and runs everywhere, so this lane is not what
       // proves that one.
-      add(["evidence", "go", "windows-go"], file);
+      // The server lane drives real evidence project diagnostics and watches.
+      add(["evidence", "go", "windows-go", "ttsc-native"], file);
       continue;
     }
     if (file.startsWith("benchmarks/evidence/")) {
@@ -571,7 +593,14 @@ function planForPaths(files) {
       continue;
     }
     if (file.startsWith("packages/unplugin/")) {
-      add(["bundler-defenses", "bundler-defenses-windows"], file);
+      add(
+        [
+          "bundler-defenses",
+          "bundler-defenses-windows",
+          "bundler-defenses-macos",
+        ],
+        file,
+      );
       continue;
     }
     if (file.startsWith("packages/metro/")) {
@@ -599,7 +628,18 @@ function planForPaths(files) {
         add(["package-defenses"], file);
         continue;
       }
-      if (["unplugin", "metro"].includes(lane)) {
+      if (lane === "unplugin") {
+        add(
+          [
+            "bundler-defenses",
+            "bundler-defenses-windows",
+            "bundler-defenses-macos",
+          ],
+          file,
+        );
+        continue;
+      }
+      if (lane === "metro") {
         add(["bundler-defenses", "bundler-defenses-windows"], file);
         continue;
       }

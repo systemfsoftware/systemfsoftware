@@ -1,24 +1,28 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { make, RegistryContext, useAtomSet, useAtomUpdate, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { expect } from 'vitest'
+import { findWidgetShowing } from './__fixtures__/find-widget.js'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Scoped atoms that belong to one part of the page')
+  .live('renders real components in Chromium and waits on browser timers')
+  .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A scoped counter is created for its subtree and updates through its setter',
       Gherkin.Do.pipe(
         Given('a scoped counter atom with a widget that can read and update it')('ctx', () =>
           Effect.sync(() => {
-            const Counter = make(() => Atom.make(0))
+            const Counter = AtomReact.make(() => Atom.make(0))
             let set: (value: number) => void = () => {
               throw new Error('set called before the widget rendered')
             }
@@ -27,15 +31,15 @@ Feature('Scoped atoms that belong to one part of the page')
             }
             function Widget() {
               const atom = Counter.use()
-              const value = useAtomValue(atom)
-              set = useAtomSet(atom)
-              increment = useAtomUpdate(atom)
+              const value = AtomReact.useAtomValue(atom)
+              set = AtomReact.useAtomSet(atom)
+              increment = AtomReact.useAtomUpdate(atom)
               return React.createElement('div', { 'data-testid': 'scoped-counter' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Counter.Provider, null, React.createElement(Widget)),
               ),
             )
@@ -53,10 +57,10 @@ Feature('Scoped atoms that belong to one part of the page')
               })
             }),
         ),
-        Then('the widget shows the updated counter')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
-          })
+        Then('the widget shows the updated counter')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'scoped-counter', text: '6' })).pipe(
+            Effect.map((counter) => expect(counter).toHaveTextContent('6')),
+          )
         ),
       ),
     )
@@ -66,26 +70,26 @@ Feature('Scoped atoms that belong to one part of the page')
       Gherkin.Do.pipe(
         Given('a scoped atom that takes a name as its input')('ctx', () =>
           Effect.sync(() => {
-            const UserName = make((name: string) => Atom.make(name))
+            const UserName = AtomReact.make((name: string) => Atom.make(name))
             function Greeting() {
               const atom = UserName.use()
-              const value = useAtomValue(atom)
+              const value = AtomReact.useAtomValue(atom)
               return React.createElement('div', { 'data-testid': 'greeting' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(UserName.Provider, { value: 'Ada' }, React.createElement(Greeting)),
               ),
             )
             return {}
           })),
-        When('the greeting is shown')('shown', () => Effect.sync(() => true)),
-        Then('the input name is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
-          })
+        When('the greeting is shown')('shown', () => Effect.succeed(true)),
+        Then('the input name is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('greeting')).pipe(
+            Effect.map((greeting) => expect(greeting).toHaveTextContent('Ada')),
+          )
         ),
       ),
     )
@@ -95,13 +99,13 @@ Feature('Scoped atoms that belong to one part of the page')
       Gherkin.Do.pipe(
         Given('a page that can rename the input of a scoped atom provider')('ctx', () =>
           Effect.sync(() => {
-            const UserName = make((name: string) => Atom.make(name))
+            const UserName = AtomReact.make((name: string) => Atom.make(name))
             let rename: () => void = () => {
               throw new Error('rename called before the greeting rendered')
             }
             function Greeting() {
               const atom = UserName.use()
-              const value = useAtomValue(atom)
+              const value = AtomReact.useAtomValue(atom)
               return React.createElement('div', { 'data-testid': 'kept-name' }, value)
             }
             function Page() {
@@ -111,8 +115,8 @@ Feature('Scoped atoms that belong to one part of the page')
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
             )
@@ -124,10 +128,10 @@ Feature('Scoped atoms that belong to one part of the page')
               s.ctx.rename()()
             })
           })),
-        Then('the original atom is still on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
-          })
+        Then('the original atom is still on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('kept-name')).pipe(
+            Effect.map((keptName) => expect(keptName).toHaveTextContent('Ada')),
+          )
         ),
       ),
     )
@@ -139,16 +143,16 @@ Feature('Scoped atoms that belong to one part of the page')
           'ctx',
           () =>
             Effect.sync(() => {
-              const Counter = make(() => Atom.make(0))
+              const Counter = AtomReact.make(() => Atom.make(0))
               function Widget() {
                 const atom = Counter.use()
-                const value = useAtomValue(atom)
+                const value = AtomReact.useAtomValue(atom)
                 return React.createElement('div', { 'data-testid': 'unscoped-value' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
-                  { value: AtomRegistry.make() },
+                  AtomReact.RegistryContext.Provider,
+                  { value: Atom.Registry.make() },
                   React.createElement(
                     ErrorBoundary,
                     { fallback: React.createElement('div', { 'data-testid': 'missing-provider' }, 'provider missing') },
@@ -159,11 +163,11 @@ Feature('Scoped atoms that belong to one part of the page')
               return {}
             }),
         ),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the error boundary reports the missing provider')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
-          })
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the error boundary reports the missing provider')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('missing-provider')).pipe(
+            Effect.map((missingProvider) => expect(missingProvider).toHaveTextContent('provider missing')),
+          )
         ),
       ),
     )

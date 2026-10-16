@@ -2261,6 +2261,60 @@ async function assertUnavailableNotificationsKeepThePersistentCache(): Promise<v
 }
 
 /**
+ * Asserts an existing project hardlink never inherits watcher authority.
+ *
+ * Directory notification backends report the path used for a write. Writing
+ * through an alias outside the project therefore mutates the same inode without
+ * an event below the watched project root (and Windows does not notify a
+ * watcher opened on the original file either). The generation must keep this
+ * input on metadata validation so a sibling delivery cannot replay stale
+ * program output.
+ */
+async function assertExternalHardlinkWriteInvalidatesGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 2, graphFanout: 2 });
+  const modules = projectModules(project.root);
+  const linkedInput = modules[1]!;
+  const alias = path.join(
+    TestProject.tmpdir("ttsc-unplugin-cache-hardlink-"),
+    "mod1-alias.ts",
+  );
+  fs.linkSync(linkedInput, alias);
+  const cache = createTtscTransformCache();
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(pluginRuns(), 1);
+  const firstGeneration = [...cache.values()][0];
+
+  fs.writeFileSync(alias, 'export const value1: string = "OTHER";\n', "utf8");
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "an external hardlink write must force one whole-project recompile",
+  );
+  assert.notEqual(
+    [...cache.values()][0],
+    firstGeneration,
+    "the generation must not trust a silent project watcher for a hardlink",
+  );
+}
+
+/**
  * Asserts a universal host input with no readable content never acquires one.
  *
  * Descriptor and config inputs are validated through their own manifest, which
@@ -2744,8 +2798,9 @@ async function assertPersistentValidationProvesSharedInputsOnce(): Promise<void>
     "an aliased spelling must keep its own proof rather than its target's",
   );
 
-  // A metadata-only change must revalidate by content, keep the generation, and
-  // then stop being re-read.
+  // A metadata-only change keeps the generation. A repository-owned watcher
+  // may prove the bytes untouched without a read; a supplied watcher seam falls
+  // back to the content comparison.
   const touched = path.join(
     project.root,
     "node_modules",
@@ -2764,10 +2819,7 @@ async function assertPersistentValidationProvesSharedInputsOnce(): Promise<void>
     beforeTouch,
     "a metadata-only change must not replace the generation",
   );
-  assert.ok(
-    reads >= 1,
-    "a changed metadata signature must fall back to the content comparison",
-  );
+  assert.ok(reads <= 1, "metadata-only proof must read the input at most once");
   reads = 0;
   assert.ok(await deliver(modules[1]!));
   // Every input of this generation is proven by now, the generation's own
@@ -3608,18 +3660,23 @@ async function assertCompileSnapshotRaceCannotAuthorizeStaleOutput(): Promise<vo
 }
 
 /**
- * Asserts a project input changed and restored during native compilation cannot
- * pair the transient output with the identical pre/post filesystem snapshots.
+ * Asserts a graph-free build-scoped project input changed and restored during
+ * native compilation cannot pair transient output with identical snapshots.
  */
 async function assertCompileSnapshotAbaRaceCannotAuthorizeStaleOutput(): Promise<void> {
-  const { createTtscTransformCache, resolveOptions, transformTtsc } =
-    await TestUnpluginRuntime.loadUnpluginApi();
+  const {
+    beginTtscTransformBuild,
+    createTtscTransformCache,
+    resolveOptions,
+    transformTtsc,
+  } = await TestUnpluginRuntime.loadUnpluginApi();
   const project = createCacheProject({
     fileCount: 2,
-    graphFanout: 2,
+    graphFanout: 0,
     snapshotAbaRace: true,
   });
   const cache = createTtscTransformCache();
+  beginTtscTransformBuild(cache);
   const options = resolveOptions();
   const main = path.join(project.root, "src", "mod0.ts");
   const lazy = path.join(project.root, "src", "mod1.ts");
@@ -4588,6 +4645,94 @@ function writeGoPlugin(dir: string): void {
   );
 }
 
+/** Prove persistent project observers stay constant at any tree size. */
+async function assertPersistentProjectWatcherCardinalityIsBounded(): Promise<void> {
+  const {
+    beginTtscTransformBuild,
+    createTtscTransformCache,
+    resetTtscTransformCache,
+    resolveOptions,
+    transformTtsc,
+  } = await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 1,
+    graphFanout: 1,
+    unrelatedDirectoryCount: 250,
+  });
+  const opened: { directory: string; recursive: boolean }[] = [];
+  let active = 0;
+  const cache = createTtscTransformCache({
+    watch: (
+      directory: string,
+      _listener: unknown,
+      _onError: unknown,
+      recursive = false,
+    ) => {
+      opened.push({ directory: path.resolve(directory), recursive });
+      active += 1;
+      return { close: () => (active -= 1) };
+    },
+  });
+  const main = projectModules(project.root)[0]!;
+  try {
+    assert.ok(
+      await transformTtsc(
+        main,
+        fs.readFileSync(main, "utf8"),
+        resolveOptions(),
+        undefined,
+        cache,
+      ),
+    );
+    const recursive = opened.filter((watcher) => watcher.recursive);
+    assert.ok(
+      recursive.length <= 2,
+      "project membership and host inputs may own at most one observer each",
+    );
+    assert.equal(
+      new Set(
+        recursive.map((watcher) =>
+          fs.realpathSync.native(watcher.directory).toLowerCase(),
+        ),
+      ).size,
+      1,
+      "both logical observers must share the one physical project root",
+    );
+  } finally {
+    resetTtscTransformCache(cache);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(active, 0, "cache reset must close every logical observer");
+  const persistentOpenCount = opened.length;
+  beginTtscTransformBuild(cache);
+  try {
+    assert.ok(
+      await transformTtsc(
+        main,
+        fs.readFileSync(main, "utf8"),
+        resolveOptions(),
+        undefined,
+        cache,
+      ),
+    );
+    const buildObservers = opened
+      .slice(persistentOpenCount)
+      .filter((watcher) => watcher.recursive);
+    assert.equal(
+      buildObservers.length,
+      1,
+      "a build attempt needs one bounded compile-race observer",
+    );
+    assert.equal(
+      active,
+      0,
+      "a build-scoped generation must retain no background observer",
+    );
+  } finally {
+    resetTtscTransformCache(cache);
+  }
+}
+
 export {
   createCacheProject,
   projectModules,
@@ -4614,6 +4759,7 @@ export {
   assertCompileSnapshotAbaRaceCannotAuthorizeStaleOutput,
   assertIndependentGraphLeafCompileSnapshotAbaRaceCannotAuthorizeStaleOutput,
   assertExternalCompileSnapshotAbaRaceCannotAuthorizeStaleOutput,
+  assertExternalHardlinkWriteInvalidatesGeneration,
   assertFilesystemOperationsAreCacheLocal,
   assertDescriptorInputRaceCannotAuthorizeStaleGeneration,
   assertConcurrentTransformsCompileOnce,
@@ -4625,6 +4771,7 @@ export {
   assertFailedNotificationsFallBackToCompleteValidation,
   assertOneFailedTrackerFallsBackToCompleteValidation,
   assertPersistentValidationProvesSharedInputsOnce,
+  assertPersistentProjectWatcherCardinalityIsBounded,
   assertPersistentValidationUsesPerFileInputs,
   assertRejectedTransformIsEvictedAndRecovers,
   assertSameTickDerivedRewriteReplacesTheGeneration,

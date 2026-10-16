@@ -5,21 +5,24 @@ Reactive toolkit for Effect — forked under systemfsoftware from tim-smart/effe
 ## Install
 
 ```sh
-pnpm add @systemfsoftware/effect-atom 'effect@4.0.0-rc.108'
+pnpm add @systemfsoftware/effect-atom 'effect@^4'
 ```
 
 Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.
 
 ## Entry points
 
-- `@systemfsoftware/effect-atom`
-- `@systemfsoftware/effect-atom/Atom`
-- `@systemfsoftware/effect-atom/AtomHttpApi`
-- `@systemfsoftware/effect-atom/AtomRef`
-- `@systemfsoftware/effect-atom/AtomRpc`
-- `@systemfsoftware/effect-atom/Hydration`
-- `@systemfsoftware/effect-atom/Registry`
-- `@systemfsoftware/effect-atom/Result`
+One entry, one namespace:
+
+```ts
+import { Atom } from '@systemfsoftware/effect-atom'
+
+const count = Atom.make(0)
+const registry = Atom.Registry.make()
+Atom.Registry.set(registry, count, 1)
+```
+
+`Atom.Registry`, `Atom.AsyncResult`, `Atom.Hydration`, `Atom.Ref`, `Atom.HttpApi`, and `Atom.Rpc` replace the former `/Registry`, `/Result`, `/Hydration`, `/AtomRef`, `/AtomHttpApi`, and `/AtomRpc` subpaths.
 
 ## API
 

@@ -1,34 +1,68 @@
-import * as AtomRpc from '@systemfsoftware/effect-atom/AtomRpc'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
-import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Schema, Stream } from 'effect'
-import { Rpc, RpcGroup } from 'effect/unstable/rpc'
-import { expect } from 'vitest'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Layer, Option, Schema, Stream } from 'effect'
+import { Rpc, RpcGroup } from 'effect/rpc'
+import * as RpcTest from 'effect/rpc/RpcTest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+/** Blocks until the registry reports a settled value for the atom, resuming from the subscription. */
+const waitForSettled = <A, E, W>(
+  registry: Atom.Registry.Registry,
+  atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W> | Atom.Atom<Atom.AsyncResult.Result<A, E>>,
+): Effect.Effect<Atom.AsyncResult.Result<A, E>> =>
+  Effect.callback((resume) => {
+    let unsubscribe = (): void => {}
+    unsubscribe = Atom.Registry.subscribe(
+      registry,
+      atom,
+      (value) => {
+        if (Atom.AsyncResult.isInitial(value) || Atom.AsyncResult.isWaiting(value)) return
+        resume(Effect.succeed(value))
+        unsubscribe()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(unsubscribe)
+  })
 
 const Group = RpcGroup.make(
   Rpc.make('getUser', {
     payload: Schema.Struct({ id: Schema.FiniteFromString }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
   }),
   Rpc.make('createUser', {
     payload: Schema.Struct({ name: Schema.String }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
   }),
 )
 
 const StreamGroup = RpcGroup.make(
   Rpc.make('getItems', {
-    payload: Schema.Struct({ count: Schema.Number }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    payload: Schema.Struct({ count: Schema.Finite }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
     stream: true,
   }),
 )
 
+type GroupRpcs = RpcGroup.Rpcs<typeof Group>
+type StreamRpcs = RpcGroup.Rpcs<typeof StreamGroup>
+
+/**
+ * An in-memory RPC server for a group.
+ *
+ * `RpcTest` wires the real client to real handlers over the no-serialization
+ * transport, so each scenario consumes a genuine `RpcClient.Flat` rather than a
+ * hand-written client shape.
+ */
+const serverFor = (handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>>) =>
+  RpcTest.makeClient(Group, { flatten: true }).pipe(Effect.provide(handlers))
+
+const itemsServer = (handlers: Layer.Layer<Rpc.ToHandler<StreamRpcs>>) =>
+  RpcTest.makeClient(StreamGroup, { flatten: true }).pipe(Effect.provide(handlers))
+
 Feature('Reusing an rpc-fetched user after the page reloads, without calling the server again')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A user fetched once over rpc is still available on a freshly reloaded page',
@@ -38,43 +72,41 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           () =>
             Effect.sync(() => {
               let callCount = 0
-              const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id: number }) => {
-                  callCount++
-                  if (tag !== 'getUser') {
-                    return Effect.die(`unexpected tag: ${tag}`)
-                  }
-                  return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-                },
-              )
-              const Client = AtomRpc.Service()('Client', {
+              const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+                getUser: ({ id }) =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id, name: `user-${id}` }
+                  }),
+                createUser: () => Effect.die('unexpected tag: createUser'),
+              })
+              const makeEffect = serverFor(Handlers)
+              const Client = Atom.Rpc.Service()('Client', {
                 group: Group,
                 protocol: Layer.empty,
                 makeEffect,
               })
               const user = Client.query('getUser', { id: 1 }, { serializationKey: '1' })
-              const registry = Registry.make()
+              const registry = Atom.Registry.make()
               return { user, registry, callsMade: () => callCount }
             }),
         ),
         When('the user is read, the page is reloaded, and read again on the fresh page')(
           'result',
           (s) =>
-            Effect.gen(function*() {
-              const unmount = s.ctx.registry.mount(s.ctx.user)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const savedPage = Hydration.dehydrate(s.ctx.registry)
+            Effect.sync(() => {
+              const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
+              const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
-              const freshPage = Registry.make()
-              Hydration.hydrate(freshPage, savedPage)
-              const secondReading = freshPage.get(s.ctx.user)
+              const freshPage = Atom.Registry.make()
+              Atom.Hydration.hydrate(freshPage, savedPage)
+              const secondReading = Atom.Registry.get(freshPage, s.ctx.user)
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
-        Then('the fresh page shows the user without calling the server a second time')((s) => {
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('the fresh page shows the user without calling the server a second time')(
+          (s, expect) => expect(s.result.calls).toBe(1),
+        ),
       ),
     )
     scenario(
@@ -83,34 +115,38 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         Given('a page that calls an rpc server that counts calls')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
-                callCount++
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
-            const Client = AtomRpc.Service()('Client', {
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) =>
+                Effect.sync(() => {
+                  callCount += 1
+                  return { id, name: `user-${id}` }
+                }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
+            const Client = Atom.Rpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,
               makeEffect,
             })
             const first = Client.query('getUser', { id: 1 }, { serializationKey: '1' })
             const second = Client.query('getUser', { id: 1 }, { serializationKey: '1' })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { first, second, registry, callsMade: () => callCount }
           })),
         When('both queries are mounted and read')('result', (s) =>
-          Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.first)
-            s.ctx.registry.mount(s.ctx.second)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return { sameAtom: s.ctx.first === s.ctx.second, calls: s.ctx.callsMade() }
+          Effect.sync(() => {
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.first, () => {}, { immediate: true })
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.second, () => {}, { immediate: true })
+            return { first: s.ctx.first, second: s.ctx.second, calls: s.ctx.callsMade() }
           })),
-        Then('both queries share one atom and the server is called once')((s) => {
-          expect(s.result.sameAtom).toBe(true)
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('both queries share one atom and the server is called once')(
+          (s, expect) =>
+            expect({ first: s.result.first, second: s.result.second, calls: s.result.calls }).toSatisfy(
+              ({ first, second, calls }) => first === second && calls === 1,
+              'the two queries share one atom, so the server was called once',
+            ),
+        ),
       ),
     )
     scenario(
@@ -118,38 +154,34 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
       Gherkin.Do.pipe(
         Given('a page that submits new records over rpc to a server that accepts them')('ctx', () =>
           Effect.sync(() => {
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly name: string }) => {
-                if (tag !== 'createUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: 1, name: payload.name })
-              },
-            )
-            const Client = AtomRpc.Service()('Client', {
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: () => Effect.die('unexpected tag: getUser'),
+              createUser: ({ name }) => Effect.succeed({ id: 1, name }),
+            })
+            const makeEffect = serverFor(Handlers)
+            const Client = Atom.Rpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,
               makeEffect,
             })
             const create = Client.mutation('createUser')
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the created record is reported')((s) => {
-          expect(Result.isSuccess(s.outcome)).toBe(true)
-          if (Result.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
-          }
-        }),
+        Then('the created record is reported')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, value: Atom.AsyncResult.value(s.outcome) }).toEqual({
+              tag: 'Success',
+              value: Option.some({ id: 1, name: 'grace' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -158,52 +190,47 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         Given('a page whose rpc server streams two records')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string) => {
-                callCount++
-                if (tag !== 'getItems') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Stream.fromIterable([
+            const Handlers: Layer.Layer<Rpc.ToHandler<StreamRpcs>> = StreamGroup.toLayer({
+              getItems: () =>
+                Stream.fromIterable([
                   { id: 1, name: 'first' },
                   { id: 2, name: 'second' },
-                ])
-              },
-            )
-            const Client = AtomRpc.Service()('Client', {
+                ]),
+            })
+            const makeEffect = itemsServer(Handlers)
+            const Client = Atom.Rpc.Service()('Client', {
               group: StreamGroup,
               protocol: Layer.empty,
               makeEffect,
             })
             const feed = Client.query('getItems', { count: 2 })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { feed, registry, callsMade: () => callCount }
           })),
         When('the feed is mounted and pulled until the server finishes')('final', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.feed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            const final = s.ctx.registry.get(s.ctx.feed)
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.feed, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
+            Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
+            Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
+            yield* waitForSettled(s.ctx.registry, s.ctx.feed)
+            const final = Atom.Registry.get(s.ctx.registry, s.ctx.feed)
             unmount()
             return final
           })),
-        Then('the records arrived in order and the feed is marked finished')((s) => {
-          expect(Result.isSuccess(s.final)).toBe(true)
-          if (Result.isSuccess(s.final)) {
-            expect(s.final.value.done).toBe(true)
-            expect([...s.final.value.items]).toEqual([
-              { id: 1, name: 'first' },
-              { id: 2, name: 'second' },
-            ])
-          }
-        }),
+        Then('the records arrived in order and the feed is marked finished')(
+          (s, expect) =>
+            expect({ tag: s.final._tag, value: Atom.AsyncResult.value(s.final) }).toEqual({
+              tag: 'Success',
+              value: Option.some({
+                done: true,
+                items: [
+                  { id: 1, name: 'first' },
+                  { id: 2, name: 'second' },
+                ],
+              }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -214,26 +241,27 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           () =>
             Effect.sync(() => {
               let callCount = 0
-              const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id?: number; readonly name?: string }) => {
-                  callCount++
-                  if (tag === 'getUser') {
-                    return Effect.succeed({ id: 1, name: 'user-1' })
-                  }
-                  if (tag === 'createUser') {
-                    return Effect.succeed({ id: 1, name: payload.name ?? '' })
-                  }
-                  return Effect.die(`unexpected tag: ${tag}`)
-                },
-              )
-              const Client = AtomRpc.Service()('Client', {
+              const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+                getUser: () =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id: 1, name: 'user-1' }
+                  }),
+                createUser: ({ name }) =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id: 1, name }
+                  }),
+              })
+              const makeEffect = serverFor(Handlers)
+              const Client = Atom.Rpc.Service()('Client', {
                 group: Group,
                 protocol: Layer.empty,
                 makeEffect,
               })
               const user = Client.query('getUser', { id: 1 }, { reactivityKeys: ['users'] })
               const create = Client.mutation('createUser')
-              const registry = Registry.make()
+              const registry = Atom.Registry.make()
               return { user, create, registry, callsMade: () => callCount }
             }),
         ),
@@ -241,29 +269,27 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           'the user is read, a record is submitted while invalidating the users key, and the user is read again',
         )('readings', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const first = s.ctx.registry.get(s.ctx.user)
-            s.ctx.registry.set(s.ctx.create, {
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
+            const first = Atom.Registry.get(s.ctx.registry, s.ctx.user)
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['users'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const second = s.ctx.registry.get(s.ctx.user)
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
+            const second = Atom.Registry.get(s.ctx.registry, s.ctx.user)
             const calls = s.ctx.callsMade()
             unmount()
             return { first, second, calls }
           })),
-        Then('the change ran and the watched user was fetched again')((s) => {
-          expect(Result.isSuccess(s.readings.first)).toBe(true)
-          expect(Result.isSuccess(s.readings.second)).toBe(true)
-          expect(s.readings.calls).toBe(3)
-        }),
+        Then('the change ran and the watched user was fetched again')(
+          (s, expect) =>
+            expect({ first: s.readings.first._tag, second: s.readings.second._tag, calls: s.readings.calls }).toEqual({
+              first: 'Success',
+              second: 'Success',
+              calls: 3,
+            }),
+        ),
       ),
     )
     scenario(
@@ -271,38 +297,35 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
       Gherkin.Do.pipe(
         Given('a page that builds its rpc client with a protocol function')('ctx', () =>
           Effect.sync(() => {
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
-                if (tag !== 'getUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
-            const Client = AtomRpc.Service()('Client', {
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) => Effect.succeed({ id, name: `user-${id}` }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
+            const Client = Atom.Rpc.Service()('Client', {
               group: Group,
               protocol: () => Layer.empty,
               makeEffect,
             })
             const user = Client.query('getUser', { id: 1 })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { user, registry }
           })),
         When('the user is read')('outcome', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const outcome = s.ctx.registry.get(s.ctx.user)
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
+            const outcome = Atom.Registry.get(s.ctx.registry, s.ctx.user)
             unmount()
             return outcome
           })),
-        Then('the user is reported')((s) => {
-          expect(Result.isSuccess(s.outcome)).toBe(true)
-          if (Result.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toEqual({ id: 1, name: 'user-1' })
-          }
-        }),
+        Then('the user is reported')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, value: Atom.AsyncResult.value(s.outcome) }).toEqual({
+              tag: 'Success',
+              value: Option.some({ id: 1, name: 'user-1' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -313,16 +336,16 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         )('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
-                callCount++
-                if (tag !== 'getUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
-            const Client = AtomRpc.Service()('Client', {
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) =>
+                Effect.sync(() => {
+                  callCount += 1
+                  return { id, name: `user-${id}` }
+                }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
+            const Client = Atom.Rpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,
               makeEffect,
@@ -336,33 +359,34 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
               timeToLive: 'Infinity',
               serializationKey: 'keep',
             })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return {
               user,
               keptUser,
               registry,
               callsMade: () => callCount,
-              idleTTL: user.idleTTL,
-              keepAlive: keptUser.keepAlive,
+              idleTTL: user.spec.idleTTL,
+              keepAlive: keptUser.spec.keepAlive,
             }
           })),
         When('the user is read and the page is reloaded')('result', (s) =>
-          Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const savedPage = Hydration.dehydrate(s.ctx.registry)
+          Effect.sync(() => {
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
+            const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
             unmount()
-            const freshPage = Registry.make()
-            Hydration.hydrate(freshPage, savedPage)
-            const secondReading = freshPage.get(s.ctx.user)
+            const freshPage = Atom.Registry.make()
+            Atom.Hydration.hydrate(freshPage, savedPage)
+            const secondReading = Atom.Registry.get(freshPage, s.ctx.user)
             return { secondReading, calls: s.ctx.callsMade() }
           })),
-        Then('the first query keeps its retention and the second stays alive, and reload does not refetch')((s) => {
-          expect(s.ctx.idleTTL).toBe(60_000)
-          expect(s.ctx.keepAlive).toBe(true)
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('the first query keeps its retention and the second stays alive, and reload does not refetch')(
+          (s, expect) =>
+            expect({ idleTTL: s.ctx.idleTTL, keepAlive: s.ctx.keepAlive, calls: s.result.calls }).toEqual({
+              idleTTL: 60_000,
+              keepAlive: true,
+              calls: 1,
+            }),
+        ),
       ),
     )
   })

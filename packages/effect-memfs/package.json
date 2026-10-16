@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-memfs",
   "license": "Apache-2.0",
-  "version": "1.3.5",
+  "version": "6.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -27,33 +27,49 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/effect-memfs.d.ts",
-      "default": "./dist/index.mjs"
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
+    "mutation": "stryker run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "memfs": "^4.17.2"
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "memfs": "^4.78.1"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/conformance-spec": "workspace:^",
+    "@systemfsoftware/differential-spec": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
@@ -65,11 +81,12 @@
     "typescript": ">=5.0.0"
   },
   "publishConfig": {
+    "access": "public",
     "provenance": true,
     "exports": {
       ".": {
-        "types": "./dist/effect-memfs.d.ts",
-        "default": "./dist/index.mjs"
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
       },
       "./package.json": "./package.json"
     }

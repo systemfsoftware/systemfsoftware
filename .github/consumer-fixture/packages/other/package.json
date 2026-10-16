@@ -1,0 +1,9 @@
+{
+  "name": "other",
+  "private": true,
+  "type": "module",
+  "exports": "./src/other.js",
+  "scripts": {
+    "test": "vitest run"
+  }
+}

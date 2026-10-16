@@ -1,16 +1,14 @@
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
-import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
+import type { Pipeable } from 'effect/Pipeable'
+import { Prototype } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
-import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
-import { type WorkflowBrand } from './Workflow.js'
-
-export { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName }
 
 /**
- * The nominal brand every `Cell` carries. `Cell.layer` is the only door that applies it.
+ * The nominal brand every `Cell` carries. The `Sandwich` chain's `write` is the only door that applies it.
  */
 export const CellTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Cell')
 
@@ -25,7 +23,7 @@ export type CellTypeId = typeof CellTypeId
  * channel carries the infrastructure refusals; the `R` channel carries the services the
  * phases `yield*`, provided once by the program's composition root.
  */
-export interface Cell<in I, out A, out E = never, out R = never> {
+export interface Cell<in I, out A, out E = never, out R = never> extends Pipeable {
   readonly [CellTypeId]: CellTypeId
   readonly run: (input: I) => Effect.Effect<A, E, R>
 }
@@ -52,99 +50,33 @@ export type Run<I, A, E, R> = Cell<I, A, E, R>['run']
 const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A, E, R> => ({
   [CellTypeId]: CellTypeId,
   run,
+  ...Prototype,
 })
-
-interface LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR> {
-  readonly read: (command: I) => Effect.Effect<Raw, RE, RR>
-  readonly decide: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand
-  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, WR>
-}
-
-interface LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-  extends LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-{
-  readonly decode?: never
-  readonly encode?: never
-}
-
-interface LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
-  extends Omit<LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>, 'decide' | 'write'>
-{
-  readonly decode: (raw: Raw) => Result.Result<Dcd, DecE>
-  readonly decide: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand
-  readonly encode: (outcome: Result.Result<Dec, DE>) => Out
-  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>
-}
+/**
+ * A constant response for any input; the error and service channels are never.
+ */
+export const succeed = <A, I = unknown>(response: A): Cell<I, A, never, never> => make(() => Effect.succeed(response))
 
 /**
- * The interpreter. Order is the text: read, then decode, then decide, then encode, then
- * write. The `E` channel is the sandwich's truth — read, decode, and write failures;
- * a decide refusal is the outcome the encode and write receive, not a failure.
+ * A constant infrastructure failure for any input.
  */
-const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec:
-    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): (input: I) => Effect.Effect<Resp, RE | DecE | WE, RR | WR> => {
-  if ('decode' in spec && 'encode' in spec) {
-    return (input) =>
-      Effect.gen(function*() {
-        const raw = yield* spec.read(input)
-        const decoded = yield* Result.match(spec.decode(raw), {
-          onFailure: Effect.fail,
-          onSuccess: Effect.succeed,
-        })
-        const outcome = spec.decide(decoded)
-        return yield* spec.write(spec.encode(outcome), raw)
-      })
-  }
-  return (input) =>
-    Effect.gen(function*() {
-      const raw = yield* spec.read(input)
-      const outcome = spec.decide(raw)
-      return yield* spec.write(outcome, raw)
-    })
-}
+export const fail = <E, I = unknown>(error: E): Cell<I, never, E, never> => make(() => Effect.fail(error))
 
 /**
- * Builds a Cell from one sandwich.
- *
- * Short form — `read` produces the value `decide` rules on, and the decide outcome is what
- * `write` receives:
- *
- * ```ts
- * import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
- * import { Effect, Result } from 'effect'
- *
- * declare const decideAdmission: Workflow<CliArgs, Verdict, Refusal>
- * declare class CliArgs { readonly target: string }
- * declare class Verdict { readonly ok: boolean }
- * declare class Refusal { readonly _tag: 'Refused' }
- *
- * const cell = Cell.layer({
- *   read: (args: CliArgs) => Effect.succeed(args),
- *   decide: decideAdmission,
- *   write: (outcome: Result.Result<Verdict, Refusal>, raw: CliArgs) => Effect.void,
- * })
- * ```
- *
- * Long form — `decode` and `encode` adapt each side of `decide`; both are required together,
- * and a spec carrying one without the other fails inference.
+ * The lifted effect's response, failure, and services carried for any input.
  */
-export function layer<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>(
-  spec: LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>,
-): Cell<I, Resp, RE | WE, RR | WR>
-export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec: LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): Cell<I, Resp, RE | DecE | WE, RR | WR>
-export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec:
-    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): Cell<I, Resp, RE | DecE | WE, RR | WR> {
-  return make(layerRunner(spec))
-}
+export const fromEffect = <A, E, R, I = unknown>(effect: Effect.Effect<A, E, R>): Cell<I, A, E, R> => make(() => effect)
 
+/**
+ * The thunked cell built afresh on each run; construction never happens at wrap time.
+ */
+export const suspend = <I, A, E, R>(thunk: () => Cell<I, A, E, R>): Cell<I, A, E, R> =>
+  make((input) => Effect.suspend(() => thunk().run(input)))
+
+/**
+ * The response is the input; the identity for `andThen`.
+ */
+export const id = <I>(): Cell<I, I, never, never> => make((input) => Effect.succeed(input))
 /**
  * Transforms the Cell's response.
  */
@@ -181,12 +113,33 @@ export const andThen: {
     self: Cell<I, A, E, R>,
     that: Cell<A, B, E2, R2>,
   ): Cell<I, B, E | E2, R | R2>
+  <A, B, E2, R2>(
+    that: Cell<A, B, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <A, B, E2, R2>(
+    f: (response: A) => Cell<A, B, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
 } = dual(
   2,
   <I, A, E, R, B, E2, R2>(
     self: Cell<I, A, E, R>,
-    that: Cell<A, B, E2, R2>,
-  ): Cell<I, B, E | E2, R | R2> => make((input) => Effect.flatMap(self.run(input), (response) => that.run(response))),
+    that: Cell<A, B, E2, R2> | ((response: A) => Cell<A, B, E2, R2>),
+  ): Cell<I, B, E | E2, R | R2> =>
+    make((input) =>
+      Effect.flatMap(
+        self.run(input),
+        (response) => {
+          if (typeof that === 'function') {
+            return that(response).run(response)
+          }
+          return that.run(response)
+        },
+      )
+    ),
 )
 
 /**
@@ -232,7 +185,7 @@ export const gate: {
       Effect.flatMap(self.run(input), (read): Effect.Effect<Option.Option<A>, E2, R2> =>
         Option.match(read, {
           onNone: () => Effect.succeed(Option.none<A>()),
-          onSome: (raw) => Effect.map(inner.run(raw), Option.some),
+          onSome: (raw) => Effect.asSome(inner.run(raw)),
         }))
     ),
 )
@@ -288,41 +241,224 @@ export const collectAll: {
 )
 
 /**
- * Provides a Layer to the Cell, eliminating the services the layer builds from `R`. This is
- * the one composition-root elimination; the resulting Cell still demands the layer's input
- * services. A missing provide is a compile error at the run site.
+ * Provides a Context to the Cell, eliminating the services the context carries from `R`. The
+ * composition root builds the context once — `Layer.build` under the root scope, or a
+ * `ManagedRuntime` — so nothing is rebuilt per run. A missing provideContext is a compile
+ * error at the run site.
  */
-export const provide: {
-  <RIn, LE, ROut>(
-    layer: Layer<ROut, LE, RIn>,
-  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
-  <I, A, E, R, RIn, LE, ROut>(
+export const provideContext: {
+  <Services>(
+    context: Context.Context<Services>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E, Exclude<R, Services>>
+  <I, A, E, R, Services>(
     self: Cell<I, A, E, R>,
-    layer: Layer<ROut, LE, RIn>,
-  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+    context: Context.Context<Services>,
+  ): Cell<I, A, E, Exclude<R, Services>>
 } = dual(
   2,
-  <I, A, E, R, RIn, LE, ROut>(
+  <I, A, E, R, Services>(
     self: Cell<I, A, E, R>,
-    layer: Layer<ROut, LE, RIn>,
-  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
+    context: Context.Context<Services>,
+  ): Cell<I, A, E, Exclude<R, Services>> => make((input) => Effect.provideContext(self.run(input), context)),
 )
 
 /**
- * The facts the lint plugin judges a spec body by, as a const table. The order the
- * interpreter runs is the text of {@link layerRunner}; the table states only what a
- * rule cannot read off a type: which phases are pure, and what counts as I/O.
+ * Remaps the Cell's infrastructure failure.
  */
-export interface Vocabulary {
-  readonly module: typeof DESCRIPTION_MODULE
-  readonly ioCells: IoCellClassification
-  readonly byKind: { readonly pure: readonly PhaseName[] }
-  readonly composer: 'layer'
-}
+export const mapError: {
+  <E, F>(f: (error: E) => F): <I, A, R>(self: Cell<I, A, E, R>) => Cell<I, A, F, R>
+  <I, A, E, R, F>(self: Cell<I, A, E, R>, f: (error: E) => F): Cell<I, A, F, R>
+} = dual(
+  2,
+  <I, A, E, R, F>(self: Cell<I, A, E, R>, f: (error: E) => F): Cell<I, A, F, R> =>
+    make((input) => Effect.mapError(self.run(input), f)),
+)
 
-export const vocabulary: Vocabulary = {
-  module: DESCRIPTION_MODULE,
-  ioCells: IO_CELLS,
-  byKind: { pure: ['decode', 'decide', 'encode'] },
-  composer: 'layer',
-}
+/**
+ * Recovers from the Cell's infrastructure failure by running the fallback cell for the
+ * same input. The fallback answers the same response, so the error narrows to the
+ * fallback's. A decide refusal is success-channel data by the time run answers, so it
+ * passes through untouched and the fallback never runs for it.
+ */
+export const orElse: {
+  <I, A, E2, R2>(fallback: Cell<I, A, E2, R2>): <E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E2, R | R2>
+  <I, A, E, R, E2, R2>(self: Cell<I, A, E, R>, fallback: Cell<I, A, E2, R2>): Cell<I, A, E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, E2, R2>(self: Cell<I, A, E, R>, fallback: Cell<I, A, E2, R2>): Cell<I, A, E2, R | R2> =>
+    make((input) =>
+      Effect.matchEffect(self.run(input), {
+        onFailure: () => fallback.run(input),
+        onSuccess: (value) => Effect.succeed(value),
+      })
+    ),
+)
+
+/**
+ * Observes the Cell's response with an effect and preserves it. The observer never runs
+ * on an infrastructure failure.
+ */
+export const tap: {
+  <A, E2, R2, A2 = unknown>(
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | E2, R | R2>
+  <I, A, E, R, E2, R2, A2 = unknown>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
+  ): Cell<I, A, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, E2, R2, A2 = unknown>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
+  ): Cell<I, A, E | E2, R | R2> => make((input) => Effect.tap(self.run(input), f)),
+)
+
+/**
+ * Threads the response through the function's cell on the original input. Both cells
+ * observe the identical input; the error and service channels union.
+ */
+export const flatMap: {
+  <I, A, B, E2, R2>(
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): <E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2> =>
+    make((input) => Effect.flatMap(self.run(input), (response) => f(response).run(input))),
+)
+
+/**
+ * Combines two cells over one input with the given function. Fail-fast: when one side
+ * refuses, the run fails and the error and service channels union.
+ */
+export const zipWith: {
+  <I, B, E2, R2, A, C>(
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): <E, R>(self: Cell<I, A, E, R>) => Cell<I, C, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2, C>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): Cell<I, C, E | E2, R | R2>
+} = dual(
+  3,
+  <I, A, E, R, B, E2, R2, C>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): Cell<I, C, E | E2, R | R2> => make((input) => Effect.zipWith(self.run(input), that.run(input), f)),
+)
+
+/**
+ * Folds the run outcome with pure handlers. A decide refusal is success-channel data by
+ * the time run answers, so it reaches the success arm; the resulting error channel is
+ * never.
+ */
+export const match: {
+  <A, E, B, C>(
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): <I, R>(self: Cell<I, A, E, R>) => Cell<I, B | C, never, R>
+  <I, A, E, R, B, C>(
+    self: Cell<I, A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): Cell<I, B | C, never, R>
+} = dual(
+  2,
+  <I, A, E, R, B, C>(
+    self: Cell<I, A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): Cell<I, B | C, never, R> => make((input) => Effect.match(self.run(input), options)),
+)
+
+/**
+ * The local no-infer marker the Do chain overloads use so the accumulator
+ * stays fixed while the next field infers.
+ */
+type NoInfer<A> = [A][A extends A ? 0 : never]
+
+type AnyInputKind<I = unknown, E = never, R = never, A = {}> = Kind<I, E, R, A>
+export const Do: AnyInputKind = make(() => Effect.succeed({}))
+/**
+ * Adds a named field to the Do accumulator by running the cell the function
+ * builds from the accumulated scope. Both cells observe the identical input,
+ * so a bind demanding another input is a compile error; the error and service
+ * channels union. A failing cell short-circuits the rest of the chain.
+ */
+export const bind: {
+  <N extends string, A extends object, I, E2, R2, B>(
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ): <E, R>(self: Kind<I, E, R, A>) => Kind<I, E | E2, R | R2, A & Record<N, B>>
+  <I, A extends object, E, R, N extends string, E2, R2, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ): Kind<I, E | E2, R | R2, A & Record<N, B>>
+} = dual(
+  3,
+  <I, A extends object, E, R, N extends string, E2, R2, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ) => flatMap(self, (a) => map(f(a), (b) => ({ ...a, [name]: b }))),
+)
+
+/**
+ * Wraps the cell's response into a named field, starting a Do chain from an
+ * existing cell.
+ */
+export const bindTo: {
+  <N extends string, A, E, R>(
+    name: N,
+  ): <I>(self: Kind<I, E, R, A>) => Kind<I, E, R, Record<N, A>>
+  <I, A, E, R, N extends string>(
+    self: Kind<I, E, R, A>,
+    name: N,
+  ): Kind<I, E, R, Record<N, A>>
+} = dual(
+  2,
+  <I, A, E, R, N extends string>(self: Kind<I, E, R, A>, name: N) => map(self, (a) => ({ [name]: a })),
+)
+
+/**
+ * Adds a named field to the Do accumulator by computing a pure value from the
+ * accumulated scope. The input, error, and service channels pass through.
+ */
+const let_: {
+  <N extends string, A extends object, B>(
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ): <I, E, R>(self: Kind<I, E, R, A>) => Kind<I, E, R, A & Record<N, B>>
+  <I, A extends object, E, R, N extends string, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ): Kind<I, E, R, A & Record<N, B>>
+} = dual(
+  3,
+  <I, A extends object, E, R, N extends string, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ) => map(self, (a) => ({ ...a, [name]: f(a) })),
+)
+
+export { let_ as let }

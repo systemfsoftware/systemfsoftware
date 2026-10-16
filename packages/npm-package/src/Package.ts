@@ -1,90 +1,248 @@
-import { ensureTrailingDirectorySeparator, posixJoin } from './Path.js'
+import { Function } from 'effect'
+import * as Result from 'effect/Result'
+import { MountPackageFile } from './mount-package-file.schema.js'
+import { mountPackageFile } from './mount-package-file.workflow.js'
+import { ensureTrailingDirectorySeparator, PackagePath } from './PackagePath.schema.js'
 import { extractTarball } from './Tarball.js'
 declare const Buffer: {
   from(data: Uint8Array): Uint8Array
 }
 
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message)
+function assert(condition: boolean, message: string): asserts condition {
+  if (condition) return
+  throw new Error(message)
 }
-export class Package {
-  #files: Record<string, string | Uint8Array> = {}
+
+export const mountedKeyOf: {
+  (packageName: string): (key: string) => string
+  (key: string, packageName: string): string
+} = Function.dual(
+  2,
+  (key: string, packageName: string): string =>
+    Result.match(mountPackageFile(new MountPackageFile({ key, packageName })), {
+      onFailure: (refused) => {
+        throw refused
+      },
+      onSuccess: (mounted) => mounted.mountedKey,
+    }),
+)
+
+export const TypeId: unique symbol = Symbol.for('@systemfsoftware/npm-package/Package')
+export type TypeId = typeof TypeId
+
+export const filesMap = new WeakMap<Package, Record<string, string | Uint8Array>>()
+
+export interface Package {
+  readonly [TypeId]: TypeId
   readonly packageName: string
   readonly packageVersion: string
   readonly resolvedUrl: string | undefined
+  tryReadBytes(path: string): string | Uint8Array | undefined
+  tryReadFile(path: string): string | undefined
+  readFile(path: string): string
+  fileExists(path: string): boolean
+  directoryExists(path: string): boolean
+  listFiles(directory?: string): string[]
+  withOverlay(other: Package): Package
+}
+function decodeStored(
+  store: Record<string, string | Uint8Array>,
+  path: string,
+  file: string | Uint8Array | undefined,
+): string | undefined {
+  if (file === undefined) return undefined
+  return decodeStoredFile(store, path, file)
+}
 
-  constructor(
-    files: Record<string, string | Uint8Array>,
-    packageName: string,
-    packageVersion: string,
-    resolvedUrl?: string,
-  ) {
-    this.#files = { ...files }
-    this.packageName = packageName
-    this.packageVersion = packageVersion
-    this.resolvedUrl = resolvedUrl
-  }
+function readStoreFile(
+  store: Record<string, string | Uint8Array> | undefined,
+  path: string,
+): string | undefined {
+  if (store === undefined) return undefined
+  return decodeStored(store, path, store[path])
+}
 
-  tryReadBytes(path: string): string | Uint8Array | undefined {
-    return this.#files[path]
-  }
-
-  tryReadFile(path: string): string | undefined {
-    const file = this.#files[path]
-    if (file === undefined) {
-      return undefined
-    }
-    if (typeof file === 'string') {
-      return file
-    }
-    const content = new TextDecoder().decode(file)
-    this.#files[path] = content
-    return content
-  }
-
-  readFile(path: string): string {
+const PackageProto: Package = {
+  [TypeId]: TypeId,
+  packageName: '',
+  packageVersion: '',
+  resolvedUrl: undefined,
+  tryReadBytes(this: Package, path: string): string | Uint8Array | undefined {
+    return filesMap.get(this)?.[path]
+  },
+  tryReadFile(this: Package, path: string): string | undefined {
+    return readStoreFile(filesMap.get(this), path)
+  },
+  readFile(this: Package, path: string): string {
     const content = this.tryReadFile(path)
     if (content === undefined) {
       throw new Error(`File not found: ${path}`)
     }
     return content
-  }
+  },
+  fileExists(this: Package, path: string): boolean {
+    const store = filesMap.get(this)
+    return store !== undefined && path in store
+  },
+  directoryExists(this: Package, path: string): boolean {
+    const store = filesMap.get(this)
+    if (store === undefined) return false
+    const prefix = ensureTrailingDirectorySeparator(PackagePath.make(path))
+    return Object.keys(store).some((file) => file.startsWith(prefix))
+  },
+  listFiles(this: Package, directory?: string): string[] {
+    const store = filesMap.get(this)
+    if (store === undefined) return []
+    return listPackageFiles(store, directory)
+  },
+  withOverlay(this: Package, other: Package): Package {
+    const combined = Object.assign({}, filesMap.get(this), filesMap.get(other))
+    return makePackage(combined, this.packageName, this.packageVersion, this.resolvedUrl)
+  },
+}
 
-  fileExists(path: string): boolean {
-    return path in this.#files
+function decodeStoredFile(
+  files: Record<string, string | Uint8Array>,
+  path: string,
+  file: string | Uint8Array,
+): string {
+  if (typeof file === 'string') {
+    return file
   }
+  const content = new TextDecoder().decode(file)
+  files[path] = content
+  return content
+}
 
-  directoryExists(path: string): boolean {
-    path = ensureTrailingDirectorySeparator(path)
-    for (const file in this.#files) {
-      if (file.startsWith(path)) {
-        return true
-      }
+export const makePackage: {
+  (
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): (files: Record<string, string | Uint8Array>) => Package
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): Package
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): Package => {
+    const pkg: Package = {
+      [TypeId]: TypeId,
+      packageName,
+      packageVersion,
+      resolvedUrl,
+      tryReadBytes(p: string) {
+        return PackageProto.tryReadBytes.call(this, p)
+      },
+      tryReadFile(p: string) {
+        return PackageProto.tryReadFile.call(this, p)
+      },
+      readFile(p: string) {
+        return PackageProto.readFile.call(this, p)
+      },
+      fileExists(p: string) {
+        return PackageProto.fileExists.call(this, p)
+      },
+      directoryExists(p: string) {
+        return PackageProto.directoryExists.call(this, p)
+      },
+      listFiles(dir?: string) {
+        return PackageProto.listFiles.call(this, dir)
+      },
+      withOverlay(other: Package) {
+        return PackageProto.withOverlay.call(this, other)
+      },
     }
-    return false
-  }
+    filesMap.set(pkg, { ...files })
+    return pkg
+  },
+)
 
-  listFiles(directory = '/'): string[] {
-    directory = ensureTrailingDirectorySeparator(directory)
-    return directory === '/'
-      ? Object.keys(this.#files)
-      : Object.keys(this.#files).filter((f) => f.startsWith(directory))
-  }
+export const Package = {
+  make: makePackage,
+}
+function directoryWithRoot(directory: string | undefined): PackagePath {
+  if (directory === undefined) return PackagePath.make('/')
+  return PackagePath.make(directory)
+}
 
-  /**
-   * Merge `other`'s files over this package's, returning a new package and
-   * mutating neither. The result keeps THIS package's name, version and
-   * resolved URL, so when `other` carries its own `package.json` the returned
-   * package's `packageName` need not match the name inside its own bytes.
-   */
-  withOverlay(other: Package): Package {
-    const files = { ...this.#files, ...other.#files }
-    return new Package(files, this.packageName, this.packageVersion, this.resolvedUrl)
+function listFilesWithPrefix(
+  files: Record<string, string | Uint8Array>,
+  prefix: string,
+): string[] {
+  if (prefix === '/') return Object.keys(files)
+  return Object.keys(files).filter((f) => f.startsWith(prefix))
+}
+
+function listPackageFiles(
+  files: Record<string, string | Uint8Array>,
+  directory: string | undefined,
+): string[] {
+  return listFilesWithPrefix(files, ensureTrailingDirectorySeparator(directoryWithRoot(directory)))
+}
+
+function defaultPackageName(packageName: string | undefined): string {
+  if (packageName === undefined) return 'test'
+  return packageName
+}
+
+function defaultPackageVersion(packageVersion: string | undefined): string {
+  if (packageVersion === undefined) return '1.0.0'
+  return packageVersion
+}
+
+function collectPackageFiles(
+  files: Record<string, string | Uint8Array>,
+  packageName: string,
+): Record<string, string | Uint8Array> {
+  const packageFiles: Record<string, string | Uint8Array> = {}
+  for (const [name, content] of Object.entries(files)) {
+    assignPackageFile(packageFiles, packageName, name, content)
   }
+  return packageFiles
+}
+
+function collectDirectoryJSON(
+  files: Record<string, string | Uint8Array>,
+  packageName: string,
+): DirectoryJSON {
+  const out: DirectoryJSON = {}
+  for (const [name, content] of Object.entries(files)) {
+    out[mountedKeyOf(name, packageName)] = directoryValue(content)
+  }
+  return out
+}
+
+function assignPackageFile(
+  packageFiles: Record<string, string | Uint8Array>,
+  packageName: string,
+  name: string,
+  content: string | Uint8Array,
+): void {
+  packageFiles[mountedKeyOf(name, packageName)] = content
+}
+
+function packageWithJson(
+  packageFiles: Record<string, string | Uint8Array>,
+  packageName: string,
+  packageVersion: string,
+  prefix: string,
+): Package {
+  const pkg = makePackage(packageFiles, packageName, packageVersion)
+  assert(pkg.fileExists(`${prefix}package.json`), 'Must contain package.json')
+  return pkg
 }
 
 /**
- * Build a {@link Package} from an authored file tree without a tarball.
+ * Build a {@link (Package:interface)} from an authored file tree without a tarball.
  *
  * Tree contract (minor-version stable):
  * - Relative keys are prefixed with `/node_modules/<packageName>/`.
@@ -98,28 +256,41 @@ export class Package {
  *   `packageName`/`packageVersion` as given, and the file tree's
  *   `package.json` text is left as authored.
  */
-export function createPackage(
-  files: Record<string, string | Uint8Array>,
-  packageName = 'test',
-  packageVersion = '1.0.0',
-): Package {
-  const prefix = `/node_modules/${packageName}/`
-  const packageFiles: Record<string, string | Uint8Array> = {}
-  for (const [name, content] of Object.entries(files)) {
-    if (name.startsWith('/')) {
-      assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-      packageFiles[name] = content
-    } else {
-      packageFiles[posixJoin(`/node_modules/${packageName}`, name)] = content
-    }
-  }
-
-  const pkg = new Package(packageFiles, packageName, packageVersion)
-  assert(pkg.fileExists(`${prefix}package.json`), 'Must contain package.json')
-  return pkg
-}
+export const createPackage: {
+  (
+    packageName?: string,
+    packageVersion?: string,
+  ): (files: Record<string, string | Uint8Array>) => Package
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName?: string,
+    packageVersion?: string,
+  ): Package
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName?: string,
+    packageVersion?: string,
+  ): Package => {
+    const name = defaultPackageName(packageName)
+    return packageWithJson(
+      collectPackageFiles(files, name),
+      name,
+      defaultPackageVersion(packageVersion),
+      `/node_modules/${name}/`,
+    )
+  },
+)
 
 export type DirectoryJSON = Record<string, string | Uint8Array | null>
+
+function directoryValue(content: string | Uint8Array): string | Uint8Array {
+  if (typeof content === 'string') return content
+  // memfs `fromJSON` only treats `string | Buffer` as file content;
+  // a plain Uint8Array would be misinterpreted as a directory.
+  return Buffer.from(content)
+}
 
 /**
  * Project an authored package tree to a memfs {@link DirectoryJSON} that
@@ -134,29 +305,16 @@ export type DirectoryJSON = Record<string, string | Uint8Array | null>
  * Core does not depend on `@systemfsoftware/effect-memfs` — this returns a
  * plain record that is structurally compatible with `Contents`.
  */
-export function toDirectoryJSON(
-  files: Record<string, string | Uint8Array>,
-  packageName = 'test',
-): DirectoryJSON {
-  const prefix = `/node_modules/${packageName}/`
-  const out: DirectoryJSON = {}
-  for (const [name, content] of Object.entries(files)) {
-    const key = name.startsWith('/') ? name : posixJoin(`/node_modules/${packageName}`, name)
-    if (name.startsWith('/')) {
-      assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-    }
-    if (typeof content === 'string') {
-      out[key] = content
-    } else {
-      // memfs `fromJSON` only treats `string | Buffer` as file content;
-      // a plain Uint8Array would be misinterpreted as a directory.
-      out[key] = Buffer.from(content)
-    }
-  }
-  return out
-}
+export const toDirectoryJSON: {
+  (packageName?: string): (files: Record<string, string | Uint8Array>) => DirectoryJSON
+  (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON =>
+    collectDirectoryJSON(files, defaultPackageName(packageName)),
+)
 
 export function createPackageFromTarballData(tarball: Uint8Array): Package {
   const { files, packageName, packageVersion } = extractTarball(tarball)
-  return new Package(files, packageName, packageVersion)
+  return makePackage(files, packageName, packageVersion)
 }

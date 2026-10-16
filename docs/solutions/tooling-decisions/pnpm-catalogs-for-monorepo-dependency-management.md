@@ -44,77 +44,53 @@ At the repo root, `pnpm-workspace.yaml` holds all catalog declarations:
 ```yaml
 catalog: # ← default catalog: "catalog:" resolves here
   typescript: ^7
-  "@effect/platform-node": 4.0.0-rc.112
-  "@effect/platform-node-shared": 4.0.0-rc.112
-  effect: 4.0.0-rc.112
-  "@effect/vitest": 4.0.0-rc.112
+  "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
+  "@effect/platform-node": 4.0.0-rc.117
+  "@effect/platform-node-shared": 4.0.0-rc.117
+  effect: 4.0.0-rc.117
   fast-check: ^4
-  vitest: ^4
-  "@vitest/snapshot": ^4
-  "@vitest/coverage-v8": ^4
-  "@vitest/coverage-istanbul": ^4
+  vitest: ^5
+  "@vitest/snapshot": ^5
+  "@vitest/coverage-v8": ^5
+  "@vitest/coverage-istanbul": ^5
   vite-tsconfig-paths: ^6.1.1
   vite: ^8
-  tsdown: ^0.22.14
+  tsdown: ^0.23.0
   rimraf: ^6.1.3
-  "@types/node": ^24
-  tstyche: ^7.1.0
+  "@types/node": ^26
+  tstyche: ^7.2.5
   testcontainers: ^12.1.0
-  "@microsoft/api-extractor": ^7.58.7
-  oxc-parser: ^0.140.0
-  "@oxc-project/types": ^0.140.0
+  "@microsoft/api-extractor": ^7.59.1
+  oxc-parser: ^0.150.0
+  "@oxc-project/types": ^0.150.0
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
-  "@testing-library/dom": ^10.4.1
-  "@testing-library/jest-dom": ^7.0.0
-  "@testing-library/react": ^16.3.2
-  "@types/react": ^19.2.18
-  "@types/react-dom": ^19.2.4
-  "@types/scheduler": ^0.26.0
-  jsdom: ^29.1.1
-  react: ^19.2.8
-  react-dom: ^19.2.8
-  react-error-boundary: ^6.1.2
-  scheduler: ^0.27.0
-  storybook: ^10.5.0
-  type-fest: ^5.8.0
-  "@storybook/addon-vitest": ^10.5.0
-  "@storybook/react-vite": ^10.5.0
-  "@vitest/browser": ^4
-  "@vitest/browser-playwright": ^4
+  storybook: ^10.6.0
+  type-fest: ^5.10.0
+  "@storybook/addon-vitest": ^10.6.0
+  "@storybook/react-vite": ^10.6.0
+  "@vitest/browser": ^5
+  "@vitest/browser-playwright": ^5
   playwright: ^1
 
 catalogs:
   peers: # ← named catalog: resolves as "catalog:peers"
-    effect: 4.0.0-rc.112
-    "@effect/vitest": 4.0.0-rc.112
+    effect: 4.0.0-rc.117
   oxlint: # ← named catalog: resolves as "catalog:oxlint"
-    oxlint: ^1.77.0
-    "@oxlint/plugins": ^1.77.0
+    oxlint: ~1.82.0
+    "@oxlint/plugins": ~1.82.0
     oxlint-tsgolint: 7.0.2001
   stryker: # ← named catalog: resolves as "catalog:stryker"
-    semver: ^7.7.0
-    "@systemfsoftware/stryker-js-cli": ^4.0.1
-    "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
-    "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1
-    "@systemfsoftware/stryker-plugins": ^1.0.1
-    "@systemfsoftware/stryker-test-contribution": ^1.0.1
-    "mutation-testing-elements": 3.7.3
-    "mutation-testing-metrics": 3.7.3
-    "mutation-testing-report-schema": 3.7.3
-  attw: # ← named catalog: resolves as "catalog:attw"
-    # @systemfsoftware/arethetypeswrong runs the JS compiler bridge (typescript@6).
-    # typescript@7 is the native Go compiler with no JS API; see
-    # docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md
-    typescript: ^6.0.3
-    # The published CLI. Consumers that must not close a workspace cycle resolve
-    # through this catalog instead of `workspace:^`; see
-    # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
-    "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.1
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.1
+    "@systemfsoftware/stryker-js": ^11.0.0
+    "@systemfsoftware/stryker-js-typescript-checker": ^7.1.0
+    "@systemfsoftware/stryker-js-vitest-runner": ^7.2.0
+    "mutation-testing-elements": 3.9.0
 ```
 
-The `catalogs:` block defines named catalogs (`peers`, `oxlint`, `stryker`, `attw`). Member packages reference them as `catalog:peers`, `catalog:oxlint`, `catalog:stryker`, or `catalog:attw`. The bare `catalog:` key is the default catalog.
+The `catalogs:` block defines named catalogs (`peers`, `oxlint`, `stryker`). Member packages reference them as `catalog:peers`, `catalog:oxlint`, or `catalog:stryker`. The bare `catalog:` key is the default catalog.
 
 The `stryker` catalog is intentionally separate from the default because its dependency axis (mutation testing tooling) differs from the main library/testing axis. Keeping it isolated prevents Effect-TS and Vitest deps from accidentally pulling in Stryker machinery.
 
@@ -127,13 +103,13 @@ Convert every shared dependency to a catalog reference. The pattern is:
 | `"effect": "^3.21.2"` | `"effect": "catalog:"`        |
 | `"semver": "^7.7.0"`  | `"semver": "catalog:stryker"` |
 
-Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `packages/effect-gherkin-spec/package.json` declares:
+Workspace-local packages (other monorepo members) continue using `workspace:^` — catalog references are only for external registry deps. For example, `@systemfsoftware/effect-gherkin-spec`'s `package.json` declares:
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "catalog:",
-  "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-  "@systemfsoftware/oxlint-config": "workspace:^",
+  "@systemfsoftware/vitest": "workspace:^",
+  "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+  "@systemfsoftware/oxlint-config-recommended": "workspace:^",
   "@systemfsoftware/tsconfig": "workspace:^",
   "@systemfsoftware/vitest-config": "workspace:^",
   "@types/node": "catalog:",
@@ -172,7 +148,7 @@ pnpm check
 
 **Consistent runtime behavior.** Every package in the monorepo tests against the same `effect` version. A bug that only manifests on older versions is caught uniformly rather than lurking in packages that haven't been manually updated.
 
-**Named catalogs model concern separation.** The `stryker` catalog isolates mutation-testing tooling from the main library axis. Bumping `@effect/vitest` does not nudge Stryker deps, and vice versa.
+**Named catalogs model concern separation.** The `stryker` catalog isolates mutation-testing tooling from the main library axis. Bumping `effect` does not nudge Stryker deps, and vice versa.
 
 **CI safety.** `pnpm check` with `--frozen-lockfile` fails if any `package.json` drifts from the lockfile, catching a missed `pnpm install` before it reaches CI.
 
@@ -190,7 +166,6 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "^0.29.0",
   "effect": "^3.21.2",
   "fast-check": "^3.0.0",
   "vitest": "^4.0.0",
@@ -203,7 +178,6 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "catalog:",
   "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
   "effect": "catalog:",
   "fast-check": "catalog:",
@@ -217,10 +191,8 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 
 ```json
 "dependencies": {
-  "@systemfsoftware/stryker-js-cli": "catalog:stryker",
-  "@systemfsoftware/stryker-plugins": "catalog:stryker",
-  "mutation-testing-metrics": "catalog:stryker",
-  "semver": "catalog:stryker",
+  "@systemfsoftware/stryker-js": "catalog:stryker",
+  "mutation-testing-elements": "catalog:stryker",
   "typescript": "catalog:"
 }
 ```

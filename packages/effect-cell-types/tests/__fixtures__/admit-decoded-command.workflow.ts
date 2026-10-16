@@ -5,15 +5,18 @@ import * as S from 'effect/Schema'
 
 export class Decoded extends S.Class<Decoded>('Decoded')({
   length: S.Int,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = { length: 'tests.decoded.length' } as const
+}
 
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/InterpreterDecide')
 type DecisionTypeId = typeof DecisionTypeId
 
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
-  length: S.Number,
+  length: S.Finite,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
+  static readonly [Workflow.InstrumentationBrand] = { length: 'tests.admitted.length' } as const
 }
 
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {
@@ -28,9 +31,17 @@ export class Malformed extends S.TaggedError<Malformed>()('Malformed', {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export const admitDecodedCommand = Workflow.make(
-  Decoded,
-  (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
+export class InfraCrashError extends S.TaggedError<InfraCrashError>()('InfraCrashError', {
+  message: S.String,
+}) {}
+
+export const AdmissionDecision = S.Union([Admitted, Rejected])
+
+export const admitDecodedCommand = Workflow.make({
+  command: Decoded,
+  decision: AdmissionDecision,
+  error: Malformed,
+  decide: (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
     Match.value(decoded.length < 0).pipe(
       Match.when(true, () => Result.fail(new Malformed({ length: decoded.length }))),
       Match.when(false, () =>
@@ -41,4 +52,4 @@ export const admitDecodedCommand = Workflow.make(
         )),
       Match.exhaustive,
     ),
-)
+})

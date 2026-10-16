@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Constitution-derived Effect Language Service policy (@effect/tsgo).
-  // Every diagnostic the plugin ships is listed explicitly: silence here would mean a
-  // new upstream rule lands at its own default severity instead of ours (A.2).
+  // Effect Language Service policy (@effect/tsgo) for shipped library code. Every diagnostic
+  // the plugin ships is listed explicitly: a rule missing here would fall back to its upstream
+  // default severity instead of ours.
   "compilerOptions": {
     "plugins": [
       {
@@ -12,7 +12,7 @@
           { "target": "error", "pattern": "default", "skipLeadingPath": ["src/"] }
         ],
         "diagnosticSeverity": {
-          // Article I — The Pure Core: a decision is data in, a value or typed error out (I.1), types before logic (I.2), one variant per failure (I.3), no primitive obsession (I.4), no state-by-presence (I.5)
+          // Effect values and services the type system must reject.
           "classSelfMismatch": "error",
           "effectFnImplicitAny": "error",
           "effectInFailure": "error",
@@ -29,7 +29,7 @@
           "schemaUnionOfLiterals": "error",
           "unknownInEffectCatch": "error",
 
-          // Article I.1 + II.3 — a decision reads no clock, no randomness, no environment, no network, no console; those live in the impure bread of the sandwich
+          // Library code reads no clock, randomness, environment, network, or console; the runner supplies those.
           "asyncFunction": "error",
           "cryptoRandomUUID": "error",
           "cryptoRandomUUIDInEffect": "error",
@@ -46,7 +46,7 @@
           "processEnvInEffect": "error",
           "tryCatchInEffectGen": "error",
 
-          // Article II.2 — effects are lazy values, interpreted once at the edge; no eager async result on the public surface
+          // Effects are lazy descriptions, run once at the edge; nothing here starts work by itself.
           "effectFnIife": "error",
           "effectGenUsesAdapter": "error",
           "floatingEffect": "error",
@@ -58,7 +58,7 @@
           "returnEffectInGen": "error",
           "runEffectInsideEffect": "error",
 
-          // Article II.4 — dependencies point inward, implementations wired at one composition root
+          // Dependencies are declared and wired at one composition point.
           "duplicatePackage": "error",
           "layerMergeAllWithDependencies": "error",
           "leakingRequirements": "error",
@@ -69,7 +69,7 @@
           "scopeInLayerEffect": "error",
           "serviceNotAsClass": "error",
 
-          // Article II.5 — decode, never cast; outside data enters through a schema, not an assertion
+          // Outside data enters through a schema, not a cast.
           "instanceOfSchema": "error",
           "missingEffectError": "error",
           "newSchemaClass": "error",
@@ -77,11 +77,11 @@
           "schemaSyncInEffect": "error",
           "unsafeEffectTypeAssertion": "error",
 
-          // Article IV.2 — names scream the domain; a key or identifier must answer "of what?"
+          // A key or tag must answer "of what?".
           "deterministicKeys": "error",
           "redundantSchemaTagIdentifier": "error",
 
-          // Article V.7 — subtract before you add; every line is a liability
+          // Prefer the smaller construct.
           "catchAllToMapError": "error",
           "catchToIgnore": "error",
           "catchToOrElseSucceed": "error",
@@ -105,21 +105,18 @@
           "unnecessaryPipeChain": "error",
           "unnecessaryTypeofType": "error",
 
-          // Deliberately not gated. Each entry names why the harm is absent or gated elsewhere (V.6).
-          // 3490 sites, overwhelmingly ESTree visitor guards. I.6 governs control-flow FORM in the pure core and is already gated there by oxlint complexity; this rule polices truthiness everywhere, including the shell.
-          "strictBooleanExpressions": "off",
-          // V.4 — demanding a pipeable overload on every exported fixed-arity function builds API surface no requirement asked for.
-          "missingPipeableSignature": "off",
-          // Nesting-versus-pipe preference. Names no harm this constitution recognises.
-          "missedPipeableOpportunity": "off",
-          // All 35 sites are entry points: integration tests and the Gherkin spec runtime, which IS the composition root for a scenario. II.4 is gated instead by oxlint-plugins/effect-entrypoint, which knows the cell taxonomy.
-          "strictEffectProvide": "off",
-          // All 17 sites are Vitest config and setup files — the harness, not the domain. processEnvInEffect stays error: inside a generator the harm is real.
-          "processEnv": "off",
-          // Fires on the Vite plugin shell, the impure bread of the II.3 sandwich. The rule cannot see core-versus-shell, and II.4 is gated by the cell import-boundary rules.
-          "nodeBuiltinImport": "off",
-          // Every site is the implementation signature of an overloaded function, which is not the public surface; callers branch on the typed overload (I.3 holds).
-          "anyUnknownInErrorContext": "off"
+          // A condition states its comparison, not its truthiness.
+          "strictBooleanExpressions": "error",
+          // Exported combinators take a data-last form beside the data-first form, so they compose in .pipe.
+          "missingPipeableSignature": "error",
+          // Nested call chains are written as .pipe.
+          "missedPipeableOpportunity": "error",
+          // Configuration is injected, never read from process.env.
+          "processEnv": "error",
+          // Node builtins are reached through their Effect-native counterparts.
+          "nodeBuiltinImport": "error",
+          // Failures carry typed errors, never any or unknown.
+          "anyUnknownInErrorContext": "error"
         }
       }
     ]

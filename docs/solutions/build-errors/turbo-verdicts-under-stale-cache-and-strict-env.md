@@ -9,6 +9,7 @@ symptoms:
   - "a workspace-wide migration census under-reports the red set, so packages are never migrated"
   - "browser tests pass standalone and fail under `turbo run` with \"Executable doesn't exist at /root/.cache/ms-playwright/chromium_headless_shell-1234\""
   - "`tsc --noEmit --incremental` reports clean on a package whose imports no longer resolve"
+  - "`tsc -p` reports TS90xx `--isolatedDeclarations` errors on a package whose config never sets the option"
 root_cause: config_error
 resolution_type: config_change
 related_components:
@@ -30,7 +31,7 @@ tags:
 During the Effect v4 workspace cut-over, three separate verdicts were false at the same time:
 
 1. `TURBO_CONCURRENCY=100% pnpm typecheck` reported a red set of ~30 packages. The real red set was larger: packages whose hashes had not changed replayed **cached pre-migration green** results, so they were never migrated. `toolchain/vitest-config`, `oxlint-plugin/oxlint-plugin-recommended` and `oxlint-plugin-cell-vocabulary` all sat in that blind spot.
-2. Every package's `typecheck` script runs `tsc --noEmit --incremental`, except `stryker-js-html-reporter`'s (a plain `tsc --noEmit`). A `tsconfig.tsbuildinfo` written **before** a dependency-graph change keeps reporting clean afterwards, because unchanged files are not re-checked. Deleting the 48 `tsbuildinfo` files turned a "green" workspace red — `vitest-setup.ts` files still importing `FastCheck` from `'effect'` had been invisible for the whole migration.
+2. Every package's `typecheck` script then ran `tsc --noEmit --incremental`, except `stryker-js-html-reporter`'s (a plain `tsc --noEmit`). A `tsconfig.tsbuildinfo` written **before** a dependency-graph change keeps reporting clean afterwards, because unchanged files are not re-checked. Deleting the 48 `tsbuildinfo` files turned a "green" workspace red — `vitest-setup.ts` files still importing `FastCheck` from `'effect'` had been invisible for the whole migration.
 3. Browser tests passed under `pnpm test` and failed under `turbo run test`. Turbo 2 defaults to strict environment mode: a task receives only declared variables plus a system allowlist. `XDG_CACHE_HOME` is not in it, so Playwright fell back to `$HOME/.cache/ms-playwright` and could not find the browser build that exists under the real cache root.
 
 ## Root cause
@@ -63,10 +64,18 @@ For the verdict-fidelity half, the only trustworthy run of a gate during a migra
 TURBO_CONCURRENCY=100% pnpm gate:tasks --force   # --force bypasses the cache entirely
 ```
 
-Deleting stale incremental state belongs in the same sweep, because `--force` re-runs the task but `tsc` still reads its own `tsbuildinfo`:
+Deleting stale incremental state belongs in the same sweep, because `--force` re-runs the task but `tsc` still reads its own build-info file. Package tsconfigs keep it under `node_modules/.cache/` (`tsBuildInfoFile`), and a few still write `tsconfig.*.tsbuildinfo` beside the config:
 
 ```bash
-rm -f packages/*/tsconfig.tsbuildinfo packages/*/*/tsconfig.tsbuildinfo
+rm -f packages/*/node_modules/.cache/*.tsbuildinfo packages/*/*/node_modules/.cache/*.tsbuildinfo \
+  packages/*/*.tsbuildinfo packages/*/*/*.tsbuildinfo
+```
+
+The same state misleads in the other direction when you measure what a compiler option changes. A composite project's build-info records the diagnostics of the run that wrote it, and a later `tsc -p` that finds nothing to rebuild replays them. In `@systemfsoftware/effect-readiness`, a build-info written by a run with `--isolatedDeclarations` made a plain `tsc -p tsconfig.app.json` exit 1 with the same 83 TS90xx errors, and a reviewer measuring from a clean checkout could not reproduce them. Give each run of an option experiment its own build-info file and output directory:
+
+```bash
+d=$(mktemp -d); tsc -p tsconfig.app.json --tsBuildInfoFile "$d/b" --outDir "$d/out"                         # exit 0
+d=$(mktemp -d); tsc -p tsconfig.app.json --tsBuildInfoFile "$d/b" --outDir "$d/out" --isolatedDeclarations  # exit 1, 83 errors
 ```
 
 ## Prevention

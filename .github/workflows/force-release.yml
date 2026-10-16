@@ -1,0 +1,64 @@
+name: Force Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package to force release for"
+        required: true
+        default: "@systemfsoftware/effect-cell-types"
+        type: string
+      bump:
+        description: "Release bump (patch, minor, major)"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  force-release:
+    name: dummy changeset + release PR
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Write dummy changeset
+        env:
+          PACKAGE: ${{ inputs.package }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          cat > ".changeset/force-${{ github.run_id }}-$BUMP.md" <<EOF
+          ---
+          "$PACKAGE": $BUMP
+          ---
+
+          chore(release): force $BUMP release for $PACKAGE via workflow dispatch
+          EOF
+      - name: Commit, push, and open PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: force-release/${{ inputs.bump }}-${{ github.run_id }}
+          BASE: ${{ github.event.repository.default_branch }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --create "$BRANCH"
+          git add .changeset
+          git commit -m "chore(release): force $BUMP via workflow dispatch"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base "$BASE" \
+            --head "$BRANCH" \
+            --title "chore(release): force $BUMP" \
+            --body "Manually triggered ${BUMP} release (run ${{ github.run_id }}). Merging drops a dummy changeset intent on main; the Release workflow then opens the version-packages PR."

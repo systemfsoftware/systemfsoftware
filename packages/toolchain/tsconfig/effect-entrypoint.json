@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
+  // and composition packages that wire layers together. nodeBuiltinImport is the one rule absent
+  // here, because choosing the runtime's platform is the job of these files.
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "keyPatterns": [
+          { "target": "service", "pattern": "default", "skipLeadingPath": ["src/"] },
+          { "target": "error", "pattern": "default", "skipLeadingPath": ["src/"] }
+        ],
+        "diagnosticSeverity": {
+          // Effect values and services the type system must reject.
+          "classSelfMismatch": "error",
+          "effectFnImplicitAny": "error",
+          "effectInFailure": "error",
+          "effectInVoidSuccess": "error",
+          "extendsNativeError": "error",
+          "genericEffectServices": "error",
+          "globalErrorInEffectCatch": "error",
+          "globalErrorInEffectFailure": "error",
+          "nonObjectEffectServiceType": "error",
+          "overriddenSchemaConstructor": "error",
+          "schemaNumber": "error",
+          "schemaOpaqueInstanceMember": "error",
+          "schemaStructWithTag": "error",
+          "schemaUnionOfLiterals": "error",
+          "unknownInEffectCatch": "error",
+
+          // Even where a real read is allowed, inside a generator it goes through Effect's services.
+          "asyncFunction": "error",
+          "cryptoRandomUUID": "error",
+          "cryptoRandomUUIDInEffect": "error",
+          "globalConsole": "error",
+          "globalConsoleInEffect": "error",
+          "globalDate": "error",
+          "globalDateInEffect": "error",
+          "globalFetch": "error",
+          "globalFetchInEffect": "error",
+          "globalRandom": "error",
+          "globalRandomInEffect": "error",
+          "globalTimers": "error",
+          "globalTimersInEffect": "error",
+          "processEnvInEffect": "error",
+          "tryCatchInEffectGen": "error",
+
+          // Effects are lazy descriptions, run once at the edge.
+          "effectFnIife": "error",
+          "effectGenUsesAdapter": "error",
+          "floatingEffect": "error",
+          "lazyEffect": "error",
+          "lazyPromiseInEffectSync": "error",
+          "missingReturnYieldStar": "error",
+          "missingStarInYieldEffectGen": "error",
+          "newPromise": "error",
+          "returnEffectInGen": "error",
+          "runEffectInsideEffect": "error",
+
+          // Dependencies are declared and wired at one composition point.
+          "duplicatePackage": "error",
+          "layerMergeAllWithDependencies": "error",
+          "leakingRequirements": "error",
+          "missingEffectContext": "error",
+          "missingEffectServiceDependency": "error",
+          "missingLayerContext": "error",
+          "multipleEffectProvide": "error",
+          "scopeInLayerEffect": "error",
+          "serviceNotAsClass": "error",
+
+          // Outside data enters through a schema, not a cast.
+          "instanceOfSchema": "error",
+          "missingEffectError": "error",
+          "newSchemaClass": "error",
+          "preferSchemaOverJson": "error",
+          "schemaSyncInEffect": "error",
+          "unsafeEffectTypeAssertion": "error",
+
+          // A key or tag must answer "of what?".
+          "deterministicKeys": "error",
+          "redundantSchemaTagIdentifier": "error",
+
+          // Prefer the smaller construct.
+          "catchAllToMapError": "error",
+          "catchToIgnore": "error",
+          "catchToOrElseSucceed": "error",
+          "catchUnfailableEffect": "error",
+          "effectDoNotation": "error",
+          "effectFnOpportunity": "error",
+          "effectMapFlatten": "error",
+          "effectMapVoid": "error",
+          "effectSucceedWithVoid": "error",
+          "flatMapToMap": "error",
+          "multipleCatchTag": "error",
+          "nestedEffectGenYield": "error",
+          "outdatedApi": "error",
+          "redundantMapError": "error",
+          "redundantOrDie": "error",
+          "syncToSucceed": "error",
+          "unnecessaryArrowBlock": "error",
+          "unnecessaryEffectGen": "error",
+          "unnecessaryFailYieldableError": "error",
+          "unnecessaryPipe": "error",
+          "unnecessaryPipeChain": "error",
+          "unnecessaryTypeofType": "error",
+
+          // A condition states its comparison, not its truthiness.
+          "strictBooleanExpressions": "error",
+          // Exported combinators take a data-last form beside the data-first form, so they compose in .pipe.
+          "missingPipeableSignature": "error",
+          // Nested call chains are written as .pipe.
+          "missedPipeableOpportunity": "error",
+          // Configuration is injected; process.env is read only where the program's configuration is built.
+          "processEnv": "error",
+          // Failures carry typed errors, never any or unknown.
+          "anyUnknownInErrorContext": "error"
+        }
+      }
+    ]
+  }
+}

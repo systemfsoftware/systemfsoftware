@@ -33,3 +33,5 @@ Checks per package:
 - `@typia/vercel` — `toVercelTools` conversion and a real `tool.execute`
   round-trip through `ai` (the package whose named-only ESM exports broke
   the previous CommonJS-transcoded build).
+- `@typia/jev` — `toJevQuestions` conversion and a native-answer
+  `decode` round-trip, with no network.

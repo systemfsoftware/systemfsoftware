@@ -1,6 +1,6 @@
 {
   "name": "ttsc",
-  "version": "0.29.0",
+  "version": "0.30.4",
   "description": "General-purpose TypeScript-Go compiler, runtime, plugin host, and LSP host.",
   "main": "lib/index.js",
   "types": "src/index.ts",
@@ -63,6 +63,10 @@
     "url": "https://github.com/samchon/ttsc/issues"
   },
   "homepage": "https://ttsc.dev",
+  "dependencies": {
+    "acorn": "8.16.0",
+    "cjs-module-lexer": "2.2.1"
+  },
   "devDependencies": {
     "@types/node": "catalog:utils",
     "rimraf": "catalog:utils",
