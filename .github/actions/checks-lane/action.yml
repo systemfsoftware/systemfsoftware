@@ -280,7 +280,9 @@ runs:
     - name: Install Playwright chromium
       if: inputs.lane == 'test' && fromJSON(inputs.job).browser
       shell: bash -e {0}
-      run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
+      run: |
+        filters="$(corepack pnpm m ls --depth 0 --json | jq -r '.[] | select(.devDependencies.playwright != null) | "--filter=" + .name')"
+        corepack pnpm $filters exec playwright install chromium
     - name: Build
       if: inputs.lane == 'test'
       shell: bash -e {0}
