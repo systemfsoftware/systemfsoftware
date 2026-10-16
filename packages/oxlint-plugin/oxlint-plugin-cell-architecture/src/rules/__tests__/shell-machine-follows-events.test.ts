@@ -149,6 +149,12 @@ ruleTester.run('shell-machine-follows-events', shellMachineFollowsEvents, {
       code: FLAT_CONFIG,
     },
     {
+      // A test file exercises the machine as a fixture; the regime binds production code.
+      name: 'Should_Pass_When_AFamilyReExportSitsInATestFile',
+      filename: '/repo/packages/shop/src/fixture.machine.test.ts',
+      code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+    },
+    {
       name: 'Should_Pass_When_ATransitionCopiesEventFieldsIntoContext',
       filename: SRC,
       code: `
@@ -1339,6 +1345,14 @@ import { createFSM } from '@systemfsoftware/xstate/fsm'
 createFSM({ states: { closed: { on: { GO: 42 } } } })
 `,
       errors: [unclosedError('a transition value that is neither a string target, a function, nor an `on` table')],
+    },
+    {
+      // The same shape, in the same stem without the test suffix, stays refused:
+      // only the test-file name silences the rule.
+      name: 'Should_Refuse_When_AFamilyReExportSitsInASrcFile',
+      filename: '/repo/packages/shop/src/fixture.machine.ts',
+      code: `export { createFSM } from '@systemfsoftware/xstate/fsm'\n`,
+      errors: [reExportError('@systemfsoftware/xstate/fsm')],
     },
   ],
 })

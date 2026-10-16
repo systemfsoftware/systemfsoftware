@@ -165,11 +165,35 @@ export const config = { atom: 1 }
 export const machine = createFSM({ states: { closed: {} } })
 `,
     },
+    {
+      // A test file exercises the machine as a fixture; the regime binds production code.
+      name: 'Should_Pass_When_AnAtomFamilyImportSitsInATestFile',
+      filename: '/repo/packages/shop/src/fixture.atom.test.ts',
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const machineAtom = atom(() => createFSM({ states: { closed: {} } }))
+`,
+    },
   ],
   invalid: [
     {
       name: 'Should_Refuse_When_AnAtomModuleImportsTheFamilyStatically',
       filename: SRC,
+      code: `
+import { atom } from '@systemfsoftware/effect-atom'
+import { createFSM } from '@systemfsoftware/xstate/fsm'
+
+export const machineAtom = atom(() => createFSM({ states: { closed: {} } }))
+`,
+      errors: [familyImportError('@systemfsoftware/xstate/fsm')],
+    },
+    {
+      // The same shape, in the same stem without the test suffix, stays refused:
+      // only the test-file name silences the rule.
+      name: 'Should_Refuse_When_AnAtomFamilyImportSitsInASrcFile',
+      filename: '/repo/packages/shop/src/fixture.atom.ts',
       code: `
 import { atom } from '@systemfsoftware/effect-atom'
 import { createFSM } from '@systemfsoftware/xstate/fsm'

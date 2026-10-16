@@ -47,6 +47,7 @@ import {
   UNRESOLVABLE_NAME,
   unresolvableActual,
 } from './shell-machine-follows-events.config.js'
+import { isTestFile } from './test-file.js'
 
 export type Options = []
 export type MessageIds =
@@ -182,6 +183,7 @@ const readsEventField = (
 export const shellMachineFollowsEvents = defineRule({
   meta,
   create(context: Context) {
+    if (isTestFile(context.filename)) return {}
     return {
       Program(program: ESTree.Program) {
         const origins = moduleOriginsWithCallResultsOf(program)

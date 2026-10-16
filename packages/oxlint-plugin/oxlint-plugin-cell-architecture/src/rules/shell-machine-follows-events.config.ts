@@ -5,6 +5,12 @@ const importFixOf = (source: string, tail: string): string =>
     ? REACT_BINDING_FIX
     : `import { createFSM } from '${source}'${tail}`
 
+/**
+ * The closed key grammar, read at the fork pin `systemfsoftware/xstate@c8c376cc2`:
+ * machine keys `id`/`initial`/`context`/`states` from `FSMConfig`
+ * (`packages/xstate/src/fsm.ts:80-88`), state key `on` from `FSMStateConfig`
+ * (`:66-73`), object transition keys `target`/`context` from `FSMTransitionConfig` (`:17-23`).
+ */
 export const MACHINE_CONFIG_KEYS: Readonly<Record<string, true>> = {
   id: true,
   initial: true,

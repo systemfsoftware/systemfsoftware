@@ -18,6 +18,7 @@ import {
 import { variableOf } from './kernel-boundary.js'
 import { literalStringOf } from './module-origin.js'
 import { walk } from './module-scope.js'
+import { isTestFile } from './test-file.js'
 
 export type Options = []
 export type MessageIds = 'atomImportsMachineFamily' | 'machineFamilyReactBinding'
@@ -79,6 +80,7 @@ const exportsTypesOnly = (statement: ESTree.ExportNamedDeclaration): boolean =>
 export const atomsReadServices = defineRule({
   meta,
   create(context: Context) {
+    if (isTestFile(context.filename)) return {}
     return {
       Program(program: ESTree.Program) {
         const atomBindings = new Set<string>()
