@@ -46,7 +46,7 @@ Create the registry outside render. React keeps no state for a render that suspe
 
 ## Restoring saved state before the first render
 
-Saved data reaches a registry before the first render; the binding never writes saved data, so it never overwrites a value already on screen.
+Saved data reaches a registry before the first render; the binding never writes saved data. `Atom.Hydration.hydrate` assigns the saved value to each atom the state names and replaces a value the registry already holds, so the owner restores saved state before the first render, while those atoms have not been read yet; a registry that already holds one of them is not a hydrate target.
 
 The owner writes it in one of three forms, before `hydrateRoot` or `createRoot(...).render`:
 

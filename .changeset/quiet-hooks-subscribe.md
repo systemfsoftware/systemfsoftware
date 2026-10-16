@@ -2,7 +2,7 @@
 "@systemfsoftware/effect-atom-react": major
 ---
 
-The code that mounts the app owns the registry; the binding never creates one or writes registry state during render, so saved data never overwrites a value already on screen.
+The code that mounts the app owns the registry; the binding never creates one or writes registry state during render. Call `Atom.Hydration.hydrate(registry, state)` before the first render, while the atoms the state names have not been read yet: hydration assigns each named atom its saved value and replaces a value the registry already holds.
 
 - `RegistryProvider` requires a `registry`. Make it with `Atom.Registry.make({ initialValues, scheduleTask: AtomReact.scheduleTask })` before the first render and dispose it at teardown.
 - `HydrationBoundary` is removed: call `Atom.Hydration.hydrate(registry, state)` before `hydrateRoot`.

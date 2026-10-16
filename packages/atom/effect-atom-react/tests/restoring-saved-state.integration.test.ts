@@ -47,6 +47,37 @@ Feature('Restoring saved page state')
     )
 
     scenario(
+      'A registry that already holds a value for an atom shows the saved value after the owner restores saved state naming that atom',
+      Gherkin.Do.pipe(
+        Given('a live registry already holding a value, then saved state for the same atom, restored by the owner')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const temperature = Atom.make(18).pipe(
+                Atom.serializable({ key: 'live-temperature', schema: Schema.Finite }),
+              )
+              const savedPage = Atom.Registry.make()
+              Atom.Registry.set(savedPage, temperature, 23)
+              const registry = ownRegistry()
+              Atom.Registry.set(registry, temperature, 18)
+              Atom.Hydration.hydrate(registry, Atom.Hydration.dehydrate(savedPage))
+              function Page() {
+                const value = AtomReact.useAtomValue(temperature)
+                return createElement('div', { 'data-testid': 'live-temperature' }, value)
+              }
+              render(createElement(AtomReact.RegistryProvider, { registry }, createElement(Page)))
+              return {}
+            }),
+        ),
+        When('the first commit is read')(
+          'firstCommit',
+          () => Effect.sync(() => screen.getByTestId('live-temperature').textContent),
+        ),
+        Then('the saved value replaced the value the registry held')((s, expect) => expect(s.firstCommit).toBe('23')),
+      ),
+    )
+
+    scenario(
       'A page whose owner restores no saved state shows the values the owner set',
       Gherkin.Do.pipe(
         Given('a value the owner sets before rendering, with nothing saved to restore')('ctx', () =>
