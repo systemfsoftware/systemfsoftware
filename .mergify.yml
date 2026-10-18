@@ -6,6 +6,15 @@ queue_rules:
     queue_conditions:
       - check-success = build · lint · typecheck · test / the gate (pnpm check:ci)
       - check-success = abort on mid-run merge conflict
+      - or:
+          - check-success = commitlint / lint PR commits
+          - check-skipped = commitlint / lint PR commits
+      - or:
+          - check-success = changeset · shared tooling / a publishable-package change needs an intent
+          - check-skipped = changeset · shared tooling / a publishable-package change needs an intent
+      - or:
+          - check-success = changeset · a packed-manifest change needs an intent
+          - check-skipped = changeset · a packed-manifest change needs an intent
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
       - check-success = build · lint · typecheck · test / the gate (pnpm check:ci)
