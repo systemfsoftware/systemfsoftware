@@ -185,6 +185,27 @@ export { unrelated }`,
       )`),
     },
     {
+      // The unchanged success is in a helper only module code outside every decide
+      // body reaches: other code, judged by nothing here.
+      name: 'Should_Ignore_AnUnreachedHelper_When_OnlyModuleCodeOutsideEveryDecideBodyCallsIt',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const backoffOf = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+const outside = backoffOf(input)
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed('ok'),
+})`,
+    },
+    {
       name: 'Should_Pass_When_TheMultiTagArmConstructsANamedVariant',
       code: inMakeBody(`Match.value(input).pipe(
         Match.tag('Approved', 'Rejected', () => Result.succeed(AlreadyApproved.make({}))),
@@ -430,6 +451,130 @@ export const decision = Workflow.make({
         Match.tag('Approved', () => Result.fail('no')),
         Match.orElse((s) => Result.succeed(s))
       )`),
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // The silent stay hides in a same-file helper the decide body reaches: the
+      // unchanged success is judged exactly as it would be inside the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyReachesAHelperReturningItsParameter',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const passThrough = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(passThrough(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A tag-keyed table dispatch in a reached helper is judged like one in the body.
+      name: 'Should_ReportTagKeyedDispatch_When_TheDecideBodyReachesAHelperReadingATagKeyedTable',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const pick = (state: { _tag: string }) => table[state._tag]
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(String(pick(input))),
+})`,
+      errors: [{ messageId: 'tagKeyedDispatch', data: TAG_KEYED_DISPATCH }],
+    },
+    {
+      // Called twice from the body, the helper's handler is judged once.
+      name: 'Should_ReportUnchangedOnce_When_TheDecideBodyCallsAHelperTwice',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const passThrough = (s: unknown) =>
+  Match.value(s).pipe(
+    Match.tag('Approved', (v) => Result.succeed(v)),
+    Match.exhaustive
+  )
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> =>
+    Result.succeed(String(passThrough(input)) + String(passThrough(input))),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A record member the body calls is entered like a helper: its dispatch is
+      // judged exactly as it would be inside the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsARecordMemberHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (s: unknown) =>
+    Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    ),
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+      decide: (input: Cmd): Result.Result<string, never> => Result.succeed(helpers.choose(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // The record member is reached through a module-scope alias: `dispatch` names
+      // `helpers.choose`, so the silent stay inside the member is judged like the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsAModuleAliasOfARecordMemberHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const helpers = {
+  choose: (s: unknown) =>
+    Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    ),
+}
+const dispatch = helpers.choose
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(dispatch(input)),
+})`,
+      errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
+    },
+    {
+      // A module-scope class the body references is entered like a helper: the
+      // dispatch inside its static method is judged exactly as it would be inside
+      // the body.
+      name: 'Should_ReportUnchanged_When_TheDecideBodyCallsAClassStaticMethodHoldingTheDispatch',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+class Choice {
+  static choose(s: unknown) {
+    return Match.value(s).pipe(
+      Match.tag('Approved', (v) => Result.succeed(v)),
+      Match.exhaustive
+    )
+  }
+}
+
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> => Result.succeed(Choice.choose(input)),
+})`,
       errors: [{ messageId: 'unchangedSuccess', data: UNCHANGED_SUCCESS }],
     },
     {

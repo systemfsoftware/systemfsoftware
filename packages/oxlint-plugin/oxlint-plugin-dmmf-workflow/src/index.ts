@@ -24,11 +24,13 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   declarations, audited-pure imports, or bindings statically imported from a
  *   relative `*.schema.js` / `*.schema.ts` specifier; control flow is one
  *   converging first-statement guard at most.
- * - `workflow-match-exhaustive` - decision-freedom over the dispatch,
- *   keyed on the `Workflow.make` boundary.
- * - `workflow-decides-through-match` - a decide body returns no success that
- *   wraps the matched value unchanged and reads no member keyed by a `_tag`
- *   value: a silent stay or a table dispatch outside `Match`.
+ * - `workflow-match-exhaustive` - decision-freedom over the dispatch, in a
+ *   `Workflow.make` decide body and every same-file function and class it
+ *   references and record method it calls.
+ * - `workflow-decides-through-match` - a decide body, and every same-file
+ *   function and class it references and record method it calls, returns no
+ *   success that wraps the matched value unchanged and reads no member keyed
+ *   by a `_tag` value: a silent stay or a table dispatch outside `Match`.
  * - `make-command-schema` - the command position holds a schema class. Scoped
  *   to the shapes `make`'s own type bound cannot refuse: an assertion, a
  *   laundering call, a `declare`d binding. It reports nothing the compiler

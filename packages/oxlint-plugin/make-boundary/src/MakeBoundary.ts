@@ -321,14 +321,3 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
 }
 
 export const hasMakeBoundary = (context: Context): boolean => collectMakeBoundaries(context).length > 0
-
-/** True when `node` descends from (or is) the body — the argument-slot containment test. */
-export const isWithinBody = (node: ESTree.Node, body: MakeBodyKind): boolean =>
-  node.start >= body.start && node.end <= body.end
-
-/** Every boundary whose resolved body contains the node; `null` bodies contain nothing. */
-export const boundariesContaining = (
-  node: ESTree.Node,
-  boundaries: readonly MakeBoundary[],
-): readonly MakeBoundary[] =>
-  boundaries.filter((boundary) => boundary.resolvedBody !== null && isWithinBody(node, boundary.resolvedBody))

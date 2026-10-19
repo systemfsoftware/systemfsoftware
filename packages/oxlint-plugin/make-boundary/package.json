@@ -9,7 +9,7 @@
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
     "directory": "packages/oxlint-plugin/make-boundary"
   },
-  "description": "Workflow.make boundary locator for oxlint rules: every Workflow.make(...) call in a file, its resolved decision body, and containment queries. Shared by the plugins that judge decision bodies.",
+  "description": "Workflow.make boundary locator for oxlint rules: every Workflow.make(...) call in a file and its resolved decision body. Shared by the plugins that judge decision bodies.",
   "type": "module",
   "scripts": {
     "build": "tsdown -l warn",
