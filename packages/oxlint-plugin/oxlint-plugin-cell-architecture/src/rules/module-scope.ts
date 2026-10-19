@@ -88,3 +88,36 @@ export const walk = (value: unknown, visit: (node: ESTree.Node) => void): void =
     walk(child, visit)
   }
 }
+
+const NESTED_SCOPES: Readonly<Record<string, true>> = {
+  ArrowFunctionExpression: true,
+  FunctionExpression: true,
+  FunctionDeclaration: true,
+  ClassDeclaration: true,
+  ClassExpression: true,
+}
+
+export const returnedValuesOf = (
+  fn: ESTree.ArrowFunctionExpression | ESTree.Function,
+): readonly ESTree.Node[] => {
+  const body = fn.body
+  if (body === null) return []
+  if (body.type !== 'BlockStatement') return [body]
+  const returned: ESTree.Node[] = []
+  const collect = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) collect(item)
+      return
+    }
+    if (!isNode(value) || NESTED_SCOPES[value.type] === true) return
+    if (value.type === 'ReturnStatement') {
+      if (value.argument !== null) returned.push(value.argument)
+      return
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (key !== 'parent') collect(child)
+    }
+  }
+  collect(body.body)
+  return returned
+}

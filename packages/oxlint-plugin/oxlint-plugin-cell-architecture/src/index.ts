@@ -1,3 +1,4 @@
+import { atomsReadServices } from './rules/atoms-read-services.js'
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { banUnknown } from './rules/ban-unknown.js'
@@ -16,6 +17,7 @@ import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { sandwichShellIsStraightLine } from './rules/sandwich-shell-is-straight-line.js'
+import { shellMachineFollowsEvents } from './rules/shell-machine-follows-events.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-cell-architecture'
 
@@ -40,6 +42,8 @@ const recommendedRules = {
   [rule('no-either-tag-assertions')]: 'error',
   [rule('sandwich-shell-is-straight-line')]: 'error',
   [rule('medium-owns-no-recovery')]: 'error',
+  [rule('shell-machine-follows-events')]: 'error',
+  [rule('atoms-read-services')]: 'error',
 } as const
 
 export default {
@@ -47,6 +51,7 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'atoms-read-services': atomsReadServices,
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'ban-unknown': banUnknown,
@@ -65,6 +70,7 @@ export default {
     'no-either-tag-assertions': noEitherTagAssertions,
     'sandwich-shell-is-straight-line': sandwichShellIsStraightLine,
     'medium-owns-no-recovery': mediumOwnsNoRecovery,
+    'shell-machine-follows-events': shellMachineFollowsEvents,
   },
   configs: {
     recommended: {
