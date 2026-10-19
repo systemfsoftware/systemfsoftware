@@ -19,6 +19,8 @@ import {
   PURE_BODY_EXPECTED,
   RUNTIME_IMPORT_ACTUAL,
   RUNTIME_IMPORT_FIX,
+  STATE_MACHINE_IMPORT_ACTUAL,
+  STATE_MACHINE_IMPORT_FIX,
   UNRESOLVABLE_ACTUAL,
   UNRESOLVABLE_FIX,
   UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
@@ -42,6 +44,7 @@ export type MessageIds =
   | 'mutableLocalReference'
   | 'unresolvableReference'
   | 'unsealedImportReference'
+  | 'stateMachineImportReference'
   | 'runtimeImportReference'
   | 'moduleMutationReference'
   | 'controlFlowBanned'
@@ -92,6 +95,8 @@ const verdictOfKind = (verdict: FailingReferenceVerdict): MessageIds => {
       return 'ioImportReference'
     case 'unsealedImport':
       return 'unsealedImportReference'
+    case 'stateMachineImport':
+      return 'stateMachineImportReference'
     case 'ioGlobal':
       return 'ioGlobalReference'
     case 'moduleState':
@@ -147,6 +152,13 @@ const verdictData = (
         expected: PURE_BODY_EXPECTED,
         actual: UNSEALED_IMPORT_ACTUAL,
         fix: UNSEALED_IMPORT_FIX,
+      }
+    case 'stateMachineImport':
+      return {
+        name: referenceName,
+        expected: PURE_BODY_EXPECTED,
+        actual: STATE_MACHINE_IMPORT_ACTUAL,
+        fix: STATE_MACHINE_IMPORT_FIX,
       }
     case 'runtimeImport':
       // The name slot already carries the full phrase; no `a reference to` prefix.

@@ -28,8 +28,9 @@ export const Options = S.Struct({})
  * specifier shape instead: a static import that is relative and whose basename
  * ends `.schema.js` or `.schema.ts`. That suffix is what makes a file the home of
  * a declared pure type, and it is the same suffix that enrolls the file in the
- * schema rules and in the mutation config's selected set, so naming a module that
- * way submits it to review rather than exempting it from one. Nothing here is a
+ * schema rules, so naming a module that way submits it to those rules rather
+ * than exempting it from them. Mutation testing selects only `*.workflow.ts`
+ * files, so an operation moved into a schema file leaves the mutated set. Nothing here is a
  * path a reviewer has to remember to check, and no rename can silently
  * un-certify a module that carries the suffix contract.
  */
@@ -56,6 +57,9 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   // `Math.random`, `Date` because it reads the clock - both stay findings. Without
   // these the rule pushed an author to alias `JSON.stringify` and `Object.keys` to
   // module-scope bindings purely to get past it, which is worse code than it replaced.
+  // The collection constructors are deterministic too: a module-scope `Map` or `Set`
+  // a decision only reads is a constant lookup, and a write to one is a module
+  // mutation the operation scan reports.
   'Array',
   'BigInt',
   'Boolean',
@@ -65,6 +69,10 @@ export const BENIGN_GLOBAL_NAMES: ReadonlySet<string> = new Set([
   'RegExp',
   'String',
   'Symbol',
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
   'undefined',
   'NaN',
   'Infinity',
@@ -93,6 +101,12 @@ export const UNSEALED_IMPORT_ACTUAL =
 
 export const UNSEALED_IMPORT_FIX =
   'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or into the schema file of the type it operates on - a relative *.schema.js or *.schema.ts specifier is the one local import a decision may make - or move the decision into the file that already holds it; one of the three is the decision, and it cannot be split across them. Pass anything a caller must supply in as data' as const
+
+export const STATE_MACHINE_IMPORT_ACTUAL =
+  'a reference to a binding imported from the state-machine family, whose lifecycle choices no decide body may make' as const
+
+export const STATE_MACHINE_IMPORT_FIX =
+  'decide in the body with Match over the closed tagged union of states and commands, and keep the machine in the service adapter module beside its *.service.ts; move the choice out of the machine' as const
 
 export const IO_FIX =
   'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it' as const
@@ -157,7 +171,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
+      'A Workflow.make decision body performs no I/O visible in the file that declares it: an I/O import, module-level state, a mutable local, an I/O global and an unbound name are refused, and control flow is limited to one converging first-statement guard. A module-scope const or class the body references is judged by the references inside its initializer or class body, except an object record whose keys are all nameable: that one is judged member by member, by the members the body calls or reads. A binding from the state-machine family (xstate, @xstate/*, @systemfsoftware/xstate and its subpaths and siblings) is refused: a decision dispatches with Match over a closed tagged union, and machines stay in service adapter modules. A binding imported from a relative schema file is the one local import a decision may make - a schema file is the core home that declares a pure type and its operations. Whether any other imported binding is itself pure belongs to the module that declares it, and is decided where that module is linted.',
   },
   schema: [Options],
   messages: {
@@ -167,6 +181,7 @@ export const meta = {
     mutableLocalReference: IO_IMPORT_REFERENCE_MESSAGE,
     unresolvableReference: IO_IMPORT_REFERENCE_MESSAGE,
     unsealedImportReference: IO_IMPORT_REFERENCE_MESSAGE,
+    stateMachineImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     runtimeImportReference: IO_IMPORT_REFERENCE_MESSAGE,
     moduleMutationReference: IO_IMPORT_REFERENCE_MESSAGE,
     controlFlowBanned: CONTROL_FLOW_BANNED_MESSAGE,
