@@ -1,0 +1,19 @@
+# The submodule pointers vendored with repos/alchemy (mode 160000, upstream's own).
+# A vendored subtree is read-only, so the pointers stay as upstream ships them;
+# declaring them here lets `git submodule foreach` (run by actions/checkout when
+# it removes credentials) resolve every gitlink. None is initialized or fetched.
+[submodule "repos/alchemy/submodules/distilled"]
+	path = repos/alchemy/submodules/distilled
+	url = https://github.com/alchemy-run/distilled.git
+	update = none
+	ignore = all
+[submodule "repos/alchemy/submodules/floci"]
+	path = repos/alchemy/submodules/floci
+	url = https://github.com/alchemy-run/floci.git
+	update = none
+	ignore = all
+[submodule "repos/alchemy/submodules/tcut"]
+	path = repos/alchemy/submodules/tcut
+	url = https://github.com/alchemy-run/tcut.git
+	update = none
+	ignore = all
