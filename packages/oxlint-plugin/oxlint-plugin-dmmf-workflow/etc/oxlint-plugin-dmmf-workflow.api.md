@@ -16,6 +16,7 @@ const _default: {
         'damp-workflow-stem': Rule;
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
+        'workflow-decides-through-match': Rule;
         'make-body-purity': Rule;
         'make-command-schema': Rule;
         'workflow-file-export-topology': Rule;
