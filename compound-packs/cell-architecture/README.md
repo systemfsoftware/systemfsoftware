@@ -8,6 +8,8 @@ Rules in this pack govern:
 
 - The typed five-phase sandwich chain (`read → decode → decide → encode → write`).
 - Pure decision workflows with cyclomatic complexity 1 (`Workflow.make`).
+- Lifecycles as decisions: a closed tagged union advanced by `Match` over state × command, with a typed refusal per illegal pair, and no state-machine-family import reachable from a decide body (`pure-decision-workflows`).
+- Shell state machines: a closed event-to-target `/fsm` table in a service adapter module, in which every state names every event another state handles, read by atoms only through the service (`shell-machines-follow-events`).
 - The four-channel contract (`I`, `A`, `E`, `R`).
 - Total schema decoding at boundaries (`decode-never-cast`).
 - Algebraic cell composition (`Cell.andThen`, `Cell.zip`).
