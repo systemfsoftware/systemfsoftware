@@ -8,3 +8,4 @@ packs:
   - source: compound-packs/ci-wall-clock
   - source: compound-packs/ui-state
   - source: compound-packs/turbo-task-graph
+  - source: compound-packs/path-trust
