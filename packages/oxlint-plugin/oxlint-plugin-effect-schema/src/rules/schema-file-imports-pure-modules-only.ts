@@ -13,6 +13,7 @@ import {
   PURE_IMPORT_FIX,
 } from './schema-file-imports-pure-modules-only.config.js'
 import { isImportMetaVitestTest, isInsideConsequent } from './vitest-guard.js'
+import { isPackageOfEnclosingWorkspace } from './workspace-packages.js'
 
 export type MessageIds = 'nonPureImport'
 
@@ -41,7 +42,7 @@ export const schemaFileImportsPureModulesOnly = defineRule({
     }
 
     const reportSource = (node: ESTree.Node, name: string, source: string): void => {
-      if (isAllowedImportSource(source)) return
+      if (isAllowedImportSource(source) || isPackageOfEnclosingWorkspace(source, context.filename)) return
       report(node, name, PURE_IMPORT_ACTUAL.replace('{{source}}', source))
     }
 

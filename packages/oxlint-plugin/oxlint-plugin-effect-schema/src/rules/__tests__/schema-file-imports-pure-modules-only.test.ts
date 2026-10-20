@@ -1,3 +1,9 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+
+import { afterAll } from 'vitest'
+
 import { createRuleTester } from './_tester.js'
 
 import {
@@ -356,6 +362,92 @@ const fs = require(name)
 export const x = fs`,
       filename: SCHEMA_FILE,
       errors: [requireError('<dynamic>')],
+    },
+  ],
+})
+
+const plant = async (root: string, files: Readonly<Record<string, string>>): Promise<void> => {
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true })
+    await writeFile(join(root, path), text)
+  }
+}
+
+const WORKSPACE = await mkdtemp(join(tmpdir(), 'schema-imports-workspace-'))
+const OUTSIDE = await mkdtemp(join(tmpdir(), 'schema-imports-outside-'))
+
+afterAll(async () => {
+  await Promise.all([WORKSPACE, OUTSIDE].map((root) => rm(root, { recursive: true, force: true })))
+})
+
+await plant(WORKSPACE, {
+  'pnpm-workspace.yaml': [
+    '# flow sequence, quoted entries and a negation: pnpm reads all three',
+    `packages: ["packages/*", 'tools/ledger', "!packages/legacy"]`,
+    'catalog:',
+    '  effect: ^4',
+    '',
+  ].join('\n'),
+  'package.json': JSON.stringify({ name: 'acme-root', private: true }),
+  'packages/app/package.json': JSON.stringify({ name: '@acme/app' }),
+  'packages/domain/package.json': JSON.stringify({ name: '@acme/domain' }),
+  'packages/legacy/package.json': JSON.stringify({ name: '@acme/legacy' }),
+  'tools/ledger/package.json': JSON.stringify({ name: 'ledger' }),
+  'tools/unlisted/package.json': JSON.stringify({ name: '@acme/unlisted' }),
+})
+
+const WORKSPACE_SCHEMA_FILE = join(WORKSPACE, 'packages/app/src/order.schema.ts')
+const OUTSIDE_SCHEMA_FILE = join(OUTSIDE, 'src/order.schema.ts')
+
+ruleTester.run('schema-file-imports-pure-modules-only in a pnpm workspace', schemaFileImportsPureModulesOnly, {
+  valid: [
+    {
+      name: 'Should_Pass_When_ScopedWorkspacePackageSubpathIsImported',
+      code: `import { Money } from '@acme/domain/money.schema'
+export const x = Money`,
+      filename: WORKSPACE_SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_UnscopedWorkspacePackageIsImported',
+      code: `import { Entry } from 'ledger'
+export const x = Entry`,
+      filename: WORKSPACE_SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_WorkspaceRootProjectIsImported',
+      code: `import { Root } from 'acme-root'
+export const x = Root`,
+      filename: WORKSPACE_SCHEMA_FILE,
+    },
+  ],
+  invalid: [
+    {
+      name: 'Should_Report_When_NonPureThirdPartyPackageIsImportedInsideAWorkspace',
+      code: `import { map } from 'lodash'
+export const x = map`,
+      filename: WORKSPACE_SCHEMA_FILE,
+      errors: [importError('lodash')],
+    },
+    {
+      name: 'Should_Report_When_NegatedPatternExcludesTheImportedPackage',
+      code: `import { Old } from '@acme/legacy'
+export const x = Old`,
+      filename: WORKSPACE_SCHEMA_FILE,
+      errors: [importError('@acme/legacy')],
+    },
+    {
+      name: 'Should_Report_When_NoPatternSelectsTheImportedPackage',
+      code: `import { Stray } from '@acme/unlisted'
+export const x = Stray`,
+      filename: WORKSPACE_SCHEMA_FILE,
+      errors: [importError('@acme/unlisted')],
+    },
+    {
+      name: 'Should_Report_When_WorkspacePackageNameIsImportedOutsideAnyWorkspace',
+      code: `import { Money } from '@acme/domain'
+export const x = Money`,
+      filename: OUTSIDE_SCHEMA_FILE,
+      errors: [importError('@acme/domain')],
     },
   ],
 })
