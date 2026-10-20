@@ -27,7 +27,7 @@ const projectNamesOf = (workspaceDir: string): ReadonlySet<string> => {
 }
 
 const directoryOf = (filename: string): string => {
-  const slash = filename.lastIndexOf('/')
+  const slash = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'))
   if (slash === -1) return '.'
   return slash === 0 ? '/' : filename.slice(0, slash)
 }
