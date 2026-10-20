@@ -47,7 +47,11 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "@pnpm/logger": "catalog:",
+    "@pnpm/workspace.projects-reader": "catalog:",
+    "@pnpm/workspace.root-finder": "catalog:",
+    "@pnpm/workspace.workspace-manifest-reader": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
