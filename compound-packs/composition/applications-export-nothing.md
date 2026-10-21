@@ -11,4 +11,4 @@ An application is deployed, not imported, so its `package.json` has no `exports`
 
 A Worker that exports its modules invites every other unit to bind to its internals. younna-ai's `workers/platform` exported 136 subpaths, and the platform could no longer change without breaking unrelated tests.
 
-Gate: `repo-checks composition-unit-kinds` fails an application with an `exports` field.
+Gate (fact-gated): `repo-checks composition-unit-kinds` fails an application with an `exports` field.

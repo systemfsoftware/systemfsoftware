@@ -1,0 +1,22 @@
+{
+  "entries-are-roles": {
+    "kappa": 0.737,
+    "cases": 29,
+    "fingerprint": "03d0c0f63c81eb341e05758fcbd8cbace3285ceebad71cbb5ccd7eaa9a9e1d63"
+  },
+  "test-only-exports": {
+    "kappa": 0.79,
+    "cases": 37,
+    "fingerprint": "785d0b3a0ec35aa41eaaa6ebc5492022be7a62f3eecc4a3bed36d08ace0baae5"
+  },
+  "granularity": {
+    "kappa": 0.778,
+    "cases": 32,
+    "fingerprint": "8f09f24a99accd44887aa4070cf6eea1c46d4cd287b216c2ec9d36baa54587be"
+  },
+  "core-adapter-split": {
+    "kappa": 0.419,
+    "cases": 23,
+    "fingerprint": "3bb37b29532ec65e5c890b01b3cf1551687e84d487fc2675b2bbb36be5873bab"
+  }
+}

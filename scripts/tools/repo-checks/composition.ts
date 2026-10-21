@@ -1,303 +1,105 @@
-// The gates of the composition pack (compound-packs/composition): how the
-// units of a workspace compose. Every check reads the pnpm workspace under
-// `root`, its package.json files and its ts/tsx/mts sources, and returns a
-// Verdict. composition-granularity reports until it is run with --strict.
+// The gates of the composition pack (compound-packs/composition): how the units of a workspace compose.
 //
-// Imports are found by pattern over source text (static, dynamic and
-// re-export specifiers), not by compiling, so a check never needs an install.
-// A "test file" is one named *.test.* / *.spec.* or under a tests, test,
-// __tests__ or e2e folder; "source" below means the non-test files.
-import { dirname, join, relative, resolve } from '@std/path'
-import { git, holds, parseJsonObject, type Verdict, violated } from './verdict.ts'
-import { readWorkspace, workspacePackageDirs } from './workspace.ts'
+// Two kinds of rule, kept apart on purpose:
+//
+//  - FACT-GATED rules (unit-kinds, graph, contracts, and the internal-null and alias parts of entries and
+//    imports) read objective facts from the real tools: the TypeScript compiler's import graph, the package.json
+//    exports resolver, the syntax tree and the type checker (composition-facts.ts). They fail on a fact.
+//  - JUDGE-GATED rules (entries-are-roles, test-only-exports, granularity, core-adapter-split) are judgement
+//    calls. The facts become structured evidence for a calibrated panel of rubric judges (composition-judge.ts).
+//    A violated verdict fails only when the panel agrees and the rule's calibration kappa is at least 0.7;
+//    otherwise, and for every uncertain verdict, it is reported for a human.
+//
+// There is no pattern over source text in this file: an import inside a string, a destructured `env`, a `dist`
+// target and a leaf library's root entry are each decided by the compiler or by the judge, never by a regex.
+import { join } from '@std/path'
+import {
+  declaredDependencies,
+  importedUnits,
+  isBuildOutput,
+  isRuntimeModule,
+  type Json,
+  judgedAsLibrary,
+  loadWorkspace,
+  sourcesOf,
+  type Unit,
+  type Workspace,
+} from './composition-facts.ts'
+import type { Judge, JudgedRule, PanelVerdict } from './composition-judge.ts'
+import { exportsMapOf, resolveExports, targetsOf } from './package-exports.ts'
+import { git, holds, type Verdict, violated } from './verdict.ts'
 
-type Json = Readonly<Record<string, unknown>>
-type Kind = 'library' | 'application' | 'template'
+export { loadWorkspace } from './composition-facts.ts'
 
-const KINDS: readonly string[] = ['library', 'application', 'template']
-const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
-const MAX_ENTRIES = 8
-const RUNTIME_MODULE = /^(react|react-dom|astro|vite|node:.*|cloudflare:.*|@cloudflare\/.*)(\/.*)?$/
-const SOURCE_FILE = /\.(ts|tsx|mts)$/
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'build', '.turbo', '.git', '.alchemy', '.wrangler'])
-const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)(__tests__|tests?|e2e)\//
-
-export interface SourceFile {
-  readonly path: string
-  readonly rel: string
-  readonly isTest: boolean
-  readonly text: string
-  /** The text with comments dropped and string, template and regex contents masked: what is left is code. */
-  readonly code: string
-  readonly specifiers: readonly string[]
-}
-
-export interface Unit {
-  readonly dir: string
-  readonly rel: string
-  readonly name: string
-  readonly manifest: Json
-  readonly kind: Kind | undefined
-  readonly files: readonly SourceFile[]
-}
-
-export interface Workspace {
-  readonly root: string
-  readonly units: readonly Unit[]
-  readonly byName: ReadonlyMap<string, Unit>
-}
-
-const stripComments = (text: string): string =>
-  text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:'"`\\])\/\/[^\n]*/gm, '$1')
-
-/** JSONC to JSON: comments dropped outside strings (a path glob holds `/*`), then trailing commas. */
-const stripJsonc = (text: string): string => {
-  let out = ''
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]!
-    if (c === '"') {
-      let j = i + 1
-      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1
-      out += text.slice(i, j + 1)
-      i = j
-    } else if (c === '/' && text[i + 1] === '/') {
-      while (i < text.length && text[i] !== '\n') i++
-      out += '\n'
-    } else if (c === '/' && text[i + 1] === '*') {
-      const end = text.indexOf('*/', i + 2)
-      i = end < 0 ? text.length : end + 1
-    } else out += c
-  }
-  return out.replace(/,(\s*[}\]])/g, '$1')
-}
-
-/** A string literal is kept in the masked code as '\u0001N\u0001', N indexing the literal's value. */
-const MASK = '\u0001'
-const IMPORT_PATTERNS = [
-  /\b(?:import|export)\s[^'"`;]*?\bfrom\s*'\u0001(\d+)\u0001'/g,
-  /\bimport\s*'\u0001(\d+)\u0001'/g,
-  /\b(?:import|require)\s*\(\s*'\u0001(\d+)\u0001'\s*\)/g,
-]
-const REGEX_PRECEDERS = new Set([
-  '',
-  '(',
-  ',',
-  '=',
-  ':',
-  '[',
-  '!',
-  '&',
-  '|',
-  '?',
-  '{',
-  '}',
-  ';',
-  '+',
-  '-',
-  '*',
-  '%',
-  '<',
-  '>',
-  '~',
-  '^',
-])
-
-/**
- * One pass over source text that tells code from comments and literals: comments are dropped, a string is
- * replaced by a numbered marker, template text and regex bodies are blanked (a `${}` expression stays code).
- * A specifier or an env reference inside a literal, such as a lint-rule fixture, is therefore not code.
- */
-export const lex = (text: string): { readonly code: string; readonly strings: readonly string[] } => {
-  const strings: string[] = []
-  let out = ''
-  const braces: number[] = [] // brace depth at which each open template expression resumes the template
-  let depth = 0
-  const significant = () => out.trimEnd().slice(-1)
-  const template = (from: number): number => {
-    // Reads template text from `from` (just after a backtick or a closing brace) up to `${` or the closing backtick.
-    let i = from
-    while (i < text.length) {
-      if (text[i] === '\\') i += 2
-      else if (text[i] === '`') {
-        out += '`'
-        return i + 1
-      } else if (text[i] === '$' && text[i + 1] === '{') {
-        braces.push(depth)
-        depth++
-        out += '`${'
-        return i + 2
-      } else i++
-    }
-    return i
-  }
-  let i = 0
-  while (i < text.length) {
-    const c = text[i]!
-    const next = text[i + 1]
-    if (c === '/' && next === '/') {
-      while (i < text.length && text[i] !== '\n') i++
-    } else if (c === '/' && next === '*') {
-      const end = text.indexOf('*/', i + 2)
-      i = end < 0 ? text.length : end + 2
-      out += ' '
-    } else if (c === '"' || c === "'") {
-      let j = i + 1
-      while (j < text.length && text[j] !== c && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1
-      strings.push(text.slice(i + 1, j))
-      out += `'${MASK}${strings.length - 1}${MASK}'`
-      i = j + 1
-    } else if (c === '`') {
-      out += '`'
-      i = template(i + 1)
-    } else if (c === '{') {
-      depth++
-      out += c
-      i++
-    } else if (c === '}') {
-      depth--
-      out += c
-      i++
-      if (braces.length > 0 && braces[braces.length - 1] === depth) {
-        braces.pop()
-        i = template(i)
-      }
-    } else if (c === '/' && REGEX_PRECEDERS.has(significant())) {
-      let j = i + 1
-      let inClass = false
-      while (j < text.length && text[j] !== '\n' && (inClass || text[j] !== '/')) {
-        if (text[j] === '\\') j++
-        else if (text[j] === '[') inClass = true
-        else if (text[j] === ']') inClass = false
-        j++
-      }
-      out += '/ /'
-      i = j + 1
-    } else {
-      out += c
-      i++
-    }
-  }
-  return { code: out, strings }
-}
-
-const specifiersIn = ({ code, strings }: { readonly code: string; readonly strings: readonly string[] }) => {
-  const found = new Set<string>()
-  for (const pattern of IMPORT_PATTERNS) for (const m of code.matchAll(pattern)) found.add(strings[Number(m[1])]!)
-  return [...found]
-}
-
-export const specifiersOf = (text: string): readonly string[] => specifiersIn(lex(text))
-
-const collectSources = async (dir: string, base: string, out: SourceFile[]): Promise<void> => {
-  for await (const entry of Deno.readDir(dir)) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory) {
-      if (!SKIPPED_DIRS.has(entry.name)) await collectSources(path, base, out)
-    } else if (entry.isFile && SOURCE_FILE.test(entry.name) && !entry.name.endsWith('.d.ts')) {
-      const text = await Deno.readTextFile(path)
-      const rel = relative(base, path)
-      const lexed = lex(text)
-      out.push({ path, rel, isTest: TEST_FILE.test(rel), text, code: lexed.code, specifiers: specifiersIn(lexed) })
-    }
-  }
-}
-
-export const loadWorkspace = async (root: string): Promise<Workspace> => {
-  const dirs = await workspacePackageDirs(root, await readWorkspace(root))
-  const units: Unit[] = []
-  for (const dir of dirs) {
-    const manifest = parseJsonObject(await Deno.readTextFile(join(dir, 'package.json')), join(dir, 'package.json'))
-    const files: SourceFile[] = []
-    await collectSources(dir, dir, files)
-    const unit = manifest['unit']
-    units.push({
-      dir,
-      rel: relative(root, dir) || '.',
-      name: typeof manifest['name'] === 'string' ? manifest['name'] : relative(root, dir),
-      manifest,
-      kind: typeof unit === 'string' && KINDS.includes(unit) ? (unit as Kind) : undefined,
-      files,
-    })
-  }
-  return { root, units, byName: new Map(units.map((u) => [u.name, u])) }
-}
-
-const sourcesOf = (unit: Unit): readonly SourceFile[] => unit.files.filter((f) => !f.isTest)
-
-const isLibrary = (unit: Unit): boolean => unit.kind === 'library'
-
-/** A unit that has not declared its kind yet is judged as a library; composition-unit-kinds reports the missing kind. */
-const judgedAsLibrary = (unit: Unit): boolean => unit.kind === undefined || isLibrary(unit)
-
-/** The workspace package a bare specifier names, with the subpath it asks for ('.' for the root). */
-const targetOf = (ws: Workspace, specifier: string): { readonly unit: Unit; readonly subpath: string } | undefined => {
-  if (specifier.startsWith('.') || specifier.startsWith('/')) return undefined
-  const parts = specifier.split('/')
-  const name = specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]!
-  const unit = ws.byName.get(name)
-  if (unit === undefined) return undefined
-  const rest = specifier.slice(name.length)
-  return { unit, subpath: rest === '' ? '.' : `.${rest}` }
-}
-
-const declaredDependencies = (unit: Unit): ReadonlySet<string> => {
-  const names = new Set<string>()
-  for (const field of DEPENDENCY_FIELDS) {
-    const deps = unit.manifest[field]
-    if (typeof deps === 'object' && deps !== null) { for (const name of Object.keys(deps)) names.add(name) }
-  }
-  return names
-}
-
-/** Workspace packages a unit's source (tests included) imports, other than itself. */
-const importedUnits = (ws: Workspace, unit: Unit): ReadonlySet<string> => {
-  const names = new Set<string>()
-  for (const file of unit.files) {
-    for (const spec of file.specifiers) {
-      const target = targetOf(ws, spec)
-      if (target !== undefined && target.unit !== unit) names.add(target.unit.name)
-    }
-  }
-  return names
-}
-
-const exportsOf = (unit: Unit): Json | undefined => {
-  const value = unit.manifest['exports']
-  if (typeof value === 'string') return { '.': value }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const record = value as Json
-  return Object.keys(record).some((key) => key.startsWith('.')) ? record : { '.': record }
-}
-
-/** Every concrete string target of an exports entry, across its conditions. */
-const leaves = (target: unknown): readonly string[] => {
-  if (typeof target === 'string') return [target]
-  if (Array.isArray(target)) return target.flatMap(leaves)
-  if (typeof target === 'object' && target !== null) return Object.values(target).flatMap(leaves)
-  return []
-}
-
-const matchesKey = (key: string, subpath: string): boolean => {
-  if (key === subpath) return true
-  const star = key.indexOf('*')
-  if (star < 0) return false
-  const head = key.slice(0, star)
-  const tail = key.slice(star + 1)
-  return subpath.length >= key.length - 1 && subpath.startsWith(head) && subpath.endsWith(tail)
-}
-
-/** Whether the exports map admits the subpath: the most specific matching key must not be null. */
-const exported = (exportsMap: Json, subpath: string): boolean => {
-  const keys = Object.keys(exportsMap).filter((key) => matchesKey(key, subpath))
-  if (keys.length === 0) return false
-  const best = keys.sort((a, b) => b.length - a.length)[0]!
-  return exportsMap[best] !== null
-}
+/** A guide the entries-are-roles judge is shown, never a limit: a library may legitimately publish more role entries. */
+const ROLE_ENTRY_GUIDE = 8
+const SHOWN_ENTRIES = 40
+const RUNTIME_CONDITIONS = ['workerd', 'worker', 'node', 'browser', 'bun', 'deno', 'edge-light', 'react-native']
 
 const sortedUnique = (lines: readonly string[]): readonly string[] => [...new Set(lines)].sort()
 
-const finish = (name: string, violations: readonly string[], why: string, summary: string): Verdict =>
-  violations.length === 0 ? holds(summary) : violated(sortedUnique(violations), `${name}: ${why}`)
+const finish = (
+  name: string,
+  violations: readonly string[],
+  why: string,
+  summary: string,
+  reports: readonly string[] = [],
+): Verdict => {
+  const reported = reports.length === 0
+    ? ''
+    : `\nreported, not failing:\n${sortedUnique(reports).map((r) => `  ${r}`).join('\n')}`
+  return violations.length === 0
+    ? holds(reports.length === 0 ? summary : `${summary}${reported}`)
+    : violated(sortedUnique(violations), `${name}: ${why}${reported}`)
+}
+
+const isPublished = (unit: Unit): boolean => unit.manifest['private'] !== true
+
+// ---------------------------------------------------------------- the judge
+
+export interface Candidate {
+  readonly label: string
+  readonly evidence: unknown
+  /** Why a violated verdict for this candidate may only be reported, whatever the rule's calibration (e.g. its unit kind is not declared). */
+  readonly reportOnly?: string
+}
+
+const brief = (panel: PanelVerdict): string =>
+  panel.members.map((m) => `${m.model} ${m.verdict}(${m.confidence}): ${m.evidence.slice(0, 3).join('; ')}`).join(' | ')
+
+/** Runs the panel over the candidates: what may fail is returned as violations, everything else as reports. */
+const judged = async (
+  judge: Judge | undefined,
+  rule: JudgedRule,
+  candidates: readonly Candidate[],
+): Promise<{ readonly violations: readonly string[]; readonly reports: readonly string[] }> => {
+  if (candidates.length === 0) return { violations: [], reports: [] }
+  if (judge === undefined) {
+    return {
+      violations: [],
+      reports: [`${rule}: ${candidates.length} candidate(s) not judged (no judge configured: set OPENROUTER_API_KEY)`],
+    }
+  }
+  const gate = judge.gate(rule)
+  const violations: string[] = []
+  const reports: string[] = []
+  for (let i = 0; i < candidates.length; i += 4) {
+    const batch = candidates.slice(i, i + 4)
+    const verdicts = await Promise.all(batch.map((c) => judge.decide(rule, c.evidence)))
+    batch.forEach((candidate, j) => {
+      const panel = verdicts[j]!
+      if (panel.verdict === 'violated') {
+        const note = candidate.reportOnly === undefined ? gate.note : `${candidate.reportOnly}: reports only`
+        const line = `${candidate.label}: judged ${rule} violated by the panel (${note}) - ${brief(panel)}`
+        if (gate.fails && candidate.reportOnly === undefined) violations.push(line)
+        else reports.push(line)
+      } else if (panel.verdict === 'uncertain') {
+        reports.push(`${candidate.label}: ${rule} uncertain, for a human - ${brief(panel)}`)
+      }
+    })
+  }
+  return { violations, reports }
+}
 
 // ---------------------------------------------------------------- unit kinds
 
@@ -344,16 +146,6 @@ export const checkCompositionUnitKinds = async (root: string): Promise<Verdict> 
 
 // --------------------------------------------------------------------- graph
 
-const ENV_REFERENCES: readonly (readonly [RegExp, string])[] = [
-  [/\bprocess\.env\b/, 'process.env'],
-  [/\bDeno\.env\b/, 'Deno.env'],
-  [/\bimport\.meta\.env\b/, 'import.meta.env'],
-  // (env: Env), (req, env: Cloudflare.Env), ({ env }: { env: Env }), env: Bindings; not env: Environment.
-  [/[(,{]\s*env\s*\??:\s*(?:[\w.]*\.)?\w*(?:Env|Bindings)\b/, 'a Cloudflare env parameter named env'],
-  // fetch(req, { env }) and ({ env }: Ctx): env destructured in a parameter list.
-  [/[(,]\s*\{[^{}]*\benv\b[^{}]*\}\s*[:,)=]/, 'a Cloudflare env parameter named env'],
-]
-
 const findCycles = (edges: ReadonlyMap<string, ReadonlySet<string>>): readonly (readonly string[])[] => {
   // Tarjan's strongly connected components; a component of two or more nodes is a cycle.
   let counter = 0
@@ -392,10 +184,14 @@ const findCycles = (edges: ReadonlyMap<string, ReadonlySet<string>>): readonly (
 export const checkCompositionGraph = async (root: string): Promise<Verdict> => {
   const ws = await loadWorkspace(root)
   const violations: string[] = []
+  const reports: string[] = []
+  const notInstalled: string[] = []
   const edges = new Map<string, Set<string>>(ws.units.map((u) => [u.name, new Set<string>()]))
   for (const unit of ws.units) {
     const declared = declaredDependencies(unit)
-    const imported = importedUnits(ws, unit)
+    // A devDependency may feed tooling (a tsconfig to extend, a test runner), so only a runtime declaration can be unused.
+    const runtimeDeclared = declaredDependencies(unit, ['dependencies', 'peerDependencies', 'optionalDependencies'])
+    const imported = importedUnits(unit)
     for (const name of new Set([...declared, ...imported])) {
       const target = ws.byName.get(name)
       if (target === undefined || target === unit) continue
@@ -408,28 +204,39 @@ export const checkCompositionGraph = async (root: string): Promise<Verdict> => {
       if (imported.has(name) && !declared.has(name)) {
         violations.push(`${unit.name} imports ${name} without declaring it`)
       }
-      if (declared.has(name) && !imported.has(name)) {
-        violations.push(`${unit.name} declares ${name} but never imports it`)
+      if (runtimeDeclared.has(name) && !imported.has(name)) {
+        // An import is the only use the compiler can see. A library that declares one it never imports has no other
+        // way to use it; an application or template, or a unit that has not declared its kind, may install it as a
+        // toolchain or into a container, so for those it is reported and not failed.
+        const line = `${unit.name} declares ${name} but never imports it`
+        if (unit.kind === 'library') violations.push(line)
+        else reports.push(`${line} (${unit.kind ?? 'kind not declared'}: may be installed as a toolchain)`)
       }
     }
-    if (judgedAsLibrary(unit)) {
-      const core = unit.manifest['layer'] === 'core'
-      for (const file of sourcesOf(unit)) {
-        const toolConfig = /(^|\/)[^/]*\.config\.[cm]?[jt]s$/.test(file.rel) // vitest.config.ts and kin configure tools, they are not library code
-        if (core) {
-          for (const spec of file.specifiers.filter((s) => RUNTIME_MODULE.test(s))) {
-            violations.push(`${unit.name}: core library ${file.rel} imports the runtime or framework module ${spec}`)
-          }
-        }
-        for (const [pattern, label] of ENV_REFERENCES) {
-          if (!toolConfig && pattern.test(file.code)) {
-            violations.push(
-              `${unit.name}: library ${file.rel} references ${label}; only applications read configuration`,
-            )
-          }
+    if (!judgedAsLibrary(unit)) continue
+    if (unit.unresolved.length > 0) notInstalled.push(`${unit.name} (${unit.unresolved.length})`)
+    const core = unit.manifest['layer'] === 'core'
+    for (const file of sourcesOf(unit).filter((f) => !f.isToolConfig)) {
+      if (core) {
+        for (const i of file.imports.filter((i) => !i.typeOnly && isRuntimeModule(i.specifier))) {
+          violations.push(
+            `${unit.name}: core library ${file.rel} imports the runtime or framework module ${i.specifier}`,
+          )
         }
       }
+      for (const env of file.env) {
+        violations.push(
+          `${unit.name}: library ${file.rel}:${env.line} references ${env.kind}; only applications read configuration`,
+        )
+      }
     }
+  }
+  if (notInstalled.length > 0) {
+    reports.push(
+      `${notInstalled.length} libraries import packages the compiler cannot resolve (dependencies not installed, so a type they declare is unknown and a Cloudflare env typed by them is not detected): ${
+        notInstalled.join(', ')
+      }`,
+    )
   }
   for (const cycle of findCycles(edges)) violations.push(`cycle: ${cycle.join(' <-> ')}`)
   return finish(
@@ -437,69 +244,101 @@ export const checkCompositionGraph = async (root: string): Promise<Verdict> => {
     violations,
     'edges point from applications to libraries, declared dependencies match imports, the graph has no cycle, core libraries import no runtime, and libraries read no environment (compound-packs/composition/dependency-direction.md, core-and-adapters.md, config-at-the-edge.md).',
     `${ws.units.length} units, ${[...edges.values()].reduce((n, e) => n + e.size, 0)} edges, no violation`,
+    reports,
   )
 }
 
 // ------------------------------------------------------------------- entries
 
-const readmeExempts = async (unit: Unit): Promise<boolean> => {
-  try {
-    return /^#+\s*Composition exceptions\s*$/im.test(await Deno.readTextFile(join(unit.dir, 'README.md')))
-  } catch (cause) {
-    if (cause instanceof Deno.errors.NotFound) return false
-    throw cause
+interface EntryFact {
+  readonly key: string
+  readonly targets: readonly string[]
+  readonly sourceTarget: string | undefined
+  readonly buildOutputOnly: boolean
+  /** The key repeats the source path after `src/`, and that path is nested in two or more folders. */
+  readonly mirrorsFolderTree: boolean
+  readonly sourceFolderDepth: number
+}
+
+const stripExtension = (path: string): string => {
+  const slash = path.lastIndexOf('/')
+  const dot = path.lastIndexOf('.')
+  return dot > slash + 1 ? path.slice(0, dot) : path
+}
+
+const entryFacts = (unit: Unit): readonly EntryFact[] => {
+  const map = exportsMapOf(unit.manifest)
+  if (map === undefined) return []
+  const conditions = new Set(unit.conditions)
+  const facts: EntryFact[] = []
+  for (const [key, value] of Object.entries(map)) {
+    if (value === null || key === './package.json') continue
+    const targets = targetsOf(value)
+    const resolved = resolveExports(unit.manifest, key, conditions)?.target
+    const source = (typeof resolved === 'string' && !isBuildOutput(resolved) ? resolved : undefined) ??
+      targets.find((t) => !isBuildOutput(t))
+    let path = source === undefined ? undefined : stripExtension(source.startsWith('./') ? source.slice(2) : source)
+    if (path !== undefined && path.startsWith('src/')) path = path.slice(4)
+    if (path !== undefined && path.endsWith('/index')) path = path.slice(0, -'/index'.length)
+    const depth = path === undefined ? 0 : path.split('/').length - 1
+    facts.push({
+      key,
+      targets,
+      sourceTarget: source,
+      buildOutputOnly: targets.length > 0 && targets.every(isBuildOutput),
+      mirrorsFolderTree: path !== undefined && key !== '.' && key.slice(2) === path && depth >= 2,
+      sourceFolderDepth: depth,
+    })
+  }
+  return facts
+}
+
+/** The evidence the entries-are-roles judge receives for a library. */
+export const entriesEvidence = (unit: Unit): Json => {
+  const entries = entryFacts(unit)
+  return {
+    package: unit.name,
+    published: isPublished(unit),
+    entryCount: entries.length,
+    roleEntryGuide: ROLE_ENTRY_GUIDE,
+    entriesShown: Math.min(entries.length, SHOWN_ENTRIES),
+    entriesMirroringFolderTree: entries.filter((e) => e.mirrorsFolderTree).length,
+    hasInternalFolder: unit.hasInternalFolder,
+    internalBlocked: exportsMapOf(unit.manifest)?.['./internal/*'] === null,
+    entries: entries.slice(0, SHOWN_ENTRIES).map((e) => ({
+      key: e.key,
+      sourceTarget: e.sourceTarget,
+      buildOutputOnly: e.buildOutputOnly,
+      mirrorsFolderTree: e.mirrorsFolderTree,
+      sourceFolderDepth: e.sourceFolderDepth,
+    })),
   }
 }
 
-const hasFolder = async (path: string): Promise<boolean> => {
-  try {
-    return (await Deno.stat(path)).isDirectory
-  } catch (cause) {
-    if (cause instanceof Deno.errors.NotFound) return false
-    throw cause
-  }
-}
-
-/** Folders a target sits under, relative to src (or the package root when it has no src), wildcards dropped. */
-const targetFolders = (target: string): readonly string[] => {
-  const parts = target.replace(/^\.\//, '').split('/').slice(0, -1)
-  if (parts[0] === 'dist' || parts[0] === 'build') return [] // build output mirrors source by construction; the source condition is judged
-  return (parts[0] === 'src' ? parts.slice(1) : parts).filter((p) => !p.includes('*'))
-}
-
-export const checkCompositionEntries = async (root: string): Promise<Verdict> => {
+export const checkCompositionEntries = async (root: string, judge?: Judge): Promise<Verdict> => {
   const ws = await loadWorkspace(root)
   const violations: string[] = []
+  const candidates: Candidate[] = []
+  const reports: string[] = []
   let libraries = 0
   for (const unit of ws.units.filter(judgedAsLibrary)) {
     libraries++
-    const map = exportsOf(unit)
+    const map = exportsMapOf(unit.manifest)
     if (map === undefined) continue
     const keys = Object.keys(map)
-    if (keys.length > MAX_ENTRIES && !(await readmeExempts(unit))) {
-      violations.push(
-        `${unit.rel} (${unit.name}): ${keys.length} exports entries, over ${MAX_ENTRIES}; split roles or record a "Composition exceptions" heading in its README`,
+    const roleEntries = entryFacts(unit).length
+    if (roleEntries > ROLE_ENTRY_GUIDE) {
+      reports.push(
+        `${unit.rel} (${unit.name}): ${roleEntries} role entries, over the guide of ${ROLE_ENTRY_GUIDE}; judged as roles or a folder mirror, not counted as a failure`,
       )
     }
-    for (const key of keys) {
-      const deep = leaves(map[key]).find((t) => targetFolders(t).length >= 2)
-      if (deep !== undefined) {
-        violations.push(
-          `${unit.rel} (${unit.name}): entry ${key} -> ${deep} mirrors a source folder ${
-            targetFolders(deep).length
-          } levels deep`,
-        )
-      }
-    }
-    const hasInternal = (await hasFolder(join(unit.dir, 'src', 'internal'))) ||
-      (await hasFolder(join(unit.dir, 'internal')))
-    if (hasInternal && !(Object.hasOwn(map, './internal/*') && map['./internal/*'] === null)) {
+    if (unit.hasInternalFolder && map['./internal/*'] !== null) {
       violations.push(`${unit.rel} (${unit.name}): has an internal folder but no "./internal/*": null`)
     }
-    if (unit.manifest['private'] === true) {
+    if (!isPublished(unit)) {
       const byFile = new Map<string, string[]>()
       for (const key of keys) {
-        for (const leaf of new Set(leaves(map[key]).map((t) => t.replace(/^\.\//, '')))) {
+        for (const leaf of new Set(targetsOf(map[key]).map((t) => (t.startsWith('./') ? t.slice(2) : t)))) {
           byFile.set(leaf, [...(byFile.get(leaf) ?? []), key])
         }
       }
@@ -513,156 +352,150 @@ export const checkCompositionEntries = async (root: string): Promise<Verdict> =>
         }
       }
     }
+    if (entryFacts(unit).length >= 2) {
+      candidates.push({ label: `${unit.rel} (${unit.name})`, evidence: entriesEvidence(unit) })
+    }
   }
+  const verdict = await judged(judge, 'entries-are-roles', candidates)
   return finish(
     'composition-entries',
-    violations,
-    'a library has at most 8 entries, none mirroring the source tree, blocks ./internal/*, and a private one keeps no alias (compound-packs/composition/role-entries-only.md, unpublished-surfaces-are-free.md).',
+    [...violations, ...verdict.violations],
+    'a library blocks ./internal/* and a private one keeps no alias; whether its entries are roles and not a mirror of the source tree is judged (compound-packs/composition/role-entries-only.md, unpublished-surfaces-are-free.md).',
     `${libraries} libraries keep their entries to roles`,
+    [...reports, ...verdict.reports],
   )
 }
 
 // ------------------------------------------------------------------- imports
 
-const readJsonc = async (path: string): Promise<Json | undefined> => {
-  try {
-    return JSON.parse(stripJsonc(await Deno.readTextFile(path))) as Json
-  } catch {
-    // A tsconfig that does not parse as JSONC states no paths this check can judge.
-    return undefined
-  }
+const noExt = (path: string): string => stripExtension(path)
+
+interface Usage {
+  readonly source: Set<string>
+  readonly test: Set<string>
 }
 
-const unitContaining = (ws: Workspace, path: string, except: Unit): Unit | undefined =>
-  ws.units.find((u) => u !== except && (path === u.dir || path.startsWith(u.dir + '/')))
-
-const noExt = (path: string): string => path.replace(/\.(d\.)?[cm]?[jt]sx?$/, '')
-
-const CONFIG_FILE = /^(vite|vitest|vitest\.workspace|astro)\.config\.[cm]?[jt]s$/
-
-const configFiles = async (unit: Unit): Promise<readonly { path: string; kind: 'tsconfig' | 'bundler' }[]> => {
-  const found: { path: string; kind: 'tsconfig' | 'bundler' }[] = []
-  for await (const entry of Deno.readDir(unit.dir)) {
-    if (!entry.isFile) continue
-    if (/^tsconfig(\..+)?\.json$/.test(entry.name)) found.push({ path: join(unit.dir, entry.name), kind: 'tsconfig' })
-    else if (CONFIG_FILE.test(entry.name)) found.push({ path: join(unit.dir, entry.name), kind: 'bundler' })
-  }
-  return found
-}
-
-export const checkCompositionImports = async (root: string): Promise<Verdict> => {
-  const ws = await loadWorkspace(root)
-  const violations: string[] = []
-  // Non-test and test use of every export target, by package and entry key.
-  const used = new Map<string, { source: boolean; test: boolean }>()
-  const usage = (unit: Unit, key: string) => {
-    const id = `${unit.name}\u0000${key}`
-    if (!used.has(id)) used.set(id, { source: false, test: false })
+/** Which files of which units import each export entry, from the compiler's resolution of every import. */
+export const entryUsage = (ws: Workspace): ReadonlyMap<string, Usage> => {
+  const used = new Map<string, Usage>()
+  const usage = (unit: string, key: string): Usage => {
+    const id = `${unit}\u0000${key}`
+    if (!used.has(id)) used.set(id, { source: new Set(), test: new Set() })
     return used.get(id)!
   }
   const targetFiles = new Map<string, { unit: Unit; keys: string[] }>()
   for (const unit of ws.units) {
-    const map = exportsOf(unit)
+    const map = exportsMapOf(unit.manifest)
     if (map === undefined) continue
     for (const [key, value] of Object.entries(map)) {
-      for (const leaf of leaves(value)) {
-        const abs = noExt(resolve(unit.dir, leaf))
-        const entry = targetFiles.get(abs) ?? { unit, keys: [] }
-        entry.keys.push(key)
-        targetFiles.set(abs, entry)
+      for (const leaf of targetsOf(value)) {
+        const file = noExt(join(unit.dir, leaf))
+        const hit = targetFiles.get(file) ?? { unit, keys: [] }
+        hit.keys.push(key)
+        targetFiles.set(file, hit)
       }
     }
   }
   for (const unit of ws.units) {
     for (const file of unit.files) {
-      for (const spec of file.specifiers) {
-        const target = targetOf(ws, spec)
-        if (target !== undefined) {
-          const map = exportsOf(target.unit)
-          if (target.unit !== unit && map !== undefined && !exported(map, target.subpath)) {
-            violations.push(`${unit.name} ${file.rel}: imports ${spec}, which ${target.unit.name} does not export`)
-          }
-          if (target.unit !== unit && spec.includes('/src/')) {
-            violations.push(`${unit.name} ${file.rel}: imports ${spec} through another package's /src/`)
-          }
-          if (map !== undefined) {
-            for (const key of Object.keys(map).filter((k) => matchesKey(k, target.subpath))) {
-              usage(target.unit, key)[file.isTest ? 'test' : 'source'] = true
-            }
-          }
-        } else if (spec.startsWith('.')) {
-          const abs = resolve(dirname(file.path), spec)
-          const other = unitContaining(ws, abs, unit)
-          if (other !== undefined && spec.includes('/src/')) {
-            violations.push(`${unit.name} ${file.rel}: imports ${spec}, a path into ${other.name}'s source`)
-          }
-          const hit = targetFiles.get(noExt(abs)) ?? targetFiles.get(abs)
-          if (hit !== undefined) {
-            for (const key of hit.keys) usage(hit.unit, key)[file.isTest ? 'test' : 'source'] = true
-          }
-        }
-      }
-    }
-    for (const config of await configFiles(unit)) {
-      if (config.kind === 'tsconfig') {
-        const compilerOptions = (await readJsonc(config.path))?.['compilerOptions'] as Json | undefined
-        const paths = compilerOptions?.['paths'] as Json | undefined
-        const base = resolve(
-          dirname(config.path),
-          typeof compilerOptions?.['baseUrl'] === 'string' ? compilerOptions['baseUrl'] : '.',
-        )
-        for (const [alias, targets] of Object.entries(paths ?? {})) {
-          for (const target of Array.isArray(targets) ? targets : []) {
-            const other = typeof target === 'string' ? unitContaining(ws, resolve(base, target), unit) : undefined
-            if (other !== undefined) {
-              violations.push(
-                `${unit.rel}: ${relative(root, config.path)} paths ${alias} points into ${other.name}'s source`,
-              )
-            }
-          }
-        }
-      } else {
-        const text = stripComments(await Deno.readTextFile(config.path))
-        if (!/\balias\b/.test(text)) continue
-        for (const m of text.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
-          const literal = m[1]!
-          const abs = literal.startsWith('.') ? resolve(unit.dir, literal) : literal
-          const other = literal.startsWith('.') ? unitContaining(ws, abs, unit) : undefined
-          const named = targetOf(ws, literal)
-          if (other !== undefined) {
-            violations.push(
-              `${unit.rel}: ${relative(root, config.path)} alias points into ${other.name}'s source (${literal})`,
-            )
-          } else if (named !== undefined && named.unit !== unit && literal.includes('/src')) {
-            violations.push(
-              `${unit.rel}: ${relative(root, config.path)} alias points into ${named.unit.name}'s source (${literal})`,
-            )
-          }
+      for (const i of file.imports) {
+        const who = `${unit.name}:${file.rel}`
+        const side = file.isTest ? 'test' : 'source'
+        if (i.workspace?.key !== undefined) usage(i.workspace.unit, i.workspace.key)[side].add(who)
+        else if (i.resolvedFile !== undefined) {
+          const hit = targetFiles.get(noExt(i.resolvedFile))
+          if (hit !== undefined) { for (const key of hit.keys) usage(hit.unit.name, key)[side].add(who) }
         }
       }
     }
   }
+  return used
+}
+
+const extensionOf = (path: string): string => {
+  const name = path.slice(path.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  return dot <= 0 ? '' : name.slice(dot)
+}
+
+/** The export entries imported by test files and by no non-test file, with the evidence the test-only-exports judge receives for each. */
+export const testOnlyCandidates = (ws: Workspace): readonly Candidate[] => {
+  const used = entryUsage(ws)
+  const candidates: Candidate[] = []
   for (const unit of ws.units) {
-    const map = exportsOf(unit)
+    const map = exportsMapOf(unit.manifest)
     if (map === undefined) continue
+    const dependents = ws.units.filter((u) =>
+      u !== unit && u.files.some((f) => !f.isTest && f.imports.some((i) => i.workspace?.unit === unit.name))
+    )
     for (const key of Object.keys(map)) {
-      // The root entry, a published library's entries (outside consumers are not in this workspace), and the
-      // ./testing and ./test-* helper entries (test support is meant for tests) are not judged.
-      if (
-        key === '.' || key === './package.json' || key.includes('*') || key.startsWith('./testing') ||
-        key.startsWith('./test-') || unit.manifest['private'] !== true
-      ) continue
+      if (key === './package.json' || map[key] === null) continue
       const seen = used.get(`${unit.name}\u0000${key}`)
-      if (seen !== undefined && seen.test && !seen.source) {
-        violations.push(`${unit.rel} (${unit.name}): export ${key} is imported only by test files`)
+      if (seen === undefined || seen.test.size === 0 || seen.source.size > 0) continue
+      candidates.push({
+        label: `${unit.rel} (${unit.name}) export ${key}`,
+        evidence: {
+          package: unit.name,
+          kind: unit.kind ?? 'undeclared',
+          published: isPublished(unit),
+          entryKey: key,
+          isRoot: key === '.',
+          entryCount: Object.keys(map).length,
+          targets: targetsOf(map[key]),
+          targetExtensions: [...new Set(targetsOf(map[key]).filter((t) => !isBuildOutput(t)).map(extensionOf))].sort(),
+          workspaceSourceImporters: 0,
+          workspaceTestImporters: [...seen.test].sort().slice(0, 5),
+          workspaceDependents: dependents.map((d) => d.name).sort(),
+          otherEntriesUsedBySource: Object.keys(map).filter((k) =>
+            k !== key && (used.get(`${unit.name}\u0000${k}`)?.source.size ?? 0) > 0
+          ),
+        },
+      })
+    }
+  }
+  return candidates
+}
+
+export const checkCompositionImports = async (root: string, judge?: Judge): Promise<Verdict> => {
+  const ws = await loadWorkspace(root)
+  const violations: string[] = []
+  for (const unit of ws.units) {
+    for (const file of unit.files) {
+      for (const i of file.imports) {
+        if (i.workspace !== undefined && !i.workspace.exported) {
+          violations.push(`${unit.name} ${file.rel}: imports ${i.specifier}, which ${i.workspace.unit} does not export`)
+        }
+        if (i.intoUnit !== undefined) {
+          violations.push(`${unit.name} ${file.rel}: imports ${i.specifier}, a path into ${i.intoUnit}'s source`)
+        }
+      }
+    }
+    for (const alias of unit.pathAliases) {
+      const other = ws.units.find((u) => u !== unit && (alias.target === u.dir || alias.target.startsWith(u.dir + '/')))
+      if (other !== undefined) {
+        violations.push(`${unit.rel}: tsconfig paths ${alias.alias} points into ${other.name}'s source`)
+      }
+    }
+    for (const alias of unit.bundlerAliases) {
+      const other = ws.units.find((u) => u !== unit && (alias.target === u.dir || alias.target.startsWith(u.dir + '/')))
+      if (other !== undefined) {
+        violations.push(`${unit.rel}: bundler alias points into ${other.name}'s source (${alias.target})`)
+        continue
+      }
+      const named = ws.units.find((u) => alias.target.startsWith(u.name + '/src'))
+      if (named !== undefined && named !== unit) {
+        violations.push(`${unit.rel}: bundler alias points into ${named.name}'s source (${alias.target})`)
       }
     }
   }
+  const candidates = testOnlyCandidates(ws)
+  const verdict = await judged(judge, 'test-only-exports', candidates)
   return finish(
     'composition-imports',
-    violations,
-    'packages import each other only through exported specifiers (never /src/, a path alias or an alias into source), and nothing is exported only so a test can reach it (compound-packs/composition/tests-stay-home.md, source-condition-resolution.md).',
+    [...violations, ...verdict.violations],
+    'packages import each other only through exported specifiers (never a path into another package, a tsconfig path or a bundler alias into source), and nothing is exported only so a test can reach it (compound-packs/composition/tests-stay-home.md, source-condition-resolution.md).',
     `${ws.units.length} units import each other through public specifiers only`,
+    verdict.reports,
   )
 }
 
@@ -674,16 +507,19 @@ export const checkCompositionContracts = async (root: string): Promise<Verdict> 
   const contracts = ws.units.filter((u) => u.manifest['role'] === 'contracts')
   for (const unit of contracts) {
     for (const file of sourcesOf(unit)) {
-      for (const spec of file.specifiers) {
-        const target = targetOf(ws, spec)
-        if (target !== undefined && target.unit !== unit && target.unit.manifest['role'] !== 'contracts') {
+      for (const i of file.imports) {
+        const target = i.workspace === undefined ? undefined : ws.byName.get(i.workspace.unit)
+        if (target !== undefined && target.manifest['role'] !== 'contracts') {
           violations.push(
-            `${unit.name} ${file.rel}: a contracts package imports ${target.unit.name}, which is not contracts`,
+            `${unit.name} ${file.rel}: a contracts package imports ${target.name}, which is not contracts`,
           )
         }
       }
-      const layer = /\bLayer\.(effect|succeed|scoped|sync)\b/.exec(file.code)
-      if (layer !== null) violations.push(`${unit.name} ${file.rel}: a contracts package defines a Layer (${layer[0]})`)
+      for (const layer of file.layers) {
+        violations.push(
+          `${unit.name} ${file.rel}:${layer.line}: a contracts package defines a Layer (Layer.${layer.member})`,
+        )
+      }
     }
   }
   return finish(
@@ -691,6 +527,63 @@ export const checkCompositionContracts = async (root: string): Promise<Verdict> 
     violations,
     'a contracts package imports only contracts packages and binds no Layer (compound-packs/composition/contracts-between-applications.md).',
     `${contracts.length} contracts packages import only contracts and define no Layer`,
+  )
+}
+
+// --------------------------------------------------------------- core and adapters
+
+/** The evidence the core-adapter-split judge receives for a library, or undefined when it imports no runtime module. */
+export const coreAdapterEvidence = (ws: Workspace, unit: Unit): Json | undefined => {
+  const sources = sourcesOf(unit).filter((f) => !f.isToolConfig)
+  const byModule = new Map<string, Set<string>>()
+  for (const file of sources) {
+    for (const i of file.imports) {
+      if (i.typeOnly || !isRuntimeModule(i.specifier)) continue
+      byModule.set(i.specifier, (byModule.get(i.specifier) ?? new Set()).add(file.rel))
+    }
+  }
+  if (byModule.size === 0) return undefined
+  const conditions = new Set<string>()
+  const collect = (value: unknown): void => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return
+    for (const [key, inner] of Object.entries(value)) {
+      if (!key.startsWith('.')) conditions.add(key)
+      collect(inner)
+    }
+  }
+  collect(unit.manifest['exports'])
+  return {
+    package: unit.name,
+    layer: unit.manifest['layer'] ?? null,
+    published: isPublished(unit),
+    sourceFileCount: sources.length,
+    filesWithRuntimeImports: new Set([...byModule.values()].flatMap((s) => [...s])).size,
+    runtimeImports: [...byModule].map(([module, files]) => ({ module, files: files.size })).sort((a, b) =>
+      b.files - a.files
+    ),
+    runtimeExportConditions: [...conditions].filter((c) => RUNTIME_CONDITIONS.includes(c)).sort(),
+    entryKeys: Object.keys(exportsMapOf(unit.manifest) ?? {}).filter((k) => k !== './package.json').slice(0, 20),
+    dependents: ws.units.filter((u) => u !== unit && importedUnits(u).has(unit.name)).map((u) => ({
+      name: u.name,
+      kind: u.kind ?? 'undeclared',
+    })),
+  }
+}
+
+export const checkCompositionCoreAdapters = async (root: string, judge?: Judge): Promise<Verdict> => {
+  const ws = await loadWorkspace(root)
+  const candidates: Candidate[] = []
+  for (const unit of ws.units.filter(judgedAsLibrary).filter((u) => u.manifest['layer'] !== 'core')) {
+    const evidence = coreAdapterEvidence(ws, unit)
+    if (evidence !== undefined) candidates.push({ label: `${unit.rel} (${unit.name})`, evidence })
+  }
+  const verdict = await judged(judge, 'core-adapter-split', candidates)
+  return finish(
+    'composition-core-adapters',
+    verdict.violations,
+    'runtime- and framework-neutral code lives in a core library and each runtime gets an adapter (compound-packs/composition/core-and-adapters.md).',
+    `${candidates.length} non-core libraries import runtime modules; none judged to need a split`,
+    verdict.reports,
   )
 }
 
@@ -731,7 +624,10 @@ export const coChanged = (commits: readonly ReadonlySet<string>[]): readonly CoC
   return found
 }
 
-const commitsTouching = async (ws: Workspace, libraries: readonly Unit[]): Promise<readonly ReadonlySet<string>[]> => {
+export const commitsTouching = async (
+  ws: Workspace,
+  libraries: readonly Unit[],
+): Promise<readonly ReadonlySet<string>[]> => {
   const out = await git([
     '-C',
     ws.root,
@@ -755,38 +651,91 @@ const commitsTouching = async (ws: Workspace, libraries: readonly Unit[]): Promi
   })
 }
 
-export const checkCompositionGranularity = async (root: string, strict: boolean): Promise<Verdict> => {
-  const ws = await loadWorkspace(root)
-  const findings: string[] = []
-  const libraries = ws.units.filter(isLibrary)
-  for (const library of libraries) {
-    const dependents = ws.units.filter((u) =>
-      u !== library && (declaredDependencies(u).has(library.name) || importedUnits(ws, u).has(library.name))
+const scriptNames = (unit: Unit): readonly string[] => {
+  const scripts = unit.manifest['scripts']
+  return typeof scripts === 'object' && scripts !== null ? Object.keys(scripts).sort() : []
+}
+
+const binNames = (unit: Unit): readonly string[] => {
+  const bin = unit.manifest['bin']
+  if (typeof bin === 'string') return [unit.name]
+  return typeof bin === 'object' && bin !== null ? Object.keys(bin).sort() : []
+}
+
+/** The evidence the granularity judge receives for a library. */
+export const granularityEvidence = (ws: Workspace, library: Unit, coChanges: readonly CoChange[]): Json => {
+  const used = entryUsage(ws)
+  const map = exportsMapOf(library.manifest)
+  const entries = map === undefined ? [] : Object.keys(map).filter((k) => k !== './package.json' && map[k] !== null)
+  const dependents = ws.units.filter((u) =>
+    u !== library && (declaredDependencies(u).has(library.name) || importedUnits(u).has(library.name))
+  )
+  return {
+    package: library.name,
+    role: library.manifest['role'] ?? null,
+    published: isPublished(library),
+    bin: binNames(library),
+    deployConfigs: library.deployConfigs,
+    hasExportsMap: exportsMapOf(library.manifest) !== undefined,
+    scriptNames: scriptNames(library),
+    entryCount: entries.length,
+    sourceFileCount: sourcesOf(library).length,
+    dependents: dependents.map((d) => ({
+      name: d.name,
+      kind: d.kind ?? 'undeclared',
+      importsIt: importedUnits(d).has(library.name),
+      entriesUsed: entries.filter((k) =>
+        [...(used.get(`${library.name}\u0000${k}`)?.source ?? [])].some((who) => who.startsWith(`${d.name}:`))
+      ),
+    })),
+    coChangedWith: coChanges
+      .filter((c) => c.a === library.name || c.b === library.name)
+      .map((c) => ({ package: c.a === library.name ? c.b : c.a, commitsTogether: c.together, commitsCompared: c.of })),
+  }
+}
+
+const disjointConsumers = (evidence: Json): boolean => {
+  const dependents = evidence['dependents'] as readonly { entriesUsed: readonly string[] }[]
+  if ((evidence['entryCount'] as number) < 2 || dependents.length < 2) return false
+  return dependents.some((a, i) =>
+    dependents.slice(i + 1).some((b) =>
+      a.entriesUsed.length > 0 && b.entriesUsed.length > 0 && !a.entriesUsed.some((k) => b.entriesUsed.includes(k))
     )
-    if (dependents.length === 1 && library.manifest['private'] === true) {
-      findings.push(
-        `${library.rel} (${library.name}): one dependent (${
-          dependents[0]!.name
-        }) and not published; merge it into its consumer`,
-      )
+  )
+}
+
+export const checkCompositionGranularity = async (root: string, strict: boolean, judge?: Judge): Promise<Verdict> => {
+  const ws = await loadWorkspace(root)
+  const libraries = ws.units.filter(judgedAsLibrary)
+  const coChanges = libraries.length > 1 ? coChanged(await commitsTouching(ws, libraries)) : []
+  const candidates: Candidate[] = []
+  for (const library of libraries) {
+    const evidence = granularityEvidence(ws, library, coChanges)
+    const dependents = (evidence['dependents'] as readonly unknown[]).length
+    if (
+      dependents <= 1 || (evidence['coChangedWith'] as readonly unknown[]).length > 0 || disjointConsumers(evidence)
+    ) {
+      candidates.push({
+        label: `${library.rel} (${library.name})`,
+        evidence,
+        // Whether a unit is a library to merge, or a tool that is run and an application that is deployed, is its declared kind.
+        ...(library.kind === undefined ? { reportOnly: 'unit kind not declared' } : {}),
+      })
     }
   }
-  if (libraries.length > 1) {
-    for (const { a, b, together, of } of coChanged(await commitsTouching(ws, libraries))) {
-      findings.push(
-        `${a} and ${b} changed together in ${together} of the last ${of} commits touching either; merge them`,
-      )
-    }
-  }
-  if (findings.length === 0) return holds('no single-consumer library and no always-co-changed pair')
+  const verdict = await judged(judge, 'granularity', candidates)
+  const findings = [...verdict.violations, ...verdict.reports]
+  if (findings.length === 0) return holds(`${candidates.length} candidate(s) judged; no library to split or merge`)
   const sorted = sortedUnique(findings)
-  if (strict) {
+  if (strict && verdict.violations.length > 0) {
     return violated(
-      sorted,
+      sortedUnique(verdict.violations),
       'composition-granularity --strict: split a library by consumer and merge by co-change (compound-packs/composition/split-by-consumer-merge-by-co-change.md).',
     )
   }
   return holds(
-    `${sorted.length} finding(s) reported; --strict fails on them\n${sorted.map((f) => `  ${f}`).join('\n')}`,
+    `${sorted.length} finding(s) reported; --strict fails on a calibrated violation\n${
+      sorted.map((f) => `  ${f}`).join('\n')
+    }`,
   )
 }

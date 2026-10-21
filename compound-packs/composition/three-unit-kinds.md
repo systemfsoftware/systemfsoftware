@@ -17,4 +17,4 @@ A workspace holds exactly three kinds of unit. Each declares its kind in `packag
 
 A unit that is both imported and deployed has collapsed. Its deployable half moves into an application and its importable half into a library.
 
-Gate: `repo-checks composition-unit-kinds`. It reads every workspace `package.json` and fails on a missing kind or a manifest that contradicts its kind.
+Gate (fact-gated): `repo-checks composition-unit-kinds`. It reads every workspace `package.json` and fails on a missing kind or a manifest that contradicts its kind.
