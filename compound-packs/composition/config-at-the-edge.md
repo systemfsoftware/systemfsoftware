@@ -11,4 +11,4 @@ Configuration is read at an application's composition root and nowhere else. A l
 
 Effect's `Config` and Layers make this the type-checked path: an unprovided service is a compile error at the edge. Rat Stack goes further, with Layers that carry their cloud resources, so removing a resource's wiring stops the code that uses it from compiling.
 
-Gate: `repo-checks composition graph` fails a library that references `process.env`, `Deno.env`, `import.meta.env` or a Cloudflare `env` parameter. Where Layers are bound is governed by `cell-architecture/service-and-layer-boundaries`.
+Gate: `repo-checks composition-graph` fails a library that references `process.env`, `Deno.env`, `import.meta.env` or a Cloudflare `env` parameter. Where Layers are bound is governed by `cell-architecture/service-and-layer-boundaries`.

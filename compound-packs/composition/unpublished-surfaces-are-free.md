@@ -11,4 +11,4 @@ tags: [composition, versioning, delete-and-rebuild]
 
 Keeping a wrong internal shape alive with aliases, shims or compatibility re-exports carries the cost of a published package without its reason, and it is how workarounds become architecture.
 
-Gate: review, plus `repo-checks composition entries`: a private library's exports map may not contain deprecated aliases (two specifiers resolving to the same file).
+Gate: review, plus `repo-checks composition-entries`: a private library's exports map may not contain deprecated aliases (two specifiers resolving to the same file).

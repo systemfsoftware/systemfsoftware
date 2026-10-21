@@ -15,4 +15,4 @@ The workspace graph is a directed acyclic graph with applications only at its to
 
 TanStack's `query-core` has no dependencies or peers, and every framework adapter depends on it, never the reverse. Effect keeps services in `effect` and their implementations in runtime packages. Both graphs point one way.
 
-Gate: `repo-checks composition graph`. It builds the graph from `package.json` dependencies AND the import specifiers in source (a declared dependency that is never imported fails, and so does an import with no declared dependency). It fails on any edge into an application, any upward edge between library layers, and any cycle.
+Gate: `repo-checks composition-graph`. It builds the graph from `package.json` dependencies AND the import specifiers in source (a declared dependency that is never imported fails, and so does an import with no declared dependency). It fails on any edge into an application, any upward edge between library layers, and any cycle.

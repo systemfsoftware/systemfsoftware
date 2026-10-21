@@ -23,4 +23,4 @@ Evidence base (source trees read 2026-10-21): TanStack Router and Query (`query-
 
 Service and Layer placement inside a library is governed by `cell-architecture/service-and-layer-boundaries.md`, the barrel shape by `cell-architecture/single-namespace-barrel.md`, and a published package's surface by `package-topology`.
 
-Gates: each `repo-checks composition <check>` is a subcommand of this repository's `repo-checks` app (`nix run github:systemfsoftware/systemfsoftware#repo-checks -- composition <check>`), so any enrolled repository runs the same check. The `template-isolation` gate is a CI job each repository adds for its templates.
+Gates: each `repo-checks composition-<check>` is a subcommand of this repository's `repo-checks` app (`nix run github:systemfsoftware/systemfsoftware#repo-checks -- composition-<check>`), so any enrolled repository runs the same check. The `template-isolation` gate is a CI job each repository adds for its templates.

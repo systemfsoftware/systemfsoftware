@@ -11,4 +11,4 @@ The shapes that cross an application boundary live in a contracts library: Schem
 
 Calls between two applications go through one declared contract, never through hand-built requests decoded on each side. A contract changes in one place and both sides fail to compile when they disagree. Whether a user-land consumer gets the contract as RPC, a capability or HTTP is a separate decision. This rule only says where the shapes live.
 
-Gate: `repo-checks composition graph` (no application-to-application edge) and `repo-checks composition contracts`, which fails a contracts library that imports a non-contracts package or defines a Layer.
+Gate: `repo-checks composition-graph` (no application-to-application edge) and `repo-checks composition-contracts`, which fails a contracts library that imports a non-contracts package or defines a Layer.

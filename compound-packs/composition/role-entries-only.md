@@ -16,4 +16,4 @@ Everything else is unreachable. `"./internal/*": null` blocks it explicitly, and
 
 Vitest's entries are roles (core, node, browser, runtime, worker, config) plus an explicit `./internal/*`. TanStack Query exports only `.` and `./package.json`. Effect blocks `./internal/*` and uses casing as the policy: public modules are PascalCase, internal ones lowercase.
 
-Gate: `repo-checks composition entries` fails a library with more than 8 entries, an entry whose path mirrors a source folder, or a missing `./internal/*: null` when the library has an internal folder. Raising the cap for one library requires a recorded exception in the library's README.
+Gate: `repo-checks composition-entries` fails a library with more than 8 entries, an entry whose path mirrors a source folder, or a missing `./internal/*: null` when the library has an internal folder. Raising the cap for one library requires a recorded exception in the library's README.

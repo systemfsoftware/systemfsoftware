@@ -11,4 +11,4 @@ Each library's exports map has a custom condition (for example `"source"`) that 
 
 This removes the two usual workarounds: path aliases that bypass the exports map, and deep `src/` imports. Vitest wires `__vitest_source__` through tsconfig `customConditions` and its bundler for exactly this.
 
-Gate: `repo-checks composition imports` fails tsconfig `paths` or bundler aliases that point into another package's source, and any import containing `/src/` across packages.
+Gate: `repo-checks composition-imports` fails tsconfig `paths` or bundler aliases that point into another package's source, and any import containing `/src/` across packages.
