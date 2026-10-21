@@ -23,6 +23,7 @@ const _default: {
         'no-native-map-in-effect': Rule;
         'no-native-set-in-effect': Rule;
         'no-new-worker-with-wasm-import': Rule;
+        'no-react-effect': Rule;
         'no-unported-time-source': Rule;
     };
     configs: {
@@ -36,6 +37,9 @@ export default _default;
 
 // @public (undocumented)
 export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-restricted-imports'];
+
+// @public (undocumented)
+export const reactImportBanNames: readonly string[];
 
 // (No @packageDocumentation comment for this package)
 

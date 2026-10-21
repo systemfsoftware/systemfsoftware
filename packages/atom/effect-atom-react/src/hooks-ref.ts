@@ -6,8 +6,28 @@
 'use client'
 
 import { Atom } from '@systemfsoftware/effect-atom'
+import * as Equal from 'effect/Equal'
 import { dual } from 'effect/Function'
-import * as React from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
+
+interface RefStore<A> {
+  readonly subscribe: (onStoreChange: () => void) => () => void
+  readonly snapshot: () => A
+}
+
+const makeRefStore = <A>(ref: Atom.Ref.ReadonlyRef<A>): RefStore<A> => {
+  let held = Atom.Ref.get(ref)
+  return {
+    subscribe: (onStoreChange) => Atom.Ref.subscribe(ref, () => onStoreChange()),
+    snapshot: () => {
+      const next = Atom.Ref.get(ref)
+      if (!Equal.equals(next, held)) {
+        held = next
+      }
+      return held
+    },
+  }
+}
 
 /**
  * Subscribes to an atom ref and returns its latest value.
@@ -19,8 +39,11 @@ import * as React from 'react'
  *
  * **Details**
  *
- * The hook subscribes with `Atom.Ref.subscribe`, triggers re-renders through
- * React state, and returns the current `Atom.Ref.get(ref)` value.
+ * The hook subscribes with `Atom.Ref.subscribe` through React's
+ * `useSyncExternalStore` and returns the current `Atom.Ref.get(ref)` value,
+ * keeping the previous value while the next one is `Equal` to it, so a ref
+ * whose read builds a new object, such as one from `Atom.Ref.map`, renders
+ * once per change.
  *
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
@@ -28,9 +51,8 @@ import * as React from 'react'
  * @since 4.0.0
  */
 export const useAtomRef = <A>(ref: Atom.Ref.ReadonlyRef<A>): A => {
-  const [, setValue] = React.useState(() => Atom.Ref.get(ref))
-  React.useEffect(() => Atom.Ref.subscribe(ref, setValue), [ref])
-  return Atom.Ref.get(ref)
+  const store = useMemo(() => makeRefStore(ref), [ref])
+  return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot)
 }
 
 /**
@@ -56,7 +78,7 @@ export const useAtomRefProp: {
 } = dual(
   2,
   <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): Atom.Ref.AtomRef<A[K]> =>
-    React.useMemo(() => Atom.Ref.prop(ref, prop), [ref, prop]),
+    useMemo(() => Atom.Ref.prop(ref, prop), [ref, prop]),
 )
 
 /**

@@ -5,16 +5,15 @@ import { act, render, screen } from '@testing-library/react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as React from 'react'
-import { Suspense } from 'react'
+import { createElement, Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
+import { ownRegistry, renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 
 const Feature = makeFeature({ it })
 
 function waitingNote() {
-  return React.createElement('div', { 'data-testid': 'waiting-note' }, 'still waiting')
+  return createElement('div', { 'data-testid': 'waiting-note' }, 'still waiting')
 }
 
 Feature('Suspending a screen until its value is ready')
@@ -33,17 +32,17 @@ Feature('Suspending a screen until its value is ready')
               const loaded = Atom.make(source.pipe(Deferred.await))
               function Screen() {
                 const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
-                return React.createElement(
+                return createElement(
                   'div',
                   { 'data-testid': 'arrived-value' },
                   Atom.AsyncResult.getOrThrow(result),
                 )
               }
               return renderSuspending(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryProvider,
-                  null,
-                  React.createElement(Suspense, { fallback: waitingNote() }, React.createElement(Screen)),
+                  { registry: ownRegistry() },
+                  createElement(Suspense, { fallback: waitingNote() }, createElement(Screen)),
                 ),
               ).pipe(Effect.as({ source }))
             }),
@@ -80,17 +79,17 @@ Feature('Suspending a screen until its value is ready')
             const loaded = Atom.make(source.pipe(Deferred.await))
             function Screen({ id }: { readonly id: string }) {
               const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
-              return React.createElement('div', { 'data-testid': `${id}-value` }, Atom.AsyncResult.getOrThrow(result))
+              return createElement('div', { 'data-testid': `${id}-value` }, Atom.AsyncResult.getOrThrow(result))
             }
             return renderSuspending(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryProvider,
-                null,
-                React.createElement(
+                { registry: ownRegistry() },
+                createElement(
                   Suspense,
                   { fallback: waitingNote() },
-                  React.createElement(Screen, { id: 'left' }),
-                  React.createElement(Screen, { id: 'right' }),
+                  createElement(Screen, { id: 'left' }),
+                  createElement(Screen, { id: 'right' }),
                 ),
               ),
             ).pipe(Effect.as({ source }))
@@ -123,19 +122,19 @@ Feature('Suspending a screen until its value is ready')
             const broken = Atom.make(Effect.fail('unavailable'))
             function Screen() {
               AtomReact.useAtomSuspense(broken)
-              return React.createElement('div', { 'data-testid': 'never-screen' }, 'unexpected')
+              return createElement('div', { 'data-testid': 'never-screen' }, 'unexpected')
             }
             render(
-              React.createElement(
+              createElement(
                 AtomReact.RegistryProvider,
-                null,
-                React.createElement(
+                { registry: ownRegistry() },
+                createElement(
                   ErrorBoundary,
-                  { fallback: React.createElement('div', { 'data-testid': 'problem-note' }, 'could not load') },
-                  React.createElement(
+                  { fallback: createElement('div', { 'data-testid': 'problem-note' }, 'could not load') },
+                  createElement(
                     Suspense,
                     { fallback: waitingNote() },
-                    React.createElement(Screen),
+                    createElement(Screen),
                   ),
                 ),
               ),

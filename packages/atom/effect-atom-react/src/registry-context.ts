@@ -8,8 +8,8 @@
  */
 'use client'
 
-import { Atom } from '@systemfsoftware/effect-atom'
-import * as React from 'react'
+import type { Atom } from '@systemfsoftware/effect-atom'
+import { createContext, createElement, type ReactNode, useContext } from 'react'
 import * as Scheduler from 'scheduler'
 
 /**
@@ -24,22 +24,21 @@ export function scheduleTask(f: () => void): () => void {
 }
 
 /**
- * Provides a React context that supplies the `Registry` used by Atom hooks and
- * hydration helpers. The context has no default, so reading it outside a
- * provider yields nothing for {@link useRegistry} to return.
+ * Provides a React context that supplies the `Registry` used by Atom hooks.
+ * The context has no default, so reading it outside a provider yields nothing
+ * for {@link useRegistry} to return.
  *
  * **When to use**
  *
- * Use to supply an existing `Registry` through React context when hooks or
- * hydration helpers need to share registry state that is managed outside
- * `RegistryProvider`.
+ * Use to supply a `Registry` through React context directly, without
+ * {@link RegistryProvider}.
  *
- * @see {@link RegistryProvider} for creating and providing a registry for a React subtree
+ * @see {@link RegistryProvider} for providing the registry its owner created
  * @see {@link useRegistry} for reading the registry supplied to the nearest provider
  *
  * @since 4.0.0
  */
-export const RegistryContext = React.createContext<Atom.Registry.Registry | undefined>(undefined)
+export const RegistryContext = createContext<Atom.Registry.Registry | undefined>(undefined)
 
 /**
  * Returns the `Registry` supplied by the nearest provider of
@@ -60,7 +59,7 @@ export const RegistryContext = React.createContext<Atom.Registry.Registry | unde
  * @since 4.0.0
  */
 export function useRegistry(): Atom.Registry.Registry {
-  const registry = React.useContext(RegistryContext)
+  const registry = useContext(RegistryContext)
   if (registry === undefined) {
     throw new Error('No registry found in context: wrap the component tree in a RegistryProvider.')
   }
@@ -69,120 +68,42 @@ export function useRegistry(): Atom.Registry.Registry {
 
 export type AnyAtom<Val = unknown> = Atom.Atom<Val>
 
-export type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
-
 /**
- * Options accepted by {@link RegistryProvider}.
+ * Props accepted by {@link RegistryProvider}.
  *
  * @since 4.0.0
  */
 export type RegistryProviderOptions = {
-  readonly children?: React.ReactNode | undefined
-  readonly initialValues?: Iterable<AnyInitialValue> | undefined
-  readonly scheduleTask?: ((f: () => void) => () => void) | undefined
-  readonly timeoutResolution?: number | undefined
-  readonly defaultIdleTTL?: number | undefined
-}
-
-type RegistryRef = {
   readonly registry: Atom.Registry.Registry
-  cancelDispose?: (() => void) | undefined
-}
-
-function scheduleTaskFrom(options: RegistryProviderOptions): (f: () => void) => () => void {
-  if (options.scheduleTask === undefined) {
-    return scheduleTask
-  }
-  return options.scheduleTask
-}
-
-function createRegistryState(options: RegistryProviderOptions): RegistryRef {
-  return {
-    registry: Atom.Registry.make({
-      scheduleTask: scheduleTaskFrom(options),
-      initialValues: options.initialValues,
-      timeoutResolution: options.timeoutResolution,
-      defaultIdleTTL: options.defaultIdleTTL,
-    }),
-  }
-}
-
-function cancelDisposeTimerIfSet(current: RegistryRef): void {
-  if (current.cancelDispose === undefined) {
-    return
-  }
-  current.cancelDispose()
-  current.cancelDispose = undefined
-}
-
-function cancelPendingDispose(current: RegistryRef | null): void {
-  if (current === null) {
-    return
-  }
-  cancelDisposeTimerIfSet(current)
-}
-
-function disposeRegistryRef(ref: React.RefObject<RegistryRef | null>): void {
-  const current = ref.current
-  if (current === null) {
-    return
-  }
-  Atom.Registry.dispose(current.registry)
-  ref.current = null
-}
-
-function assignDisposeTimer(ref: React.RefObject<RegistryRef | null>): void {
-  const current = ref.current
-  if (current === null) {
-    return
-  }
-  current.cancelDispose = Atom.Registry.scheduleTimer(current.registry, () => {
-    disposeRegistryRef(ref)
-  }, 500)
-}
-
-function scheduleDelayedDispose(ref: React.RefObject<RegistryRef | null>): void {
-  if (ref.current === null) {
-    return
-  }
-  assignDisposeTimer(ref)
+  readonly children?: ReactNode | undefined
 }
 
 /**
- * Provides a stable `Registry` to a React subtree, optionally seeding
- * initial atom values and overriding registry scheduling or idle settings.
+ * Provides the `Registry` its owner created to a React subtree.
  *
  * **When to use**
  *
- * Use to scope atom state, scheduling, and idle cleanup to a React subtree.
+ * Use at the root of an app, island or story, with the registry the code that
+ * mounts it created before the first render.
  *
  * **Details**
  *
- * The provider creates one `Registry` with `Atom.Registry.make`, passes it
- * through `RegistryContext.Provider`, and forwards `initialValues`,
- * `scheduleTask`, `timeoutResolution`, and `defaultIdleTTL` only when that
- * registry is created.
+ * The provider creates, seeds, hydrates and disposes nothing. The owner calls
+ * `Atom.Registry.make` (passing `scheduleTask: AtomReact.scheduleTask` and any
+ * `initialValues`), hydrates saved state with `Atom.Hydration.hydrate` before
+ * rendering, and calls `Atom.Registry.dispose` at teardown, or composes the
+ * registry with `Atom.Registry.layer`, which disposes it when its scope closes.
  *
  * **Gotchas**
  *
- * Option changes after the first render do not rebuild the registry. When the
- * provider unmounts, registry disposal is delayed briefly and canceled if the
- * provider remounts before the timeout fires.
+ * React keeps no state for a render that suspended before its first mount, so a
+ * registry created during render is rebuilt on every retry and never disposed.
+ * Create it outside render.
  *
  * @see {@link RegistryContext} for the React context supplied by this provider
+ * @see {@link scheduleTask} for the scheduler the owner passes to the registry
  *
  * @since 4.0.0
  */
-export const RegistryProvider = (options: RegistryProviderOptions) => {
-  const ref = React.useRef<RegistryRef | null>(null)
-  if (ref.current === null) {
-    ref.current = createRegistryState(options)
-  }
-  React.useEffect(() => {
-    cancelPendingDispose(ref.current)
-    return () => {
-      scheduleDelayedDispose(ref)
-    }
-  }, [ref])
-  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options.children)
-}
+export const RegistryProvider = (options: RegistryProviderOptions) =>
+  createElement(RegistryContext.Provider, { value: options.registry }, options.children)

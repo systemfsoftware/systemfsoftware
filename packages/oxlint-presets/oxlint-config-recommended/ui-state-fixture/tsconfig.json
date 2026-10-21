@@ -3,6 +3,7 @@
   "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
   "compilerOptions": {
     "noEmit": true,
+    "jsx": "react-jsx",
     "tsBuildInfoFile": "../node_modules/.cache/ui-state-fixture.tsbuildinfo",
     "types": [
       "node"

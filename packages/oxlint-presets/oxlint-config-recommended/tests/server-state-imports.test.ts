@@ -24,6 +24,7 @@ const PACK_RULE = 'ui-state/server-data-lives-in-atoms'
 
 const NODE_BUILTIN = 'node:fs'
 const SERVER_STATE_IMPORT = '@tanstack/react-query'
+const REACT_EFFECT_IMPORT = 'useLayoutEffect'
 const CONSUMER_OWN = '@consumer/legacy-client'
 const DRIFT_FILES = [
   'src/Page.tsx',
@@ -83,25 +84,29 @@ it('names the pack rule in every server-state report', async () => {
   expect(helps).toEqual(SERVER_STATE.map(() => true))
 }, 60_000)
 
-it('reports the node builtin and the server-state import in a source file', async () => {
-  expect(await specifiers('src/Page.tsx')).toEqual([NODE_BUILTIN, SERVER_STATE_IMPORT].toSorted())
+it('reports the node builtin, the server-state and the React Effect import in a source file', async () => {
+  expect(await specifiers('src/Page.tsx')).toEqual([NODE_BUILTIN, SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT].toSorted())
 }, 60_000)
 
-it('reports every server-state and node-builtin import as an error', async () => {
+it('reports every server-state, node-builtin and React Effect import as an error', async () => {
   const reports = await Promise.all(
     ['src/server-state/names.ts', 'src/Page.tsx'].map((path) => restrictedImports(path)),
   )
   expect(reports.flat().map((report) => report.severity)).toEqual(
-    [...SERVER_STATE, NODE_BUILTIN, SERVER_STATE_IMPORT].map(() => 'error'),
+    [...SERVER_STATE, NODE_BUILTIN, SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT].map(() => 'error'),
   )
 }, 60_000)
 
-it('reports only the server-state import in a fixtures directory and in a script outside src', async () => {
-  expect(await Promise.all([specifiers('src/__fixtures__/both.ts'), specifiers('scripts/both.ts')])).toEqual([
-    [SERVER_STATE_IMPORT],
-    [SERVER_STATE_IMPORT],
-  ])
-}, 60_000)
+it(
+  'reports the server-state and React Effect imports, not the node builtin, in a fixtures directory and in a script outside src',
+  async () => {
+    expect(await Promise.all([specifiers('src/__fixtures__/both.ts'), specifiers('scripts/both.ts')])).toEqual([
+      [SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT].toSorted(),
+      [SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT].toSorted(),
+    ])
+  },
+  60_000,
+)
 
 // The drift guard takes its file groups from effect-platform's own exported overrides, so a glob it adds or moves is
 // linted here. Within a group the last override matching a file decides its no-restricted-imports value.
@@ -123,7 +128,13 @@ const groupGlobs = importGroups.flatMap((group, index) =>
 const driftCases = groupGlobs.flatMap(({ glob, bansNodeBuiltins, file }) =>
   file === undefined
     ? []
-    : [{ glob, file, expected: bansNodeBuiltins ? [NODE_BUILTIN, SERVER_STATE_IMPORT] : [SERVER_STATE_IMPORT] }]
+    : [{
+      glob,
+      file,
+      expected: bansNodeBuiltins
+        ? [NODE_BUILTIN, SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT]
+        : [SERVER_STATE_IMPORT, REACT_EFFECT_IMPORT],
+    }]
 )
 
 it('has a drift fixture file for every glob effect-platform sets no-restricted-imports on', () => {
@@ -131,7 +142,7 @@ it('has a drift fixture file for every glob effect-platform sets no-restricted-i
 })
 
 it.each(driftCases)(
-  'keeps both bans under the preset in effect-platform group $glob ($file)',
+  'keeps every import ban under the preset in effect-platform group $glob ($file)',
   async ({ file, expected }) => {
     expect(await specifiers(file)).toEqual(expected.toSorted())
   },
@@ -139,7 +150,7 @@ it.each(driftCases)(
 )
 
 it.each(driftCases)(
-  'keeps both bans and the consumer pattern when a consumer spreads the exports, in group $glob ($file)',
+  'keeps every import ban and the consumer pattern when a consumer spreads the exports, in group $glob ($file)',
   async ({ file, expected }) => {
     expect(await specifiers(file, 'consumer-spread.config.ts')).toEqual([...expected, CONSUMER_OWN].toSorted())
   },

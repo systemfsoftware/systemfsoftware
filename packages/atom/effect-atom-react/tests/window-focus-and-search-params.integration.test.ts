@@ -17,7 +17,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
+import { createElement } from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -68,12 +68,12 @@ const waitUntilRegistryEmpties = (registry: Atom.Registry.Registry): Promise<voi
   })
 
 function FocusFollowingValue({ atom }: { readonly atom: Atom.Atom<number> }) {
-  return React.createElement('span', { 'data-testid': 'focus-following-value' }, AtomReact.useAtomValue(atom))
+  return createElement('span', { 'data-testid': 'focus-following-value' }, AtomReact.useAtomValue(atom))
 }
 
 function AddressFollowingValue({ atom }: { readonly atom: Atom.Atom<Option.Option<number>> }) {
   const pageNumber = AtomReact.useAtomValue(atom)
-  return React.createElement(
+  return createElement(
     'span',
     { 'data-testid': 'address-following-value' },
     Option.getOrElse(pageNumber, () => 'no page chosen'),
@@ -81,7 +81,7 @@ function AddressFollowingValue({ atom }: { readonly atom: Atom.Atom<Option.Optio
 }
 
 function AddressTracker({ atom }: { readonly atom: Atom.Atom<string> }) {
-  return React.createElement('span', { 'data-testid': 'address-value' }, AtomReact.useAtomValue(atom))
+  return createElement('span', { 'data-testid': 'address-value' }, AtomReact.useAtomValue(atom))
 }
 
 Feature('Keeping on-screen values in step with the browser page')
@@ -105,10 +105,10 @@ Feature('Keeping on-screen values in step with the browser page')
                 const followed = Atom.refreshOnWindowFocus(Atom.make(reads.counted))
                 const registry = Atom.Registry.make()
                 render(
-                  React.createElement(
+                  createElement(
                     AtomReact.RegistryContext.Provider,
                     { value: registry },
-                    React.createElement(FocusFollowingValue, { atom: followed }),
+                    createElement(FocusFollowingValue, { atom: followed }),
                   ),
                 )
                 showThePage()
@@ -155,10 +155,10 @@ Feature('Keeping on-screen values in step with the browser page')
           When('the widget that reads the page number from the address appears')('shown', (s) =>
             Effect.sync(() => {
               render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: s.ctx.registry },
-                  React.createElement(AddressFollowingValue, { atom: s.ctx.pageNumber }),
+                  createElement(AddressFollowingValue, { atom: s.ctx.pageNumber }),
                 ),
               )
               return { page: screen.getByTestId('address-following-value').textContent }
@@ -187,11 +187,11 @@ Feature('Keeping on-screen values in step with the browser page')
               const registry = Atom.Registry.make()
               visit('?page=7')
               const view = render(
-                React.createElement(
+                createElement(
                   AtomReact.RegistryContext.Provider,
                   { value: registry },
-                  React.createElement(FocusFollowingValue, { atom: followed }),
-                  React.createElement(AddressTracker, { atom: trackedPage }),
+                  createElement(FocusFollowingValue, { atom: followed }),
+                  createElement(AddressTracker, { atom: trackedPage }),
                 ),
               )
               showThePage()

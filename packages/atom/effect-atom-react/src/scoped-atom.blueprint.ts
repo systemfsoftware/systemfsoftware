@@ -10,7 +10,7 @@
 'use client'
 
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
-import * as React from 'react'
+import { type Context, createContext, createElement, type FC, type ReactNode, useContext, useState } from 'react'
 import { type AnyAtom } from './registry-context.js'
 
 type Top<A = unknown> = A
@@ -50,9 +50,8 @@ export interface ScopedAtomUse extends Blueprint.Target {
   readonly target: () => FieldOf<this['Index'], 'Atom'>
 }
 
-type ProviderOf<X> = [FieldOf<X, 'Input'>] extends [never]
-  ? React.FC<{ readonly children?: React.ReactNode | undefined }>
-  : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: FieldOf<X, 'Input'> }>
+type ProviderOf<X> = [FieldOf<X, 'Input'>] extends [never] ? FC<{ readonly children?: ReactNode | undefined }>
+  : FC<{ readonly children?: ReactNode | undefined; readonly value: FieldOf<X, 'Input'> }>
 
 /**
  * The provider component of a scoped atom, taking a `value` prop when the
@@ -70,7 +69,7 @@ export interface ScopedAtomProvider extends Blueprint.Target {
  * @since 4.0.0
  */
 export interface ScopedAtomContext extends Blueprint.Target {
-  readonly target: React.Context<FieldOf<this['Index'], 'Atom'> | undefined>
+  readonly target: Context<FieldOf<this['Index'], 'Atom'> | undefined>
 }
 
 /**
@@ -106,7 +105,7 @@ export interface ScopedAtomSpec {
  * ```ts
  * import { Atom } from "@systemfsoftware/effect-atom"
  * import { make, useAtomValue } from "@systemfsoftware/effect-atom-react"
- * import * as React from "react"
+ * import { createElement } from "react"
  * import { renderToStaticMarkup } from "react-dom/server"
  *
  * const Counter = make(() => Atom.make(0))
@@ -114,14 +113,14 @@ export interface ScopedAtomSpec {
  * function View() {
  *   const atom = Counter.use()
  *   const value = useAtomValue(atom)
- *   return React.createElement("div", null, value)
+ *   return createElement("div", null, value)
  * }
  *
  * export function App() {
- *   return React.createElement(Counter.Provider, null, React.createElement(View))
+ *   return createElement(Counter.Provider, null, createElement(View))
  * }
  *
- * renderToStaticMarkup(React.createElement(App)) // => "<div>0</div>"
+ * renderToStaticMarkup(createElement(App))
  * ```
  *
  * @since 4.0.0
@@ -199,7 +198,7 @@ const ScopedAtoms = Blueprint.make<ScopedAtomSpec, ScopedAtomIndex>()(TypeId).op
  * ```ts
  * import { Atom } from "@systemfsoftware/effect-atom"
  * import { make, useAtomValue } from "@systemfsoftware/effect-atom-react"
- * import * as React from "react"
+ * import { createElement } from "react"
  * import { renderToStaticMarkup } from "react-dom/server"
  *
  * const User = make((name: string) => Atom.make(name))
@@ -207,18 +206,18 @@ const ScopedAtoms = Blueprint.make<ScopedAtomSpec, ScopedAtomIndex>()(TypeId).op
  * function UserName() {
  *   const atom = User.use()
  *   const value = useAtomValue(atom)
- *   return React.createElement("span", null, value)
+ *   return createElement("span", null, value)
  * }
  *
  * export function App() {
- *   return React.createElement(
+ *   return createElement(
  *     User.Provider,
  *     { value: "Ada" },
- *     React.createElement(UserName)
+ *     createElement(UserName)
  *   )
  * }
  *
- * renderToStaticMarkup(React.createElement(App)) // => "<span>Ada</span>"
+ * renderToStaticMarkup(createElement(App))
  * ```
  *
  * @since 4.0.0
@@ -226,23 +225,25 @@ const ScopedAtoms = Blueprint.make<ScopedAtomSpec, ScopedAtomIndex>()(TypeId).op
 export const make = <A extends AnyAtom, Input = never>(
   f: (() => A) | ((input: Input) => A),
 ): ScopedAtom<A, Input> => {
-  const Context = React.createContext<A | undefined>(undefined)
+  const ScopeContext = createContext<A | undefined>(undefined)
 
   const use = (): A => {
-    const atom = React.useContext(Context)
+    const atom = useContext(ScopeContext)
     if (atom === undefined) {
       throw new Error('ScopedAtom used outside of its Provider')
     }
     return atom
   }
 
-  const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
-    const atom = React.useRef<A | undefined>(undefined)
-    if (atom.current === undefined) {
-      atom.current = createScopedAtom(f, props.value)
-    }
-    return React.createElement(Context.Provider, { value: atom.current }, props.children)
+  const Provider: FC<{ readonly children?: ReactNode | undefined; readonly value?: Input }> = (props) => {
+    const [atom] = useState(() => createScopedAtom(f, props.value))
+    return createElement(ScopeContext.Provider, { value: atom }, props.children)
   }
 
-  return ScopedAtoms.of<{ readonly Atom: A; readonly Input: Input }>({ factory: f, use, Provider, Context })
+  return ScopedAtoms.of<{ readonly Atom: A; readonly Input: Input }>({
+    factory: f,
+    use,
+    Provider,
+    Context: ScopeContext,
+  })
 }

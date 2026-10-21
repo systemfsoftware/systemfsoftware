@@ -30,24 +30,24 @@ let runtime: ManagedRuntime.ManagedRuntime<AppLive, never> | undefined
 export const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))
 ```
 
-And `cell.run(input)` is work, not wiring: an arrow application any module may perform at any depth. The six rules below keep those three facts mechanical, so a file that violates them fails lint instead of review.
+And `cell.run(input)` is work, not wiring: an arrow application any module may perform at any depth. The rules below keep those three facts mechanical, so a file that violates them fails lint instead of review.
 
 ## Install
 
 ```bash
-pnpm add -D @systemfsoftware/oxlint-plugin-effect-entrypoint
+pnpm add -D @systemfsoftware/oxlint-plugin-effect-platform
 ```
 
 ## Quick Start
 
 ```ts
 // oxlint.config.ts
-import effectEntrypoint from '@systemfsoftware/oxlint-plugin-effect-entrypoint'
+import effectPlatform from '@systemfsoftware/oxlint-plugin-effect-platform'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-entrypoint'],
-  rules: { ...effectEntrypoint.configs.recommended.rules },
+  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-platform'],
+  rules: { ...effectPlatform.configs.recommended.rules },
 })
 ```
 
@@ -55,18 +55,19 @@ export default defineConfig({
 pnpm oxlint src
 ```
 
-All six rules are in the recommended set, so the spread enables them at `error`. To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-entrypoint/<rule>': 'warn'`; entries placed after the spread override it.
+The platform rules are in the recommended set, so the spread enables them at `error`. To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-platform/<rule>': 'warn'`; entries placed after the spread override it. `no-react-effect` is React-only, so the recommended set leaves it off: enable it directly where React code is linted, `'@systemfsoftware/oxlint-plugin-effect-platform/no-react-effect': 'error'`.
 
 ## Rules
 
-| Rule                             | Reports                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `entrypoint-interprets-once`     | A `main.ts` with zero or more than one interpretation edge — `runMain` under any namespace, `Effect.run*`, `ManagedRuntime.make`, `Layer.toRuntime`                                                                                                                                                                                                              |
-| `entrypoint-no-exports`          | Any export from `main.ts`: named, default, `export *`, re-export, or type-only                                                                                                                                                                                                                                                                                   |
-| `entrypoint-not-imported`        | Any static import, re-export, or dynamic `import()` of a `main` module, reported in the importing file — production, barrel, or test                                                                                                                                                                                                                             |
-| `entrypoint-no-promise-wrapper`  | `runMain(Effect.tryPromise(...))` or `runMain(Effect.promise(...))`: the outer edge awaits a promise while the real fibers run in a runtime it cannot interrupt                                                                                                                                                                                                  |
-| `runtime-construction-placement` | `ManagedRuntime.make` or `Layer.provide` inside a function body — wiring rebuilt per call — and `ManagedRuntime.make` at module scope, where importing the module starts fibers nothing can interrupt. It judges runtime code: a file under a `src/` directory segment, or a `*.test.ts` file; a package-root hook, config, or setup file is outside its subject |
-| `no-unported-time-source`        | A direct `Date.now`, `performance.now`, `process.hrtime`, `Math.random`, `crypto.getRandomValues`, `crypto.randomUUID`, `setTimeout`, `setInterval`, or `setImmediate` call, an argument-less `new Date()`, or a static or dynamic import of `node:timers` in production source outside a file listed in the rule's `ports` option                               |
+| Rule                             | Reports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entrypoint-interprets-once`     | A `main.ts` with zero or more than one interpretation edge — `runMain` under any namespace, `Effect.run*`, `ManagedRuntime.make`, `Layer.toRuntime`                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `entrypoint-no-exports`          | Any export from `main.ts`: named, default, `export *`, re-export, or type-only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `entrypoint-not-imported`        | Any static import, re-export, or dynamic `import()` of a `main` module, reported in the importing file — production, barrel, or test                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `entrypoint-no-promise-wrapper`  | `runMain(Effect.tryPromise(...))` or `runMain(Effect.promise(...))`: the outer edge awaits a promise while the real fibers run in a runtime it cannot interrupt                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `runtime-construction-placement` | `ManagedRuntime.make` or `Layer.provide` inside a function body — wiring rebuilt per call — and `ManagedRuntime.make` at module scope, where importing the module starts fibers nothing can interrupt. It judges runtime code: a file under a `src/` directory segment, or a `*.test.ts` file; a package-root hook, config, or setup file is outside its subject                                                                                                                                                                                                                                  |
+| `no-unported-time-source`        | A direct `Date.now`, `performance.now`, `process.hrtime`, `Math.random`, `crypto.getRandomValues`, `crypto.randomUUID`, `setTimeout`, `setInterval`, or `setImmediate` call, an argument-less `new Date()`, or a static or dynamic import of `node:timers` in production source outside a file listed in the rule's `ports` option                                                                                                                                                                                                                                                                |
+| `no-react-effect`                | An `import('react')` or a global `require('react')` with a literal specifier, and a disable directive that turns the React Effect ban off: one naming this rule, one naming no rule that covers such a load or a `react` import the preset's import ban refuses, or one naming `no-restricted-imports` that covers such an import. `useEffect`, `useLayoutEffect`, `useInsertionEffect`, `useEffectEvent`, the namespace and default imports of `react` and `export * from 'react'` are refused by the preset's import ban, with no exception, and the hooks from any other module are left alone |
 
 What the placement rule leaves alone, each a shape the rule's own fixtures pin:
 

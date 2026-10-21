@@ -6,8 +6,8 @@ import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import * as React from 'react'
-import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
+import { createElement } from 'react'
+import { ownRegistry, renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
 
@@ -17,68 +17,87 @@ Feature('Restoring saved page state')
   .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
-      'A page that receives a saved value for a fresh atom shows it immediately',
+      'A page whose owner restores a saved value before rendering shows it in its first commit',
       Gherkin.Do.pipe(
-        Given('a page that will receive saved state for an atom it has not loaded yet')('ctx', () =>
-          Effect.sync(() => {
-            const temperature = Atom.make(18).pipe(
-              Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
-            )
-            const savedPage = Atom.Registry.make()
-            Atom.Registry.set(savedPage, temperature, 23)
-            const saved = Atom.Hydration.dehydrate(savedPage)
-            function Page() {
-              const value = AtomReact.useAtomValue(temperature)
-              return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
-            }
-            render(
-              React.createElement(
-                AtomReact.RegistryContext.Provider,
-                { value: Atom.Registry.make() },
-                React.createElement(AtomReact.HydrationBoundary, { state: saved }, React.createElement(Page)),
-              ),
-            )
-            return {}
-          })),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the saved value is already on screen')((_s, expect) =>
-          Effect.promise(() => screen.findByTestId('fresh-temperature')).pipe(
-            Effect.map((temperature) => expect(temperature).toHaveTextContent('23')),
-          )
+        Given('saved state for an atom the page has not loaded yet, restored by the owner before the page renders')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const temperature = Atom.make(18).pipe(
+                Atom.serializable({ key: 'owned-temperature', schema: Schema.Finite }),
+              )
+              const savedPage = Atom.Registry.make()
+              Atom.Registry.set(savedPage, temperature, 23)
+              const registry = ownRegistry()
+              Atom.Hydration.hydrate(registry, Atom.Hydration.dehydrate(savedPage))
+              function Page() {
+                const value = AtomReact.useAtomValue(temperature)
+                return createElement('div', { 'data-testid': 'owned-temperature' }, value)
+              }
+              render(createElement(AtomReact.RegistryProvider, { registry }, createElement(Page)))
+              return {}
+            }),
         ),
+        When('the first commit is read')(
+          'firstCommit',
+          () => Effect.sync(() => screen.getByTestId('owned-temperature').textContent),
+        ),
+        Then('the saved value is what the page first showed')((s, expect) => expect(s.firstCommit).toBe('23')),
       ),
     )
 
     scenario(
-      'A hydration boundary without saved state leaves the page values alone',
+      'A registry that already holds a value for an atom shows the saved value after the owner restores saved state naming that atom',
       Gherkin.Do.pipe(
-        Given('a page whose value is set before it renders, wrapped in a boundary without saved state')(
+        Given('a live registry already holding a value, then saved state for the same atom, restored by the owner')(
           'ctx',
           () =>
             Effect.sync(() => {
-              const room = Atom.make(4)
-              const registry = Atom.Registry.make()
-              Atom.Registry.set(registry, room, 4)
-              function Page() {
-                const value = AtomReact.useAtomValue(room)
-                return React.createElement('div', { 'data-testid': 'plain-room' }, value)
-              }
-              render(
-                React.createElement(
-                  AtomReact.RegistryContext.Provider,
-                  { value: registry },
-                  React.createElement(AtomReact.HydrationBoundary, null, React.createElement(Page)),
-                ),
+              const temperature = Atom.make(18).pipe(
+                Atom.serializable({ key: 'live-temperature', schema: Schema.Finite }),
               )
+              const savedPage = Atom.Registry.make()
+              Atom.Registry.set(savedPage, temperature, 23)
+              const registry = ownRegistry()
+              Atom.Registry.set(registry, temperature, 18)
+              Atom.Hydration.hydrate(registry, Atom.Hydration.dehydrate(savedPage))
+              function Page() {
+                const value = AtomReact.useAtomValue(temperature)
+                return createElement('div', { 'data-testid': 'live-temperature' }, value)
+              }
+              render(createElement(AtomReact.RegistryProvider, { registry }, createElement(Page)))
               return {}
             }),
         ),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the value that was set is still on screen')((_s, expect) =>
-          Effect.promise(() => screen.findByTestId('plain-room')).pipe(
-            Effect.map((room) => expect(room).toHaveTextContent('4')),
-          )
+        When('the first commit is read')(
+          'firstCommit',
+          () => Effect.sync(() => screen.getByTestId('live-temperature').textContent),
         ),
+        Then('the saved value replaced the value the registry held')((s, expect) => expect(s.firstCommit).toBe('23')),
+      ),
+    )
+
+    scenario(
+      'A page whose owner restores no saved state shows the values the owner set',
+      Gherkin.Do.pipe(
+        Given('a value the owner sets before rendering, with nothing saved to restore')('ctx', () =>
+          Effect.sync(() => {
+            const room = Atom.make(4)
+            const registry = ownRegistry()
+            Atom.Registry.set(registry, room, 4)
+            Atom.Hydration.hydrate(registry, [])
+            function Page() {
+              const value = AtomReact.useAtomValue(room)
+              return createElement('div', { 'data-testid': 'owned-room' }, value)
+            }
+            render(createElement(AtomReact.RegistryProvider, { registry }, createElement(Page)))
+            return {}
+          })),
+        When('the first commit is read')(
+          'firstCommit',
+          () => Effect.sync(() => screen.getByTestId('owned-room').textContent),
+        ),
+        Then('the value the owner set is what the page first showed')((s, expect) => expect(s.firstCommit).toBe('4')),
       ),
     )
   })
