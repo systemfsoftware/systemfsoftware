@@ -28,6 +28,10 @@ const GHERKIN = "import { it, layer, makeFeature } from '@systemfsoftware/effect
 
 const TRACE = "import { TraceSpec } from '@systemfsoftware/trace-spec'\n"
 
+const STORYBOOK_SETUP = '/repo/apps/web/.storybook/vitest.setup.ts'
+
+const SETUP_HOOKS = "import { afterEach, beforeAll, beforeEach } from 'vitest'\nimport { page } from 'vitest/browser'\n"
+
 const runnerImport = (runner: string, source: string, lane: 'behaviour' | 'conformance' | 'differential') => ({
   messageId: 'runnerImport' as const,
   data: {
@@ -149,6 +153,17 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
       code:
         `import type { Conformance } from '@systemfsoftware/conformance-spec'\nimport { it } from '@systemfsoftware/vitest'\nit('x', () => {})`,
     }),
+    {
+      name: 'Should_Allow_LifecycleHooksFromVitest_When_TheFileIsTheStorybookVitestSetup',
+      code:
+        `${SETUP_HOOKS}beforeAll(() => {})\nbeforeEach(() => {})\nafterEach(async (context) => { await screenshot(page, context) })`,
+      filename: STORYBOOK_SETUP,
+    },
+    {
+      name: 'Should_Allow_AfterAllBesideAType_When_TheFileIsTheStorybookVitestSetup',
+      code: `import { afterAll, type TestContext } from 'vitest'`,
+      filename: STORYBOOK_SETUP,
+    },
   ],
   invalid: [
     {
@@ -200,6 +215,36 @@ ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVi
       name: 'Should_Report_ValueImport_When_TheFileIsNamedLikeASetupFile',
       code: `import { afterEach } from 'vitest'`,
       filename: '/repo/packages/atom/effect-atom-react/vitest-setup.ts',
+      errors: [refusal],
+    },
+    ...[
+      '/repo/apps/web/src/foo.test.ts',
+      '/repo/apps/web/.storybook/preview.tsx',
+      '/repo/apps/web/.storybook/nested/vitest.setup.ts',
+      '/repo/apps/web/vitest.setup.ts',
+      '/repo/apps/web/.storybook/vitest.setup.tsx',
+    ].map((filename) => ({
+      name: `Should_Report_LifecycleHooksFromVitest_When_TheFileIsNotTheStorybookVitestSetup_${filename}`,
+      code: SETUP_HOOKS,
+      filename,
+      errors: [refusal],
+    })),
+    {
+      name: 'Should_Report_ANonHookValue_When_TheStorybookVitestSetupImportsItBesideHooks',
+      code: `import { afterEach, expect } from 'vitest'`,
+      filename: STORYBOOK_SETUP,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_ANamespaceImport_When_TheStorybookVitestSetupImportsVitest',
+      code: `import * as V from 'vitest'`,
+      filename: STORYBOOK_SETUP,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_HooksFromEffectVitest_When_TheFileIsTheStorybookVitestSetup',
+      code: `import { afterEach } from '@effect/vitest'`,
+      filename: STORYBOOK_SETUP,
       errors: [refusal],
     },
     {
