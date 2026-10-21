@@ -1,30 +1,13 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { MicroVMSpec, WaitStrategy } from './MicroVMSpec.schema.js'
-
-const WaitStrategyDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-microsandbox/WaitStrategyDecision',
-)
-type WaitStrategyDecisionTypeId = typeof WaitStrategyDecisionTypeId
-
-const { Condition } = Readiness
-
-export class WaitRequired extends Schema.TaggedClass<WaitRequired>()('WaitRequired', {
-  strategy: WaitStrategy,
-  condition: Condition,
-  label: Schema.String,
-}) {
-  readonly [WaitStrategyDecisionTypeId] = WaitStrategyDecisionTypeId
-}
-
-export class WaitSkipped extends Schema.TaggedClass<WaitSkipped>()('WaitSkipped', {}) {
-  readonly [WaitStrategyDecisionTypeId] = WaitStrategyDecisionTypeId
-}
-
-export const WaitStrategyDecision = Schema.Union([WaitRequired, WaitSkipped])
-export type WaitStrategyDecision = typeof WaitStrategyDecision.Type
+import {
+  type ReadinessCondition,
+  WaitRequired,
+  WaitSkipped,
+  WaitStrategyDecision,
+} from './resolve-wait-strategy.schema.js'
 
 export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>()('ResolveWaitStrategy', {
   spec: MicroVMSpec,
@@ -32,11 +15,11 @@ export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
-const conditionOf = (strategy: WaitStrategy): (typeof Condition)['Type'] =>
+const conditionOf = (strategy: WaitStrategy): ReadinessCondition =>
   Match.value(strategy).pipe(
-    Match.tag('Port', ({ port }): (typeof Condition)['Type'] => ({ _tag: 'Tcp', guestPort: port })),
-    Match.tag('Http', ({ path, port }): (typeof Condition)['Type'] => ({ _tag: 'Http', guestPort: port, path })),
-    Match.tag('Log', ({ pattern }): (typeof Condition)['Type'] => ({ _tag: 'Log', pattern })),
+    Match.tag('Port', ({ port }): ReadinessCondition => ({ _tag: 'Tcp', guestPort: port })),
+    Match.tag('Http', ({ path, port }): ReadinessCondition => ({ _tag: 'Http', guestPort: port, path })),
+    Match.tag('Log', ({ pattern }): ReadinessCondition => ({ _tag: 'Log', pattern })),
     Match.exhaustive,
   )
 
