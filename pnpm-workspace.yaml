@@ -26,7 +26,6 @@ catalog:
   fast-check: ^4.10.2
   vitest: ^5.0.5
   "@vitest/coverage-v8": ^5.0.5
-  "@vitest/coverage-istanbul": ^5.0.5
   vite: ^8.3.4
   tsdown: ^0.23.0
   rimraf: ^6.1.3
@@ -35,22 +34,6 @@ catalog:
   "@microsoft/api-extractor": ^7.59.4
   oxc-parser: ^0.153.0
   "@oxc-project/types": ^0.153.0
-  "@testing-library/dom": ^10.4.2
-  "@testing-library/react": ^16.3.3
-  "@types/react": ^19.3.0
-  "@types/react-dom": ^19.3.0
-  "@types/scheduler": ^0.28.0
-  react: ^19.3.0
-  react-dom: ^19.3.0
-  react-error-boundary: ^6.1.6
-  scheduler: ^0.28.0
-  storybook: ^10.6.1
-  type-fest: ^5.10.0
-  "@storybook/addon-vitest": ^10.6.1
-  "@storybook/react-vite": ^10.6.1
-  "@vitest/browser": ^5.0.5
-  "@vitest/browser-playwright": ^5.0.5
-  playwright: ^1.64.0
   "@systemfsoftware/vitest-config": workspace:^
   "@pnpm/logger": ^1100.0.0
   "@pnpm/workspace.projects-reader": ^1101.1.4
@@ -83,7 +66,6 @@ overrides:
   esbuild: ^0.28.2
 packages:
   - packages/*
-  - packages/atom/*
   - packages/daemon/*
   - packages/gherkin/*
   - packages/oxlint-plugin/*

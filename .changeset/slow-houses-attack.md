@@ -1,8 +1,6 @@
 ---
 "@systemfsoftware/conformance-spec": none
 "@systemfsoftware/discern": none
-"@systemfsoftware/effect-atom": none
-"@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
 "@systemfsoftware/effect-daemon-cluster": none
 "@systemfsoftware/effect-daemon-conformance": none
@@ -22,7 +20,6 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/rx-effect": none
-"@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/trace-spec": none
 "@systemfsoftware/trace-taxonomy": none
 ---

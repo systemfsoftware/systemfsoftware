@@ -219,8 +219,6 @@ pnpm map
 | [`@systemfsoftware/effect-microsandbox`](packages/effect-microsandbox)      | Declarative container specifications and isolated microVM testcontainers        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/effect-daemon-spec`](packages/daemon/effect-daemon-spec) | Supervision tree daemon primitives and health monitors                          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/effect-memfs`](packages/effect-memfs)                    | In-memory Effect Platform `FileSystem` implementation                           | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-atom`](packages/atom/effect-atom)                 | Reactive atomic state management with Effect streams                            | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-atom-react`](packages/atom/effect-atom-react)     | React bindings and hooks for Effect Atom                                        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ### Schema & Property Law
 
@@ -235,14 +233,13 @@ pnpm map
 
 ### Specification & BDD Verification
 
-| Package                                                                        | Purpose                                                                         | Verification Gates                                        |
-| :----------------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------- |
-| [`@systemfsoftware/effect-gherkin-spec`](packages/gherkin/effect-gherkin-spec) | Gherkin BDD syntax executing Given/When/Then steps as typed Effect workflows    | `build`, `lint`, `typecheck`, `test`, `attw`              |
-| [`@systemfsoftware/storybook-gherkin`](packages/gherkin/storybook-gherkin)     | Gherkin scenarios executed as play functions in Storybook browser tests         | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/differential-spec`](packages/sim/differential-spec)         | Differential testing comparing candidate code against reference implementations | `build`, `lint`, `typecheck`, `test`                      |
-| [`@systemfsoftware/effect-spec-runtime`](packages/effect-spec-runtime)         | Test execution runtime and fixture isolation harness                            | `build`, `lint`, `typecheck`, `test`, `attw`              |
-| [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw`              |
-| [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
+| Package                                                                        | Purpose                                                                         | Verification Gates                           |
+| :----------------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :------------------------------------------- |
+| [`@systemfsoftware/effect-gherkin-spec`](packages/gherkin/effect-gherkin-spec) | Gherkin BDD syntax executing Given/When/Then steps as typed Effect workflows    | `build`, `lint`, `typecheck`, `test`, `attw` |
+| [`@systemfsoftware/differential-spec`](packages/sim/differential-spec)         | Differential testing comparing candidate code against reference implementations | `build`, `lint`, `typecheck`, `test`         |
+| [`@systemfsoftware/effect-spec-runtime`](packages/effect-spec-runtime)         | Test execution runtime and fixture isolation harness                            | `build`, `lint`, `typecheck`, `test`, `attw` |
+| [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw` |
+| [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw` |
 
 ### Oxlint Static Plugins & Presets
 

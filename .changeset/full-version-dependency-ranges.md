@@ -2,8 +2,6 @@
 "@systemfsoftware/conformance-spec": patch
 "@systemfsoftware/differential-spec": patch
 "@systemfsoftware/discern": patch
-"@systemfsoftware/effect-atom": patch
-"@systemfsoftware/effect-atom-react": patch
 "@systemfsoftware/effect-cell-types": patch
 "@systemfsoftware/effect-daemon-cluster": patch
 "@systemfsoftware/effect-daemon-conformance": patch
@@ -34,7 +32,6 @@
 "@systemfsoftware/oxlint-plugin-effect-schema": patch
 "@systemfsoftware/oxlint-plugin-test-discipline": patch
 "@systemfsoftware/rx-effect": patch
-"@systemfsoftware/storybook-gherkin": patch
 "@systemfsoftware/stryker-config": patch
 "@systemfsoftware/trace-spec": patch
 "@systemfsoftware/trace-taxonomy": patch
@@ -43,4 +40,4 @@
 "@systemfsoftware/vitest-config": patch
 ---
 
-Published dependency ranges now name a full version: `vitest`, `@vitest/*` and `@types/node` ranges start at 5.0.1 and 26.6.2 (were `^5` and `^26`), `typescript` at 7.0.2 (was `^7`) and `playwright` at 1.63.0 (was `^1`). The `vitest` peer dependency of `@systemfsoftware/effect-gherkin-spec`, `@systemfsoftware/effect-schema-law`, `@systemfsoftware/effect-schema-vite`, `@systemfsoftware/effect-spec-runtime`, `@systemfsoftware/storybook-gherkin`, `@systemfsoftware/trace-spec`, `@systemfsoftware/vitest` and `@systemfsoftware/vitest-config` is now `^5.0.1`, so a consumer needs at least Vitest 5.0.1. `@systemfsoftware/trace-spec` depends on `@opentelemetry/semantic-conventions` `^1.43.0` (was `^1.33`).
+Published dependency ranges now name a full version: `vitest`, `@vitest/*` and `@types/node` ranges start at 5.0.1 and 26.6.2 (were `^5` and `^26`), and `typescript` at 7.0.2 (was `^7`). The `vitest` peer dependency of `@systemfsoftware/effect-gherkin-spec`, `@systemfsoftware/effect-schema-law`, `@systemfsoftware/effect-schema-vite`, `@systemfsoftware/effect-spec-runtime`, `@systemfsoftware/trace-spec`, `@systemfsoftware/vitest` and `@systemfsoftware/vitest-config` is now `^5.0.1`, so a consumer needs at least Vitest 5.0.1. `@systemfsoftware/trace-spec` depends on `@opentelemetry/semantic-conventions` `^1.43.0` (was `^1.33`).
