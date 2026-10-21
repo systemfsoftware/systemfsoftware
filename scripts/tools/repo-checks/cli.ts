@@ -2,13 +2,24 @@
 // flake package `repo-checks` (nix/deno-tool.nix). Run it at the repository
 // root:
 //
-//   nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>... [--plans <dir> --base <rev> [--head <rev>]]
+//   nix run github:systemfsoftware/systemfsoftware#repo-checks -- <check>... [--plans <dir> --base <rev> [--head <rev>]] [--strict]
 //
-// Checks: subtrees, release-age, project-membership, single-plan, packed-manifest.
+// Checks: subtrees, release-age, project-membership, single-plan, packed-manifest,
+// and the composition gates composition-unit-kinds, composition-graph,
+// composition-entries, composition-imports, composition-contracts and
+// composition-granularity (which fails only with --strict).
 // Exit 0: every named check holds. Exit 1: a check found a violation, whatever
 // the others decided. Exit 2: no violation, but a check could not decide
 // (usage, shallow history, missing compiler).
 import { parseArgs } from '@std/cli/parse-args'
+import {
+  checkCompositionContracts,
+  checkCompositionEntries,
+  checkCompositionGranularity,
+  checkCompositionGraph,
+  checkCompositionImports,
+  checkCompositionUnitKinds,
+} from './composition.ts'
 import { checkPackedManifest } from './packed-manifest.ts'
 import { checkProjectMembership } from './project-membership.ts'
 import { checkReleaseAge } from './release-age.ts'
@@ -21,6 +32,7 @@ interface Options {
   readonly plans: string | undefined
   readonly base: string | undefined
   readonly head: string
+  readonly strict: boolean
 }
 
 const CHECKS: Readonly<Record<string, (options: Options) => Promise<Verdict>>> = {
@@ -29,21 +41,37 @@ const CHECKS: Readonly<Record<string, (options: Options) => Promise<Verdict>>> =
   'project-membership': ({ root }) => checkProjectMembership(root),
   'single-plan': ({ plans, base, head }) => checkSinglePlan(plans, base, head),
   'packed-manifest': ({ base, head }) => checkPackedManifest(base, head),
+  'composition-unit-kinds': ({ root }) => checkCompositionUnitKinds(root),
+  'composition-graph': ({ root }) => checkCompositionGraph(root),
+  'composition-entries': ({ root }) => checkCompositionEntries(root),
+  'composition-imports': ({ root }) => checkCompositionImports(root),
+  'composition-contracts': ({ root }) => checkCompositionContracts(root),
+  'composition-granularity': ({ root, strict }) => checkCompositionGranularity(root, strict),
 }
 
-const USAGE = `usage: repo-checks <check>... [--plans <dir> --base <rev> [--head <rev>]]\nchecks: ${
+const USAGE = `usage: repo-checks <check>... [--plans <dir> --base <rev> [--head <rev>]] [--strict]\nchecks: ${
   Object.keys(CHECKS).join(', ')
 }`
 
 const main = async (): Promise<number> => {
-  const args = parseArgs(Deno.args, { string: ['plans', 'base', 'head'], default: { head: 'HEAD' } })
+  const args = parseArgs(Deno.args, {
+    string: ['plans', 'base', 'head'],
+    boolean: ['strict'],
+    default: { head: 'HEAD' },
+  })
   const names = args._.map(String)
   const unknown = names.filter((name) => !Object.hasOwn(CHECKS, name))
   if (names.length === 0 || unknown.length > 0) {
     console.error(unknown.length > 0 ? `repo-checks: unknown check(s) ${unknown.join(', ')}\n${USAGE}` : USAGE)
     return 2
   }
-  const options: Options = { root: Deno.cwd(), plans: args.plans, base: args.base, head: args.head }
+  const options: Options = {
+    root: Deno.cwd(),
+    plans: args.plans,
+    base: args.base,
+    head: args.head,
+    strict: args.strict,
+  }
   let violatedAny = false
   let undecidedAny = false
   for (const name of names) {

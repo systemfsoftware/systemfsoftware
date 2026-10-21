@@ -80,7 +80,9 @@
               runtimeInputs = [ pkgs.pnpm_12 ];
             };
             # Repository invariants for any pnpm workspace (subtrees,
-            # release-age, project-membership, single-plan, packed-manifest); see
+            # release-age, project-membership, single-plan, packed-manifest, and the
+            # composition-* gates, which read the workspace's package.json files and
+            # sources and run git log for composition-granularity); see
             # scripts/tools/repo-checks/cli.ts. project-membership runs the
             # workspace's own installed compiler.
             repo-checks = denoTool {

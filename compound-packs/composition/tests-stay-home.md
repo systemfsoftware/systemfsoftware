@@ -11,4 +11,4 @@ A test lives in the package whose code it tests, beside that code or under its `
 
 Exporting a module so that a test elsewhere can reach it turns the test suite into the package's largest consumer of internals and freezes them. TanStack's source never deep-imports another package's source, and the few tests that do are a visible smell. Deno std keeps tests next to the module they test.
 
-Gate: `repo-checks composition-imports` fails any import of another workspace package by a path the package doesn't export, and any export that only test files import (computed with knip-style reachability over non-test sources).
+Gate: `repo-checks composition-imports` fails any import of another workspace package by a path the package doesn't export, and any export that only test files import (computed with knip-style reachability over non-test sources). The gate does not judge the root `.` entry, any entry of a published (not `"private": true`) library, whose consumers live outside the workspace, or `./testing` and `./test-*` entries, which exist to support tests.
