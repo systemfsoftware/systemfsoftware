@@ -7,8 +7,9 @@ import {
   isRelativeSchemaSpecifier,
   isStateMachineFamilySpecifier,
 } from '@systemfsoftware/oxlint-import-origin'
-import type { MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { collectMakeBoundaries, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
 import { BENIGN_GLOBAL_NAMES, IO_GLOBAL_NAMES } from './make-body-purity.config.js'
+import { unwrap } from './ValueExports.js'
 
 type IdentifierLike = ESTree.Node & { readonly type: 'Identifier'; readonly name: string }
 
@@ -310,7 +311,7 @@ const recordFollowsOf = (value: ESTree.Node, path: readonly string[], into: Reco
     const name = propertyNameOf(property)
     if (name === null || property.type !== 'Property') continue
     const memberPath = [...path, name]
-    const propValue = property.value
+    const propValue = unwrap(property.value)
     if (property.kind === 'get') {
       if (isFunctionLike(propValue)) into.push({ path: memberPath, node: propValue, isGetter: true, isCallable: true })
     } else if (isArrowFunction(propValue) || isFunctionLike(propValue)) {
@@ -331,8 +332,11 @@ const recordInfoOf = (
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
   if (!isVariableDeclarator(def.node)) return null
-  const init = def.node.init
-  if (init === null || init.type !== 'ObjectExpression' || isOpaqueRecord(init)) return null
+  if (def.node.init === null) return null
+  // A record pinned with `as` or `satisfies` is still a record: its members are
+  // followed one by one.
+  const init = unwrap(def.node.init)
+  if (init.type !== 'ObjectExpression' || isOpaqueRecord(init)) return null
   if (variable.scope.type !== 'module' && variable.scope.type !== 'global') return null
   const follows: RecordFollow[] = []
   recordFollowsOf(init, [], follows)
@@ -619,9 +623,10 @@ const collectOperations = (region: ESTree.Node, context: Context, reports: Refer
 }
 
 /**
- * The module-scope helper resolution: a const-arrow, a function expression or
- * a function declaration a decision body calls. Anything else is not a helper
- * the classifier can enter - the reference itself is judged instead.
+ * The module-scope helper resolution: a const-arrow, a function expression or a
+ * function declaration a decision body calls, transparent through an `as` or
+ * `satisfies` wrapper. Anything else is not a helper the classifier can enter -
+ * the reference itself is judged instead.
  */
 const helperFunctionOf = (def: DefinitionLike): MakeBodyKind | null => {
   if (def.type === 'FunctionName' && isFunctionLike(def.node)) return def.node
@@ -629,8 +634,8 @@ const helperFunctionOf = (def: DefinitionLike): MakeBodyKind | null => {
   const declaration = def.parent
   if (declaration === null || !isVariableDeclaration(declaration) || declaration.kind !== 'const') return null
   if (!isVariableDeclarator(def.node)) return null
-  const init = def.node.init
-  if (init === null) return null
+  if (def.node.init === null) return null
+  const init = unwrap(def.node.init)
   if (isArrowFunction(init) || isFunctionLike(init)) return init
   return null
 }
@@ -640,13 +645,13 @@ const moduleLevelOf = (variable: VariableLike): boolean =>
 
 /**
  * The module-scope `const` initializer a decision body reaches when the
- * initializer is neither a function (a helper, followed by `helperFunctionOf`)
- * nor a nameable object record (followed member by member). The whole
- * initializer is then judged by the body's own classifier - a call, a member
- * chain, a type assertion, a record whose members cannot be named, anything that
- * computes the binding - so a binding cannot launder what it computes past the
- * purity rule. A non-module or non-`const` binding keeps its own verdict, and a
- * null initializer has nothing to follow.
+ * initializer is neither a function (a helper, followed by `helperFunctionOf`,
+ * through an `as` or `satisfies` wrapper) nor a nameable object record (followed
+ * member by member). The whole initializer is then judged by the body's own
+ * classifier - a call, a member chain, a type assertion, a record whose members
+ * cannot be named, anything that computes the binding - so a binding cannot
+ * launder what it computes past the purity rule. A non-module or non-`const`
+ * binding keeps its own verdict, and a null initializer has nothing to follow.
  */
 const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): ESTree.Node | null => {
   if (def.type !== 'Variable') return null
@@ -656,9 +661,52 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
   if (!moduleLevelOf(variable)) return null
   const init = def.node.init
   if (init === null) return null
-  if (init.type === 'ObjectExpression' && !isOpaqueRecord(init)) return null
-  if (isArrowFunction(init) || isFunctionLike(init)) return null
+  // A wrapper around a function carries the helper's region, which the helper
+  // branch already follows, and a wrapper around a nameable record is followed
+  // member by member: judging either here would walk it a second time.
+  const unwrapped = unwrap(init)
+  if (unwrapped.type === 'ObjectExpression' && !isOpaqueRecord(unwrapped)) return null
+  if (isArrowFunction(unwrapped) || isFunctionLike(unwrapped)) return null
   return init
+}
+
+const aliasedRecordMemberOf = (
+  init: ESTree.Node,
+  getScope: (node: ESTree.Node) => unknown,
+): ESTree.Node | null => {
+  const unwrapped = unwrap(init)
+  if (unwrapped.type !== 'MemberExpression') return null
+  const root = memberChainRoot(unwrapped)
+  if (root.type !== 'Identifier') return null
+  const recordVariable = variableOf(root, getScope)
+  if (recordVariable === null) return null
+  const recordDef = recordVariable.defs[0]
+  if (recordDef === undefined) return null
+  const record = recordInfoOf(recordDef, recordVariable)
+  if (record === null) return null
+  const path = recordPathOf(unwrapped, recordVariable, getScope, 0)
+  if (path === null || path === 'opaque') return null
+  const key = path.path.join('.')
+  const member = record.follows.find((follow) => follow.path.join('.') === key)
+  return member === undefined ? null : member.node
+}
+
+/**
+ * The accumulated output of one decision-body walk: the purity reports and every
+ * region the walk entered — a helper function, a record member the body calls or
+ * aliases, a class the body references (whole), and a module-scope `const` whose
+ * initializer is not a nameable record (whole, since which member the body
+ * reaches cannot be read). Both readouts come from the one walk, so no second
+ * traversal re-derives "the decision".
+ *
+ * One registry holds the entered regions: the `Set` records each region once
+ * (a helper reached by two paths may still be walked twice, and the purity
+ * reports are node-keyed, so a second walk adds a duplicate the rule's own
+ * dedupe absorbs).
+ */
+interface DecisionWalk {
+  readonly reports: ReferenceReport[]
+  readonly regions: Set<ESTree.Node>
 }
 
 /**
@@ -666,17 +714,20 @@ const followableInitializerOf = (def: DefinitionLike, variable: VariableLike): E
  * - module-level helper functions, module-scope `const` initializers and class
  * bodies a decision body reaches, and the touched record members it calls, each
  * followed and judged the same way (a shared visited set terminates the follow)
- * - plus the operation scan. Only references inside the followed region are
+ * - plus the operation scan. Every region the follow enters is accumulated into
+ * `walk.regions` for the rules that judge dispatch, so one walk defines "the
+ * decision" for both readouts. Only references inside the followed region are
  * judged, so an impurity elsewhere in the file never surfaces here, and
  * type-position identifiers are excluded.
  */
 export const classifyFunctionReferences = (
   region: ESTree.Node,
   context: Context,
-  reports: ReferenceReport[],
+  walk: DecisionWalk,
   visited: ReadonlySet<ESTree.Node>,
 ): void => {
   if (visited.has(region)) return
+  const reports = walk.reports
   const nextVisited: ReadonlySet<ESTree.Node> = new Set(visited).add(region)
   collectOperations(region, context, reports)
   const scopeValue: unknown = context.sourceCode.getScope(region)
@@ -710,8 +761,12 @@ export const classifyFunctionReferences = (
       }
       if (def.type === 'ClassName') {
         reports.push({ identifier, name: identifier.name, verdict: { kind: 'moduleValue' } })
-        // A module-scope class is judged by what its own class body references.
-        if (moduleLevelOf(variable)) classifyFunctionReferences(def.node, context, reports, nextVisited)
+        // A module-scope class is judged by what its own class body references, and
+        // registered so a dispatch inside it is judged by the dispatch rules too.
+        if (moduleLevelOf(variable)) {
+          walk.regions.add(def.node)
+          classifyFunctionReferences(def.node, context, walk, nextVisited)
+        }
         continue
       }
       if (def.type === 'FunctionName' || def.type === 'Variable') {
@@ -724,16 +779,30 @@ export const classifyFunctionReferences = (
           }
           for (const member of record.follows) {
             if (recordContains(usage, member)) {
-              classifyFunctionReferences(member.node, context, reports, nextVisited)
+              walk.regions.add(member.node)
+              classifyFunctionReferences(member.node, context, walk, nextVisited)
             }
           }
         }
         const helper = helperFunctionOf(def)
-        if (helper !== null) classifyFunctionReferences(helper, context, reports, nextVisited)
+        if (helper !== null) {
+          walk.regions.add(helper)
+          classifyFunctionReferences(helper, context, walk, nextVisited)
+        }
         // A module-scope `const` the body references is judged by what its own
-        // initializer references, so the binding cannot launder what it computes.
+        // initializer references, so the binding cannot launder what it computes,
+        // and registered so a dispatch inside it is judged by the dispatch rules too.
         const initializer = followableInitializerOf(def, variable)
-        if (initializer !== null) classifyFunctionReferences(initializer, context, reports, nextVisited)
+        if (initializer !== null) {
+          const aliasMember = aliasedRecordMemberOf(initializer, context.sourceCode.getScope)
+          if (aliasMember === null) {
+            walk.regions.add(initializer)
+            classifyFunctionReferences(initializer, context, walk, nextVisited)
+          } else {
+            walk.regions.add(aliasMember)
+            classifyFunctionReferences(aliasMember, context, walk, nextVisited)
+          }
+        }
         const mutable = isMutableDeclaration(def)
         const moduleLevel = moduleLevelOf(variable)
         const verdict: ReferenceVerdict = mutable
@@ -754,8 +823,37 @@ export const classifyFunctionReferences = (
   collect(rootScope)
 }
 
-export const classifyBodyReferences = (body: MakeBodyKind, context: Context): readonly ReferenceReport[] => {
-  const reports: ReferenceReport[] = []
-  classifyFunctionReferences(body, context, reports, new Set())
-  return reports
+const walkDecisionBody = (body: MakeBodyKind, context: Context): DecisionWalk => {
+  const walk: DecisionWalk = { reports: [], regions: new Set() }
+  classifyFunctionReferences(body, context, walk, new Set())
+  return walk
 }
+
+export const classifyBodyReferences = (body: MakeBodyKind, context: Context): readonly ReferenceReport[] =>
+  walkDecisionBody(body, context).reports
+
+/**
+ * Every region a decision rule judges in one file: each `Workflow.make` decide
+ * body plus every region its walk enters - a same-file function, record member or
+ * class the body references, transitively, whether the region is called or passed
+ * as a value. Deduped across boundaries, so two bodies reaching one helper judge
+ * it once, and one walk defines "the decision" for every rule.
+ */
+export const decisionRegionsOf = (context: Context): readonly ESTree.Node[] => {
+  const regions: ESTree.Node[] = []
+  const seen = new Set<ESTree.Node>()
+  for (const boundary of collectMakeBoundaries(context)) {
+    const body = boundary.resolvedBody
+    if (body === null) continue
+    for (const region of [body, ...walkDecisionBody(body, context).regions]) {
+      if (seen.has(region)) continue
+      seen.add(region)
+      regions.push(region)
+    }
+  }
+  return regions
+}
+
+/** The containment test the decision rules share: whether `node` sits in one of `regions`. */
+export const isInsideDecisionRegion = (node: ESTree.Node, regions: readonly ESTree.Node[]): boolean =>
+  regions.some((region) => isWithinRegion(node, region))

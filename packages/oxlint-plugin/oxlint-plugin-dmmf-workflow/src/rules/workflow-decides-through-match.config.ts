@@ -14,7 +14,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A Workflow.make decision body may not return success wrapping the matched value unchanged, and may not read a member keyed by a _tag value: the first is a silent stay, the second is dispatch by table outside Match.',
+      'A Workflow.make decision body, every same-file function and class it references transitively, and every record method it calls, may not return success wrapping the matched value unchanged, and may not read a member keyed by a _tag value: the first is a silent stay, the second is dispatch by table outside Match.',
   },
   schema: [Options],
   messages: {
