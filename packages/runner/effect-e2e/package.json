@@ -1,0 +1,92 @@
+{
+  "name": "@systemfsoftware/effect-e2e",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/runner/effect-e2e"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/effect-e2e#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Effect-native end-to-end testing framework: suite config decoded at the edge, an in-process runner, a report-1 document, and fixed exit codes.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "e2e",
+    "end-to-end",
+    "testing",
+    "vitest",
+    "typescript"
+  ],
+  "type": "module",
+  "bin": {
+    "effect-e2e": "./src/bin.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./runner": {
+        "types": "./dist/runner.d.ts",
+        "default": "./dist/runner.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "effect-e2e": "./dist/effect-e2e.mjs"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./runner": {
+      "@systemfsoftware/source": "./src/runner.ts",
+      "types": "./dist/runner.d.ts",
+      "default": "./dist/runner.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}
