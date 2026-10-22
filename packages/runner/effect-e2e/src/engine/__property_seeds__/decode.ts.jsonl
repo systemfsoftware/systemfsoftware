@@ -1,0 +1,3 @@
+{"_tag":"Refuted","property":"∀n_ChainLength_≡AcceptedIffAtMost64","seed":496004,"attempt":0,"size":0,"path":[0],"failure":"ReturnedFalse"}
+{"_tag":"Refuted","property":"∀s_ActionVariant_≡RefusesForeignField","seed":496005,"attempt":0,"size":0,"path":[],"failure":"ReturnedFalse"}
+{"_tag":"Refuted","property":"∀s_LocatorVariant_≡RefusesForeignField","seed":496006,"attempt":0,"size":0,"path":[],"failure":"ReturnedFalse"}
