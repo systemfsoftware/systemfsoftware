@@ -138,12 +138,10 @@ const Trace = Schema.Literals(['off', 'on', 'retain-on-failure'])
 
 const workersOf = (defaults: ConfigDefaults): number => Math.min(1024, Math.max(1, Math.floor(defaults.cores / 2)))
 
-/** The defaults the design table makes depend on whether the run is in CI (design §3.1). */
+const CI_RUN_SHAPE = { retries: 1, workers: 1, cacheMode: 'read-only' } as const
+
 const runShapeOf = (defaults: ConfigDefaults) =>
-  ({
-    true: { retries: 1, workers: 1, cacheMode: 'read-only' },
-    false: { retries: 0, workers: workersOf(defaults), cacheMode: 'read-write' },
-  } as const)[`${defaults.ci}`]
+  defaults.ci === true ? CI_RUN_SHAPE : { retries: 0, workers: workersOf(defaults), cacheMode: 'read-write' } as const
 
 const cacheConfigOf = (mode: typeof CacheMode.Type) =>
   Schema.Struct({ mode: CacheMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed(mode))) })
