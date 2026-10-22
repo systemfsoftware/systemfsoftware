@@ -24,22 +24,3 @@ export const runOxlint = ({ fixture, config, format, path }: OxlintRun): Promise
   })
   return promise
 }
-
-export interface Diagnostic {
-  readonly code: string
-  readonly severity: string
-  readonly message: string
-  readonly help?: string
-}
-
-interface Report {
-  readonly diagnostics: readonly Diagnostic[]
-}
-
-export const lintDiagnostics = async (config: string, path: string): Promise<readonly Diagnostic[]> => {
-  const { stdout, stderr } = await runOxlint({ fixture: 'ui-state-fixture/', config, format: 'json', path })
-  const report: Report = await Promise.try(() => JSON.parse(stdout)).catch(() => {
-    throw new Error(`oxlint printed no JSON report for ${path} with ${config}:\n${stdout}${stderr}`)
-  })
-  return report.diagnostics
-}

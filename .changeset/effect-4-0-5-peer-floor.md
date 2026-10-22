@@ -1,6 +1,4 @@
 ---
-"@systemfsoftware/effect-atom-react": patch
-"@systemfsoftware/effect-atom": patch
 "@systemfsoftware/effect-daemon-cluster": patch
 "@systemfsoftware/effect-daemon-conformance": patch
 "@systemfsoftware/effect-daemon-microvm": patch
@@ -14,7 +12,6 @@
 "@systemfsoftware/effect-readiness": patch
 "@systemfsoftware/effect-spec-runtime": patch
 "@systemfsoftware/effect-gherkin-spec": patch
-"@systemfsoftware/storybook-gherkin": patch
 "@systemfsoftware/npm-package": patch
 "@systemfsoftware/oxlint-plugin-cell-architecture": patch
 "@systemfsoftware/oxlint-plugin-dmmf-workflow": patch

@@ -15,7 +15,7 @@ A pull-request job that runs whatever the diff touched, rather than what it affe
 
 A coding agent asked to "make CI catch it" can put main-only work in presubmit, and then every pull request waits on it with no extra verdict on the diff. An unnamed private repo, 2026-10-12: a full NixOS VM test of 25-40 minutes on hosted runners ran on every pull request, and three machine-image builds of 27 minutes or more ran on pull requests that touched Nix paths, each one alone past this gate's 10 minutes.
 
-A coding agent asked to make CI faster can reach for a path filter or a list of packages to run. That list is a second copy of the dependency graph, kept by hand, and it drifts: this repo's storybook-gherkin browser suite runs on a pull request only when `packages/gherkin/storybook-gherkin/**` or its own workflow changes (`storybook-gherkin-browser.yml:9-13`), while the package depends on nine workspace packages (`packages/gherkin/storybook-gherkin/package.json`, `workspace:^`), so a change to any of them never reaches it. An agent that diffs a main push against `HEAD~1` misses work another way: when the previous push's run failed or never ran, the commits since the last green one are never judged.
+A coding agent asked to make CI faster can reach for a path filter or a list of packages to run. That list is a second copy of the dependency graph, kept by hand, and it drifts: a workflow that runs a package's suite on a pull request only when that package's own directory or its own workflow file changes never runs it when a workspace package it depends on (`workspace:^`) changes. An agent that diffs a main push against `HEAD~1` misses work another way: when the previous push's run failed or never ran, the commits since the last green one are never judged.
 
 A CI-facing diff reviewed without this pack is a diff nobody checked against it. Packs are applied only on ce-code-review's full path: "a diff that takes the lite or focused path is not checked against packs, and its receipt says so". A coding agent that routes a workflow, flake, image or deploy change through a lighter review gets a clean verdict from a review that never read these rules, and the PR merges carrying every pattern they condemn.
 
@@ -43,13 +43,13 @@ The 10 minutes is measured from the run and written to its step summary (`one-st
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-# WRONG: systemfsoftware/systemfsoftware 02bf9653b1:.github/workflows/storybook-gherkin-browser.yml:9-13
-# What is affected is decided by a path filter, not by what depends on the change.
+# WRONG: neutral shape, no citation. What is affected is decided by a path filter, not by
+# what depends on the change: a change to a workspace package this one depends on never runs it.
   pull_request:
     branches: [main]
     paths:
-      - "packages/gherkin/storybook-gherkin/**"
-      - ".github/workflows/storybook-gherkin-browser.yml"
+      - "packages/<family>/<package>/**"
+      - ".github/workflows/<package>-suite.yml"
 
 # WRONG: unnamed pattern, a private product repo (org CI audit, 2026-10-11)
 # A separate accessibility journeys lane, outside the story run, on every code pull request.

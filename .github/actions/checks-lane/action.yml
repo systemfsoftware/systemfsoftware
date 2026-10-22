@@ -269,18 +269,6 @@ runs:
           turbo-${{ runner.os }}-test-${{ fromJSON(inputs.job).id }}-
           turbo-${{ runner.os }}-checks-
           turbo-${{ runner.os }}-
-    - name: Cache Playwright browsers
-      if: inputs.lane == 'test' && fromJSON(inputs.job).browser
-      uses: actions/cache@v6
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-        restore-keys: |
-          playwright-${{ runner.os }}-
-    - name: Install Playwright chromium
-      if: inputs.lane == 'test' && fromJSON(inputs.job).browser
-      shell: bash -e {0}
-      run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
     - name: Build
       if: inputs.lane == 'test'
       shell: bash -e {0}

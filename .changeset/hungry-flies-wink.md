@@ -2,8 +2,6 @@
 "@systemfsoftware/conformance-spec": none
 "@systemfsoftware/differential-spec": none
 "@systemfsoftware/discern": none
-"@systemfsoftware/effect-atom": none
-"@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
 "@systemfsoftware/effect-daemon-cluster": none
 "@systemfsoftware/effect-daemon-conformance": none
@@ -34,7 +32,6 @@
 "@systemfsoftware/oxlint-plugin-effect-schema": none
 "@systemfsoftware/oxlint-plugin-test-discipline": none
 "@systemfsoftware/rx-effect": none
-"@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/trace-spec": none
 "@systemfsoftware/trace-taxonomy": none
 "@systemfsoftware/vitest": none

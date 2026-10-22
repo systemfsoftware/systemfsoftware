@@ -2,8 +2,6 @@
 "@systemfsoftware/conformance-spec": patch
 "@systemfsoftware/differential-spec": patch
 "@systemfsoftware/discern": patch
-"@systemfsoftware/effect-atom": patch
-"@systemfsoftware/effect-atom-react": patch
 "@systemfsoftware/effect-cell-types": patch
 "@systemfsoftware/effect-daemon-cluster": patch
 "@systemfsoftware/effect-daemon-conformance": patch
@@ -20,7 +18,6 @@
 "@systemfsoftware/hex-schema": patch
 "@systemfsoftware/npm-package": patch
 "@systemfsoftware/rx-effect": patch
-"@systemfsoftware/storybook-gherkin": patch
 "@systemfsoftware/trace-spec": patch
 "@systemfsoftware/trace-taxonomy": patch
 "@systemfsoftware/vitest": patch

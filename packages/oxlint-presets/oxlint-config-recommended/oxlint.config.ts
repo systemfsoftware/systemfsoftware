@@ -3,5 +3,5 @@ import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [ruleAuthoring],
-  ignorePatterns: ['outside-src-fixture/**', 'ui-state-fixture/**'],
+  ignorePatterns: ['outside-src-fixture/**'],
 })

@@ -4,8 +4,6 @@ packs:
   - source: compound-packs/schema-laws
   - source: compound-packs/package-topology
   - source: compound-packs/mutation-discipline
-  - source: compound-packs/storybook-testing
   - source: compound-packs/ci-wall-clock
-  - source: compound-packs/ui-state
   - source: compound-packs/turbo-task-graph
   - source: compound-packs/path-trust
