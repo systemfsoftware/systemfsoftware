@@ -357,4 +357,4 @@ export const makeJudge = async (
   }
 }
 
-export const DEFAULT_MODELS: readonly string[] = ['deepseek/deepseek-v4.1-flash', 'google/gemini-3.8-flash']
+export const DEFAULT_MODELS: readonly string[] = ['~deepseek/deepseek-flash-latest', 'google/gemini-3.8-flash']
