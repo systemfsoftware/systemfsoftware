@@ -7,12 +7,22 @@ import {
   type StoreMode,
   TraceEntry,
 } from '@systemfsoftware/effect-e2e/cache'
-import { Engine, type EngineShape, EnvironmentUnavailable, type MemorySite } from '@systemfsoftware/effect-e2e/engine'
+import {
+  ArtifactWriteFailed,
+  Engine,
+  type EngineShape,
+  EnvironmentUnavailable,
+  type MemorySite,
+} from '@systemfsoftware/effect-e2e/engine'
 import { type ModelAnswer, ModelGateway, type ModelRequest } from '@systemfsoftware/effect-e2e/model'
 import {
+  ArtifactStore,
+  type ArtifactStoreShape,
   type AttemptLog,
+  type AttemptTest,
   type EngineSource,
   makeAttemptLog,
+  MemoryArtifactStore,
   type SessionInput,
   TestSession,
   type TestSessionShape,
@@ -22,6 +32,7 @@ import * as Effect from 'effect/Effect'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import type * as Option from 'effect/Option'
 import type * as Redacted from 'effect/Redacted'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
@@ -33,7 +44,9 @@ const KEY_FIELDS = TraceEntry.fields.keyedBy.fields
 
 const IDENTITY: EngineSource['identity'] = { adapter: 'memory', kind: 'web' }
 
-const decodedConfig = (mode: StoreMode): Effect.Effect<E2EConfig> =>
+type TraceSetting = E2EConfig['trace']
+
+const decodedConfig = (mode: StoreMode, trace: TraceSetting): Effect.Effect<E2EConfig> =>
   Effect.orDie(decodeConfig(
     defineConfig({
       projectId: 'run-engine',
@@ -49,9 +62,34 @@ const decodedConfig = (mode: StoreMode): Effect.Effect<E2EConfig> =>
         },
       },
       cache: { mode },
+      trace,
     }),
     { ci: false, projectId: 'run-engine', cores: 1 },
   ))
+
+/** Where a fixture try's evidence goes: a store and a way to read back what it holds by suite-relative path. */
+export interface ObservedArtifacts {
+  readonly store: ArtifactStoreShape
+  readonly read: (path: string) => Effect.Effect<Option.Option<Uint8Array>>
+}
+
+const refusingArtifacts: ObservedArtifacts = {
+  store: {
+    put: (artifact) =>
+      Effect.fail(
+        new ArtifactWriteFailed({
+          message: `the evidence store refuses ${artifact.kind}`,
+          evidence: [{ _tag: 'LogEvidence', text: artifact.kind }],
+        }),
+      ),
+  },
+  read: () => Effect.succeedNone,
+}
+
+const memoryArtifacts: Effect.Effect<ObservedArtifacts> = Effect.map(
+  MemoryArtifactStore.make({ output: '.e2e' }),
+  (store) => ({ store, read: store.read }),
+)
 
 export interface CountedEngine {
   readonly source: EngineSource
@@ -82,6 +120,47 @@ export const countedEngine = (site: MemorySite): Effect.Effect<CountedEngine> =>
       },
       acquisitions: Ref.get(acquisitions),
       closes: Ref.get(closes),
+    }
+  })
+
+type ScreenshotRequest = Parameters<EngineShape['screenshot']>[0]
+
+export interface CapturingEngine extends CountedEngine {
+  readonly screenshots: Effect.Effect<ReadonlyArray<ScreenshotRequest>>
+  readonly asked: Effect.Effect<void>
+}
+
+interface Capture {
+  readonly requests: Ref.Ref<ReadonlyArray<ScreenshotRequest>>
+  readonly asked: Deferred.Deferred<void>
+  readonly hangs: boolean
+}
+
+const capturing = (capture: Capture) => (engine: EngineShape): EngineShape => ({
+  ...engine,
+  screenshot: (request) =>
+    Ref.update(capture.requests, (all) => [...all, request]).pipe(
+      Effect.andThen(Deferred.succeed(capture.asked, undefined)),
+      Effect.andThen(capture.hangs ? Effect.never : engine.screenshot(request)),
+    ),
+})
+
+export const capturingEngine = (input: {
+  readonly site: MemorySite
+  readonly hangs?: boolean
+}): Effect.Effect<CapturingEngine> =>
+  Effect.gen(function*() {
+    const counted = yield* countedEngine(input.site)
+    const capture: Capture = {
+      requests: yield* Ref.make<ReadonlyArray<ScreenshotRequest>>([]),
+      asked: yield* Deferred.make<void>(),
+      hangs: input.hangs ?? false,
+    }
+    return {
+      ...counted,
+      source: { ...counted.source, acquire: Effect.map(counted.source.acquire, capturing(capture)) },
+      screenshots: Ref.get(capture.requests),
+      asked: Deferred.await(capture.asked),
     }
   })
 
@@ -188,14 +267,20 @@ export interface World {
   readonly requests: Effect.Effect<ReadonlyArray<ModelRequest>>
   readonly drained: Effect.Effect<void>
   readonly store: ObservedStore
+  readonly artifacts: ObservedArtifacts
 }
 
-/** A suite config in `mode`, an empty attempt log, a scripted model and an observed memory store. */
+/**
+ * A suite config in `mode` (evidence kept on failure unless `trace` says otherwise), an empty attempt log, a scripted
+ * model, an observed memory store and a memory evidence store, or one that refuses every write.
+ */
 export const worldOf = (input: {
   readonly mode: StoreMode
   readonly answers: ReadonlyArray<ModelAnswer>
   readonly seed?: ReadonlyArray<readonly [KeyDigest, TraceEntry]> | undefined
   readonly failingStore?: boolean
+  readonly trace?: TraceSetting
+  readonly refusingArtifacts?: boolean
 }): Effect.Effect<World> =>
   Effect.gen(function*() {
     const scripted = yield* scriptedGateway(input.answers)
@@ -204,7 +289,7 @@ export const worldOf = (input: {
     const signalled = Effect.flatMap(scripted.requests, (seen) =>
       Effect.when(Deferred.succeed(drained, undefined), Effect.succeed(seen.length === input.answers.length)))
     return {
-      config: yield* decodedConfig(input.mode),
+      config: yield* decodedConfig(input.mode, input.trace ?? 'retain-on-failure'),
       log: yield* makeAttemptLog,
       gateway: Layer.succeed(
         ModelGateway,
@@ -220,6 +305,7 @@ export const worldOf = (input: {
         seed: input.seed ?? [],
         failing: input.failingStore ?? false,
       }),
+      artifacts: input.refusingArtifacts === true ? refusingArtifacts : yield* memoryArtifacts,
     }
   })
 
@@ -228,6 +314,7 @@ export interface TryRequest<A, E> {
   readonly retry: number
   readonly engine: EngineSource
   readonly secrets?: Readonly<Record<string, Redacted.Redacted<string>>>
+  readonly test?: AttemptTest
   readonly body: (session: TestSessionShape) => Effect.Effect<A, E, Scope.Scope>
 }
 
@@ -245,7 +332,7 @@ const sessionInputOf = <A, E>(request: TryRequest<A, E>): SessionInput => {
     config: request.world.config,
     target,
     agent: { name: 'default', config: agent },
-    test: TEST,
+    test: request.test ?? TEST,
     retry: request.retry,
     secrets: request.secrets ?? {},
     engine: request.engine,
@@ -262,7 +349,13 @@ export const inTry = <A, E>(request: TryRequest<A, E>): Effect.Effect<A, E> =>
         return yield* request.body(yield* TestSession)
       }),
       TestSession.layer(sessionInputOf(request)).pipe(
-        Layer.provide(Layer.merge(request.world.gateway, request.world.store.layer)),
+        Layer.provide(
+          Layer.mergeAll(
+            request.world.gateway,
+            request.world.store.layer,
+            Layer.succeed(ArtifactStore, request.world.artifacts.store),
+          ),
+        ),
       ),
     ),
   )

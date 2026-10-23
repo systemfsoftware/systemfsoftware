@@ -147,7 +147,8 @@ const Reporter = Schema.Literals(['list', 'json', 'junit', 'markdown'])
 export const ReporterConfig = Schema.NonEmptyArray(Reporter)
 export type ReporterConfig = typeof ReporterConfig.Type
 
-const Trace = Schema.Literals(['off', 'on', 'retain-on-failure'])
+export const Trace = Schema.Literals(['off', 'on', 'retain-on-failure'])
+export type Trace = typeof Trace.Type
 
 const workersOf = (defaults: ConfigDefaults): number => Math.min(1024, Math.max(1, Math.floor(defaults.cores / 2)))
 

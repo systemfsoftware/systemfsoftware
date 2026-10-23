@@ -63,7 +63,7 @@ const systemTextOf = (agentSystem: string): string =>
     Match.exhaustive,
   )
 
-const logLineOf = (entry: LogEntry): string =>
+export const logLineOf = (entry: LogEntry): string =>
   Match.valueTags(entry, {
     Console: ({ level, text }) => `[console:${level}] ${text}`,
     PageError: ({ message }) => `[pageerror] ${message}`,
@@ -84,7 +84,7 @@ const readLogs = (engine: EngineShape, ledger: SecretLedgerShape): Effect.Effect
 const visibleRefsOf = (nodes: ReadonlyArray<SemanticNode>): ReadonlyArray<NodeRef> =>
   Arr.flatMap(nodes, (node) => (node.states.hidden ? [] : [node.ref, ...visibleRefsOf(node.children)]))
 
-const evidenceLineOf = (ref: EvidenceRef): string =>
+export const evidenceLineOf = (ref: EvidenceRef): string =>
   Match.valueTags(ref, {
     NodeEvidence: ({ ref }) => `- node ${ref.id}`,
     ScreenshotEvidence: ({ screenshot }) => `- screenshot ${screenshot.digest}`,

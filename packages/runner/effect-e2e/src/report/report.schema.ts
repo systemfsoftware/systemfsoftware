@@ -1,10 +1,14 @@
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import { ProjectId } from '../Config/config.schema.js'
 import { ConfigName } from '../Config/names.schema.js'
 import { FailureRecord } from '../verdict/failure.schema.js'
 import { ExitCode, RunStatus } from '../verdict/run-verdict.schema.js'
-import { Count, StepRecord } from '../verdict/step-record.schema.js'
+import { Count, type StepOutcome, StepRecord } from '../verdict/step-record.schema.js'
 
 const TargetName = ConfigName.pipe(Schema.brand('TargetName'))
 
@@ -23,10 +27,10 @@ export type TestStatus = typeof TestStatus.Type
 export const CacheCounts = Schema.Struct({ replayed: Count, handedOff: Count, missed: Count })
 export type CacheCounts = typeof CacheCounts.Type
 
-export const ArtifactRef = Schema.Struct({
-  kind: Schema.Literals(['screenshot', 'screen-text', 'trace-page', 'ai-trace']),
-  path: Schema.String,
-})
+export const ArtifactKind = Schema.Literals(['screenshot', 'screen-text', 'trace-page', 'ai-trace'])
+export type ArtifactKind = typeof ArtifactKind.Type
+
+export const ArtifactRef = Schema.Struct({ kind: ArtifactKind, path: Schema.String })
 export type ArtifactRef = typeof ArtifactRef.Type
 
 export const RanAttempt = Schema.TaggedStruct('Ran', {
@@ -63,6 +67,12 @@ export const TestResult = Schema.Struct({
 })
 export type TestResult = typeof TestResult.Type
 
+export const TestResults = Schema.Array(TestResult)
+export type TestResults = typeof TestResults.Type
+
+export const RunErrors = Schema.Array(FailureRecord)
+export type RunErrors = typeof RunErrors.Type
+
 export const RunRecord = Schema.Struct({
   id: RunId,
   project: ProjectId,
@@ -70,7 +80,7 @@ export const RunRecord = Schema.Struct({
   exitCode: ExitCode,
   startedAt: Schema.DateTimeUtcFromString,
   finishedAt: Schema.DateTimeUtcFromString,
-  errors: Schema.Array(FailureRecord),
+  errors: RunErrors,
 })
 export type RunRecord = typeof RunRecord.Type
 
@@ -89,7 +99,64 @@ export type RunSummary = typeof RunSummary.Type
 export const Report1 = Schema.Struct({
   schema: Schema.Literal('report-1'),
   run: RunRecord,
-  results: Schema.Array(TestResult),
+  results: TestResults,
   summary: RunSummary,
 })
 export type Report1 = typeof Report1.Type
+
+const resultKeyOf = (result: TestResult): string => JSON.stringify([result.test, result.target, result.agent])
+
+export const sameResultAs = (result: TestResult) => (other: TestResult): boolean =>
+  resultKeyOf(result) === resultKeyOf(other)
+
+const byResultKey = Order.mapInput(Order.String, resultKeyOf)
+
+export const sortResults = (results: TestResults): TestResults => Arr.sort(results, byResultKey)
+
+const byEncoding = Order.mapInput(Order.String, (error: RunErrors[number]) => JSON.stringify(error))
+
+/** Run errors are a multiset; a canonical order makes two reports of the same errors equal. */
+export const canonicalErrorsOf = (errors: RunErrors): RunErrors => Arr.sort(errors, byEncoding)
+
+const countOf = (results: ReadonlyArray<TestResult>, status: TestStatus): number =>
+  Arr.filter(results, (result) => result.status === status).length
+
+const sumOf = (results: ReadonlyArray<TestResult>, field: keyof CacheCounts): number =>
+  Arr.reduce(results, 0, (total, result) => total + result.cache[field])
+
+/** The summary is counted from the results, never carried, so it cannot disagree with them. */
+export const summaryOf = (results: ReadonlyArray<TestResult>): RunSummary => ({
+  tests: results.length,
+  passed: countOf(results, 'passed'),
+  failed: countOf(results, 'failed'),
+  blocked: countOf(results, 'blocked'),
+  error: countOf(results, 'error'),
+  interrupted: countOf(results, 'interrupted'),
+  skipped: countOf(results, 'skipped'),
+  cache: {
+    replayed: sumOf(results, 'replayed'),
+    handedOff: sumOf(results, 'handedOff'),
+    missed: sumOf(results, 'missed'),
+  },
+})
+
+const outcomeCodesOf = (outcome: StepOutcome): ReadonlyArray<string> =>
+  Match.valueTags(outcome, {
+    Passed: () => [],
+    Skipped: () => [],
+    Inconclusive: ({ code }) => [code],
+    Failed: ({ code }) => [code],
+  })
+
+const attemptReasonOf = (attempt: Attempt): Option.Option<string> =>
+  Match.valueTags(attempt, {
+    Ran: ({ steps, errors }) =>
+      Arr.head([
+        ...Arr.flatMap(steps, (step) => outcomeCodesOf(step.outcome)),
+        ...Arr.map(errors, (error) => error.code),
+      ]),
+    Skipped: ({ reason }) => Option.some(reason),
+  })
+
+export const finalReasonOf = (result: TestResult): string =>
+  Option.getOrElse(Option.flatMap(Arr.last(result.attempts), attemptReasonOf), () => result.status)
