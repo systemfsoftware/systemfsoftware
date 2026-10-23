@@ -1,6 +1,6 @@
 # Storybook Testing Compound Pack
 
-How a UI's behaviour is proven with Storybook stories: where a story gets its I/O and how each story's fakes start fresh, how a journey reads, how a story finds and asserts, where stories run and what fails them, when a layout claim counts, which test kind proves what a person sees, and where a story's visual evidence comes from.
+How a UI's behaviour is proven with Storybook stories: where a story gets its I/O and how each story's fakes start fresh, how a journey reads, how a story finds and asserts, where stories run and what fails them, when a layout claim counts, which test kind proves what a person sees, and where a story's visual evidence comes from, and what a story may import and render.
 
 Rules:
 
@@ -12,5 +12,7 @@ Rules:
 - `pin-the-viewport-a-claim-needs`: a layout claim pins `globals.viewport`, and a responsive claim is proven on each side of the breakpoint.
 - `stories-are-the-ui-integration-tests`: user-visible behaviour is proven by stories over the real app, not by a simulated-DOM suite or a shell test against a double.
 - `visual-evidence-comes-from-the-runner`: each story's image comes from one capture hook the runner runs for every story, and failure images from Vitest; both folders are ignored run output that CI uploads as they are, and no story calls `page.screenshot`.
+- `stories-import-no-test-fixtures-and-no-browser-commands`: no story, step or preview module imports a path under `tests/__fixtures__`, and `vitest/browser` is imported only by `.storybook/vitest.setup.ts`.
+- `a-story-renders-one-component-never-a-shipped-page`: a story renders one component or one composed screen over fakes, never a shipped route, a built page or an iframe of a site.
 
 What makes a port fake admissible, and how adapters are tested against local oracles, is governed by boundary-testing (`port-fakes-pass-the-port-contract.md`, `real-system-oracles.md`, `no-mocks-on-internal-glue.md`). The step DSL's API is documented by the `@systemfsoftware/storybook-gherkin` README and its API report.
