@@ -72,6 +72,7 @@ import {
 import { type Capture, type Execute, NextAct, nextAct, type NextActDecision } from './next-act.workflow.js'
 import { formatObservation, stableTextOf } from './observation.js'
 import { recordedFlow, RecordFlow } from './recorded-flow.workflow.js'
+import { redactMessage, redactRequest } from './redaction.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
 
@@ -400,20 +401,6 @@ const keyingOf = (step: Step): Option.Option<Keying> => {
 
 // --- live loop ---------------------------------------------------------------------------------
 
-const redactMessage = (redact: (text: string) => string) => (message: Message): Message =>
-  Match.valueTags(message, {
-    UserMessage: (user): Message => ({
-      ...user,
-      content: Arr.map(user.content, (part) =>
-        Match.valueTags(part, {
-          TextPart: (text): typeof part => ({ ...text, text: redact(text.text) }),
-          ImagePart: (image): typeof part => image,
-        })),
-    }),
-    AssistantMessage: (assistant): Message => ({ ...assistant, text: redact(assistant.text) }),
-    ToolMessage: (tool): Message => ({ ...tool, content: redact(tool.content) }),
-  })
-
 const requestOf = (step: Step, run: Run, observation: Observation): ModelRequest => {
   const { config } = step.context.agent
   const messages: ReadonlyArray<Message> = [
@@ -426,17 +413,12 @@ const requestOf = (step: Step, run: Run, observation: Observation): ModelRequest
     ...run.history,
     observationMessageOf(formatObservation(observation, step.ledger.redactCut), run.screenshot),
   ]
-  const request = actRequestOf({
+  return redactRequest(step.ledger.redact)(actRequestOf({
     model: config.model.model,
     system: systemPromptOf(config.system),
     messages,
     tools: actTools(step.engine.capabilities),
-  })
-  return {
-    ...request,
-    system: step.ledger.redact(request.system),
-    messages: request.messages.map(redactMessage(step.ledger.redact)),
-  }
+  }))
 }
 
 const metered = (response: ModelResponse) => (run: Run): Run => ({
