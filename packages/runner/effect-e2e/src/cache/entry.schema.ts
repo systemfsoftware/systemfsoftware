@@ -136,13 +136,15 @@ const SLOT_PLACEHOLDERS = /\{\$unique:(\d+)(?::(uri|form))?\}/gu
 
 const SLOT_PLACEHOLDER = /\{\$unique:\d+(?::(?:uri|form))?\}/u
 
-const spellers: Record<SlotSpelling, (value: string) => string> = {
-  raw: (value) => value,
-  uri: (value) => encodeURIComponent(value),
-  form: (value) => encodeURIComponent(value).replaceAll('%20', '+'),
+const percentEncoded = Option.liftThrowable(encodeURIComponent)
+
+const spellers: Record<SlotSpelling, (value: string) => Option.Option<string>> = {
+  raw: Option.some,
+  uri: percentEncoded,
+  form: (value) => Option.map(percentEncoded(value), (encoded) => encoded.replaceAll('%20', '+')),
 }
 
-const spellSlot = (value: string, spelling: SlotSpelling): string => spellers[spelling](value)
+const spellSlot = (value: string, spelling: SlotSpelling): Option.Option<string> => spellers[spelling](value)
 
 const slotPlaceholderOf = (index: number, spelling: SlotSpelling): string =>
   spelling === 'raw' ? `{$unique:${index}}` : `{$unique:${index}:${spelling}}`
@@ -155,30 +157,36 @@ export type SlotSpell = typeof SlotSpell.Type
 
 const SPELLINGS: ReadonlyArray<SlotSpelling> = ['raw', 'uri', 'form']
 
+const slotSpellOf = (slot: IndexedSlot) => (spelling: SlotSpelling): Option.Option<SlotSpell> =>
+  Option.map(spellSlot(slot.value, spelling), (spelled) => ({
+    spelled,
+    placeholder: slotPlaceholderOf(slot.index, spelling),
+  }))
+
 export const slotSpellsOf = (slot: IndexedSlot): ReadonlyArray<SlotSpell> =>
   Arr.dedupeWith(
-    SPELLINGS.map((spelling) => ({
-      spelled: spellSlot(slot.value, spelling),
-      placeholder: slotPlaceholderOf(slot.index, spelling),
-    })),
+    Arr.getSomes(SPELLINGS.map(slotSpellOf(slot))),
     (left, right) => left.spelled === right.spelled,
   )
 
 const spellingOf = (marker: string | undefined): SlotSpelling => Schema.is(SlotSpelling)(marker) ? marker : 'raw'
 
-const valueAt = (values: ReadonlyArray<string>, index: string): string =>
-  Arr.get(values, Number(index)).pipe(Option.getOrElse(() => ''))
+const fillOf = (values: ReadonlyArray<string>) => (match: RegExpExecArray): Option.Option<readonly [string, string]> =>
+  Arr.get(values, Number(match[1])).pipe(
+    Option.flatMap((value) => spellSlot(value, spellingOf(match[2]))),
+    Option.map((filled) => [match[0], filled] as const),
+  )
 
-const filledOf =
-  (values: ReadonlyArray<string>) => (_match: string, index: string, marker: string | undefined): string =>
-    spellSlot(valueAt(values, index), spellingOf(marker))
-
-const boundIn = (values: ReadonlyArray<string>) => (match: RegExpExecArray): boolean => Number(match[1]) < values.length
+const filledTextOf = (text: string, fills: ReadonlyArray<readonly [string, string]>): string => {
+  const byPlaceholder: Record<string, string> = Object.fromEntries(fills)
+  return text.replace(SLOT_PLACEHOLDERS, (placeholder) => byPlaceholder[placeholder] ?? placeholder)
+}
 
 const expandTextOf = (values: ReadonlyArray<string>) => (text: string): Option.Option<string> =>
-  Arr.every(Array.from(text.matchAll(SLOT_PLACEHOLDERS)), boundIn(values))
-    ? Option.some(text.replace(SLOT_PLACEHOLDERS, filledOf(values)))
-    : Option.none()
+  Option.map(
+    Option.all(Array.from(text.matchAll(SLOT_PLACEHOLDERS), fillOf(values))),
+    (fills) => filledTextOf(text, fills),
+  )
 
 export const expandSlots: {
   (values: ReadonlyArray<string>): (entry: TraceEntry) => Option.Option<TraceEntry>
