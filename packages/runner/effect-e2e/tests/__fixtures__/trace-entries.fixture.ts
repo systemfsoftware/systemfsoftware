@@ -12,6 +12,7 @@ const route = (path: string): JsonObject => ({ origin: 'https://shop.example', p
 const entryJson = (path: string, alerts: ReadonlyArray<string>, schema = 'trace-1'): JsonObject => ({
   schema,
   keyedBy: {
+    step: 'act',
     project: 'shop',
     test: 'checkout pays',
     target: 'staging',

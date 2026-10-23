@@ -13,6 +13,7 @@ import {
   canonicalKeyOf,
   EngineIdentity,
   type ParamValue,
+  StepKind,
   StepParams,
   uniqueSlotsOf,
 } from './key.schema.js'
@@ -21,6 +22,7 @@ const CacheKeyTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-e2e/Ca
 
 export class DeriveKey extends Schema.TaggedClass<DeriveKey>()('DeriveKey', {
   mode: CacheMode,
+  step: StepKind,
   project: CacheKeyContext.fields.project,
   test: CacheKeyContext.fields.test,
   target: CacheKeyContext.fields.target,
@@ -65,6 +67,7 @@ const keyedParamsOf = (params: StepParams, slots: ReadonlyArray<string>): Schema
 const contextOf = (command: DeriveKey): CacheKeyContext => {
   const slots = slotNamesOf(command.params)
   return {
+    step: command.step,
     project: command.project,
     test: command.test,
     target: command.target,

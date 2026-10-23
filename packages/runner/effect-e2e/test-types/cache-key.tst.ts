@@ -4,9 +4,9 @@ import { describe, expect, it } from 'tstyche'
 import type { CacheKeyContext, EngineIdentity, KeyDigest, ParamValue } from '../src/cache/key.schema.js'
 
 describe('CacheKeyContext', () => {
-  it('keys exactly the fields design 9.1 includes', () => {
+  it('keys exactly the fields design 9.1 includes, amended with the step kind', () => {
     expect<keyof CacheKeyContext>().type.toBe<
-      'project' | 'test' | 'target' | 'engine' | 'app' | 'instruction' | 'params' | 'slots' | 'agent'
+      'step' | 'project' | 'test' | 'target' | 'engine' | 'app' | 'instruction' | 'params' | 'slots' | 'agent'
     >()
   })
 

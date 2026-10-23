@@ -395,6 +395,7 @@ const keyingOf = (step: Step): Option.Option<Keying> => {
     deriveKey(
       new DeriveKey({
         mode: cache.mode,
+        step: 'act',
         project: cache.project,
         test: cache.test,
         target: cache.target,
