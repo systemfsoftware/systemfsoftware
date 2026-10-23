@@ -9,16 +9,23 @@ tags: [astryx, setup, css, theme, provider, storybook]
 
 Astryx ships its component styles as pre-built CSS. Importing a component brings its markup, not its styles; without the stylesheets the components render unstyled. The Astryx CLI writes this warning into an agent's `AGENTS.md` ("without these, components render unstyled") and agents still skipped it.
 
-1. **Stylesheets, in order, once per root.** The app's global stylesheet starts with:
+1. **Stylesheets, in order, once per root.** The app's global stylesheet declares the layer order first and then imports Tailwind, Astryx and the theme in the order the cascade needs:
 
    ```css
+   @layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
+   @import "tailwindcss/theme.css" layer(theme);
+   @import "tailwindcss/preflight.css" layer(base);
    @import "@astryxdesign/core/reset.css";
    @import "@astryxdesign/core/astryx.css";
+   @import "@astryxdesign/theme-neutral/theme.css"; /* or the CSS the repo's theme build generates */
+   @import "@astryxdesign/core/tailwind-theme.css";
+   @import "tailwindcss/utilities.css" layer(utilities);
    ```
 
-   and the theme's CSS follows them: a base theme's `theme.css` (for example `@astryxdesign/theme-neutral/theme.css`) or the CSS the repo's theme build generates (pack: astryx, astryx-themes-are-defined-and-built-before-typecheck.md). The order is the cascade: `reset.css` is `@layer reset`, `astryx.css` is `@layer astryx-base`, theme CSS is `@layer astryx-theme`, so a theme imported first loses to the base styles. The app entry imports the global stylesheet, then the theme CSS.
+   The theme CSS is a base theme's `theme.css` or the CSS the repo's theme build generates (pack: astryx, astryx-themes-are-defined-and-built-before-typecheck.md). The order is the cascade: `reset.css` is `@layer reset`, `astryx.css` is `@layer astryx-base`, theme CSS is `@layer astryx-theme`, and Tailwind utilities come last so they win. The app entry imports the global stylesheet, then the theme CSS if the stylesheet does not already. The full layer rule is in (pack: astryx, astryx-is-consumed-as-prebuilt-css-under-tailwind-with-one-layer-order.md).
 2. **Providers at the root.** The root component wraps the app in `Theme` (with the theme object and the light, dark or system mode), `LinkProvider` (given the router's link component, so Astryx links route client-side) and `LayerProvider` (toasts, sheets and imperative modals). Upstream marks `LayerProvider` optional, with hooks falling back to a self-mounting viewport; it is mounted once at the root anyway, because toast placement and any `inset` for a bar over a viewport edge are declared on it once.
-3. **The Storybook preview is a root.** `.storybook/preview.tsx` imports the same global stylesheet and theme CSS and wraps every story in the same `Theme`, `LinkProvider` and `LayerProvider`, with the story's theme global choosing the mode. A preview that skips them makes every story pass on an unstyled render.
+3. **The Storybook preview is a root.** `.storybook/preview.tsx` loads the same styles (through the compiled sheet of pack: astryx, storybook-and-browser-tests-load-the-compiled-tailwind-sheet.md, which is built from the same global stylesheet) and wraps every story in the same `Theme`, `LinkProvider` and `LayerProvider`, with the story's theme global choosing the mode. A preview that skips them makes every story pass on an unstyled render.
 4. **Fonts.** The theme names a font family; it does not load the font file. The app loads it (a package such as `@fontsource-variable/<family>` imported in the global stylesheet, or a link), or every viewer silently falls back to the next family in the stack.
 
 ```tsx
