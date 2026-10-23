@@ -11,6 +11,7 @@ type ExportEntry = string | Record<string, string | undefined>
 // for the API report in `etc/`, which is the gate that matters; only its rollup is disabled.
 const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
+  './model': './dist/model.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -32,7 +33,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 
 export default defineConfig({
   ...quietBuild,
-  entry: { index: './src/mod.ts' },
+  entry: { index: './src/mod.ts', model: './src/model/mod.ts' },
   format: 'esm',
   dts: true,
   exports: {
