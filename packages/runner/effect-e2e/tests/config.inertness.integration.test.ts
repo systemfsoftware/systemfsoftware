@@ -20,16 +20,23 @@ const fromSubject = (): boolean => {
   return stack.includes(SUBJECT_SOURCE)
 }
 
-/** Evaluates the entry and every module under it again, in a module graph cleared of earlier imports. */
-const importFresh = Effect.promise(() => {
-  vi.resetModules()
-  return import('@systemfsoftware/effect-e2e')
-})
+type Entry = {
+  readonly entry: string
+  readonly load: () => Promise<object>
+}
 
-const importEngineFresh = Effect.promise(() => {
-  vi.resetModules()
-  return import('@systemfsoftware/effect-e2e/engine')
-})
+const ENTRIES: ReadonlyArray<Entry> = [
+  { entry: 'the root entry', load: () => import('@systemfsoftware/effect-e2e') },
+  { entry: 'the engine entry', load: () => import('@systemfsoftware/effect-e2e/engine') },
+  { entry: 'the model entry', load: () => import('@systemfsoftware/effect-e2e/model') },
+]
+
+/** Evaluates the entry and every module under it again, in a module graph cleared of earlier imports. */
+const importFresh = ({ load }: Entry) =>
+  Effect.promise(() => {
+    vi.resetModules()
+    return load()
+  })
 
 /** The id the next fiber will get: Effect numbers every fiber it starts from one process-wide counter. */
 const nextFiberId = Effect.map(Effect.forkChild(Effect.void), (fiber) => fiber.id + 1)
@@ -82,65 +89,56 @@ const installProbe = (): ImportProbe => {
   }
 }
 
-const probed = <A>(load: Effect.Effect<A>) =>
+const probedImport = (entry: Entry) =>
   Effect.acquireUseRelease(
     Effect.sync(installProbe),
-    (probe) => Effect.as(load, { envReads: probe.envReads, scheduled: probe.scheduled }),
+    (probe) => Effect.as(importFresh(entry), { envReads: probe.envReads, scheduled: probe.scheduled }),
     (probe) => Effect.sync(probe.restore),
   )
 
-Feature('Importing the core entry')
+Feature('Importing the core entries')
   .withLayer(Layer.empty)
   .live('the scenarios evaluate the real module graph, which is module-loader I/O')
-  .body(({ scenario }) => {
-    scenario(
+  .body(({ scenarioOutline }) => {
+    scenarioOutline(
       'Importing the entry inside a scope registers no finalizer',
-      Gherkin.Do.pipe(
-        Given('an open scope with no finalizers')('scope', () => Scope.make()),
-        When('the entry is imported fresh with that scope provided')(
-          'imported',
-          ({ scope }) => Effect.provideService(importFresh, Scope.Scope, scope),
+      ENTRIES,
+      (entry) =>
+        Gherkin.Do.pipe(
+          Given('an open scope with no finalizers')('scope', () => Scope.make()),
+          When('the entry is imported fresh with that scope provided')(
+            'imported',
+            ({ scope }) => Effect.provideService(importFresh(entry), Scope.Scope, scope),
+          ),
+          Then('the scope still holds no finalizer')((state, expect) =>
+            expect(state.scope.state).toEqual({ _tag: 'Empty' })
+          ),
         ),
-        Then('the scope still holds no finalizer')((state, expect) =>
-          expect(state.scope.state).toEqual({ _tag: 'Empty' })
-        ),
-      ),
     )
 
-    scenario(
+    scenarioOutline(
       'Evaluating the entry starts no fiber',
-      Gherkin.Do.pipe(
-        Given('the id the next fiber would take')('before', () => nextFiberId),
-        When('the entry is evaluated fresh')('imported', () => importFresh),
-        Then('the next fiber takes the id right after it')((state, expect) =>
-          Effect.map(nextFiberId, (after) => expect(after - state.before).toBe(1))
+      ENTRIES,
+      (entry) =>
+        Gherkin.Do.pipe(
+          Given('the id the next fiber would take')('before', () => nextFiberId),
+          When('the entry is evaluated fresh')('imported', () => importFresh(entry)),
+          Then('the next fiber takes the id right after it')((state, expect) =>
+            Effect.map(nextFiberId, (after) => expect(after - state.before).toBe(1))
+          ),
         ),
-      ),
     )
 
-    scenario(
+    scenarioOutline(
       'Evaluating the entry reads no environment and schedules no work',
-      Gherkin.Do.pipe(
-        When('the entry is evaluated fresh under the environment and scheduler probes')(
-          'probed',
-          () => probed(importFresh),
+      ENTRIES,
+      (entry) =>
+        Gherkin.Do.pipe(
+          When('the entry is evaluated fresh under the environment and scheduler probes')('probed', () =>
+            probedImport(entry)),
+          Then("the package's own code read no variable and scheduled nothing")((state, expect) =>
+            expect(state.probed).toEqual({ envReads: [], scheduled: [] })
+          ),
         ),
-        Then("the package's own code read no variable and scheduled nothing")((state, expect) =>
-          expect(state.probed).toEqual({ envReads: [], scheduled: [] })
-        ),
-      ),
-    )
-
-    scenario(
-      'Evaluating the engine entry reads no environment and schedules no work',
-      Gherkin.Do.pipe(
-        When('the engine entry is evaluated fresh under the environment and scheduler probes')(
-          'probed',
-          () => probed(importEngineFresh),
-        ),
-        Then("the package's own code read no variable and scheduled nothing")((state, expect) =>
-          expect(state.probed).toEqual({ envReads: [], scheduled: [] })
-        ),
-      ),
     )
   })
