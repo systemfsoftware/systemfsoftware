@@ -55,25 +55,9 @@ const skippedOf = (step: StepRecord): StepRecord =>
       modelCalls: record.modelCalls,
       tokens: record.tokens,
     })),
-    Match.tag('AssertStep', (record): StepRecord => ({
-      _tag: 'AssertStep',
-      id: record.id,
-      record: record.record,
-      outcome: SKIPPED,
-    })),
-    Match.tag('WaitForStep', (record): StepRecord => ({
-      _tag: 'WaitForStep',
-      id: record.id,
-      record: record.record,
-      outcome: SKIPPED,
-    })),
-    Match.tag('ExtractStep', (record): StepRecord => ({
-      _tag: 'ExtractStep',
-      id: record.id,
-      schemaId: record.schemaId,
-      result: record.result,
-      outcome: SKIPPED,
-    })),
+    Match.tag('AssertStep', (record): StepRecord => ({ ...record, outcome: SKIPPED })),
+    Match.tag('WaitForStep', (record): StepRecord => ({ ...record, outcome: SKIPPED })),
+    Match.tag('ExtractStep', (record): StepRecord => ({ ...record, outcome: SKIPPED })),
     Match.tag('LocatorStep', (record): StepRecord => ({
       _tag: 'LocatorStep',
       id: record.id,
@@ -270,9 +254,15 @@ it.prop(
   },
   (subject, [pool, record, entry, waits, code]) => {
     const stagedIndex = pool.length
-    const judgment: StepRecord = waits
-      ? { _tag: 'WaitForStep', id: StepId.make(record.sentence), record, outcome: PASSED }
-      : { _tag: 'AssertStep', id: StepId.make(record.sentence), record, outcome: PASSED }
+    const judged = {
+      id: StepId.make(record.sentence),
+      record,
+      outcome: PASSED,
+      cache: { lookup: { _tag: 'Missed' }, write: 'unconfirmed' },
+      modelCalls: 1,
+      tokens: { input: 0, output: 0 },
+    } as const
+    const judgment: StepRecord = waits ? { _tag: 'WaitForStep', ...judged } : { _tag: 'AssertStep', ...judged }
     const act: StepRecord = {
       _tag: 'ActStep',
       id: StepId.make(record.sentence),

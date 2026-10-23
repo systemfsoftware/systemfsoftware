@@ -24,6 +24,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import type * as Redacted from 'effect/Redacted'
 import * as Ref from 'effect/Ref'
+import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 
 import { ORIGIN, scriptedGateway } from './agent-sites.fixture.js'
@@ -169,6 +170,16 @@ export const TEST = {
   title: 'greets',
   file: 'tests/greet.e2e.ts',
 } as const
+
+export const GREETING_SCHEMA = Schema.Struct({ greeting: Schema.String }).pipe(
+  Schema.toStandardSchemaV1,
+  Schema.toStandardJSONSchemaV1,
+)
+
+export const EXTRACTS_GREETING: ModelAnswer = {
+  _tag: 'ToolCalls',
+  calls: [{ id: 'call-extracted', name: 'extracted', arguments: { value: { greeting: 'Hello, Ada' } } }],
+}
 
 export interface World {
   readonly config: E2EConfig

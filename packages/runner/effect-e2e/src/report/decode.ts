@@ -66,7 +66,15 @@ const passedStepsOf = (text: string): ReadonlyArray<Row> => [
     modelCalls: 0,
     tokens: { input: 0, output: 0 },
   },
-  { _tag: 'AssertStep', id: 'step-2', record: checkRecordOf(text), outcome: { _tag: 'Passed' } },
+  {
+    _tag: 'AssertStep',
+    id: 'step-2',
+    record: checkRecordOf(text),
+    outcome: { _tag: 'Passed' },
+    cache: { lookup: { _tag: 'Replayed' }, write: 'kept' },
+    modelCalls: 0,
+    tokens: { input: 0, output: 0 },
+  },
   {
     _tag: 'WaitForStep',
     id: 'step-3',
@@ -77,6 +85,9 @@ const passedStepsOf = (text: string): ReadonlyArray<Row> => [
       vision: true,
     },
     outcome: { _tag: 'Passed' },
+    cache: { lookup: { _tag: 'Missed' }, write: 'saved' },
+    modelCalls: 1,
+    tokens: { input: 1800, output: 60 },
   },
   {
     _tag: 'ExtractStep',
@@ -84,6 +95,9 @@ const passedStepsOf = (text: string): ReadonlyArray<Row> => [
     schemaId: 'Invoice',
     result: { total: 12.5, lines: [text] },
     outcome: { _tag: 'Passed' },
+    cache: { lookup: { _tag: 'Off' }, write: 'no-change' },
+    modelCalls: 1,
+    tokens: { input: 1200, output: 45 },
   },
   {
     _tag: 'LocatorStep',
@@ -130,6 +144,9 @@ const failedStepsOf = (text: string): ReadonlyArray<Row> => [
       ],
       proposed: { cause: 'automation', evidence: [{ _tag: 'LogEvidence', text }] },
     },
+    cache: { lookup: { _tag: 'Missed' }, write: 'evicted' },
+    modelCalls: 2,
+    tokens: { input: 2400, output: 80 },
   },
 ]
 

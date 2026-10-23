@@ -210,6 +210,8 @@ const writeAt = (
 const withWrite = (write: CacheWrite) => (step: StepRecord): StepRecord =>
   Match.value(step).pipe(
     Match.tag('ActStep', (act): StepRecord => ({ ...act, cache: { lookup: act.cache.lookup, write } })),
+    Match.tag('AssertStep', (judged): StepRecord => ({ ...judged, cache: { lookup: judged.cache.lookup, write } })),
+    Match.tag('WaitForStep', (judged): StepRecord => ({ ...judged, cache: { lookup: judged.cache.lookup, write } })),
     Match.orElse(() => step),
   )
 

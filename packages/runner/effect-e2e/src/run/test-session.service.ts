@@ -226,17 +226,20 @@ const actRecorder = (books: Books, index: number) => (record: ActRecord): Effect
     tokens: record.tokens,
   }, record.staged)
 
+const judgedStepFields = (index: number, record: JudgmentRecord) => ({
+  id: stepIdOf(index),
+  record: record.record,
+  outcome: record.outcome,
+  cache: { lookup: record.lookup, write: 'no-change' as const },
+  modelCalls: record.modelCalls,
+  tokens: record.tokens,
+})
+
 const assertRecorder = (books: Books, index: number) => (record: JudgmentRecord): Effect.Effect<void> =>
-  recorded(books, index)(
-    { _tag: 'AssertStep', id: stepIdOf(index), record: record.record, outcome: record.outcome },
-    record.staged,
-  )
+  recorded(books, index)({ _tag: 'AssertStep', ...judgedStepFields(index, record) }, record.staged)
 
 const waitForRecorder = (books: Books, index: number) => (record: JudgmentRecord): Effect.Effect<void> =>
-  recorded(books, index)(
-    { _tag: 'WaitForStep', id: stepIdOf(index), record: record.record, outcome: record.outcome },
-    record.staged,
-  )
+  recorded(books, index)({ _tag: 'WaitForStep', ...judgedStepFields(index, record) }, record.staged)
 
 const extractRecorder = (books: Books, index: number) => (record: ExtractRecord): Effect.Effect<void> =>
   recorded(books, index)(
@@ -246,6 +249,9 @@ const extractRecorder = (books: Books, index: number) => (record: ExtractRecord)
       schemaId: record.schemaId,
       result: record.value,
       outcome: record.outcome,
+      cache: { lookup: { _tag: 'Off' }, write: 'no-change' },
+      modelCalls: record.modelCalls,
+      tokens: record.tokens,
     },
     Option.none(),
   )
