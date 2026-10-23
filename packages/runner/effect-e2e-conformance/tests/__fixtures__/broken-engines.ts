@@ -8,7 +8,7 @@ import {
   ReadRequest,
   type SemanticNode,
 } from '@systemfsoftware/effect-e2e/engine'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Option, Ref } from 'effect'
 
 import { everyCapability, LAW_ORIGIN, lawSite } from './law-site.js'
 
@@ -55,6 +55,17 @@ const breakages = {
       tree: checkedSubscribe(observation.tree),
     })),
   }),
+  rebuild: (good: EngineShape, held: Ref.Ref<Option.Option<Observation>>): Partial<EngineShape> => ({
+    open: (url) =>
+      good.open(url).pipe(
+        Effect.andThen(Effect.orDie(good.observe)),
+        Effect.flatMap((first) => Ref.set(held, Option.some(first))),
+      ),
+    observe: Effect.flatMap(
+      good.observe,
+      (now) => Effect.map(Ref.get(held), Option.getOrElse(() => now)),
+    ),
+  }),
   close: (): Partial<EngineShape> => ({ close: Effect.void }),
 } as const
 
@@ -63,7 +74,11 @@ export type BrokenMethod = keyof typeof breakages
 export const brokenSubject = (method: BrokenMethod): EngineSubject => ({
   name: `in-memory with a broken ${method}`,
   origin: LAW_ORIGIN,
-  layer: Layer.effect(Engine)(Effect.map(Engine, (good) => Engine.of({ ...good, ...breakages[method](good) }))).pipe(
-    Layer.provide(Engine.layerTest(lawSite(everyCapability))),
-  ),
+  layer: Layer.effect(Engine)(
+    Effect.gen(function*() {
+      const good = yield* Engine
+      const held = yield* Ref.make(Option.none<Observation>())
+      return Engine.of({ ...good, ...breakages[method](good, held) })
+    }),
+  ).pipe(Layer.provide(Engine.layerTest(lawSite(everyCapability)))),
 })
