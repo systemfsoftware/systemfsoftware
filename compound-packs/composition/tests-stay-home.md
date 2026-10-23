@@ -12,7 +12,7 @@ tags: [composition, tests, public-api, internals, test-layers, test-support]
 
 ## Rule
 
-A test lives in the `tests/` folder of the package whose behaviour it tests. It imports the code under test only through the package's public specifier (`@scope/ledger`), the same specifier a consumer writes. This holds for a test inside the same package: no import into `src`, `internal` or the package root, from any test anywhere. Relative imports that stay inside the test tree (`./fixtures/order.ts`) are allowed.
+A test lives in the `tests/` folder of the package whose behaviour it tests. It imports the code under test only through the package's public specifier (`@scope/ledger`), the same specifier a consumer writes. This holds for a test inside the same package: no relative import into `src`, `internal` or the package root, from any test anywhere. Relative imports that stay inside the test tree (`./fixtures/order.ts`) are allowed.
 
 "Import" means every way a test loads a module: a static or dynamic `import`, `export ... from`, `require`, and the string arguments of `vi.mock`, `vi.doMock`, `vi.importActual`, `vi.importMock` and `import.meta.glob`. A package.json `"imports"` specifier (`#internal/*`) and a test-runner alias (`@scope/ledger/internal` -> `./src/internal`) are paths into the package and are forbidden the same way.
 
@@ -31,7 +31,7 @@ A test that imports internals certifies code no consumer can reach and misses th
 ## Evidence
 
 - Effect 4: tests sit in `effect-smol/packages/*/test`, outside `src`, and import `effect`, `effect/Function`, `effect/testing`; no static import names `../src` ((pack: composition, evidence/FINDINGS.md) Cycle 003, finding 8). The one reach is a string argument: `effect-smol/packages/effect/test/schema/HMR.test.ts:4,20` loads `../../src/Schema.ts` through `vi.importActual`, which is why string loaders count as imports here.
-- Vitest: zero test files inside `packages/`; private test projects import the public `vitest` entry, and shared helpers are the private package `@vitest/internal-testing-helpers` (`vitest/test/test-utils/package.json`, `main: ./index.ts`) ((pack: composition, evidence/FINDINGS.md) Cycle 001, finding 9).
+- Vitest: no `*.test.ts` file inside `packages/` (six `*.spec.ts` component tests sit beside source in `vitest/packages/ui/client/components`, the exception to its own layout); private test projects import the public `vitest` entry, and shared helpers are the private package `@vitest/internal-testing-helpers` (`vitest/test/test-utils/package.json`, `main: ./index.ts`) ((pack: composition, evidence/FINDINGS.md) Cycle 001, finding 9).
 - TanStack Query: shared test helpers are the package `@tanstack/query-test-utils` (`query/packages/query-test-utils`), not a `./test-utils` export ((pack: composition, evidence/FINDINGS.md) Cycle 000, finding 6; (pack: composition, evidence/PACK.md) rules 9 and 12).
 - Every source deep-imports somewhere in tests (TanStack `react-router/tests` into `router-core/src`, Vitest `test/unit` into `packages/*/src`), which is why this must be a gate, not a convention ((pack: composition, evidence/FINDINGS.md) Cycles 000 and 001).
 

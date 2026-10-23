@@ -29,7 +29,7 @@ A decision chained to a runtime cannot be tested or reused outside it, and once 
 
 - TanStack: `start-client-core` and `start-server-core` contain zero files importing `react`; `react-start-*` are the adapters ((pack: composition, evidence/FINDINGS.md) Cycle 000, finding 1). `router/packages/router-core/package.json` `./isServer` maps conditions `development`, `workerd`, `worker`, `browser`, `deno`, `node`, `bun` to separate files from `src/isServer/{client,server,development}.ts` (finding 3).
 - Effect: one package per runtime (`platform-node`, `platform-bun`, `platform-browser`) over a shared contract, because the implementations differ wholesale ((pack: composition, evidence/FINDINGS.md) Cycle 003, finding 6); conflict and ruling: (pack: composition, evidence/PACK.md) Part 3, row 10.
-- Singletons: Effect and Vitest peer on `effect` and `vitest`; TanStack peers on `react` and `react-dom` from every framework adapter (`query/packages/react-query/package.json`); Stead builds its shared libraries once behind an import map ((pack: composition, evidence/PACK.md) rule 15).
+- Singletons: Effect and Vitest peer on `effect` and `vitest`; TanStack's `query/packages/react-query/package.json` peers on `react` (with `react-dom` only a dev dependency); Stead builds its shared libraries once behind an import map ((pack: composition, evidence/PACK.md) rule 15).
 - Rat Stack `noCoreAdapters`: "Core cannot import HTTP clients or adapters. Provide a domain port from the composition root instead." (`rat-stack/scripts/oxlint-plugin-boundaries.ts:945`).
 
 Upstream paths are relative to the repositories pinned in (pack: composition, evidence/SOURCES.md).

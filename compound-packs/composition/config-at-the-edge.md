@@ -25,8 +25,9 @@ A library that reads its environment cannot be tested without faking the host, c
 ## Evidence
 
 - Effect: platform implementations take options and leave `Config` to the root; `effect-smol/packages/platform-node/src/NodeFileSystem.ts:7` "this module only chooses the Node implementation" ((pack: composition, evidence/FINDINGS.md) Cycle 003, finding 5).
-- Rat Stack composes by supplying Layers in its applications (`rat-stack/apps/site/src/app.ts`, `rat-stack/apps/cli/src/surfaces.ts`); its Config adapter is the only reader of deployment configuration, and its D1 Layer takes only `{ id }` (`rat-stack/packages/database/src/d1.ts`) ((pack: composition, evidence/FINDINGS.md) Cycle 005; (pack: composition, evidence/PACK.md) rules 18-19).
-- younna-ai's `workers/platform/src/worker.ts` and `src/git-worker.ts` are the Layer-wiring files: the root exists, but no gate kept it the only one ((pack: composition, evidence/FINDINGS.md) Cycle 006, finding 6).
+- Rat Stack composes by supplying Layers in its applications (`rat-stack/apps/site/src/app.ts`, `rat-stack/apps/cli/src/surfaces.ts`), and its D1 Layer takes only `{ id }` (`rat-stack/packages/database/src/d1.ts`) ((pack: composition, evidence/FINDINGS.md) Cycle 005; (pack: composition, evidence/PACK.md) rule 18).
+- Conflict ruled against: Rat Stack reads `Config` in its applications (`rat-stack/apps/site/src/worker.ts`, `rat-stack/apps/infra/alchemy.run.ts`) and also in libraries (`rat-stack/packages/core/src/config-service.ts`, `rat-stack/packages/flags/src/config.ts`), and (pack: composition, evidence/PACK.md) rule 19 allows `Config` inside an adapter's `layerConfig`. This rule is stricter: a library takes plain options, so the one reader is the application.
+- younna-ai: `workers/platform` is the de-facto composition root "without the rule that keeps it so" ((pack: composition, evidence/FINDINGS.md) Cycle 006, finding 6). At younna-ai `a80c7cb3b6` its Layer wiring is in `workers/platform/src/worker.ts` and `workers/platform/src/git-worker.ts`: the root exists, but no gate kept it the only one.
 
 Upstream paths are relative to the repositories pinned in (pack: composition, evidence/SOURCES.md).
 

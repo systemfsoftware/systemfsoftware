@@ -10,3 +10,4 @@ packs:
   - source: compound-packs/turbo-task-graph
   - source: compound-packs/path-trust
   - source: compound-packs/ui-craft
+  - source: compound-packs/composition

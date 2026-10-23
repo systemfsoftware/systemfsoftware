@@ -13,11 +13,11 @@ tags: [composition, unit-kind, application, library, template, manifest]
 
 Each workspace unit states its kind in `package.json` as `"unit": "library" | "application" | "template"`, and its manifest has that kind's shape:
 
-| Kind        | What it is                                                   | Manifest                                                                                                 |
-| ----------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| library     | code other units import                                      | an `exports` map of `.` only (pack: composition, role-entries-only.md); no `deploy` or `deploy:*` script |
-| application | something deployed or run: a Worker, an SPA, a site, a CLI   | `"private": true`; **no `exports` field**; its own dev, build and deploy scripts; its composition root   |
-| template    | an application copied out of the monorepo for someone to own | everything an application has, plus (pack: composition, templates-leave-the-monorepo.md)                 |
+| Kind        | What it is                                                   | Manifest                                                                                                            |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| library     | code other units import                                      | an `exports` map of `.` only by default (pack: composition, role-entries-only.md); no `deploy` or `deploy:*` script |
+| application | something deployed or run: a Worker, an SPA, a site, a CLI   | `"private": true`; **no `exports` field**; its own dev, build and deploy scripts; its composition root              |
+| template    | an application copied out of the monorepo for someone to own | everything an application has, plus (pack: composition, templates-leave-the-monorepo.md)                            |
 
 An application is deployed, never imported. Code inside an application that another unit needs moves into a library both depend on; shapes two applications exchange move into a contracts library (pack: composition, contracts-between-applications.md). Logic inside an application that needs tests below its deployed entry also moves into a library (pack: composition, tests-stay-home.md). A unit that is both imported and deployed has collapsed: split its deployable half into an application and its importable half into a library.
 

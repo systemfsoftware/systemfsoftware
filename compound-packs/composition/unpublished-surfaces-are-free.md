@@ -25,7 +25,7 @@ Keeping a wrong internal shape alive with aliases and shims pays the cost of a p
 
 ## Evidence
 
-- (pack: composition, evidence/PACK.md) Part 3, row 4: private packages get usage and boundary gates instead of semver.
+- (pack: composition, evidence/PACK.md) Part 3, row 4: "Private packages get the usage gate instead of semver."
 - Rat Stack treats removal as a checklist of exact files, dependencies and config entries, done in one change ((pack: composition, evidence/FINDINGS.md) Cycle 005, finding 7).
 
 ## Wrong / right

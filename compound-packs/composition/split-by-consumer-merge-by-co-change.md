@@ -15,7 +15,7 @@ A library boundary exists so things can change independently.
 - **Split** a library when its consumers fall into groups that use disjoint parts of it, or when one part must run where the other cannot (pack: composition, core-and-adapters.md).
 - **Merge** two libraries when their history shows they change together.
 - **Keep inside** the consumer any code with one consumer and no second use, until a second consumer appears. A driver follows the same rule (pack: composition, drivers-live-where-chosen.md).
-- A private library nobody imports is deleted, unless it is run or read rather than imported: a `bin`, a deployed entry, a runner invoked by its own scripts, configuration read as data, or a toolchain another unit declares.
+- A private library nobody imports is deleted, unless it is read or loaded rather than imported: configuration read as data, a toolchain another unit declares, or a runner invoked only by its own scripts. A unit with a `bin` that is run or with a deployed entry is an application, not a library (pack: composition, three-unit-kinds.md), so this deletion rule never applies to it; when a unit is both, the application kind wins and its importable half splits into a library.
 
 ## Why
 

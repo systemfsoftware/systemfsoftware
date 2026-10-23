@@ -20,7 +20,7 @@ Without a shared contract, the second application either imports the first (an e
 ## Evidence
 
 - Rat Stack: one Schema contract per capability (input, output, failure, metadata), projected to HTTP, CLI and MCP from the same definition: "do not write separate business logic for each interface" ((pack: composition, evidence/FINDINGS.md) Cycle 005, finding 10).
-- (pack: composition, evidence/PACK.md) Part 3, row 6: applications compose through a shared library, never by path.
+- (pack: composition, evidence/PACK.md) Part 3, row 6 rules: "Compose through the export, never by path. App→app is allowed only for composition (a component/entry the other app publishes); app→infra is banned; package→app is banned." This pack is stricter on the first case: an application has no `exports` field (pack: composition, three-unit-kinds.md), so it publishes no component or entry another application could import, and app→app is forbidden outright (pack: composition, dependency-direction.md). A component one application would publish to another moves into a library both import, and the shapes they exchange into a contracts library as above. Stead, which allows app→app through `@apps/<app>` ((pack: composition, evidence/FINDINGS.md) Cycle 004, finding 4), is ruled against for that reason.
 
 Upstream paths are relative to the repositories pinned in (pack: composition, evidence/SOURCES.md).
 

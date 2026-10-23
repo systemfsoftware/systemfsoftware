@@ -18,11 +18,11 @@ A template (`"unit": "template"`) is what someone receives as their own reposito
 
 ## Why
 
-The first person to copy a template that leans on the workspace gets a repository that does not install. younna-ai's app template (`younna-ai/packages/app-template/package.json`, read 2026-10-23) carries its own configs, but every one of its 12 dependencies is a `catalog:` reference that only this workspace's `pnpm-workspace.yaml` can resolve, one of them is the workspace-only `@younna/oxlint-preset`, and its only scripts are `typecheck` and `lint`: copied out, it does not install, and it has nothing to deploy ((pack: composition, evidence/FINDINGS.md) Cycle 006, finding 10; (pack: composition, evidence/PACK.md) rule 13).
+The first person to copy a template that leans on the workspace gets a repository that does not install. younna-ai's app template carries its own oxlint, tsconfig and vitest configs ((pack: composition, evidence/FINDINGS.md) Cycle 006, finding 10, which records only that much). Read at younna-ai `a80c7cb3b6` (2026-10-23), `packages/app-template/package.json` shows the rest: every one of its 12 dependencies is a `catalog:` reference that only this workspace's `pnpm-workspace.yaml` can resolve, one of them is the workspace-only `@younna/oxlint-preset`, and its only scripts are `typecheck` and `lint`. Copied out, it does not install, and it has nothing to deploy ((pack: composition, evidence/PACK.md) rule 13).
 
 ## Evidence
 
-- Stead's `ui/template` is a complete workspace package with its own configs and versioned `@stead/shell` and `@stead/sdk` dependencies: it is what `stead init` writes ((pack: composition, evidence/FINDINGS.md) Cycle 004, finding 11).
+- Counter-example, ruled against: Stead's `ui/template` is what Stead ships as a workspace template ((pack: composition, evidence/FINDINGS.md) Cycle 004, finding 11), and it carries its own configs, but `ui/template/package.json:13-15,28` declares `@stead/relay-client`, `@stead/sdk`, `@stead/shell` and `@stead/cli` as `catalog:`, resolved only by Stead's own strict pnpm catalog, where Stead's packages are `workspace:*` (finding 12). As checked in, it is the shape this rule forbids.
 - Effect's published manifests carry no `workspace:` reference; packages install standalone against a peer `effect` ((pack: composition, evidence/FINDINGS.md) Cycle 003).
 
 Upstream paths are relative to the repositories pinned in (pack: composition, evidence/SOURCES.md).

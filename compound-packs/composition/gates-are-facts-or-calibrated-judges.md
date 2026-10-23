@@ -46,4 +46,4 @@ RIGHT: "Gate: none yet. It would read <the fact> from <the tool>."
 
 ## Gate
 
-Gate: none yet in this repository's CI. `.github/workflows/ci.yml` runs `repo-checks single-plan` and `changeset-check.yml` runs `repo-checks packed-manifest`, but no workflow runs any `composition-*` check. The fact the gate reads is the CI configuration: a workflow step on every pull request that runs `nix run .#repo-checks -- composition-unit-kinds composition-graph composition-entries composition-imports composition-contracts composition-core-adapters composition-granularity` with `OPENROUTER_API_KEY` set, and fails on exit 1.
+Gate: none yet in this repository's CI. `.github/workflows/ci.yml` runs `repo-checks single-plan` and `changeset-check.yml` runs `repo-checks packed-manifest`, but no workflow runs any `composition-*` check. The fact the gate reads is the CI configuration: a workflow step on every pull request that runs `nix run .#repo-checks -- composition-unit-kinds composition-graph composition-entries composition-imports composition-contracts composition-core-adapters composition-granularity --strict` with `OPENROUTER_API_KEY` set, and fails on exit 1.

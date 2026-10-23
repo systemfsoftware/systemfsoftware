@@ -33,7 +33,7 @@ A service library that also holds its drivers makes every consumer install every
 
 ## Evidence
 
-- Effect: the service is `effect/FileSystem`; `effect-smol/packages/platform-node/src/NodeFileSystem.ts:6-7` imports it type-only and exports only the Node Layer. Twelve `@effect/sql-*` driver packages, one per backend, each with 0-5 dependencies, all peering on `effect` ((pack: composition, evidence/FINDINGS.md) Cycle 003, findings 5-7).
+- Effect: the service is `effect/FileSystem`; `effect-smol/packages/platform-node/src/NodeFileSystem.ts:12` imports it type-only (`import type { FileSystem } from "effect/FileSystem"`), the module exports only the Node Layer, and its header says it "only chooses the Node implementation" (line 7). Twelve `@effect/sql-*` driver packages, one per backend, each with 0-5 dependencies, all peering on `effect` ((pack: composition, evidence/FINDINGS.md) Cycle 003, findings 5-7).
 - Rat Stack: "A Layer is one vendor's implementation ... Swapping vendors is a one-line change" ((pack: composition, evidence/FINDINGS.md) Cycle 005, finding 5). Its resource-declaring D1 Layer is in a library, `rat-stack/packages/database/src/d1.ts`, and takes only `{ id }`, getting the binding from `Cloudflare.D1.QueryDatabaseBinding` (Rat Stack pipes that provide inside the library; here the application provides it, because only a composition root calls `Layer.provide`). Its `@rat-stack/database` ships drivers as subpaths (`./d1`, `./hyperdrive-postgres`); that half is ruled against here, because a private library exports `.` only (pack: composition, role-entries-only.md).
 - Store laws run the fake and the real adapter side by side (pack: boundary-testing, fake-and-real-store-laws.md).
 

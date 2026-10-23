@@ -12,7 +12,7 @@ tags: [composition, exports-map, barrel, internal, subpath, conditions]
 
 ## Rule
 
-A private library (`"private": true`, `"unit": "library"`) has one entry, `.`, pointing at one `mod.ts` namespace barrel (`export * as Ledger from './Ledger.ts'`; barrel shape: (pack: cell-architecture, single-namespace-barrel.md)). The map is `{ ".": ... }` and nothing else. Every other subpath already fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`, so internals are unnameable without a `"./internal/*": null` block; that block is needed only by a map that also exports a `"./*"` pattern, which a private library never does.
+A private library (`"private": true`, `"unit": "library"`) has one entry, `.`, pointing at one `mod.ts` namespace barrel (`export * as Ledger from './Ledger.ts'`; barrel shape: (pack: cell-architecture, single-namespace-barrel.md)). By default the map is `{ ".": ... }` and nothing else; the only exceptions are the two narrow ones below. Every other subpath already fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`, so internals are unnameable without a `"./internal/*": null` block; that block is needed only by a map that also exports a `"./*"` pattern, which a private library never does.
 
 Each key a library is tempted to add has a home that is not a subpath:
 
@@ -21,7 +21,7 @@ Each key a library is tempted to add has a home that is not a subpath:
 - **A runtime difference** (`./workerd`, `./browser`, `./node`). An export condition on `.` pointing at separate files with the same names and types (pack: composition, core-and-adapters.md).
 - **A framework binding** (`./react`). Its own adapter library that depends on this one (pack: composition, core-and-adapters.md).
 
-An extra key is justified one at a time, in the change that adds it, and only for one of two reasons: an asset read by path (`./styles.css`), or a file a build tool loads by specifier in a config role (`./vite`, or `./package.json` when a named tool reads it). Two keys that resolve to one file are never allowed in a private library.
+The default is `.` only. The ruling (Ryan, 2026-10-23) rejected `./testing`, driver subpaths, runtime keys and `./react`, and left exactly two exceptions: an asset a consumer reads by path (`./styles.css`), or a build tool's config role, a file the tool loads by specifier (`./vite`). Each is justified one at a time, in the change that adds it, naming the consumer that reads it. No other key qualifies, `./package.json` included. Two keys that resolve to one file are never allowed in a private library.
 
 Conditions on `.` never widen it. Every condition branch of `.` exports the same names and types (pack: package-topology, condition-branch-agreement.md), and no condition exists for tests: a `test`, `vitest` or `development` branch pointing at a barrel that exports more than the default branch gives tests a wider surface under the same specifier, which is the deep import (pack: composition, tests-stay-home.md) forbids, renamed.
 
@@ -33,9 +33,9 @@ Every key in an exports map is a contract someone will import. At the research s
 
 ## Evidence
 
-- TanStack Query: `query/packages/query-core/package.json` and `query/packages/react-query/package.json` export exactly `.` and `./package.json`.
+- TanStack Query: `query/packages/query-core/package.json` and `query/packages/react-query/package.json` export exactly `.` and `./package.json`; both are published, and `./package.json` is a publishing convention a private library does not carry.
 - Effect 4 publishes `"./*"` and therefore needs `effect-smol/packages/effect/package.json:51-52` `"./internal/*": null` to close the pattern; casing marks public (PascalCase) against internal (lowercase) modules ((pack: composition, evidence/FINDINGS.md) Cycle 003, findings 3-4). No static import in `effect-smol/packages/effect/test` names `../src`; `test/schema/HMR.test.ts:4,20` reaches `../../src/Schema.ts` and `../../src/SchemaAST.ts` through `vi.importActual` to test module reloading, which is why string-argument loaders count as imports in (pack: composition, tests-stay-home.md).
-- Conflicts ruled against, with reasons: Rat Stack exports driver subpaths (`@rat-stack/database` has `./d1`, `./hyperdrive-postgres`) and Vitest publishes 14 role entries plus `./internal/*` ((pack: composition, evidence/FINDINGS.md) Cycles 001, 005). Both are published multi-runtime packages; a private library in this stack takes the four homes above instead.
+- Conflicts ruled against, with reasons: Rat Stack's `@rat-stack/database` is a private library (`rat-stack/packages/database/package.json`: `"private": true`, no `publishConfig`) that exports driver subpaths `./d1` and `./hyperdrive-postgres` ((pack: composition, evidence/FINDINGS.md) Cycle 005), which is exactly the shape this rule forbids; here those drivers take the driver home above. Vitest, a published package, exports role entries plus `./internal/*` ((pack: composition, evidence/FINDINGS.md) Cycle 001); a published surface is decided under (pack: package-topology, declared-entry-points.md) and licenses nothing for a private library.
 
 Upstream paths are relative to the repositories pinned in (pack: composition, evidence/SOURCES.md).
 

@@ -1,5 +1,5 @@
 ---
-title: A library or adapter is removable by deleting its folder and its one provide line, with every other import unchanged and the full gate green
+title: A library or adapter is removable by deleting its folder and, in each application that provides it, its dependency, import and provide line, with every other import unchanged and the full gate green
 applies_when:
   - adding a new library, adapter, vendor integration or feature package
   - reviewing a change that wires a new Layer into an application
@@ -12,9 +12,9 @@ tags: [composition, removal, cartridge, layers, acceptance-test]
 
 A unit composes only if it can be taken out. For any library or driver adapter:
 
-- **Push in** is one dependency plus one `Layer.provide` (or one Stack entry) in an application's composition root.
-- **Pull out** is deleting the unit's folder, its dependency line, and that one provide line. Afterwards no other file's import path changes, and the repository's full gate (typecheck, lint, test, build, and the composition checks) is green.
-- **Self-contained**: the unit declares its own resources and bindings (pack: composition, stack-has-one-owner.md), so pulling it out leaves no orphaned resource.
+- **Push in** is, in each application that provides the unit, one dependency, one import and one `Layer.provide` (or one Stack entry) at its composition root. That is one application for most units and exactly two for a driver adapter whose Layer declares Cloudflare resources: the infrastructure application provides it in the Stack to provision them, and the runtime application provides it to serve through them (pack: composition, stack-has-one-owner.md).
+- **Pull out** is deleting the unit's folder and, in each of those applications, its dependency line, its import and its provide line. Afterwards no other file's import path changes, and the repository's full gate (typecheck, lint, test, build, and the composition checks) is green.
+- **Self-contained**: the unit declares its own resources and requires their binding services (`Cloudflare.D1.QueryDatabaseBinding`), never a binding object (pack: composition, stack-has-one-owner.md), so pulling it out leaves no orphaned resource.
 
 A unit that cannot be pulled out this way names its coupling in the change that adds it: the extra import paths that would break, and why they are not yet behind a service.
 
@@ -36,11 +36,13 @@ Upstream paths are relative to the repositories pinned in (pack: composition, ev
 WRONG: removing @scope/flags-kv also needs edits in apps/web/src/routes/*.tsx (they import
        @scope/flags-kv's KV type) and packages/billing (it re-exports the flag schema).
 
-RIGHT: apps/web imports the Flags service from @scope/flags; apps/web/src/main.ts has
-       Layer.provide(FlagsKv.layer({ id: 'web' })). Removing @scope/flags-kv deletes
-       packages/flags-kv, one dependency line and that provide line; the gate stays green.
+RIGHT: apps/web imports the Flags service from @scope/flags. FlagsKv.layer declares its KV
+       namespace, so apps/infra/alchemy.run.ts and apps/web/src/main.ts each import
+       @scope/flags-kv and provide FlagsKv.layer({ id: 'web' }). Removing @scope/flags-kv
+       deletes packages/flags-kv and, in each of those two applications, one dependency
+       line, one import and one provide line; the gate stays green.
 ```
 
 ## Gate
 
-Gate: none yet. It would run on a scratch checkout: delete the unit's directory, its dependency declarations and the provide call site the compiler finds for its exported Layers, then run the repository gate and `repo-checks composition-graph`; the facts read are the gate's exit code and the list of files outside the unit that fail to compile. Until it exists, a change that adds a library or adapter states, in its description, the files and lines a removal would delete.
+Gate: none yet. It would run on a scratch checkout: delete the unit's directory, its dependency declarations and every import and provide call site the compiler finds for its exported Layers, then run the repository gate and `repo-checks composition-graph`; the facts read are the gate's exit code and the list of files outside the unit that fail to compile. Until it exists, a change that adds a library or adapter states, in its description, the files and lines a removal would delete.
