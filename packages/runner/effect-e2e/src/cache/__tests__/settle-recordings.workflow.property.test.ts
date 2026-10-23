@@ -118,15 +118,21 @@ const verifyPair: ReadonlyArray<StepRecord> = [valueStepOf('pad'), passedLocator
 const verifiedStepsOf = (pool: ReadonlyArray<StepRecord>): ReadonlyArray<StepRecord> =>
   Arr.appendAll(neutralizedOf(pool), [valueStepOf('pad-a'), valueStepOf('pad-b'), passedLocatorOf('verify')])
 
-const writeStagedOf = (
+const writeStagedOf = (stepIndex: number, digest: KeyDigest, entry: TraceEntry): StagedRecording => ({
+  stepIndex,
+  digest,
+  recording: { _tag: 'Write', entry },
+})
+
+const overwriteStagedOf = (
   stepIndex: number,
   digest: KeyDigest,
   entry: TraceEntry,
-  existing?: TraceEntry,
+  existing: TraceEntry,
 ): StagedRecording => ({
   stepIndex,
   digest,
-  recording: existing === undefined ? { _tag: 'Write', entry } : { _tag: 'Write', entry, existing },
+  recording: { _tag: 'Overwrite', entry, existing },
 })
 
 const keepStagedOf = (stepIndex: number, digest: KeyDigest): StagedRecording => ({
@@ -182,7 +188,7 @@ it.prop(
   (subject, [pool, entry, existing, drawn, code]) => {
     const bound = pool.length + 2
     const stagedIndex = Math.abs(drawn) % bound
-    const writeStaged = writeStagedOf(
+    const writeStaged = overwriteStagedOf(
       stagedIndex,
       digestOf(`write:${String(stagedIndex)}`),
       entry,
@@ -194,7 +200,7 @@ it.prop(
     )
     const command = new SettleRecordings({
       mode: 'read-write',
-      ending: { _tag: 'Ended', failure: code },
+      ending: { _tag: 'Failed', failure: code },
       steps: verifiedStepsOf(pool),
       staged: [writeStaged, keepStaged],
     })
@@ -240,7 +246,7 @@ it.prop(
     )
     const command = new SettleRecordings({
       mode: 'read-write',
-      ending: { _tag: 'Ended', failure: code },
+      ending: { _tag: 'Failed', failure: code },
       steps: neutralizedOf(pool),
       staged: [writeStaged, keepStaged],
     })
@@ -266,7 +272,7 @@ it.prop(
     const staged = Arr.map(pool, (step, index) => keepStagedOf(index, digestOf(`keep:${step.id}`)))
     const command = new SettleRecordings({
       mode: 'read-write',
-      ending: { _tag: 'Ended', failure: code },
+      ending: { _tag: 'Failed', failure: code },
       steps: neutralizedOf(pool),
       staged,
     })
@@ -314,13 +320,13 @@ it.prop(
     const over = withAlertsOf(slim, [], ['a'.repeat(WIRE_BYTES_CAP - baseBytes - 1)])
     const overCommand = new SettleRecordings({
       mode: 'read-write',
-      ending: { _tag: 'Ended' },
+      ending: { _tag: 'Passed' },
       steps: verifyPair,
       staged: [writeStagedOf(0, digestOf(`over:${left}`), over)],
     })
     const exactCommand = new SettleRecordings({
       mode: 'read-write',
-      ending: { _tag: 'Ended' },
+      ending: { _tag: 'Passed' },
       steps: verifyPair,
       staged: [writeStagedOf(0, digestOf(`exact:${right}`), exact)],
     })
