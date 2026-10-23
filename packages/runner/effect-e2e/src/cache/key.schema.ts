@@ -28,6 +28,19 @@ export type ParamValue = typeof ParamValue.Type
 export const StepParams = Schema.Record(Schema.String, ParamValue)
 export type StepParams = typeof StepParams.Type
 
+export const UniqueSlot = Schema.Struct({ name: Schema.String, value: Schema.String })
+export type UniqueSlot = typeof UniqueSlot.Type
+
+const isUnique = Schema.is(Unique)
+
+const bySlotName = Order.mapInput(Str.Order, (slot: UniqueSlot) => slot.name)
+
+const slotOf = ([name, value]: readonly [string, ParamValue]): ReadonlyArray<UniqueSlot> =>
+  isUnique(value) ? [{ name, value: value.value }] : []
+
+export const uniqueSlotsOf = (params: StepParams): ReadonlyArray<UniqueSlot> =>
+  Arr.sort(Object.entries(params).flatMap(slotOf), bySlotName)
+
 export const CacheKeyContext = Schema.Struct({
   project: ProjectId,
   test: TestId,

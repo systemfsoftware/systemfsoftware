@@ -1,10 +1,8 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import * as Str from 'effect/String'
 
 import { CacheMode } from '../Config/config.schema.js'
 import { Unique } from '../Config/values.schema.js'
@@ -16,6 +14,7 @@ import {
   EngineIdentity,
   type ParamValue,
   StepParams,
+  uniqueSlotsOf,
 } from './key.schema.js'
 
 const CacheKeyTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-e2e/CacheKey')
@@ -52,11 +51,7 @@ export type CacheKeyDecision = typeof CacheKeyDecision.Type
 
 const isUnique = Schema.is(Unique)
 
-const slotNamesOf = (params: StepParams): ReadonlyArray<string> =>
-  Arr.sort(
-    Object.entries(params).filter(([, value]) => isUnique(value)).map(([name]) => name),
-    Str.Order,
-  )
+const slotNamesOf = (params: StepParams): ReadonlyArray<string> => uniqueSlotsOf(params).map((slot) => slot.name)
 
 const keyedParamOf = (slots: ReadonlyArray<string>, name: string, value: ParamValue): Schema.Json =>
   Option.match(Option.liftPredicate(value, isUnique), {
