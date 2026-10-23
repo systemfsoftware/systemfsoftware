@@ -13,6 +13,7 @@ const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
   './engine': './dist/engine.d.ts',
   './model': './dist/model.d.ts',
+  './cache': './dist/cache.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -34,7 +35,12 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 
 export default defineConfig({
   ...quietBuild,
-  entry: { index: './src/mod.ts', engine: './src/engine/mod.ts', model: './src/model/mod.ts' },
+  entry: {
+    index: './src/mod.ts',
+    engine: './src/engine/mod.ts',
+    model: './src/model/mod.ts',
+    cache: './src/cache/mod.ts',
+  },
   format: 'esm',
   dts: true,
   exports: {
