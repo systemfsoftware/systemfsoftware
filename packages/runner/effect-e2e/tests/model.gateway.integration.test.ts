@@ -36,6 +36,7 @@ const openRouterSpec: ModelSpec = {
   gateway: 'openrouter',
   model: 'deepseek/deepseek-flash-latest',
   apiKeyEnv: 'OPENROUTER_API_KEY',
+  vision: false,
 }
 
 const compatibleSpec = (origin: string): ModelSpec => ({
@@ -43,6 +44,7 @@ const compatibleSpec = (origin: string): ModelSpec => ({
   baseURL: `${origin}/v1`,
   model: 'acme/chat-1',
   apiKeyEnv: 'ACME_API_KEY',
+  vision: false,
 })
 
 const budgetedSpec = (origin: string): ModelSpec => ({ ...compatibleSpec(origin), maxInputTokens: 10 })

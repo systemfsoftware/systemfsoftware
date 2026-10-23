@@ -69,7 +69,12 @@ const contextOf = (app: GreetApp, record: ActContext['record']): ActContext => (
   agent: {
     name: 'default',
     config: {
-      model: { gateway: 'openrouter', model: 'deepseek/deepseek-flash-latest', apiKeyEnv: 'OPENROUTER_API_KEY' },
+      model: {
+        gateway: 'openrouter',
+        model: 'deepseek/deepseek-flash-latest',
+        apiKeyEnv: 'OPENROUTER_API_KEY',
+        vision: false,
+      },
       system: '',
       context: '',
       maxSteps: 10,
