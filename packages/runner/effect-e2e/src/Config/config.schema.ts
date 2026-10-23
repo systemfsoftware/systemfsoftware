@@ -128,7 +128,8 @@ export const AgentConfig = Schema.Struct({
 })
 export type AgentConfig = typeof AgentConfig.Type
 
-const CacheMode = Schema.Literals(['off', 'read-only', 'read-write'])
+export const CacheMode = Schema.Literals(['off', 'read-only', 'read-write'])
+export type CacheMode = typeof CacheMode.Type
 
 export const SecretConfig = Schema.Struct({ env: EnvVarName })
 export type SecretConfig = typeof SecretConfig.Type
@@ -150,7 +151,7 @@ const CI_RUN_SHAPE = { retries: 1, workers: 1, cacheMode: 'read-only' } as const
 const runShapeOf = (defaults: ConfigDefaults) =>
   defaults.ci === true ? CI_RUN_SHAPE : { retries: 0, workers: workersOf(defaults), cacheMode: 'read-write' } as const
 
-const cacheConfigOf = (mode: typeof CacheMode.Type) =>
+const cacheConfigOf = (mode: CacheMode) =>
   Schema.Struct({ mode: CacheMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed(mode))) })
 
 const configSchemaFor = (defaults: ConfigDefaults, shape: ReturnType<typeof runShapeOf>) =>
