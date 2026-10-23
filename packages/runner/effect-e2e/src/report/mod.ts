@@ -33,4 +33,5 @@ export {
 export { renderJson } from './reporters/json.js'
 export { renderJunit } from './reporters/junit.js'
 export { renderList } from './reporters/list.js'
+export type { MarkdownRequest } from './reporters/markdown.js'
 export { renderMarkdown } from './reporters/markdown.js'

@@ -23,15 +23,15 @@ export interface EmitReportsRequest {
 }
 
 interface Reporter {
-  readonly render: (report: Report1) => Effect.Effect<string, Schema.SchemaError>
+  readonly render: (request: EmitReportsRequest) => Effect.Effect<string, Schema.SchemaError>
   readonly file: Option.Option<string>
 }
 
 const REPORTERS: { readonly [Name in ReporterConfig[number]]: Reporter } = {
-  list: { render: (report) => Effect.succeed(renderList(report)), file: Option.none() },
-  json: { render: renderJson, file: Option.none() },
-  junit: { render: (report) => Effect.succeed(renderJunit(report)), file: Option.some('junit.xml') },
-  markdown: { render: (report) => Effect.succeed(renderMarkdown(report)), file: Option.some('summary.md') },
+  list: { render: ({ report }) => Effect.succeed(renderList(report)), file: Option.none() },
+  json: { render: ({ report }) => renderJson(report), file: Option.none() },
+  junit: { render: ({ report }) => Effect.succeed(renderJunit(report)), file: Option.some('junit.xml') },
+  markdown: { render: (request) => Effect.succeed(renderMarkdown(request)), file: Option.some('summary.md') },
 }
 
 const REPORT_FILE_MODE = 0o644
@@ -66,7 +66,7 @@ const emitted = (request: EmitReportsRequest) =>
   name: ReporterConfig[number],
 ): Effect.Effect<Option.Option<string>, ArtifactWriteFailed | Schema.SchemaError, FileSystem.FileSystem | Path.Path> =>
   Effect.flatMap(
-    REPORTERS[name].render(request.report),
+    REPORTERS[name].render(request),
     (text) =>
       Option.match(REPORTERS[name].file, {
         onNone: () => Effect.succeedSome(text),

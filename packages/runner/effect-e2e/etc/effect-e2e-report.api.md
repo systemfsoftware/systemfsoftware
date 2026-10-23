@@ -748,6 +748,14 @@ export interface EmitReportsRequest {
     readonly root: string;
 }
 
+// @public (undocumented)
+export interface MarkdownRequest {
+    // (undocumented)
+    readonly output: string;
+    // (undocumented)
+    readonly report: Report1;
+}
+
 // Warning: (ae-forgotten-export) The symbol "MergeReports_base" needs to be exported by the entry point report.d.ts
 //
 // @public (undocumented)
@@ -1440,7 +1448,7 @@ export const renderJunit: (report: Report1) => string;
 export const renderList: (report: Report1) => string;
 
 // @public (undocumented)
-export const renderMarkdown: (report: Report1) => string;
+export const renderMarkdown: (input: MarkdownRequest) => string;
 
 // @public (undocumented)
 export const Report1: Schema.Struct<{

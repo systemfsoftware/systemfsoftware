@@ -12,18 +12,29 @@ const tableOf = (header: ReadonlyArray<string>, rows: ReadonlyArray<ReadonlyArra
   ...rows.map(row),
 ]
 
-const linkOf = (artifact: ArtifactRef): string => `[${artifact.kind}](${artifact.path})`
+export interface MarkdownRequest {
+  readonly report: Report1
+  readonly output: string
+}
 
-const failureOf = (result: TestResult): ReadonlyArray<string> => [
+const outputPrefixOf = (output: string): string => `${output.replace(/^(?:\.\/)+/u, '').replace(/\/+$/u, '')}/`
+
+const linkOf = (prefix: string) => (artifact: ArtifactRef): string =>
+  `[${artifact.kind}](${artifact.path.startsWith(prefix) ? artifact.path.slice(prefix.length) : artifact.path})`
+
+const failureOf = (prefix: string) => (result: TestResult): ReadonlyArray<string> => [
   `### ${cell(result.title)} (${result.target} / ${result.agent})`,
   '',
   `- Status: ${result.status}`,
   `- Reason: \`${finalReasonOf(result)}\``,
-  ...(Arr.isReadonlyArrayNonEmpty(result.artifacts) ? [`- Evidence: ${result.artifacts.map(linkOf).join(', ')}`] : []),
+  ...Arr.match(result.artifacts, {
+    onEmpty: () => [],
+    onNonEmpty: (artifacts) => [`- Evidence: ${artifacts.map(linkOf(prefix)).join(', ')}`],
+  }),
   '',
 ]
 
-export const renderMarkdown = (report: Report1): string =>
+export const renderMarkdown = ({ report, output }: MarkdownRequest): string =>
   [
     '# effect-e2e report',
     '',
@@ -51,6 +62,9 @@ export const renderMarkdown = (report: Report1): string =>
     '',
     ...Arr.match(
       Arr.filter(report.results, (result) => result.status !== 'passed' && result.status !== 'skipped'),
-      { onEmpty: () => [], onNonEmpty: (failing) => ['## Failures', '', ...Arr.flatMap(failing, failureOf)] },
+      {
+        onEmpty: () => [],
+        onNonEmpty: (failing) => ['## Failures', '', ...Arr.flatMap(failing, failureOf(outputPrefixOf(output)))],
+      },
     ),
   ].join('\n')

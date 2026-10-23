@@ -166,6 +166,27 @@ Feature('Rendering the run report for people and CI')
     )
 
     scenario(
+      'Each evidence link in summary.md opens its artifact from where summary.md sits',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a run where one test passes, one fails and one is skipped by the platform gate')(
+          'report',
+          () => mixedRun,
+        ),
+        Given('a temporary suite directory')('root', () => suiteDirectory),
+        When('every reporter renders the report')('outputs', ({ report, root }) => emittedAll(report, root)),
+        Then('the links, taken from the output directory, are the suite paths the report lists for the failure')((
+          s,
+          expect,
+        ) =>
+          expect(
+            [...s.outputs.markdown.matchAll(/\]\(([^)]+)\)/gu)].map(([, link = '']) => `${OUTPUT}/${link}`),
+          ).toEqual(s.report.results.flatMap((result) => result.artifacts.map((artifact) => artifact.path)))
+        ),
+      ),
+    )
+
+    scenario(
       'A blocked test is a JUnit error, not a failure, and reads as blocked everywhere else',
       { scenarioLayer: NodeServices.layer },
       Gherkin.Do.pipe(
