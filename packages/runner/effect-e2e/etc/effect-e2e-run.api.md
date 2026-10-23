@@ -37,9 +37,41 @@ export interface AdmitTestRequest {
 }
 
 // @public
+export interface Artifact {
+    // (undocumented)
+    readonly bytes: Uint8Array;
+    // (undocumented)
+    readonly directory: ResultDirectory;
+    // Warning: (ae-forgotten-export) The symbol "ArtifactKind" needs to be exported by the entry point run.d.ts
+    //
+    // (undocumented)
+    readonly kind: ArtifactKind;
+}
+
+// @public
+export const ArtifactFileName: Schema.Literals<readonly ["screen.png", "screen.txt", "trace.md", "ai-trace.json"]>;
+
+// @public (undocumented)
+export type ArtifactFileName = typeof ArtifactFileName.Type;
+
+// Warning: (ae-forgotten-export) The symbol "ArtifactStore_base" needs to be exported by the entry point run.d.ts
+//
+// @public
+export class ArtifactStore extends ArtifactStore_base {}
+
+// @public (undocumented)
+export interface ArtifactStoreShape {
+    // Warning: (ae-forgotten-export) The symbol "ArtifactRef" needs to be exported by the entry point run.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ArtifactWriteFailed" needs to be exported by the entry point run.d.ts
+    readonly put: (artifact: Artifact) => Effect.Effect<ArtifactRef, ArtifactWriteFailed>;
+}
+
+// @public
 export interface AttemptEntry {
     // (undocumented)
     readonly agent: string;
+    // (undocumented)
+    readonly artifacts: ReadonlyArray<ArtifactRef>;
     // Warning: (ae-forgotten-export) The symbol "Attempt" needs to be exported by the entry point run.d.ts
     //
     // (undocumented)
@@ -87,8 +119,21 @@ export interface EngineSource {
     readonly version: string;
 }
 
+// @public (undocumented)
+export namespace FileArtifactStore {
+    export { FileArtifactStoreOptions, layer, make };
+}
+
+// @public (undocumented)
+export const fileNameOf: (kind: ArtifactKind) => ArtifactFileName;
+
 // @public
 export const makeAttemptLog: Effect.Effect<AttemptLog>;
+
+// @public (undocumented)
+export namespace MemoryArtifactStore {
+    export { MemoryArtifactStore, MemoryArtifactStoreOptions, layer$1 as layer, make$1 as make };
+}
 
 // Warning: (ae-forgotten-export) The symbol "Admitted" needs to be exported by the entry point run.d.ts
 // Warning: (ae-forgotten-export) The symbol "PlatformSkipped" needs to be exported by the entry point run.d.ts
@@ -98,6 +143,12 @@ export const PlatformAdmission: Schema.Union<readonly [typeof Admitted, typeof P
 
 // @public (undocumented)
 export type PlatformAdmission = typeof PlatformAdmission.Type;
+
+// @public
+export const ResultDirectory: Schema.brand<Schema.String, "ResultDirectory">;
+
+// @public (undocumented)
+export type ResultDirectory = typeof ResultDirectory.Type;
 
 // Warning: (ae-forgotten-export) The symbol "ActRequest" needs to be exported by the entry point run.d.ts
 //
@@ -166,7 +217,7 @@ export class TestSession extends TestSession_base {
     // Warning: (ae-forgotten-export) The symbol "CacheStore" needs to be exported by the entry point run.d.ts
     //
     // (undocumented)
-    static readonly layer: (input: SessionInput) => Layer.Layer<TestSession, never, ModelGateway | CacheStore>;
+    static readonly layer: (input: SessionInput) => Layer.Layer<TestSession, never, ModelGateway | CacheStore | ArtifactStore>;
 }
 
 // @public (undocumented)

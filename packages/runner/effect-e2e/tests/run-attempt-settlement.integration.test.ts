@@ -1,6 +1,6 @@
-import type { Attempt } from '@systemfsoftware/effect-e2e'
 import type { StoreMode } from '@systemfsoftware/effect-e2e/cache'
 import type { ModelAnswer } from '@systemfsoftware/effect-e2e/model'
+import type { Attempt } from '@systemfsoftware/effect-e2e/report'
 import type { StepHandle, TestSessionShape, TryEnding } from '@systemfsoftware/effect-e2e/run'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'

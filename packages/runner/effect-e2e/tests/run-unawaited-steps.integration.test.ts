@@ -1,4 +1,4 @@
-import type { Attempt } from '@systemfsoftware/effect-e2e'
+import type { Attempt } from '@systemfsoftware/effect-e2e/report'
 import type { TestSessionShape } from '@systemfsoftware/effect-e2e/run'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
