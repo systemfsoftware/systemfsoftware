@@ -47,6 +47,11 @@
       "types": "./dist/model.d.ts",
       "default": "./dist/model.mjs"
     },
+    "./run": {
+      "@systemfsoftware/source": "./src/run/mod.ts",
+      "types": "./dist/run.d.ts",
+      "default": "./dist/run.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -59,8 +64,8 @@
     "test": "vitest run",
     "mutation": "stryker run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json && api-extractor-quiet run --config api-extractor.cache.json && api-extractor-quiet run --config api-extractor.agent.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json && api-extractor run --local --config api-extractor.cache.json && api-extractor run --local --config api-extractor.agent.json",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json && api-extractor-quiet run --config api-extractor.cache.json && api-extractor-quiet run --config api-extractor.agent.json && api-extractor-quiet run --config api-extractor.run.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json && api-extractor run --local --config api-extractor.cache.json && api-extractor run --local --config api-extractor.agent.json && api-extractor run --local --config api-extractor.run.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -122,6 +127,10 @@
       "./model": {
         "types": "./dist/model.d.ts",
         "default": "./dist/model.mjs"
+      },
+      "./run": {
+        "types": "./dist/run.d.ts",
+        "default": "./dist/run.mjs"
       },
       "./package.json": "./package.json"
     },
