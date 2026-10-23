@@ -4,15 +4,15 @@ How a user-facing screen is designed and built by an agent so that a design-lite
 
 The pipeline, in order. Each step names the rule that owns it.
 
-| Step | Output | Rule |
-| ---- | ------ | ---- |
-| 1 Brief | one `BRIEF.md` with the founder's verdict, purpose, copy source, references, bans and the evidence matrix | `ui-work-starts-from-a-brief` |
-| 2 Directions | four different Magic Patterns directions, one chosen and why | `four-directions-then-reference-images` |
-| 3 Reference images | one generated image per section of the chosen direction | `four-directions-then-reference-images` |
-| 4 Build | Codex `gpt-6-astra` at `xhigh`, loading only the skills the step names | `each-step-loads-its-curated-skills` |
-| 5 Self-check | screenshots on the matrix, a harsh score, fixes, repeat until the score is 8 or more | `the-build-loop-scores-from-screenshots` |
-| 6 Judge | an independent design judge scores the same screenshots against the rubric | `an-independent-judge-gates-the-merge` |
-| 7 Production | the merged build re-captured on production and re-judged | `production-is-rechecked-after-deploy` |
+| Step               | Output                                                                                                    | Rule                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 1 Brief            | one `BRIEF.md` with the founder's verdict, purpose, copy source, references, bans and the evidence matrix | `ui-work-starts-from-a-brief`            |
+| 2 Directions       | four different Magic Patterns directions, one chosen and why                                              | `four-directions-then-reference-images`  |
+| 3 Reference images | one generated image per section of the chosen direction                                                   | `four-directions-then-reference-images`  |
+| 4 Build            | Codex `gpt-6-astra` at `xhigh`, loading only the skills the step names                                    | `each-step-loads-its-curated-skills`     |
+| 5 Self-check       | screenshots on the matrix, a harsh score, fixes, repeat until the score is 8 or more                      | `the-build-loop-scores-from-screenshots` |
+| 6 Judge            | an independent design judge scores the same screenshots against the rubric                                | `an-independent-judge-gates-the-merge`   |
+| 7 Production       | the merged build re-captured on production and re-judged                                                  | `production-is-rechecked-after-deploy`   |
 
 Rules:
 
