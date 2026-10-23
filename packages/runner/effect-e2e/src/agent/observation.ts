@@ -29,8 +29,48 @@ const maskableSecrets = (secrets: ReadonlyArray<SecretValue>): ReadonlyArray<Sec
 const longestFirst = (secrets: ReadonlyArray<SecretValue>): ReadonlyArray<SecretValue> =>
   Arr.sort(maskableSecrets(secrets), byLongestValue)
 
-const maskedWith = (text: string, secret: SecretValue): string =>
-  text.split(secret.value).join(SECRET_MASK(secret.name))
+interface Claim {
+  readonly start: number
+  readonly end: number
+  readonly name: string
+}
+
+const overlapsAny = (claims: ReadonlyArray<Claim>, start: number, end: number): boolean =>
+  Arr.some(claims, (claim) => claim.start < end && start < claim.end)
+
+const occurrenceOf = (text: string, value: string, from: number): Option.Option<number> =>
+  Option.filter(Option.some(text.indexOf(value, from)), (at) => at >= 0)
+
+const claimedAt = (text: string, secret: SecretValue, claims: ReadonlyArray<Claim>, start: number) => {
+  const end = start + secret.value.length
+  return overlapsAny(claims, start, end)
+    ? claimsOf(text, secret, claims, start + 1)
+    : claimsOf(text, secret, [...claims, { start, end, name: secret.name }], end)
+}
+
+const claimsOf = (
+  text: string,
+  secret: SecretValue,
+  claims: ReadonlyArray<Claim>,
+  from: number,
+): ReadonlyArray<Claim> =>
+  Option.match(occurrenceOf(text, secret.value, from), {
+    onNone: () => claims,
+    onSome: (start) => claimedAt(text, secret, claims, start),
+  })
+
+const byStart: Order.Order<Claim> = Order.mapInput(Order.Number, (claim: Claim) => claim.start)
+
+const renderedWith = (text: string, claims: ReadonlyArray<Claim>): string => {
+  const rendered = Arr.reduce(Arr.sort(claims, byStart), { out: '', at: 0 }, (done, claim) => ({
+    out: `${done.out}${text.slice(done.at, claim.start)}${SECRET_MASK(claim.name)}`,
+    at: claim.end,
+  }))
+  return `${rendered.out}${text.slice(rendered.at)}`
+}
+
+const redactClaimed = (secrets: ReadonlyArray<SecretValue>, text: string, claimed: ReadonlyArray<Claim>): string =>
+  renderedWith(text, Arr.reduce(longestFirst(secrets), claimed, (claims, secret) => claimsOf(text, secret, claims, 0)))
 
 /** Replace every occurrence of each non-empty secret value by its mask, longest value first, by literal search. */
 export const redactText: {
@@ -38,7 +78,7 @@ export const redactText: {
   (secrets: ReadonlyArray<SecretValue>): (text: string) => string
 } = Function.dual(
   2,
-  (secrets: ReadonlyArray<SecretValue>, text: string): string => Arr.reduce(longestFirst(secrets), text, maskedWith),
+  (secrets: ReadonlyArray<SecretValue>, text: string): string => redactClaimed(secrets, text, []),
 )
 
 interface CutMatch {
@@ -78,7 +118,7 @@ const cutMatchIn = (secrets: ReadonlyArray<SecretValue>, text: string): Option.O
   Arr.head(Arr.sort(Arr.getSomes(Arr.map(longestFirst(secrets), (secret) => matchAt(secret, text))), byLongestMatch))
 
 const cutRedacted = (secrets: ReadonlyArray<SecretValue>, text: string, match: CutMatch): string =>
-  redactText(secrets, `${text.slice(0, text.length - match.length)}${SECRET_MASK(match.secret.name)}`)
+  redactClaimed(secrets, text, [{ start: text.length - match.length, end: text.length, name: match.secret.name }])
 
 const redactCutAtLimit = (secrets: ReadonlyArray<SecretValue>, limit: number, text: string): string =>
   text.length === limit
@@ -206,7 +246,12 @@ const observationOf = (tree: ReadonlyArray<SemanticNode>): Observation => ({
 })
 
 const definedEntriesOf = (
-  fields: { readonly role?: string; readonly name?: string; readonly text?: string; readonly value?: string },
+  fields: {
+    readonly role?: string | undefined
+    readonly name?: string | undefined
+    readonly text?: string | undefined
+    readonly value?: string | undefined
+  },
 ): ReadonlyArray<readonly [string, string]> =>
   Object.entries({ role: fields.role, name: fields.name, text: fields.text, value: fields.value }).filter(
     (entry): entry is [string, string] => entry[1] !== undefined,
@@ -228,6 +273,20 @@ const leafOf = (
   children: [],
 })
 
+/**
+ * The drawn subtree with its engine handles (ref ids, roles) replaced by uppercase constants. Handles are
+ * assigned by the engine, never typed by the page, and the model calls tools by them, so the formatter prints
+ * them verbatim; a drawn handle that happens to spell the secret says nothing about redaction.
+ */
+const handledOf = (nodes: ReadonlyArray<SemanticNode>, path: string): ReadonlyArray<SemanticNode> =>
+  Arr.map(nodes, (node, index) => ({
+    ...Object.fromEntries(definedEntriesOf({ name: node.name, text: node.text, value: node.value })),
+    ref: { id: `N${path}_${String(index)}`, revision: 'R1' },
+    role: 'ROLE',
+    states: node.states,
+    children: handledOf(node.children, `${path}_${String(index)}`),
+  }))
+
 /** The drawn node's subtree under a fresh visible node, with one field planted — never spreading the drawn node itself. */
 const plantedOf = (
   node: SemanticNode,
@@ -239,8 +298,17 @@ const plantedOf = (
   ref: { id, revision: 'R1' },
   role: 'ROLE',
   states: { disabled: false, hidden: false },
-  children: node.children,
+  children: handledOf(node.children, '0'),
 })
+
+/**
+ * A secret the formatter's own fixed text cannot spell: labels (`text=`), state words (`disabled`) and the mask
+ * itself (`[secret:…]`) are lowercase, so a bare word could appear in the output with no content leaking.
+ */
+const framedSecretOf = (raw: string): SecretValue => ({ name: 'S_VAULT', value: `~${wordOf(raw)}~` })
+
+/** The output with every mask of `name` removed; a secret found in what remains leaked. */
+const outsideMasksOf = (formatted: string, name: string): string => formatted.split(maskOf(name)).join('')
 
 /** A fresh hidden node with the given children, standing in for a hidden subtree. */
 const hidingOf = (children: ReadonlyArray<SemanticNode>): SemanticNode => ({
@@ -263,10 +331,10 @@ if (import.meta.vitest !== void 0) {
     '∀t_PlantedName_¬∈Format',
     { of: [SemanticNode, Schema.String], subject: formatObservation, arbitrary: { seed: 505_001 } },
     (format, [drawn, raw]) => {
-      const secret = { name: 'S_VAULT', value: wordOf(raw) }
+      const secret = framedSecretOf(raw)
       const tree = [plantedOf(drawn, 'N1', 'name', `x${secret.value}y`)]
       const formatted = format(observationOf(tree), redactedBy([secret]))
-      return formatted.includes(maskOf(secret.name)) && !formatted.includes(secret.value)
+      return formatted.includes(maskOf(secret.name)) && !outsideMasksOf(formatted, secret.name).includes(secret.value)
     },
   )
 
@@ -274,10 +342,10 @@ if (import.meta.vitest !== void 0) {
     '∀t_PlantedText_¬∈Format',
     { of: [SemanticNode, Schema.String], subject: formatObservation, arbitrary: { seed: 505_002 } },
     (format, [drawn, raw]) => {
-      const secret = { name: 'S_VAULT', value: wordOf(raw) }
+      const secret = framedSecretOf(raw)
       const tree = [plantedOf(drawn, 'N1', 'text', `x${secret.value}y`)]
       const formatted = format(observationOf(tree), redactedBy([secret]))
-      return formatted.includes(maskOf(secret.name)) && !formatted.includes(secret.value)
+      return formatted.includes(maskOf(secret.name)) && !outsideMasksOf(formatted, secret.name).includes(secret.value)
     },
   )
 
@@ -285,10 +353,10 @@ if (import.meta.vitest !== void 0) {
     '∀t_PlantedValue_¬∈Format',
     { of: [SemanticNode, Schema.String], subject: formatObservation, arbitrary: { seed: 505_003 } },
     (format, [drawn, raw]) => {
-      const secret = { name: 'S_VAULT', value: wordOf(raw) }
+      const secret = framedSecretOf(raw)
       const tree = [plantedOf(drawn, 'N1', 'value', `x${secret.value}y`)]
       const formatted = format(observationOf(tree), redactedBy([secret]))
-      return formatted.includes(maskOf(secret.name)) && !formatted.includes(secret.value)
+      return formatted.includes(maskOf(secret.name)) && !outsideMasksOf(formatted, secret.name).includes(secret.value)
     },
   )
 
