@@ -176,11 +176,13 @@ export const ModelSpec: Schema.Union<readonly [Schema.Struct<{
     readonly model: Schema.String;
     readonly apiKeyEnv: Schema.String;
     readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
+    readonly vision: Schema.withDecodingDefaultKey<Schema.Boolean, never>;
 }>, Schema.Struct<{
     readonly gateway: Schema.withDecodingDefaultKey<Schema.Literal<"openrouter">, never>;
     readonly model: Schema.withDecodingDefaultKey<Schema.String, never>;
     readonly apiKeyEnv: Schema.withDecodingDefaultKey<Schema.String, never>;
     readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
+    readonly vision: Schema.withDecodingDefaultKey<Schema.Boolean, never>;
 }>]>;
 
 // @public (undocumented)
