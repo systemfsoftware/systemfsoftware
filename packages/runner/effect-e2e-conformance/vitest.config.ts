@@ -1,11 +1,28 @@
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
+// The one test file that drives a real browser. `test` runs every other test and needs no browser;
+// `test:engine` runs this file and needs Chromium.
+const BROWSER_TESTS = ['tests/web-engine-law.integration.test.ts']
+
 export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['tests/**/*.integration.test.ts'],
     exclude: [...(sharedConfig.test?.exclude ?? []), 'tests/__fixtures__/**'],
     testTimeout: 60_000,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'pure',
+          include: ['tests/**/*.integration.test.ts'],
+          exclude: [...(sharedConfig.test?.exclude ?? []), 'tests/__fixtures__/**', ...BROWSER_TESTS],
+        },
+      },
+      {
+        extends: true,
+        test: { name: 'engine', include: BROWSER_TESTS },
+      },
+    ],
   },
 })

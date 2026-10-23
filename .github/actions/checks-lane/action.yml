@@ -287,3 +287,10 @@ runs:
       env:
         FILTERS: ${{ fromJSON(inputs.job).filters }}
       run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $FILTERS
+
+    - name: Browser engine suites
+      if: inputs.lane == 'test-after' && fromJSON(inputs.job).browser && (fromJSON(inputs.job).shard == null || fromJSON(inputs.job).shard.index == 1)
+      shell: bash -e {0}
+      env:
+        FILTERS: ${{ fromJSON(inputs.job).filters }}
+      run: corepack pnpm exec turbo run test:engine --concurrency=1 --continue --output-logs=new-only --log-order=stream $FILTERS
