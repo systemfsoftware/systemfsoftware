@@ -95,6 +95,9 @@ const withControlFallbackOf = (mapped: ReadonlyArray<RecordedAction>): ReadonlyA
         : [{ action: first.action, controls: [controlOf(0, 0)] }, ...mapped.slice(1)],
   })
 
+const withAnchorFallbackOf = (appeared: ReadonlyArray<Anchor>): ReadonlyArray<Anchor> =>
+  Arr.isReadonlyArrayNonEmpty(appeared) ? appeared : [{ control: anchorControlOf('appeared', 0), states: {} }]
+
 const withReplayableFlowOf = (drawn: TraceEntry): TraceEntry => ({
   schema: 'trace-1',
   keyedBy: drawn.keyedBy,
@@ -107,10 +110,10 @@ const withReplayableFlowOf = (drawn: TraceEntry): TraceEntry => ({
   ),
   end: movedRouteOf(drawn.start),
   anchors: {
-    appeared: drawn.anchors.appeared.map((anchor, index) => ({
+    appeared: withAnchorFallbackOf(drawn.anchors.appeared.map((anchor, index) => ({
       control: anchorControlOf('appeared', index),
       states: anchor.states,
-    })),
+    }))),
     gone: drawn.anchors.gone.map((anchor, index) => ({
       control: anchorControlOf('gone', index),
       states: anchor.states,
@@ -284,18 +287,7 @@ it.prop(
   '∀t_ClassifyReplay_¬PreexistingStateProves',
   { of: [TraceEntry], subject: classifyReplay, arbitrary: { seed: 498_024 } },
   (subject, [drawn]) => {
-    const replayable = withReplayableFlowOf(drawn)
-    const stale: TraceEntry = {
-      schema: 'trace-1',
-      keyedBy: replayable.keyedBy,
-      start: replayable.start,
-      actions: replayable.actions,
-      end: replayable.start,
-      anchors: replayable.anchors,
-      checks: replayable.checks,
-      alerts: replayable.alerts,
-      provenance: replayable.provenance,
-    }
+    const stale = withReplayableFlowOf(drawn)
     const decision = decisionOf(
       subject,
       new ClassifyReplay({

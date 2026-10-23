@@ -244,12 +244,9 @@ const firstAnchorStopOf = (
     (missing) => stop(new AnchorMissing({ anchor: missing }), prefix),
   )
 
-const routeMovedOf = (transcript: ReplayTranscript): boolean => !sameRoute(transcript.start.route, transcript.end.route)
-
 const changeEvidenced = (entry: TraceEntry, transcript: ReplayTranscript): boolean =>
   Arr.some(
     [
-      routeMovedOf(transcript),
       ...Arr.map(countedAnchorsOf(entry.anchors.appeared), (anchor) => !anchorPresentIn(anchor, transcript.start)),
       ...Arr.map(countedAnchorsOf(entry.anchors.gone), (anchor) => anchorPresentIn(anchor, transcript.start)),
     ],
