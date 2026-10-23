@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/effect-e2e": "workspace:^",
+    "@systemfsoftware/effect-e2e-web": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -25,6 +26,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
+    "playwright": "catalog:",
     "vitest": "catalog:"
   }
 }

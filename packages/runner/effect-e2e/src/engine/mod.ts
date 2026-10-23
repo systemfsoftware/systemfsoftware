@@ -4,6 +4,7 @@ export {
   AppUnreachable,
   ArtifactWriteFailed,
   AutomationUnsupported,
+  EnvironmentUnavailable,
   LocatorAmbiguous,
   LocatorNotFound,
 } from '../verdict/failure.schema.js'
