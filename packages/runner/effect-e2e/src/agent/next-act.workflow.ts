@@ -10,11 +10,12 @@ import * as SchemaAST from 'effect/SchemaAST'
 import { ControlDescriptor } from '../cache/entry.schema.js'
 import { Action, WaitState } from '../engine/action.schema.js'
 import { EngineCapability } from '../engine/capability.schema.js'
-import { ByRole, Locator, LocatorExpression } from '../engine/locator.schema.js'
+import { Locator } from '../engine/locator.schema.js'
 import { Observation } from '../engine/observation.schema.js'
-import { NodeRef, SemanticNode } from '../engine/semantic-node.schema.js'
+import { NodeRef } from '../engine/semantic-node.schema.js'
 import { Message, ModelAnswer, ToolCall } from '../model/model.schema.js'
 import { Count } from '../verdict/step-record.schema.js'
+import { type LocatedNode, lookupNode } from './located-node.schema.js'
 
 const SecretText = Schema.Union([Schema.String, Schema.Struct({ secret: Schema.String })])
 
@@ -260,116 +261,11 @@ const toolMembers: ReadonlyArray<ToolMember> = Arr.flatMap(
 const memberNamed = (name: string): Option.Option<ToolMember> =>
   Arr.findFirst(toolMembers, (member) => member.name === name)
 
-interface Placement {
-  readonly node: SemanticNode
-  readonly chain: ReadonlyArray<SemanticNode>
-}
-
-const placementsOf = (
-  forest: ReadonlyArray<SemanticNode>,
-  chain: ReadonlyArray<SemanticNode>,
-): ReadonlyArray<Placement> => Arr.flatMap(forest, (node) => placementsUnder(node, chain))
-
-const visibleOf = (node: SemanticNode): Option.Option<SemanticNode> =>
-  Option.filter(Option.some(node), () => !node.states.hidden)
-
-const placementsUnder = (node: SemanticNode, chain: ReadonlyArray<SemanticNode>): ReadonlyArray<Placement> =>
-  Option.match(visibleOf(node), {
-    onNone: () => [],
-    onSome: (visible) => [
-      { node: visible, chain },
-      ...placementsOf(visible.children, Arr.append(chain, visible)),
-    ],
-  })
-
-const placementOfRef = (placements: ReadonlyArray<Placement>, ref: string): Option.Option<Placement> =>
-  Arr.findFirst(placements, (placement) => placement.node.ref.id === ref)
-
-const nameOf = (node: SemanticNode): ReadonlyArray<string> =>
-  Option.match(Option.fromNullishOr(node.name), {
-    onNone: () => [],
-    onSome: (name) => [name],
-  })
-
-const namedAncestorsOf = (chain: ReadonlyArray<SemanticNode>): ReadonlyArray<string> => Arr.flatMap(chain, nameOf)
-
-interface ResolvedTarget {
-  readonly locator: Locator
-  readonly located: ReadonlyArray<NodeRef>
-  readonly controls: ReadonlyArray<ControlDescriptor>
-}
-
 interface ActionPlan {
   readonly action: Action
   readonly located: ReadonlyArray<NodeRef>
   readonly controls: ReadonlyArray<ControlDescriptor>
 }
-
-const baseExpressionOf = (role: string, name: Option.Option<string>): ByRole =>
-  Option.match(name, {
-    onNone: () => ({ kind: 'ByRole', role }),
-    onSome: (value) => ({ kind: 'ByRole', role, name: { value, exact: true } }),
-  })
-
-const nameMatches = (name: Option.Option<string>) => (other: Placement): boolean =>
-  Option.match(name, {
-    onNone: () => true,
-    onSome: (value) => other.node.name === value,
-  })
-
-const sameTargetAs = (role: string, name: Option.Option<string>) => (other: Placement): boolean =>
-  Arr.every([other.node.role === role, nameMatches(name)(other)], (holds) => holds)
-
-// the placement is always among its own candidates, so the fallback is unreachable
-const indexAmong = (
-  candidates: ReadonlyArray<Placement>,
-  placement: Placement,
-): number =>
-  Option.getOrElse(
-    Arr.findFirstIndex(candidates, (candidate) => candidate.node.ref.id === placement.node.ref.id),
-    () => 0,
-  )
-
-const expressionOf = (
-  placements: ReadonlyArray<Placement>,
-  placement: Placement,
-  role: string,
-  name: Option.Option<string>,
-  base: ByRole,
-): LocatorExpression => {
-  const candidates = Arr.filter(placements, sameTargetAs(role, name))
-  return Match.value(candidates.length > 1).pipe(
-    Match.when(true, (): LocatorExpression => ({ kind: 'Nth', inner: base, index: indexAmong(candidates, placement) })),
-    Match.when(false, (): LocatorExpression => base),
-    Match.exhaustive,
-  )
-}
-
-const labelOf = (role: string, name: Option.Option<string>): string =>
-  Option.match(name, {
-    onNone: () => role,
-    onSome: (value) => `${role} "${value}"`,
-  })
-
-const locatorOf = (placements: ReadonlyArray<Placement>, placement: Placement, role: string): Locator => {
-  const name = Option.fromNullishOr(placement.node.name)
-  return {
-    expression: expressionOf(placements, placement, role, name, baseExpressionOf(role, name)),
-    label: labelOf(role, name),
-  }
-}
-
-const controlOf = (placement: Placement, role: string): ControlDescriptor =>
-  Option.match(Option.fromNullishOr(placement.node.name), {
-    onNone: () => ({ role, context: namedAncestorsOf(placement.chain) }),
-    onSome: (name) => ({ role, name, context: namedAncestorsOf(placement.chain) }),
-  })
-
-const targetOf = (placements: ReadonlyArray<Placement>, placement: Placement, role: string): ResolvedTarget => ({
-  locator: locatorOf(placements, placement, role),
-  located: [placement.node.ref],
-  controls: [controlOf(placement, role)],
-})
 
 const modelCallGated = (command: NextAct, decision: NextActDecision): NextActDecision =>
   Match.value(command.modelCalls < command.maxModelCalls).pipe(
@@ -410,36 +306,24 @@ const executeOf = (command: NextAct, call: ToolCall, plan: ActionPlan): NextActD
     Match.exhaustive,
   )
 
-const singlePlanOf = (target: ResolvedTarget, actionOf: (locator: Locator) => Action): ActionPlan => ({
-  action: actionOf(target.locator),
-  located: target.located,
-  controls: target.controls,
+const refPlanOf = (located: LocatedNode, actionOf: (locator: Locator) => Action): ActionPlan => ({
+  action: actionOf(located.locator),
+  located: [located.ref],
+  controls: [located.control],
 })
-
-const roleDecision = (
-  command: NextAct,
-  call: ToolCall,
-  placements: ReadonlyArray<Placement>,
-  placement: Placement,
-  actionOf: (locator: Locator) => Action,
-): NextActDecision =>
-  Option.match(Option.fromNullishOr(placement.node.role), {
-    onNone: () => toolCorrected(command, call.id, roleMissingContent(placement.node.ref.id)),
-    onSome: (role) => executeOf(command, call, singlePlanOf(targetOf(placements, placement, role), actionOf)),
-  })
 
 const refDecision = (
   command: NextAct,
   call: ToolCall,
   ref: string,
   actionOf: (locator: Locator) => Action,
-): NextActDecision => {
-  const placements = placementsOf(command.observation.tree, [])
-  return Option.match(placementOfRef(placements, ref), {
-    onNone: () => toolCorrected(command, call.id, absentRefContent(ref)),
-    onSome: (placement) => roleDecision(command, call, placements, placement, actionOf),
-  })
-}
+): NextActDecision =>
+  Match.value(lookupNode(command.observation, ref)).pipe(
+    Match.tag('NodeAbsent', () => toolCorrected(command, call.id, absentRefContent(ref))),
+    Match.tag('NodeRoleless', () => toolCorrected(command, call.id, roleMissingContent(ref))),
+    Match.tag('NodeLocated', ({ located }) => executeOf(command, call, refPlanOf(located, actionOf))),
+    Match.exhaustive,
+  )
 
 const secretRefDecision = (
   command: NextAct,
@@ -504,43 +388,36 @@ const typeAtDecision = (
     ),
   )
 
-const dragPlanOf = (from: ResolvedTarget, to: ResolvedTarget): ActionPlan => ({
+const dragPlanOf = (from: LocatedNode, to: LocatedNode): ActionPlan => ({
   action: { _tag: 'Drag', from: from.locator, to: to.locator },
-  located: [...from.located, ...to.located],
-  controls: [...from.controls, ...to.controls],
+  located: [from.ref, to.ref],
+  controls: [from.control, to.control],
 })
 
-const targetOfPlacement = (placements: ReadonlyArray<Placement>, placement: Placement): Option.Option<ResolvedTarget> =>
-  Option.map(Option.fromNullishOr(placement.node.role), (role) => targetOf(placements, placement, role))
-
-const rolelessIdOf = (from: Placement, to: Placement): string =>
-  Match.value(Option.fromNullishOr(from.node.role)).pipe(
-    Match.when(Option.isNone, () => from.node.ref.id),
-    Match.orElse(() => to.node.ref.id),
-  )
-
-const dragTargetsDecision = (
-  command: NextAct,
-  call: ToolCall,
-  placements: ReadonlyArray<Placement>,
-  from: Placement,
-  to: Placement,
-): NextActDecision =>
-  Option.match(Option.all([targetOfPlacement(placements, from), targetOfPlacement(placements, to)]), {
-    onNone: () => toolCorrected(command, call.id, roleMissingContent(rolelessIdOf(from, to))),
-    onSome: ([fromTarget, toTarget]) => executeOf(command, call, dragPlanOf(fromTarget, toTarget)),
-  })
-
 const dragDecision = (command: NextAct, call: ToolCall, fromRef: string, toRef: string): NextActDecision => {
-  const placements = placementsOf(command.observation.tree, [])
-  return Option.match(placementOfRef(placements, fromRef), {
-    onNone: () => toolCorrected(command, call.id, absentRefContent(fromRef)),
-    onSome: (from) =>
-      Option.match(placementOfRef(placements, toRef), {
-        onNone: () => toolCorrected(command, call.id, absentRefContent(toRef)),
-        onSome: (to) => dragTargetsDecision(command, call, placements, from, to),
-      }),
-  })
+  const from = lookupNode(command.observation, fromRef)
+  const to = lookupNode(command.observation, toRef)
+  return Match.value(from).pipe(
+    Match.tag('NodeAbsent', () => toolCorrected(command, call.id, absentRefContent(fromRef))),
+    Match.orElse((fromPresent) =>
+      Match.value(to).pipe(
+        Match.tag('NodeAbsent', () => toolCorrected(command, call.id, absentRefContent(toRef))),
+        Match.orElse((toPresent) =>
+          Match.value(fromPresent).pipe(
+            Match.tag('NodeRoleless', () => toolCorrected(command, call.id, roleMissingContent(fromRef))),
+            Match.tag('NodeLocated', (fromLocated) =>
+              Match.value(toPresent).pipe(
+                Match.tag('NodeRoleless', () => toolCorrected(command, call.id, roleMissingContent(toRef))),
+                Match.tag('NodeLocated', (toLocated) =>
+                  executeOf(command, call, dragPlanOf(fromLocated.located, toLocated.located))),
+                Match.exhaustive,
+              )),
+            Match.exhaustive,
+          )
+        ),
+      )
+    ),
+  )
 }
 
 const toolDecision = (command: NextAct, call: ToolCall, tool: ActTool): NextActDecision =>

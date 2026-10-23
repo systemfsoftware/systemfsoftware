@@ -213,6 +213,60 @@ export const formatObservation: {
     Arr.join([routeLineOf(observation, redactField), ...visibleLinesOf(observation.tree, 0, redactField)], '\n'),
 )
 
+interface StableNode {
+  readonly id: string
+  readonly node: Omit<SemanticNode, 'ref' | 'children'>
+  readonly children: ReadonlyArray<StableNode>
+}
+
+const stableNodeOf = ({ ref, children, ...node }: SemanticNode): StableNode => ({
+  id: ref.id,
+  node,
+  children: children.map(stableNodeOf),
+})
+
+export const stableTextOf = (observation: Observation): string =>
+  JSON.stringify([observation.route, observation.tree.map(stableNodeOf)])
+
+/**
+ * A node with its name, text and value masked at the same limits as the formatted tree, so a
+ * check the model built from the masked view is evaluated against that same view (FR-9).
+ */
+const redactedNameOf = (node: SemanticNode, redactField: (limit: number, text: string) => string): {
+  readonly name?: string
+} => (node.name === undefined ? {} : { name: redactField(NAME_LIMIT, node.name) })
+
+const redactedTextOf = (node: SemanticNode, redactField: (limit: number, text: string) => string): {
+  readonly text?: string
+} => (node.text === undefined ? {} : { text: redactField(TEXT_LIMIT, node.text) })
+
+const redactedValueOf = (node: SemanticNode, redactField: (limit: number, text: string) => string): {
+  readonly value?: string
+} => (node.value === undefined ? {} : { value: redactField(TEXT_LIMIT, node.value) })
+
+const redactedFieldsOf = (
+  node: SemanticNode,
+  redactField: (limit: number, text: string) => string,
+): { readonly name?: string; readonly text?: string; readonly value?: string } =>
+  Object.assign(
+    {},
+    redactedNameOf(node, redactField),
+    redactedTextOf(node, redactField),
+    redactedValueOf(
+      node,
+      redactField,
+    ),
+  )
+
+export const redactedNodeFieldsOf: {
+  (node: SemanticNode, redactField: (limit: number, text: string) => string): SemanticNode
+  (node: SemanticNode): (redactField: (limit: number, text: string) => string) => SemanticNode
+} = Function.dual(
+  2,
+  (node: SemanticNode, redactField: (limit: number, text: string) => string): SemanticNode =>
+    Object.assign({}, node, redactedFieldsOf(node, redactField)),
+)
+
 // The property laws below pin the redaction contract of this module: masking by name, the cut-at-limit
 // prefix rule, and hidden-subtree skipping. Inputs are drawn from the production schemas; secrets are
 // derived words (lowercase-alphanumeric, >= 3 chars) so they never collide with the uppercase constants.

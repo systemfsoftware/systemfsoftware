@@ -87,6 +87,32 @@ const holdingEngine = (engine: object): E2EConfigInput => {
   return { ...config, targets: [{ ...config.targets[0], engine }] }
 }
 
+const OPENROUTER_MODEL = {
+  gateway: 'openrouter',
+  model: 'deepseek/deepseek-flash-latest',
+  apiKeyEnv: 'OPENROUTER_API_KEY',
+}
+
+const COMPATIBLE_MODEL = {
+  gateway: 'openai-compatible',
+  baseURL: 'https://models.acme.test/v1',
+  model: 'acme-vision',
+  apiKeyEnv: 'ACME_MODEL_KEY',
+}
+
+const withModel = (model: object): E2EConfigInput => {
+  const config = designLiteral()
+  return { ...config, agents: { default: { ...config.agents?.['default'], model } } }
+}
+
+const modelVisionOf = (config: E2EConfigInput) =>
+  Effect.result(
+    Effect.mapBoth(decodeConfig(config, LOCAL_MACHINE), {
+      onFailure: (refusal) => refusal.path.slice(0, 4),
+      onSuccess: (decoded) => decoded.agents['default']?.model.vision,
+    }),
+  )
+
 Feature('Decoding a suite config at the edge')
   .withLayer(Layer.empty)
   .body(({ scenario, scenarioOutline }) => {
@@ -171,6 +197,35 @@ Feature('Decoding a suite config at the edge')
           When('the edge decodes it')('outcome', (state) => refusalPath(state.config, 3)),
           Then('the refusal points at the engine')((state, expect) =>
             expect(state.outcome).toMatchObject({ _tag: 'Failure', failure: ['targets', 0, 'engine'] })
+          ),
+        ),
+    )
+
+    scenarioOutline(
+      "A model's vision flag decodes strictly and defaults to text only",
+      [
+        { flag: 'unset on openrouter', model: OPENROUTER_MODEL, outcome: { _tag: 'Success', success: false } },
+        {
+          flag: 'unset on a compatible gateway',
+          model: COMPATIBLE_MODEL,
+          outcome: { _tag: 'Success', success: false },
+        },
+        { flag: 'true', model: { ...COMPATIBLE_MODEL, vision: true }, outcome: { _tag: 'Success', success: true } },
+        {
+          flag: 'a string',
+          model: { ...OPENROUTER_MODEL, vision: 'yes' },
+          outcome: { _tag: 'Failure', failure: ['agents', 'default', 'model', 'vision'] },
+        },
+      ],
+      ({ model, outcome }) =>
+        Gherkin.Do.pipe(
+          Given('an agent whose model states its vision flag that way')(
+            'config',
+            () => Effect.succeed(withModel(model)),
+          ),
+          When('the edge decodes it')('outcome', (state) => modelVisionOf(state.config)),
+          Then('the decoded flag, or the refusal path, is the one the schema gives')((state, expect) =>
+            expect(state.outcome).toMatchObject(outcome)
           ),
         ),
     )

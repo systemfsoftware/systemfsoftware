@@ -101,11 +101,15 @@ const InputTokenBudget = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1, { message: 'an input token budget is a whole number of at least 1' }),
 )
 
+/** Whether the model accepts image input; a text-only model is the default, so vision must be declared. */
+const ModelVision = Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false)))
+
 const OpenRouterModel = Schema.Struct({
   gateway: Schema.Literal('openrouter').pipe(Schema.withDecodingDefaultKey(Effect.succeed('openrouter' as const))),
   model: NonBlank.pipe(Schema.withDecodingDefaultKey(Effect.succeed('deepseek/deepseek-flash-latest'))),
   apiKeyEnv: EnvVarName.pipe(Schema.withDecodingDefaultKey(Effect.succeed('OPENROUTER_API_KEY'))),
   maxInputTokens: Schema.optionalKey(InputTokenBudget),
+  vision: ModelVision,
 })
 
 const OpenAiCompatibleModel = Schema.Struct({
@@ -114,6 +118,7 @@ const OpenAiCompatibleModel = Schema.Struct({
   model: NonBlank,
   apiKeyEnv: EnvVarName,
   maxInputTokens: Schema.optionalKey(InputTokenBudget),
+  vision: ModelVision,
 })
 
 export const ModelSpec = Schema.Union([OpenAiCompatibleModel, OpenRouterModel])

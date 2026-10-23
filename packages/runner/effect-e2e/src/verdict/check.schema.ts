@@ -1,3 +1,5 @@
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
 import { Locator } from '../engine/locator.schema.js'
@@ -96,6 +98,20 @@ export const Check: Schema.Codec<Check> = Schema.suspend((): Schema.Codec<Check>
   identifier: 'Check',
   recursionBudget: { maxDepth: 8, depthSize: 'small' },
 })
+
+export const checkLocatorsOf = (check: Check): ReadonlyArray<Locator> =>
+  Match.value(check).pipe(
+    Match.tag('Present', ({ locator }): ReadonlyArray<Locator> => [locator]),
+    Match.tag('Text', ({ locator }): ReadonlyArray<Locator> => [locator]),
+    Match.tag('Value', ({ locator }): ReadonlyArray<Locator> => [locator]),
+    Match.tag('State', ({ locator }): ReadonlyArray<Locator> => [locator]),
+    Match.tag('Route', (): ReadonlyArray<Locator> => []),
+    Match.tag('Region', (): ReadonlyArray<Locator> => []),
+    Match.tag('AllOf', ({ checks }): ReadonlyArray<Locator> => Arr.flatMap(checks, checkLocatorsOf)),
+    Match.tag('AnyOf', ({ checks }): ReadonlyArray<Locator> => Arr.flatMap(checks, checkLocatorsOf)),
+    Match.tag('Not', ({ check: inner }): ReadonlyArray<Locator> => checkLocatorsOf(inner)),
+    Match.exhaustive,
+  )
 
 export const CheckRecord = Schema.Struct({
   sentence: Schema.String,

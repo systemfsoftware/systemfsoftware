@@ -36,7 +36,6 @@ import type { Action } from '../engine/action.schema.js'
 import type { EngineShape } from '../engine/engine.service.js'
 import { Engine } from '../engine/engine.service.js'
 import type { Observation } from '../engine/observation.schema.js'
-import type { SemanticNode } from '../engine/semantic-node.schema.js'
 import type { Message, ModelAnswer, ModelFailure, ModelRequest, ModelResponse } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
@@ -71,8 +70,9 @@ import {
   toolResultOf,
 } from './act-prompt.js'
 import { type Capture, type Execute, NextAct, nextAct, type NextActDecision } from './next-act.workflow.js'
-import { formatObservation } from './observation.js'
+import { formatObservation, stableTextOf } from './observation.js'
 import { recordedFlow, RecordFlow } from './recorded-flow.workflow.js'
+import { redactMessage, redactRequest } from './redaction.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
 
@@ -227,22 +227,6 @@ const isSecretRef = Schema.is(SecretRef)
 const secretNamesOf = (params: StepParams): ReadonlyArray<string> =>
   Object.values(params).flatMap((value) => (isSecretRef(value) ? [value.secret] : []))
 
-interface StableNode {
-  readonly id: string
-  readonly node: Omit<SemanticNode, 'ref' | 'children'>
-  readonly children: ReadonlyArray<StableNode>
-}
-
-const stableNodeOf = ({ ref, children, ...node }: SemanticNode): StableNode => ({
-  id: ref.id,
-  node,
-  children: children.map(stableNodeOf),
-})
-
-/** The observation without its revisions, which change on every observe even when nothing moved. */
-const stableTextOf = (observation: Observation): string =>
-  JSON.stringify([observation.route, observation.tree.map(stableNodeOf)])
-
 const update = (step: Step, change: (run: Run) => Run): Effect.Effect<void> => Ref.update(step.run, change)
 
 const settledAgainst = (previous: Observation, rounds: number) => (next: Observation): boolean =>
@@ -395,6 +379,7 @@ const keyingOf = (step: Step): Option.Option<Keying> => {
     deriveKey(
       new DeriveKey({
         mode: cache.mode,
+        step: 'act',
         project: cache.project,
         test: cache.test,
         target: cache.target,
@@ -416,20 +401,6 @@ const keyingOf = (step: Step): Option.Option<Keying> => {
 
 // --- live loop ---------------------------------------------------------------------------------
 
-const redactMessage = (redact: (text: string) => string) => (message: Message): Message =>
-  Match.valueTags(message, {
-    UserMessage: (user): Message => ({
-      ...user,
-      content: Arr.map(user.content, (part) =>
-        Match.valueTags(part, {
-          TextPart: (text): typeof part => ({ ...text, text: redact(text.text) }),
-          ImagePart: (image): typeof part => image,
-        })),
-    }),
-    AssistantMessage: (assistant): Message => ({ ...assistant, text: redact(assistant.text) }),
-    ToolMessage: (tool): Message => ({ ...tool, content: redact(tool.content) }),
-  })
-
 const requestOf = (step: Step, run: Run, observation: Observation): ModelRequest => {
   const { config } = step.context.agent
   const messages: ReadonlyArray<Message> = [
@@ -442,17 +413,12 @@ const requestOf = (step: Step, run: Run, observation: Observation): ModelRequest
     ...run.history,
     observationMessageOf(formatObservation(observation, step.ledger.redactCut), run.screenshot),
   ]
-  const request = actRequestOf({
+  return redactRequest(step.ledger.redact)(actRequestOf({
     model: config.model.model,
     system: systemPromptOf(config.system),
     messages,
     tools: actTools(step.engine.capabilities),
-  })
-  return {
-    ...request,
-    system: step.ledger.redact(request.system),
-    messages: request.messages.map(redactMessage(step.ledger.redact)),
-  }
+  }))
 }
 
 const metered = (response: ModelResponse) => (run: Run): Run => ({

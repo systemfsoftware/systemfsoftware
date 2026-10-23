@@ -11,6 +11,8 @@ import * as Layer from 'effect/Layer';
 import * as Option_2 from 'effect/Option';
 import * as Redacted from 'effect/Redacted';
 import * as Schema from 'effect/Schema';
+import { StandardJSONSchemaV1 } from 'effect/StandardSchema';
+import { StandardSchemaV1 } from 'effect/StandardSchema';
 import { YieldableError } from 'effect/Cause';
 
 // Warning: (ae-forgotten-export) The symbol "Engine" needs to be exported by the entry point agent.d.ts
@@ -139,6 +141,137 @@ export interface ActResult {
     readonly summary: string;
 }
 
+// @public (undocumented)
+export const assert: (request: AssertRequest) => Effect.Effect<AssertResult, AssertFailure, Engine | ModelGateway | CacheStore | SecretLedger>;
+
+// @public (undocumented)
+export type AssertFailure = JudgmentFailure;
+
+// @public (undocumented)
+export interface AssertOptions {
+    // (undocumented)
+    readonly maxModelCalls?: number | undefined;
+    // (undocumented)
+    readonly timeout?: Duration.Input | undefined;
+    // Warning: (ae-forgotten-export) The symbol "VisionMode" needs to be exported by the entry point agent.d.ts
+    //
+    // (undocumented)
+    readonly vision?: VisionMode | undefined;
+}
+
+// @public (undocumented)
+export interface AssertRequest extends AssertOptions {
+    // (undocumented)
+    readonly context: JudgmentContext;
+    // (undocumented)
+    readonly statement: string;
+}
+
+// @public (undocumented)
+export interface AssertResult {
+    // (undocumented)
+    readonly lookup: CacheLookup;
+    // (undocumented)
+    readonly modelCalls: number;
+    // Warning: (ae-forgotten-export) The symbol "CheckRecord" needs to be exported by the entry point agent.d.ts
+    //
+    // (undocumented)
+    readonly record: CheckRecord;
+    // (undocumented)
+    readonly tokens: TokenUsage;
+}
+
+// @public
+export const extract: <I, O>(request: ExtractRequest<I, O>) => Effect.Effect<ExtractResult<O>, ExtractFailure, Engine | ModelGateway | SecretLedger>;
+
+// @public
+export interface ExtractContext extends Omit<ActContext, 'record'> {
+    // (undocumented)
+    readonly record: (record: ExtractRecord) => Effect.Effect<void>;
+}
+
+// @public (undocumented)
+export type ExtractFailure = UnsupportedCapability | PolicyDenied | AutomationUnsupported | ArtifactWriteFailed | AppNotOpen | ModelFailure | StepTimeout;
+
+// @public (undocumented)
+export interface ExtractOptions {
+    readonly maxModelCalls?: number | undefined;
+    readonly timeout?: Duration.Input | undefined;
+    readonly vision?: VisionMode | undefined;
+}
+
+// @public
+export interface ExtractRecord {
+    // (undocumented)
+    readonly instruction: string;
+    // (undocumented)
+    readonly modelCalls: number;
+    // (undocumented)
+    readonly outcome: StepOutcome;
+    // (undocumented)
+    readonly schemaId: string;
+    // (undocumented)
+    readonly stepIndex: number;
+    // (undocumented)
+    readonly tokens: TokenUsage;
+    readonly value: Schema.Json;
+}
+
+// @public
+export interface ExtractRequest<I, O> extends ExtractOptions {
+    // (undocumented)
+    readonly context: ExtractContext;
+    // (undocumented)
+    readonly instruction: string;
+    // (undocumented)
+    readonly schema: StandardSchemaV1<I, O> & StandardJSONSchemaV1<I, O>;
+}
+
+// @public (undocumented)
+export interface ExtractResult<O> {
+    // (undocumented)
+    readonly modelCalls: number;
+    // (undocumented)
+    readonly tokens: TokenUsage;
+    // (undocumented)
+    readonly value: O;
+}
+
+// @public (undocumented)
+export type JudgmentContext = Omit<ActContext, 'record'> & {
+    readonly record: (record: JudgmentRecord) => Effect.Effect<void>;
+};
+
+// Warning: (ae-forgotten-export) The symbol "AssertionFailed" needs to be exported by the entry point agent.d.ts
+// Warning: (ae-forgotten-export) The symbol "AssertionInconclusive" needs to be exported by the entry point agent.d.ts
+// Warning: (ae-forgotten-export) The symbol "InternalError" needs to be exported by the entry point agent.d.ts
+//
+// @public (undocumented)
+export type JudgmentFailure = UnsupportedCapability | PolicyDenied | AutomationUnsupported | ArtifactWriteFailed | AppNotOpen | ModelFailure | AssertionFailed | AssertionInconclusive | StepBudgetExhausted | StepTimeout | InternalError;
+
+// @public (undocumented)
+export type JudgmentKind = 'assert' | 'waitFor';
+
+// @public
+export interface JudgmentRecord {
+    // (undocumented)
+    readonly kind: JudgmentKind;
+    // (undocumented)
+    readonly lookup: CacheLookup;
+    // (undocumented)
+    readonly modelCalls: number;
+    // (undocumented)
+    readonly outcome: StepOutcome;
+    readonly record: CheckRecord;
+    // (undocumented)
+    readonly sentence: string;
+    readonly staged: Option_2.Option<StagedRecording>;
+    // (undocumented)
+    readonly stepIndex: number;
+    // (undocumented)
+    readonly tokens: TokenUsage;
+}
+
 // Warning: (ae-forgotten-export) The symbol "SecretLedger_base" needs to be exported by the entry point agent.d.ts
 //
 // @public (undocumented)
@@ -159,12 +292,50 @@ export interface SecretLedgerShape {
     readonly screenshot: <A, E, R>(capture: Effect.Effect<A, E, R>) => Effect.Effect<A, E | PolicyDenied, R>;
 }
 
+// @public (undocumented)
+export const waitFor: (request: WaitForRequest) => Effect.Effect<WaitForResult, WaitForFailure, Engine | ModelGateway | CacheStore | SecretLedger>;
+
+// @public (undocumented)
+export type WaitForFailure = JudgmentFailure;
+
+// @public (undocumented)
+export interface WaitForOptions {
+    // (undocumented)
+    readonly interval?: Duration.Input | undefined;
+    // (undocumented)
+    readonly maxModelCalls?: number | undefined;
+    // (undocumented)
+    readonly timeout?: Duration.Input | undefined;
+    // (undocumented)
+    readonly vision?: VisionMode | undefined;
+}
+
+// @public (undocumented)
+export interface WaitForRequest extends WaitForOptions {
+    // (undocumented)
+    readonly condition: string;
+    // (undocumented)
+    readonly context: JudgmentContext;
+}
+
+// @public (undocumented)
+export interface WaitForResult {
+    // (undocumented)
+    readonly lookup: CacheLookup;
+    // (undocumented)
+    readonly modelCalls: number;
+    // (undocumented)
+    readonly record: CheckRecord;
+    // (undocumented)
+    readonly tokens: TokenUsage;
+}
+
 // Warnings were encountered during analysis:
 //
-// dist/agent.d.ts:778:5 - (ae-forgotten-export) The symbol "CacheKeyContext" needs to be exported by the entry point agent.d.ts
-// dist/agent.d.ts:779:5 - (ae-forgotten-export) The symbol "AgentConfig" needs to be exported by the entry point agent.d.ts
-// dist/agent.d.ts:782:5 - (ae-forgotten-export) The symbol "CacheMode" needs to be exported by the entry point agent.d.ts
-// dist/agent.d.ts:786:5 - (ae-forgotten-export) The symbol "EngineIdentity" needs to be exported by the entry point agent.d.ts
+// dist/agent.d.ts:782:5 - (ae-forgotten-export) The symbol "CacheKeyContext" needs to be exported by the entry point agent.d.ts
+// dist/agent.d.ts:783:5 - (ae-forgotten-export) The symbol "AgentConfig" needs to be exported by the entry point agent.d.ts
+// dist/agent.d.ts:786:5 - (ae-forgotten-export) The symbol "CacheMode" needs to be exported by the entry point agent.d.ts
+// dist/agent.d.ts:790:5 - (ae-forgotten-export) The symbol "EngineIdentity" needs to be exported by the entry point agent.d.ts
 
 // (No @packageDocumentation comment for this package)
 
