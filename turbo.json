@@ -82,6 +82,30 @@
       ],
       "cache": true
     },
+    "test:engine": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "vitest.config.ts",
+        "vitest.config.*",
+        "!**/README.md",
+        "!**/AGENTS.md",
+        "!**/CHANGELOG.md",
+        "!**/etc/*.api.md"
+      ],
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "^build",
+        "build"
+      ],
+      "outputs": [],
+      "env": [
+        "NODE_ENV",
+        "CI",
+        "AGENT",
+        "CONFORMANCE_PROFILE"
+      ],
+      "cache": true
+    },
     "test:types": {
       "inputs": [
         "$TURBO_DEFAULT$",

@@ -91,14 +91,20 @@ const opened = (origin: string, path: string): Effect.Effect<EngineShape, Engine
 const nodesIn = (tree: ReadonlyArray<SemanticNode>): ReadonlyArray<SemanticNode> =>
   tree.flatMap((node) => [node, ...nodesIn(node.children)])
 
+const nodeNamed = (tree: ReadonlyArray<SemanticNode>, role: string, name: string): Option.Option<SemanticNode> =>
+  Arr.findFirst(nodesIn(tree), (node) => node.role === role && node.name === name)
+
 const summaryOf = (tree: ReadonlyArray<SemanticNode>, role: string, name: string) =>
-  Option.match(Arr.findFirst(nodesIn(tree), (node) => node.role === role && node.name === name), {
+  Option.match(nodeNamed(tree, role, name), {
     onNone: () => 'missing',
     onSome: (node) => ({
       disabled: node.states.disabled,
       checked: Option.getOrNull(Option.fromNullishOr(node.states.checked)),
     }),
   })
+
+const valueOf = (tree: ReadonlyArray<SemanticNode>, role: string, name: string): string | null =>
+  Option.getOrNull(Option.flatMap(nodeNamed(tree, role, name), (node) => Option.fromNullishOr(node.value)))
 
 const redecodes = (observation: Observation): Effect.Effect<boolean> =>
   Schema.encodeEffect(Observation)(observation).pipe(
@@ -245,6 +251,23 @@ const laws: ReadonlyArray<Law> = [
         return compared(
           [{ _tag: 'Checked', checked: true }, { _tag: 'Checked', checked: false }],
           [afterFirst, afterSecond],
+        )
+      }),
+  },
+  {
+    name: 'tree-rebuilds-after-acts',
+    check: (origin) =>
+      Effect.gen(function*() {
+        const engine = yield* opened(origin, LawSite.form)
+        yield* engine.act({ _tag: 'Fill', target: email, value: FILLED })
+        yield* engine.act({ _tag: 'Tap', target: subscribe })
+        const { tree } = yield* engine.observe
+        return compared(
+          { email: FILLED, subscribe: { disabled: false, checked: true } },
+          {
+            email: valueOf(tree, 'textbox', LawSite.emptyTextbox),
+            subscribe: summaryOf(tree, 'checkbox', LawSite.uncheckedCheckbox),
+          },
         )
       }),
   },

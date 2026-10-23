@@ -43,6 +43,7 @@ Feature('Proving the web engine against the engine laws')
             'query-role-name: held',
             'fill-then-read: held',
             'tap-checkbox: held',
+            'tree-rebuilds-after-acts: held',
             'tap-link-navigates: held',
             'screenshot-masks-without-requiring-a-match: held',
             'drag-capability: skipped',

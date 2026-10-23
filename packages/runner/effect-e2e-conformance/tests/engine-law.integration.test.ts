@@ -43,6 +43,7 @@ Feature('Proving an engine against the engine laws')
             'query-role-name: held',
             'fill-then-read: held',
             'tap-checkbox: held',
+            'tree-rebuilds-after-acts: held',
             'tap-link-navigates: held',
             'screenshot-masks-without-requiring-a-match: held',
             'drag-capability: skipped',
@@ -70,6 +71,7 @@ Feature('Proving an engine against the engine laws')
             'query-role-name: held',
             'fill-then-read: held',
             'tap-checkbox: held',
+            'tree-rebuilds-after-acts: held',
             'tap-link-navigates: held',
             'screenshot-masks-without-requiring-a-match: held',
             'drag-capability: held',
@@ -126,6 +128,7 @@ Feature('Proving an engine against the engine laws')
         { method: 'logs', broken: ['logs-hold-load-evidence-once-open-returns'] },
         { method: 'observe', broken: ['observe-tree'] },
         { method: 'close', broken: ['close-ends-session-and-open-starts-fresh'] },
+        { method: 'rebuild', broken: ['tree-rebuilds-after-acts'] },
       ] as const,
       (row) =>
         Gherkin.Do.pipe(

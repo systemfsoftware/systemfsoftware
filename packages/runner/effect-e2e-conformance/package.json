@@ -12,7 +12,8 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
-    "test": "vitest run",
+    "test": "vitest run --project pure",
+    "test:engine": "vitest run --project engine",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
@@ -23,8 +24,10 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/jsdom": "30.0.0",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "jsdom": "30.1.2",
     "oxlint": "catalog:oxlint",
     "playwright": "catalog:",
     "vitest": "catalog:"
