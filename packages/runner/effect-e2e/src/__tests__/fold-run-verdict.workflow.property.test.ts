@@ -3,43 +3,42 @@ import * as Arr from 'effect/Array'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
+import type { Cause } from '../verdict/cause.schema.js'
 import { runVerdictOf } from '../verdict/exit-code.js'
 import type { FailureCode } from '../verdict/failure.schema.js'
 import { FoldRunVerdict, foldRunVerdict } from '../verdict/fold-run-verdict.workflow.js'
 import { RunVerdict } from '../verdict/run-verdict.schema.js'
 
-// Design §10: a failure code is blockable exactly when its default cause is environment.
-const BLOCKABLE: { readonly [Code in FailureCode]: boolean } = {
-  MODEL_UNAVAILABLE: true,
-  MODEL_PROVIDER_FAILED: true,
-  MODEL_REFUSED: true,
-  AUTH_CREDENTIAL_UNAVAILABLE: true,
-  AUTH_CREDENTIAL_INVALID: true,
-  SECRET_UNAVAILABLE: true,
-  ENVIRONMENT_UNAVAILABLE: true,
-  APP_UNREACHABLE: true,
-  APP_NOT_OPEN: true,
-  ARTIFACT_WRITE_FAILED: true,
-  LOCATOR_NOT_FOUND: false,
-  LOCATOR_AMBIGUOUS: false,
-  ACTION_FAILED: false,
-  AUTOMATION_UNSUPPORTED: false,
-  UNSUPPORTED_CAPABILITY: false,
-  STEP_BUDGET_EXHAUSTED: false,
-  STEP_TIMEOUT: false,
-  STEP_NO_CONCLUSION: false,
-  STEP_NOT_AWAITED: false,
-  REPLAY_STALE: false,
-  POLICY_DENIED: false,
-  CONTEXT_OVERFLOW: false,
-  MODEL_OUTPUT_INVALID: false,
-  ASSERTION_INCONCLUSIVE: false,
-  ASSERTION_FAILED: false,
-  INTERRUPTED: false,
-  INTERNAL_ERROR: false,
+const DESIGN_10_CAUSE: { readonly [Code in FailureCode]: Cause } = {
+  MODEL_UNAVAILABLE: 'environment',
+  MODEL_PROVIDER_FAILED: 'environment',
+  MODEL_REFUSED: 'environment',
+  AUTH_CREDENTIAL_UNAVAILABLE: 'environment',
+  AUTH_CREDENTIAL_INVALID: 'environment',
+  SECRET_UNAVAILABLE: 'environment',
+  ENVIRONMENT_UNAVAILABLE: 'environment',
+  APP_UNREACHABLE: 'environment',
+  APP_NOT_OPEN: 'environment',
+  ARTIFACT_WRITE_FAILED: 'environment',
+  LOCATOR_NOT_FOUND: 'automation',
+  LOCATOR_AMBIGUOUS: 'automation',
+  ACTION_FAILED: 'automation',
+  AUTOMATION_UNSUPPORTED: 'automation',
+  UNSUPPORTED_CAPABILITY: 'automation',
+  STEP_BUDGET_EXHAUSTED: 'automation',
+  STEP_TIMEOUT: 'automation',
+  STEP_NO_CONCLUSION: 'automation',
+  STEP_NOT_AWAITED: 'automation',
+  REPLAY_STALE: 'automation',
+  POLICY_DENIED: 'automation',
+  CONTEXT_OVERFLOW: 'automation',
+  MODEL_OUTPUT_INVALID: 'automation',
+  ASSERTION_INCONCLUSIVE: 'automation',
+  ASSERTION_FAILED: 'product',
+  INTERRUPTED: 'unclassified',
+  INTERNAL_ERROR: 'unclassified',
 }
 
-// FR-5 exit table.
 const EXIT_OF_STATUS = { passed: 0, failed: 1, blocked: 3, error: 4, interrupted: 130 } as const
 
 type Status = keyof typeof EXIT_OF_STATUS
@@ -47,30 +46,26 @@ type Status = keyof typeof EXIT_OF_STATUS
 const verdictOf = (command: FoldRunVerdict): RunVerdict | undefined =>
   Result.match(foldRunVerdict(command), { onFailure: () => undefined, onSuccess: runVerdictOf })
 
-// Design §10 precedence: interruption, then internal error, then any non-blockable failure, then only blockable failures.
+const recordedCodesOf = (command: FoldRunVerdict): ReadonlyArray<FailureCode> => [
+  ...command.steps.flatMap((step) => 'code' in step.outcome ? [step.outcome.code] : []),
+  ...command.runErrors.map((error) => error.code),
+]
+
 const design10StatusOf = (command: FoldRunVerdict): Status => {
-  const codes = [
-    ...command.steps.flatMap((step) => 'code' in step.outcome ? [step.outcome.code] : []),
-    ...command.runErrors.map((error) => error.code),
-  ]
+  const codes = recordedCodesOf(command)
   return codes.includes('INTERRUPTED')
     ? 'interrupted'
     : codes.includes('INTERNAL_ERROR')
     ? 'error'
     : codes.length === 0
     ? 'passed'
-    : codes.every((code) => BLOCKABLE[code])
+    : codes.every((code) => DESIGN_10_CAUSE[code] === 'environment')
     ? 'blocked'
     : 'failed'
 }
 
-const nonPassingCountOf = (command: FoldRunVerdict): number =>
-  command.steps.filter((step) => 'code' in step.outcome).length + command.runErrors.length
-
-// Each drawn record carries an arbitrary recorded cause and model-proposed cause, so the verdict matching the
-// code-only oracle is also the law that neither cause moves the status or the exit code.
 it.prop(
-  '∀c_FoldRunVerdict_≡Design10StatusAndExit',
+  '∀c_FoldRunVerdict_≡Design10StatusExitAndCauses',
   {
     of: [FoldRunVerdict],
     subject: verdictOf,
@@ -86,14 +81,20 @@ it.prop(
   },
   (subject, [command]) => {
     const status = design10StatusOf(command)
+    const codes = recordedCodesOf(command)
     const verdict = subject(command)
     return verdict !== undefined && Schema.is(RunVerdict)(verdict) && verdict.status === status &&
-      verdict.exitCode === EXIT_OF_STATUS[status] && verdict.failures.length === nonPassingCountOf(command)
+      verdict.exitCode === EXIT_OF_STATUS[status] && verdict.failures.length === codes.length &&
+      verdict.failures.every((failure, index) =>
+        failure.code === codes[index] && failure.cause === DESIGN_10_CAUSE[failure.code] &&
+        (failure.proposed === undefined || failure.proposed.evidence.length > 0 ||
+          failure.proposed.cause === 'unclassified')
+      )
   },
 )
 
 it.prop(
-  '∀c_FoldRunVerdict_≡SameVerdictRepeatedAndReordered',
+  '∀c_FoldRunVerdict_≡SameStatusAndExitRepeatedAndReordered',
   { of: [FoldRunVerdict, Schema.Int], subject: verdictOf, runs: 200, arbitrary: { seed: 499_102 } },
   (subject, [command, shift]) => {
     const first = subject(command)
