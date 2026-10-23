@@ -27,6 +27,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./model": {
+      "@systemfsoftware/source": "./src/model/mod.ts",
+      "types": "./dist/model.d.ts",
+      "default": "./dist/model.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -76,6 +81,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./model": {
+        "types": "./dist/model.d.ts",
+        "default": "./dist/model.mjs"
       },
       "./package.json": "./package.json"
     },

@@ -97,10 +97,15 @@ export const Target = TargetFields.pipe(
 )
 export type Target = typeof Target.Type
 
+const InputTokenBudget = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, { message: 'an input token budget is a whole number of at least 1' }),
+)
+
 const OpenRouterModel = Schema.Struct({
   gateway: Schema.Literal('openrouter').pipe(Schema.withDecodingDefaultKey(Effect.succeed('openrouter' as const))),
   model: NonBlank.pipe(Schema.withDecodingDefaultKey(Effect.succeed('deepseek/deepseek-flash-latest'))),
   apiKeyEnv: EnvVarName.pipe(Schema.withDecodingDefaultKey(Effect.succeed('OPENROUTER_API_KEY'))),
+  maxInputTokens: Schema.optionalKey(InputTokenBudget),
 })
 
 const OpenAiCompatibleModel = Schema.Struct({
@@ -108,9 +113,11 @@ const OpenAiCompatibleModel = Schema.Struct({
   baseURL: AbsoluteUrl,
   model: NonBlank,
   apiKeyEnv: EnvVarName,
+  maxInputTokens: Schema.optionalKey(InputTokenBudget),
 })
 
-const ModelSpec = Schema.Union([OpenAiCompatibleModel, OpenRouterModel])
+export const ModelSpec = Schema.Union([OpenAiCompatibleModel, OpenRouterModel])
+export type ModelSpec = typeof ModelSpec.Type
 
 export const AgentConfig = Schema.Struct({
   model: ModelSpec,
