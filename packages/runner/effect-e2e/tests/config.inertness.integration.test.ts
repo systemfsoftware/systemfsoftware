@@ -26,6 +26,11 @@ const importFresh = Effect.promise(() => {
   return import('@systemfsoftware/effect-e2e')
 })
 
+const importEngineFresh = Effect.promise(() => {
+  vi.resetModules()
+  return import('@systemfsoftware/effect-e2e/engine')
+})
+
 /** The id the next fiber will get: Effect numbers every fiber it starts from one process-wide counter. */
 const nextFiberId = Effect.map(Effect.forkChild(Effect.void), (fiber) => fiber.id + 1)
 
@@ -77,11 +82,12 @@ const installProbe = (): ImportProbe => {
   }
 }
 
-const probedImport = Effect.acquireUseRelease(
-  Effect.sync(installProbe),
-  (probe) => Effect.as(importFresh, { envReads: probe.envReads, scheduled: probe.scheduled }),
-  (probe) => Effect.sync(probe.restore),
-)
+const probed = <A>(load: Effect.Effect<A>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(installProbe),
+    (probe) => Effect.as(load, { envReads: probe.envReads, scheduled: probe.scheduled }),
+    (probe) => Effect.sync(probe.restore),
+  )
 
 Feature('Importing the core entry')
   .withLayer(Layer.empty)
@@ -115,7 +121,23 @@ Feature('Importing the core entry')
     scenario(
       'Evaluating the entry reads no environment and schedules no work',
       Gherkin.Do.pipe(
-        When('the entry is evaluated fresh under the environment and scheduler probes')('probed', () => probedImport),
+        When('the entry is evaluated fresh under the environment and scheduler probes')(
+          'probed',
+          () => probed(importFresh),
+        ),
+        Then("the package's own code read no variable and scheduled nothing")((state, expect) =>
+          expect(state.probed).toEqual({ envReads: [], scheduled: [] })
+        ),
+      ),
+    )
+
+    scenario(
+      'Evaluating the engine entry reads no environment and schedules no work',
+      Gherkin.Do.pipe(
+        When('the engine entry is evaluated fresh under the environment and scheduler probes')(
+          'probed',
+          () => probed(importEngineFresh),
+        ),
         Then("the package's own code read no variable and scheduled nothing")((state, expect) =>
           expect(state.probed).toEqual({ envReads: [], scheduled: [] })
         ),
