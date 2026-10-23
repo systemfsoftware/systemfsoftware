@@ -135,12 +135,25 @@ const failedStepsOf = (text: string): ReadonlyArray<Row> => [
 
 const stepsOf = (text: string): Steps => [[passedStepsOf(text)], [failedStepsOf(text), failedStepsOf(text)]]
 
-const attemptOf = (steps: ReadonlyArray<Row>, retry: number, status: string): Row => ({
+const ranAttemptOf = (steps: ReadonlyArray<Row>, retry: number, status: string): Row => ({
+  _tag: 'Ran',
   id: `attempt-${retry}`,
   retry,
   status,
   steps,
+  errors: [],
 })
+
+const skippedAttemptOf = (text: string): Row => ({
+  _tag: 'Skipped',
+  id: 'attempt-0',
+  retry: 0,
+  reason: `declared for ios; target "staging" runs on web${text}`,
+})
+
+type AttemptEdit = (at: string, attempt: Row) => Row
+
+const unedited: AttemptEdit = (_at, attempt) => attempt
 
 interface ResultHead {
   readonly head: Row
@@ -179,13 +192,26 @@ const resultHeads: ReadonlyArray<ResultHead> = [
   },
 ]
 
-const resultOf = (result: ResultHead, attempts: ReadonlyArray<ReadonlyArray<Row>>): Row => ({
-  ...result.head,
-  status: result.status,
-  attempts: attempts.map((steps, retry) => attemptOf(steps, retry, result.status)),
+const skippedResultOf = (attempt: Row): Row => ({
+  test: 'tests/ios.e2e.ts > pairs the watch',
+  title: 'pairs the watch',
+  file: 'tests/ios.e2e.ts',
+  target: 'staging',
+  agent: 'default',
+  status: 'skipped',
+  attempts: [attempt],
+  cache: { replayed: 0, handedOff: 0, missed: 0 },
+  artifacts: [],
 })
 
-const reportOf = (steps: Steps): Row => ({
+const resultOf = (edit: AttemptEdit) => (result: ResultHead, attempts: ReadonlyArray<ReadonlyArray<Row>>, r: number) =>
+  ({
+    ...result.head,
+    status: result.status,
+    attempts: attempts.map((steps, retry) => edit([r, retry].join(), ranAttemptOf(steps, retry, result.status))),
+  }) satisfies Row
+
+const reportOf = (steps: Steps, text: string, edit: AttemptEdit = unedited): Row => ({
   schema: 'report-1',
   run: {
     id: 'run-2026-10-23-0900',
@@ -196,20 +222,23 @@ const reportOf = (steps: Steps): Row => ({
     finishedAt: '2026-10-23T09:01:30.000Z',
     errors: [],
   },
-  results: Arr.zipWith(resultHeads, steps, resultOf),
+  results: [
+    ...resultHeads.map((head, r) => resultOf(edit)(head, steps[r] ?? [], r)),
+    skippedResultOf(edit([resultHeads.length, 0].join(), skippedAttemptOf(text))),
+  ],
   summary: {
-    tests: 2,
+    tests: 3,
     passed: 1,
     failed: 1,
     blocked: 0,
     error: 0,
     interrupted: 0,
-    skipped: 0,
+    skipped: 1,
     cache: { replayed: 1, handedOff: 2, missed: 0 },
   },
 })
 
-const specReportOf = (text: string): Row => reportOf(stepsOf(text))
+const specReportOf = (text: string): Row => reportOf(stepsOf(text), text)
 
 interface Removal {
   readonly report: Row
@@ -222,19 +251,36 @@ const replacedAt = (steps: Steps, at: string, step: Row): Steps =>
 const removalPathOf = (stepPath: ReadonlyArray<PathSegment>, field: string): ReadonlyArray<PathSegment> =>
   field === '_tag' ? stepPath : [...stepPath, field]
 
-const removalsOf = (text: string): ReadonlyArray<Removal> => {
+const stepRemovalsOf = (text: string): ReadonlyArray<Removal> => {
   const steps = stepsOf(text)
   return steps.flatMap((attempts, r) =>
     attempts.flatMap((rows, a) =>
       rows.flatMap((row, s) =>
         Object.keys(row).map((field) => ({
-          report: reportOf(replacedAt(steps, [r, a, s].join(), without(row, field))),
+          report: reportOf(replacedAt(steps, [r, a, s].join(), without(row, field)), text),
           path: removalPathOf(['results', r, 'attempts', a, 'steps', s], field),
         }))
       )
     )
   )
 }
+
+const attemptKeysOf = (steps: Steps): ReadonlyArray<readonly [number, number, Row]> => [
+  ...steps.flatMap((attempts, r) => attempts.map((_rows, a) => [r, a, ranAttemptOf([], a, 'passed')] as const)),
+  [resultHeads.length, 0, skippedAttemptOf('')] as const,
+]
+
+const attemptRemovalsOf = (text: string): ReadonlyArray<Removal> => {
+  const steps = stepsOf(text)
+  return attemptKeysOf(steps).flatMap(([r, a, shape]) =>
+    Object.keys(shape).filter((field) => field !== 'steps').map((field) => ({
+      report: reportOf(steps, text, (at, attempt) => (at === [r, a].join() ? without(attempt, field) : attempt)),
+      path: removalPathOf(['results', r, 'attempts', a], field),
+    }))
+  )
+}
+
+const removalsOf = (text: string): ReadonlyArray<Removal> => [...stepRemovalsOf(text), ...attemptRemovalsOf(text)]
 
 const standardIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -268,7 +314,7 @@ if (import.meta.vitest !== void 0) {
   const shippedAccepts = Schema.is(fromJsonSchemaDocument(report1JsonSchema(), { patterns: 'apply' }))
 
   it.prop(
-    '∀s_ReportStepField_≡RemovalRefusedAtItsPath',
+    '∀s_ReportField_≡RemovalRefusedAtItsPath',
     { of: [Schema.String], subject: refusalPathOf, runs: 100, arbitrary: { seed: 497_004 } },
     (subject, [text]) =>
       Option.isNone(subject(specReportOf(text))) &&

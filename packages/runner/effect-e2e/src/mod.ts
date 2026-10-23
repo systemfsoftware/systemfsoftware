@@ -16,3 +16,6 @@ export { Browser, EngineSpec, WebEngineSpec } from './Config/engine-spec.schema.
 export { SecretRef } from './Config/names.schema.js'
 export type { CredentialHandles, CredentialPasswordRef, CredentialUser, SecretHandles } from './Config/values.schema.js'
 export { credentials, secrets, Unique, unique } from './Config/values.schema.js'
+export type { Attempt } from './report/report.schema.js'
+export type { TestPlatform } from './run/admit-platforms.workflow.js'
+export type { RunVerdict } from './verdict/run-verdict.schema.js'

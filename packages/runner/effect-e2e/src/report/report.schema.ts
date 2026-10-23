@@ -29,12 +29,24 @@ export const ArtifactRef = Schema.Struct({
 })
 export type ArtifactRef = typeof ArtifactRef.Type
 
-export const Attempt = Schema.Struct({
+export const RanAttempt = Schema.TaggedStruct('Ran', {
   id: AttemptId,
   retry: Count,
-  status: TestStatus,
+  status: RunStatus,
   steps: Schema.Array(StepRecord),
+  errors: Schema.Array(FailureRecord),
 })
+export type RanAttempt = typeof RanAttempt.Type
+
+/** A test that never ran on this target, and why. */
+export const SkippedAttempt = Schema.TaggedStruct('Skipped', {
+  id: AttemptId,
+  retry: Count,
+  reason: Schema.String.check(Schema.isPattern(/\S/u, { message: 'a skip reason names why the test did not run' })),
+})
+export type SkippedAttempt = typeof SkippedAttempt.Type
+
+export const Attempt = Schema.Union([RanAttempt, SkippedAttempt]).pipe(Schema.toTaggedUnion('_tag'))
 export type Attempt = typeof Attempt.Type
 
 export const TestResult = Schema.Struct({
