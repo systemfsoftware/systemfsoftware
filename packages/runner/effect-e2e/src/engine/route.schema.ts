@@ -113,6 +113,8 @@ const upstreamDistinctLocations: ReadonlyArray<readonly [string, string]> = [
   ['http://127.0.0.1:4400/shop', 'http://localhost:4400/shop'],
 ]
 
+const malformedEscapePair: readonly [string, string] = ['/files/a%ZZ', '/files/a%ZY']
+
 const hexOf = (seed: number, width: number): string => Math.abs(seed).toString(16).padStart(width, '0')
 
 const uuidOf = (seed: number): string => {
@@ -159,7 +161,7 @@ if (import.meta.vitest !== void 0) {
     '∀w_RouterWord_≡SameRouteIffSameWord',
     { of: [Schema.Int, Schema.Int], subject: sameLocation, runs: 200, arbitrary: { seed: 496_002 } },
     (subject, [first, second]) =>
-      Arr.every(upstreamDistinctLocations, (pair) => !subject(pair)) &&
+      Arr.every(Arr.append(upstreamDistinctLocations, malformedEscapePair), (pair) => !subject(pair)) &&
       Arr.every(
         Arr.zip(routeWordLocations(sixLetterWordOf(first)), routeWordLocations(sixLetterWordOf(second))),
         (pair) => subject(pair) === (sixLetterWordOf(first) === sixLetterWordOf(second)),

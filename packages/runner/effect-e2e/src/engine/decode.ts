@@ -42,19 +42,21 @@ const parentOf = (child: SemanticNode): SemanticNode => ({
 const chainOf = (length: number): SemanticNode =>
   Arr.makeBy(length - 1, () => parentOf).reduce((child, wrap) => wrap(child), leafNode)
 
-const observedChain = (length: number): typeof Observation.Encoded => ({
+const observedForest = (rootLengths: ReadonlyArray<number>): typeof Observation.Encoded => ({
   route: { origin: 'https://app.example.test', path: '/', query: [] },
   revision: 'r1',
-  tree: [chainOf(length)],
+  tree: rootLengths.map(chainOf),
 })
 
-const depthVerdict = (length: number): string =>
-  decodeObservation(observedChain(length)).pipe(
+const depthVerdict = (rootLengths: ReadonlyArray<number>): string =>
+  decodeObservation(observedForest(rootLengths)).pipe(
     Effect.as('accepted'),
-    Effect.catchTag('TreeDepthExceeded', (error) => Effect.succeed(`exceeded:${error.budget}`)),
+    Effect.catchTag('TreeDepthExceeded', (error) => Effect.succeed(`exceeded:${error.budget}:${error.depth}`)),
     Effect.orElseSucceed(() => 'refused'),
     Effect.runSync,
   )
+
+const expectedVerdict = (deepest: number): string => (deepest <= 64 ? 'accepted' : `exceeded:64:${deepest}`)
 
 const actionDecodes = (input: typeof Action.Encoded): boolean =>
   decodeAction(input).pipe(Effect.runSyncExit, Exit.isSuccess)
@@ -115,12 +117,13 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')
 
   it.prop(
-    '∀n_ChainLength_≡AcceptedIffAtMost64',
+    '∀n_DeepestRoot_≡AcceptedIffAtMost64',
     { of: [Schema.Int], subject: depthVerdict, runs: 100, arbitrary: { seed: 496_004 } },
     (subject, [drawn]) =>
       Arr.every(
         Arr.append(depthSeeds, (Math.abs(drawn) % 130) + 1),
-        (length) => subject(length) === (length <= 64 ? 'accepted' : 'exceeded:64'),
+        (length) =>
+          Arr.every([[length], [1, length], [length, 1]], (roots) => subject(roots) === expectedVerdict(length)),
       ),
   )
 
