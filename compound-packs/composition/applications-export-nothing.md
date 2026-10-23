@@ -7,7 +7,7 @@ applies_when:
 tags: [composition, application, exports]
 ---
 
-An application is deployed, not imported, so its `package.json` has no `exports` field. Code inside an application that another unit needs gets extracted into a library. Tests inside the application import it relatively (`tests-stay-home`).
+An application is deployed, not imported, so its `package.json` has no `exports` field. Code inside an application that another unit needs gets extracted into a library. Tests of an application drive its deployed entry (the Worker's fetch or RPC handler), never its internal modules (`tests-stay-home`).
 
 A Worker that exports its modules invites every other unit to bind to its internals. younna-ai's `workers/platform` exported 136 subpaths, and the platform could no longer change without breaking unrelated tests.
 

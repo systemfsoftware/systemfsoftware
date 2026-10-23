@@ -10,8 +10,8 @@ Rules:
 - `dependency-direction`: edges point from applications to libraries and from libraries to lower libraries; nothing imports an application, and the graph has no cycles.
 - `applications-export-nothing`: an application's manifest has no `exports`; what two applications share lives in a library both depend on.
 - `core-and-adapters`: runtime- and framework-neutral code lives in a core library; each runtime or framework gets an adapter library; runtime choice is an export condition, never a deep path.
-- `role-entries-only`: a library's entries are its root namespace barrel plus named roles; internals are blocked in the exports map; a long list of entries is judged as roles or a folder mirror, never failed by a count.
-- `tests-stay-home`: tests import their own package relatively and other packages only through public specifiers; nothing is exported so a test can reach it.
+- `role-entries-only`: a private library exports `.` only, one `mod.ts` namespace barrel; runtimes are conditions, drivers and framework bindings are their own libraries, and nothing is exported for tests.
+- `tests-stay-home`: tests live in their package's `tests/` and import every package, their own included, only through its public specifier; nothing is exported so a test can reach it.
 - `source-condition-resolution`: workspace packages resolve to source through a custom export condition, so neither development nor tests need a build or a deep import.
 - `config-at-the-edge`: only applications read configuration and choose Layers; libraries take their dependencies as services.
 - `contracts-between-applications`: two applications that talk share a contracts library (schemas, RPC groups); neither imports the other.
