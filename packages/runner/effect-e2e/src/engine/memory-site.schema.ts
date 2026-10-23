@@ -30,6 +30,5 @@ export type OpenPage = typeof OpenPage.Type
 export const MemorySession = Schema.Union([
   Schema.TaggedStruct('Idle', {}),
   Schema.TaggedStruct('Open', { page: OpenPage, logs: Schema.Array(LogEntry) }),
-  Schema.TaggedStruct('Closed', {}),
 ]).pipe(Schema.toTaggedUnion('_tag'))
 export type MemorySession = typeof MemorySession.Type

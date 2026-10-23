@@ -126,10 +126,8 @@ const requiring = (site: MemorySite, capability: EngineCapability, what: string)
 const unreachable = (url: string): AppUnreachable =>
   new AppUnreachable({ message: `${url} is not a page of the site`, evidence: logEvidence(url) })
 
-const notOpen = (session: MemorySession): AppNotOpen => {
-  const message = MemorySession.guards.Closed(session) ? 'the engine session is closed' : 'no page is open'
-  return new AppNotOpen({ message, evidence: logEvidence(message) })
-}
+const notOpen = (): AppNotOpen =>
+  new AppNotOpen({ message: 'no page is open', evidence: logEvidence('no page is open') })
 
 const labelOf = (node: SemanticNode): string => Option.getOrElse(Option.fromNullishOr(node.name), () => node.ref.id)
 
@@ -367,7 +365,6 @@ const reopened =
     MemorySession.match(session, {
       Idle: () => loadPage(site, NO_HISTORY)(url),
       Open: (open) => loadPage(site, historyOf(open))(url),
-      Closed: () => Result.fail(unreachable(url)),
     })
 
 export const memoryEngine = (site: MemorySite): Effect.Effect<EngineShape> =>
@@ -401,6 +398,6 @@ export const memoryEngine = (site: MemorySite): Effect.Effect<EngineShape> =>
           : Effect.fail(undeclared('screenshot')),
       route: Effect.map(opened, ({ page }) => page.route),
       logs: Effect.map(opened, ({ logs }) => logs),
-      close: Ref.set(session, { _tag: 'Closed' }),
+      close: Ref.set(session, { _tag: 'Idle' }),
     }
   })

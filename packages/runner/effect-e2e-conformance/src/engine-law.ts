@@ -147,14 +147,20 @@ const networkEvidence = (engine: EngineShape, logs: ReadonlyArray<LogEntry>): bo
 
 const screenshotOutcome = (engine: EngineShape): Effect.Effect<ReadonlyArray<number> | string> =>
   declares(engine, 'screenshot')
-    ? Effect.match(engine.screenshot({ mask: [email] }), {
+    ? Effect.match(engine.screenshot({ mask: [email, missing] }), {
       onFailure: (failure) => JSON.stringify(failure),
       onSuccess: (bytes) => Array.from(bytes.slice(0, PNG_SIGNATURE.length)),
     })
-    : outcomeOf(engine.screenshot({ mask: [email] }), refusalNaming('screenshot'))
+    : outcomeOf(engine.screenshot({ mask: [email, missing] }), refusalNaming('screenshot'))
 
 const screenshotExpectation = (engine: EngineShape): ReadonlyArray<number> | string =>
   declares(engine, 'screenshot') ? PNG_SIGNATURE : 'unsupported, naming screenshot'
+
+const reopenedPath = (engine: EngineShape, origin: string): Effect.Effect<string> =>
+  engine.open(at(origin, LawSite.home)).pipe(
+    Effect.andThen(engine.route),
+    Effect.match({ onFailure: (failure) => JSON.stringify(failure), onSuccess: (route) => route.path }),
+  )
 
 const laws: ReadonlyArray<Law> = [
   {
@@ -252,7 +258,7 @@ const laws: ReadonlyArray<Law> = [
       }),
   },
   {
-    name: 'screenshot',
+    name: 'screenshot-masks-without-requiring-a-match',
     check: (origin) =>
       Effect.gen(function*() {
         const engine = yield* opened(origin, LawSite.form)
@@ -273,7 +279,7 @@ const laws: ReadonlyArray<Law> = [
       }),
   },
   {
-    name: 'console-network-evidence',
+    name: 'logs-hold-load-evidence-once-open-returns',
     check: (origin) =>
       Effect.gen(function*() {
         const engine = yield* opened(origin, LawSite.form)
@@ -304,12 +310,16 @@ const laws: ReadonlyArray<Law> = [
       }),
   },
   {
-    name: 'close-ends-session',
+    name: 'close-ends-session-and-open-starts-fresh',
     check: (origin) =>
       Effect.gen(function*() {
         const engine = yield* opened(origin, LawSite.form)
         yield* engine.close
-        return compared('not open', yield* outcomeOf(engine.observe, notOpen))
+        const afterClose = yield* outcomeOf(engine.observe, notOpen)
+        return compared(
+          { afterClose: 'not open', reopened: LawSite.home },
+          { afterClose, reopened: yield* reopenedPath(engine, origin) },
+        )
       }),
   },
 ]

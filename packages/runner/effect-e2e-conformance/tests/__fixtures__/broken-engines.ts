@@ -1,4 +1,4 @@
-import type { EngineSubject } from '@systemfsoftware/effect-e2e-conformance'
+import { type EngineSubject, LawSite } from '@systemfsoftware/effect-e2e-conformance'
 import {
   Action,
   Engine,
@@ -25,6 +25,9 @@ const checkedSubscribe = (tree: ReadonlyArray<SemanticNode>): ReadonlyArray<Sema
   )
 
 const breakages = {
+  open: (good: EngineShape): Partial<EngineShape> => ({
+    open: (url) => good.open(new URL(LawSite.form, url).href),
+  }),
   read: (good: EngineShape): Partial<EngineShape> => ({
     read: (locator, request) =>
       ReadRequest.guards.Value(request) ? Effect.succeed({ _tag: 'Value', value: '' }) : good.read(locator, request),
