@@ -31,6 +31,53 @@ export const FORM_PAGE = `<!doctype html>
 
 const NEXT_PAGE = '<!doctype html><html><head><title>Next</title></head><body><h1>Next</h1></body></html>'
 
+export const CONTROLS_PAGE = `<!doctype html>
+<html>
+  <head>
+    <title>Controls</title>
+    <style>
+      body { margin: 8px; min-height: 3000px; }
+      [draggable], #bin, #pad { width: 160px; height: 60px; margin: 8px 0; background: #ddd; }
+    </style>
+  </head>
+  <body>
+    <ol aria-label="Events"></ol>
+    <label for="plan">Plan</label>
+    <select id="plan"><option value="basic">Basic</option><option value="pro">Pro</option></select>
+    <input aria-label="Note" placeholder="Write a note">
+    <input aria-label="Memo">
+    <button type="button" id="hover-target">Hover me</button>
+    <button type="button" id="tap-target">Tap here</button>
+    <div data-testid="card" draggable="true">Card</div>
+    <div id="bin">Bin</div>
+    <div id="pad"></div>
+    <ul aria-label="Fruit"><li>Apple <button type="button">Remove</button></li><li>Pear <button type="button">Remove</button></li></ul>
+    <iframe title="Help" src="/help"></iframe>
+    <script>
+      const logged = new Set()
+      const log = (text) => {
+        if (logged.has(text)) return
+        logged.add(text)
+        const item = document.createElement('li')
+        item.textContent = text + ';'
+        document.querySelector('ol').append(item)
+      }
+      const on = (selector, type, listener) => document.querySelector(selector).addEventListener(type, listener)
+      on('[aria-label="Note"]', 'keydown', (event) => { if (event.key === 'Enter') log('pressed Enter') })
+      on('#hover-target', 'mouseenter', () => log('hovered'))
+      on('#tap-target', 'click', () => log('tapped'))
+      on('[draggable]', 'dragstart', (event) => event.dataTransfer.setData('text/plain', 'card'))
+      on('#bin', 'dragover', (event) => event.preventDefault())
+      on('#bin', 'drop', (event) => { event.preventDefault(); log('dropped') })
+      on('#pad', 'pointerdown', () => log('pad down'))
+      on('#pad', 'pointerup', () => log('pad up'))
+      window.addEventListener('wheel', () => log('swiped'))
+    </script>
+  </body>
+</html>`
+
+const HELP_PAGE = '<!doctype html><html><body><button type="button">Help</button></body></html>'
+
 export interface SeenRequest {
   readonly path: string
   readonly secretHeader: string
@@ -44,6 +91,8 @@ export interface WebSite {
 const ROUTES: Readonly<Record<string, { readonly type: string; readonly body: string }>> = {
   '/form': { type: 'text/html', body: FORM_PAGE },
   '/next': { type: 'text/html', body: NEXT_PAGE },
+  '/controls': { type: 'text/html', body: CONTROLS_PAGE },
+  '/help': { type: 'text/html', body: HELP_PAGE },
   '/style.css': { type: 'text/css', body: 'body { font-family: sans-serif; }' },
 }
 

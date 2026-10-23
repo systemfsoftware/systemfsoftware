@@ -7,13 +7,16 @@ import {
   type EnvironmentUnavailable,
   type Locator,
   LogEntry,
+  type NthIndex,
   type ReadResult,
   type SemanticNode,
+  type ViewportPoint,
 } from '@systemfsoftware/effect-e2e/engine'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import * as Redacted from 'effect/Redacted'
 
@@ -44,6 +47,36 @@ const byTestId = (testId: string): Locator => ({ expression: { kind: 'ByTestId',
 
 const email = byRole('textbox', 'Email')
 const agree = byRole('checkbox', 'Agree')
+const note = byRole('textbox', 'Note')
+const memo = byRole('textbox', 'Memo')
+const plan: Locator = {
+  expression: { kind: 'ByLabel', text: { value: 'Plan', exact: true } },
+  label: 'the Plan select',
+}
+
+const selector = (css: string): Locator => ({ expression: { kind: 'Selector', css }, label: css })
+
+const textOf = (text: string): Locator => ({
+  expression: { kind: 'ByText', text: { value: text, exact: true } },
+  label: text,
+})
+
+const nthOf = (locator: Locator, index: NthIndex): Locator => ({
+  expression: { kind: 'Nth', inner: locator.expression, index },
+  label: `${String(index)} of ${locator.label}`,
+})
+
+const onlyMatch = <E>(found: Effect.Effect<ReadonlyArray<SemanticNode>, E>) =>
+  Effect.flatMap(found, (nodes) => Effect.fromOption(Arr.head(nodes)))
+
+const centreOf = (node: SemanticNode): ViewportPoint =>
+  Option.match(Option.fromNullishOr(node.bounds), {
+    onNone: () => ({ x: 0, y: 0 }),
+    onSome: (bounds) => ({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }),
+  })
+
+const summariesOf = (nodes: ReadonlyArray<SemanticNode>) =>
+  nodes.map((node) => ({ role: node.role, name: node.name, text: node.text }))
 
 const nodesIn = (tree: ReadonlyArray<SemanticNode>): ReadonlyArray<SemanticNode> =>
   tree.flatMap((node) => [node, ...nodesIn(node.children)])
@@ -236,6 +269,137 @@ Feature('Driving a real browser through the web engine')
               distinctTotalEvidence: 2,
               deleteEvidence: s.matched.observedDeletes,
             }),
+        ),
+      ),
+    )
+
+    scenario(
+      'Every action reaches the page and leaves the effect it names',
+      Gherkin.Do.pipe(
+        When('each action is performed once on the controls page, then the page navigates on')(
+          'performed',
+          () =>
+            onSite((engine, site) =>
+              Effect.gen(function*() {
+                yield* engine.open(`${site.origin}/controls`)
+                yield* engine.act({ _tag: 'Type', target: note, text: 'hi' })
+                yield* engine.act({ _tag: 'Press', target: note, key: 'Enter' })
+                yield* engine.act({ _tag: 'Select', target: plan, option: { _tag: 'ByValue', value: 'pro' } })
+                const byValue = yield* engine.read(plan, { _tag: 'Value' })
+                yield* engine.act({ _tag: 'Select', target: plan, option: { _tag: 'ByLabel', label: 'Basic' } })
+                const byLabel = yield* engine.read(plan, { _tag: 'Value' })
+                yield* engine.act({ _tag: 'Hover', target: byRole('button', 'Hover me') })
+                yield* engine.act({ _tag: 'Drag', from: byTestId('card'), to: selector('#bin') })
+                const tapHere = yield* onlyMatch(engine.query(byRole('button', 'Tap here')))
+                yield* engine.act({ _tag: 'TapAt', point: centreOf(tapHere) })
+                const pad = centreOf(yield* onlyMatch(engine.query(selector('#pad'))))
+                yield* engine.act({
+                  _tag: 'SwipePath',
+                  path: [{ x: pad.x - 40, y: pad.y }, { x: pad.x + 40, y: pad.y }],
+                })
+                const emptyPath = yield* Effect.flip(engine.act({ _tag: 'SwipePath', path: [] }))
+                const memoBox = yield* onlyMatch(engine.query(memo))
+                yield* engine.act({ _tag: 'TypeAt', point: centreOf(memoBox), text: 'xy' })
+                yield* engine.act({ _tag: 'Swipe', direction: 'up', momentum: 'slow' })
+                yield* engine.act({ _tag: 'WaitFor', locator: textOf('swiped;'), state: 'attached', timeout: 5_000 })
+                const screenshotAction = yield* Effect.flip(engine.act({ _tag: 'Screenshot', label: 'controls' }))
+                const reads = {
+                  note: yield* engine.read(note, { _tag: 'Value' }),
+                  memo: yield* engine.read(memo, { _tag: 'Value' }),
+                  byValue,
+                  byLabel,
+                  events: yield* engine.read(byRole('list', 'Events'), { _tag: 'Text' }),
+                }
+                yield* engine.act({ _tag: 'Navigate', url: `${site.origin}/next` })
+                const route = yield* engine.route
+                return { reads, emptyPath, screenshotAction, path: route.path }
+              })
+            ),
+        ),
+        Then('every action left its effect, in order, and the two refusals carry their own codes')((s, expect) =>
+          expect(s.performed).toMatchObject({
+            reads: {
+              note: { _tag: 'Value', value: 'hi' },
+              memo: { _tag: 'Value', value: 'xy' },
+              byValue: { _tag: 'Value', value: 'pro' },
+              byLabel: { _tag: 'Value', value: 'basic' },
+              events: { _tag: 'Text', text: 'pressed Enter;hovered;dropped;tapped;pad down;pad up;swiped;' },
+            },
+            emptyPath: { _tag: 'ACTION_FAILED' },
+            screenshotAction: { _tag: 'AUTOMATION_UNSUPPORTED' },
+            path: '/next',
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Every locator kind finds exactly what it names, and a made-up role is refused',
+      Gherkin.Do.pipe(
+        When('the controls page is queried once with each locator kind')(
+          'found',
+          () =>
+            onSite((engine, site) =>
+              Effect.gen(function*() {
+                yield* engine.open(`${site.origin}/controls`)
+                const removes = byRole('button', 'Remove')
+                const firstRemove = yield* onlyMatch(engine.query(nthOf(removes, 'first')))
+                const lastRemove = yield* onlyMatch(engine.query(nthOf(removes, 'last')))
+                const unknownRole = yield* Effect.flip(
+                  engine.query({ expression: { kind: 'ByRole', role: 'not-a-role' }, label: 'a made-up role' }),
+                )
+                return {
+                  byLabel: summariesOf(yield* engine.query(plan)),
+                  byPlaceholder: summariesOf(
+                    yield* engine.query({
+                      expression: { kind: 'ByPlaceholder', text: { value: 'Write a note', exact: true } },
+                      label: 'the note placeholder',
+                    }),
+                  ),
+                  byText: summariesOf(yield* engine.query(textOf('Bin'))),
+                  selector: (yield* engine.query(selector('#pad'))).length,
+                  filter: summariesOf(
+                    yield* engine.query({
+                      expression: {
+                        kind: 'Filter',
+                        inner: { kind: 'ByRole', role: 'listitem' },
+                        text: { value: 'Pear', exact: false },
+                      },
+                      label: 'the Pear row',
+                    }),
+                  ),
+                  nthDistinct: Arr.dedupe([firstRemove.ref.id, lastRemove.ref.id]).length,
+                  frame: summariesOf(
+                    yield* engine.query({
+                      expression: {
+                        kind: 'Frame',
+                        frame: 'iframe[title="Help"]',
+                        inner: { kind: 'ByRole', role: 'button', name: { value: 'Help', exact: true } },
+                      },
+                      label: 'the Help button',
+                    }),
+                  ),
+                  unknownRole,
+                  unknownRoleNamed: unknownRole.message.includes('not-a-role'),
+                }
+              })
+            ),
+        ),
+        Then('each kind finds its one element, the two Remove ends differ, and the made-up role is unsupported')((
+          s,
+          expect,
+        ) =>
+          expect(s.found).toMatchObject({
+            byLabel: [{ role: 'combobox', name: 'Plan' }],
+            byPlaceholder: [{ role: 'textbox', name: 'Note' }],
+            byText: [{ text: 'Bin' }],
+            selector: 1,
+            filter: [{ role: 'listitem', text: 'Pear' }],
+            nthDistinct: 2,
+            frame: [{ role: 'button', name: 'Help' }],
+            unknownRole: { _tag: 'AUTOMATION_UNSUPPORTED' },
+            unknownRoleNamed: true,
+          })
         ),
       ),
     )
