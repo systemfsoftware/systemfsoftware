@@ -137,17 +137,31 @@ const singleDeclaration = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AST>)
 
 const isSingleInhabitant = (ast: SchemaAST.AST): boolean => singleValueWithin(ast, new Set<SchemaAST.AST>())
 
+/** A codec law pair's property budget; `runs` overrides the configured default for both laws. */
+export interface RuleOfSchemasOptions {
+  readonly runs?: number | undefined
+}
+
 const SINGLE_INHABITANT_REASON = 'single-inhabitant schema: a constant codec is correct'
 
+const budgetOf = (options: RuleOfSchemasOptions | undefined): number | undefined =>
+  options === undefined ? undefined : options.runs
+
+const propSpecOf = <const Of extends readonly unknown[], Subject>(
+  of: Of,
+  subject: Subject,
+  runs: number | undefined,
+): { readonly of: Of; readonly subject: Subject } | {
+  readonly of: Of
+  readonly subject: Subject
+  readonly runs: number
+} => runs === undefined ? { of, subject } : { of, subject, runs }
 export const ruleOfSchemas: {
-  (name: string): <A, I>(schema: S.Codec<A, I>) => void
-  <A, I>(name: string, schema: S.Codec<A, I>): void
+  (name: string): <A, I>(schema: S.Codec<A, I>, options?: RuleOfSchemasOptions) => void
+  <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void
 } = Function.dual(
   2,
-  <A, I>(
-    name: string,
-    schema: S.Codec<A, I>,
-  ): void => {
+  <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void => {
     const typeEq = S.toEquivalence(schema)
     const encodedEq = S.toEquivalence(S.toEncoded(schema))
     const subject: CodecPair<A, I> = {
@@ -163,15 +177,16 @@ export const ruleOfSchemas: {
       return
     }
 
+    const runs = budgetOf(options)
     it.prop(
       `∀x_${name}Enc_=x`,
-      { of: [schema], subject },
+      propSpecOf([schema], subject, runs),
       (codec, [value]) => encodeStableOf(codec, encodedEq)(value),
     )
 
     it.prop(
       `∀x_${name}_=x`,
-      { of: [schema, schema], subject },
+      propSpecOf([schema, schema], subject, runs),
       (codec, [value, twin]) => roundTripsOf(codec, typeEq)(value, twin),
     )
   },
