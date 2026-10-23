@@ -87,17 +87,20 @@ export type ReplyFinish = typeof ReplyFinish.Type
 export const ProviderError = Schema.Struct({ code: Schema.NullOr(Schema.String), message: Schema.String })
 export type ProviderError = typeof ProviderError.Type
 
-export const ProviderReply = Schema.Union([
-  Schema.TaggedStruct('Answered', {
-    model: Schema.String,
-    text: Schema.NullOr(Schema.String),
-    refusal: Schema.NullOr(Schema.String),
-    toolCalls: Schema.Array(ToolCall),
-    finish: ReplyFinish,
-    usage: TokenUsage,
-  }),
-  Schema.TaggedStruct('Rejected', { status: Count, ...ProviderError.fields }),
-]).pipe(Schema.toTaggedUnion('_tag'))
+export const Answered = Schema.TaggedStruct('Answered', {
+  model: Schema.String,
+  text: Schema.NullOr(Schema.String),
+  refusal: Schema.NullOr(Schema.String),
+  toolCalls: Schema.Array(ToolCall),
+  finish: ReplyFinish,
+  usage: TokenUsage,
+})
+export type Answered = typeof Answered.Type
+
+export const Rejected = Schema.TaggedStruct('Rejected', { status: Count, ...ProviderError.fields })
+export type Rejected = typeof Rejected.Type
+
+export const ProviderReply = Schema.Union([Answered, Rejected]).pipe(Schema.toTaggedUnion('_tag'))
 export type ProviderReply = typeof ProviderReply.Type
 
 const BYTES_PER_TOKEN = 4
