@@ -55,7 +55,7 @@ export type Deleted = typeof Deleted.Type;
 
 // @public (undocumented)
 export namespace FileCacheStore {
-    export { FileCacheStoreOptions, layer$1 as layer, make$1 as make };
+    export { FileCacheStoreOptions, layer, make };
 }
 
 // Warning: (ae-forgotten-export) The symbol "Hit_base" needs to be exported by the entry point cache.d.ts
@@ -88,7 +88,7 @@ export type KeyDigest = typeof KeyDigest.Type;
 
 // @public (undocumented)
 export namespace MemoryCacheStore {
-    export { MemoryCacheStoreOptions, layer, make };
+    export { MemoryCacheStoreOptions, layer$1 as layer, make$1 as make };
 }
 
 // Warning: (ae-forgotten-export) The symbol "Miss_base" needs to be exported by the entry point cache.d.ts
