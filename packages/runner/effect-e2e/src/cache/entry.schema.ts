@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Function from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
 import { ConfigName } from '../Config/names.schema.js'
@@ -12,6 +13,13 @@ import { CacheKeyContext, CanonicalJson, canonicalJsonOf, EngineIdentity } from 
 
 const MAX_ACTIONS = 50
 const MAX_ANCHORS = 8
+
+const ENTRY_WIRE_BYTES_CAP = 1_048_576
+
+export const EntryWireBytes = Schema.Uint8Array.check(
+  Schema.isMaxLength(ENTRY_WIRE_BYTES_CAP, { message: 'a stored entry is at most 1 MiB (1,048,576 bytes)' }),
+)
+export type EntryWireBytes = typeof EntryWireBytes.Type
 
 export const ControlDescriptor = Schema.Struct({
   role: Schema.optionalKey(Schema.String),
@@ -210,6 +218,22 @@ export const entryWireBytesOf = (entry: TraceEntry): number =>
     onNone: () => Number.POSITIVE_INFINITY,
     onSome: (text) => new TextEncoder().encode(text).byteLength,
   })
+
+export const entryFitsWireCap = (entry: TraceEntry): boolean => entryWireBytesOf(entry) <= ENTRY_WIRE_BYTES_CAP
+
+export const entryWireUtf8Of = (entry: TraceEntry): Option.Option<Uint8Array> =>
+  Option.map(entryWireTextOf(entry), (text) => new TextEncoder().encode(text))
+
+const strictUtf8 = new TextDecoder('utf-8', { fatal: true })
+
+const decodeWireText = Schema.decodeUnknownResult(Schema.fromJsonString(TraceEntryJson), {
+  onExcessProperty: 'error',
+})
+
+export const entryOfWireBytes = (bytes: EntryWireBytes): Result.Result<TraceEntry, string> =>
+  Result.try({ try: () => strictUtf8.decode(bytes), catch: () => 'the stored bytes are not UTF-8 text' }).pipe(
+    Result.flatMap((text) => Result.mapError(decodeWireText(text), (error) => error.message)),
+  )
 
 const flowTextOf = (flow: TraceFlow): Option.Option<CanonicalJson> =>
   Option.map(Schema.encodeOption(TraceFlowJson)(flow), canonicalJsonOf)

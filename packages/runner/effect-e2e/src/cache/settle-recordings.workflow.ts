@@ -8,12 +8,10 @@ import * as Schema from 'effect/Schema'
 import { CacheMode } from '../Config/config.schema.js'
 import { FailureCode } from '../verdict/failure.schema.js'
 import { CacheWrite, Count, StepRecord } from '../verdict/step-record.schema.js'
-import { entryWireBytesOf, sameFlow, TraceEntry } from './entry.schema.js'
+import { entryFitsWireCap, sameFlow, TraceEntry } from './entry.schema.js'
 import { KeyDigest } from './key.schema.js'
 
 const SettleRecordingsTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-e2e/SettleRecordings')
-
-const WIRE_BYTES_CAP = 1_048_576
 
 const MODEL_UNREACHABLE: ReadonlyArray<FailureCode> = ['MODEL_UNAVAILABLE', 'MODEL_PROVIDER_FAILED']
 
@@ -121,10 +119,10 @@ const implicatesOf = (ending: SettledEnding): boolean =>
   )
 
 const freshWritePiece = (staged: StagedRecording, entry: TraceEntry): SettlePiece =>
-  Match.value(entryWireBytesOf(entry) > WIRE_BYTES_CAP).pipe(
-    Match.when(true, (): SettlePiece => piece(staged, 'not-written', Option.none(), Option.none())),
+  Match.value(entryFitsWireCap(entry)).pipe(
+    Match.when(false, (): SettlePiece => piece(staged, 'not-written', Option.none(), Option.none())),
     Match.when(
-      false,
+      true,
       (): SettlePiece => piece(staged, 'saved', Option.some({ digest: staged.digest, entry }), Option.none()),
     ),
     Match.exhaustive,
