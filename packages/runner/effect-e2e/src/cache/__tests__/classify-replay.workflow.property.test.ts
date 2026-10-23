@@ -9,11 +9,12 @@ import { type Action } from '../../engine/action.schema.js'
 import { type Observation } from '../../engine/observation.schema.js'
 import { type Route } from '../../engine/route.schema.js'
 import { type SemanticNode } from '../../engine/semantic-node.schema.js'
+import { FailureCode } from '../../verdict/failure.schema.js'
 import {
   ClassifyReplay,
   classifyReplay,
-  Performed,
   type ReplayDecision,
+  type ReplayOutcome,
   type ReplayStep,
   type ReplayStopReason,
   type ReplayTranscript,
@@ -22,7 +23,7 @@ import { type Anchor, type ControlDescriptor, type RecordedAction, TraceEntry } 
 
 type Classify = typeof classifyReplay
 
-const PERFORMED = new Performed({})
+const PERFORMED: ReplayOutcome = { _tag: 'Performed' }
 
 const NEUTRAL_STATES: SemanticNode['states'] = { disabled: false, hidden: false }
 
@@ -228,6 +229,49 @@ const handOffNamed = (
     ),
   )
 
+const handOffWithReason = (
+  decision: ReplayDecision,
+  reason: ReplayStopReason,
+  prefixLength: number,
+): boolean =>
+  Match.value(decision).pipe(
+    Match.tag('HandOff', (handOff) =>
+      handOff.prefix.length === prefixLength && JSON.stringify(handOff.reason) === JSON.stringify(reason)),
+    Match.orElse(() =>
+      false
+    ),
+  )
+
+const sameAnchorStates = (left: Anchor['states'], right: Anchor['states']): boolean =>
+  left.checked === right.checked && left.selected === right.selected && left.expanded === right.expanded &&
+  left.pressed === right.pressed
+
+const anchorMissingNamed = (decision: ReplayDecision, anchor: Anchor, prefixLength: number): boolean =>
+  Match.value(decision).pipe(
+    Match.tag('HandOff', (handOff) =>
+      Match.value(handOff.reason).pipe(
+        Match.tag('AnchorMissing', (missing) =>
+          handOff.prefix.length === prefixLength &&
+          JSON.stringify(missing.anchor.control) === JSON.stringify(anchor.control) &&
+          sameAnchorStates(missing.anchor.states, anchor.states)),
+        Match.orElse(() => false),
+      )),
+    Match.orElse(() => false),
+  )
+
+const stepsWithOutcomeOf = (
+  steps: ReadonlyArray<ReplayStep>,
+  index: number,
+  outcome: ReplayOutcome,
+): ReadonlyArray<ReplayStep> => steps.map((step, at) => at === index ? { ...step, outcome } : step)
+
+const endTreeWithoutOf = (entry: TraceEntry, skip: number): ReadonlyArray<SemanticNode> =>
+  entry.anchors.appeared.flatMap((anchor, at) => at === skip ? [] : [anchorChainOf(anchor)])
+
+const UNRECORDED_ALERT_MARKER = 'replay-never-recorded:'
+
+const unrecordedAlertOf = (text: string): string => `${UNRECORDED_ALERT_MARKER}${text}`
+
 it.prop(
   '∀t_ClassifyReplay_≡Deterministic',
   { of: [ClassifyReplay], subject: classifyReplay, arbitrary: { seed: 498_021 } },
@@ -316,5 +360,101 @@ it.prop(
     )
     const off = decisionOf(subject, offCommandOf(drawn.transcript, drawn.entry))
     return isMiss(withoutEntry) && isMiss(off)
+  },
+)
+
+it.prop(
+  '∀t_ClassifyReplay_→RouteMismatchStops',
+  { of: [TraceEntry], subject: classifyReplay, arbitrary: { seed: 498_026 } },
+  (subject, [drawn]) => {
+    const entry = withReplayableFlowOf(drawn)
+    const base = replayTranscriptOf(entry)
+    const startMoved = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: { ...base, start: observationOf(movedRouteOf(entry.start), []) },
+      }),
+    )
+    const endMoved = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: { ...base, end: observationOf(movedRouteOf(entry.end), base.end.tree) },
+      }),
+    )
+    return handOffWithReason(startMoved, { _tag: 'RouteChanged' }, 0) &&
+      handOffWithReason(endMoved, { _tag: 'EndRouteChanged' }, entry.actions.length)
+  },
+)
+
+it.prop(
+  '∀t_ClassifyReplay_→StepOutcomeStops',
+  { of: [TraceEntry, FailureCode, Schema.Int], subject: classifyReplay, arbitrary: { seed: 498_027 } },
+  (subject, [drawn, code, picked]) => {
+    const entry = withReplayableFlowOf(drawn)
+    const index = controlledIndexOf(entry, picked)
+    const base = replayTranscriptOf(entry)
+    const rejected = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: { ...base, steps: stepsWithOutcomeOf(base.steps, index, { _tag: 'Rejected', code }) },
+      }),
+    )
+    const notRun = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: { ...base, steps: stepsWithOutcomeOf(base.steps, index, { _tag: 'NotRun' }) },
+      }),
+    )
+    return handOffWithReason(rejected, { _tag: 'ActionRejected', code }, index) &&
+      handOffWithReason(notRun, { _tag: 'ActionNotRun' }, index)
+  },
+)
+
+it.prop(
+  '∀t_ClassifyReplay_→MissingAnchorStops',
+  { of: [TraceEntry, Schema.Int], subject: classifyReplay, arbitrary: { seed: 498_028 } },
+  (subject, [drawn, picked]) => {
+    const entry = withReplayableFlowOf(drawn)
+    const index = Math.abs(picked) % entry.anchors.appeared.length
+    const missing = entry.anchors.appeared[index]
+    const decision = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: {
+          ...replayTranscriptOf(entry),
+          end: observationOf(entry.end, endTreeWithoutOf(entry, index)),
+        },
+      }),
+    )
+    return missing !== undefined && anchorMissingNamed(decision, missing, entry.actions.length)
+  },
+)
+
+it.prop(
+  '∀t_ClassifyReplay_→UnexpectedAlertStops',
+  { of: [TraceEntry, Schema.String], subject: classifyReplay, arbitrary: { seed: 498_029 } },
+  (subject, [drawn, text]) => {
+    const entry = withReplayableFlowOf(drawn)
+    const base = replayTranscriptOf(entry)
+    const alert = unrecordedAlertOf(text)
+    const decision = decisionOf(
+      subject,
+      new ClassifyReplay({
+        mode: 'read-write',
+        entry,
+        transcript: { ...base, alerts: [...base.alerts, alert] },
+      }),
+    )
+    return handOffWithReason(decision, { _tag: 'UnexpectedAlert', text: alert }, entry.actions.length)
   },
 )

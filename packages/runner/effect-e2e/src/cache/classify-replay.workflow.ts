@@ -15,11 +15,14 @@ import { Anchor, ControlDescriptor, TraceEntry } from './entry.schema.js'
 
 const ReplayDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-e2e/ReplayDecision')
 
-export class Performed extends Schema.TaggedClass<Performed>()('Performed', {}) {}
+export const Performed = Schema.TaggedStruct('Performed', {})
+export type Performed = typeof Performed.Type
 
-export class Rejected extends Schema.TaggedClass<Rejected>()('Rejected', { code: FailureCode }) {}
+export const Rejected = Schema.TaggedStruct('Rejected', { code: FailureCode })
+export type Rejected = typeof Rejected.Type
 
-export class NotRun extends Schema.TaggedClass<NotRun>()('NotRun', {}) {}
+export const NotRun = Schema.TaggedStruct('NotRun', {})
+export type NotRun = typeof NotRun.Type
 
 export const ReplayOutcome = Schema.Union([Performed, Rejected, NotRun])
 export type ReplayOutcome = typeof ReplayOutcome.Type
@@ -38,29 +41,36 @@ export const ReplayTranscript = Schema.Struct({
 })
 export type ReplayTranscript = typeof ReplayTranscript.Type
 
-export class RouteChanged extends Schema.TaggedClass<RouteChanged>()('RouteChanged', {}) {}
+export const RouteChanged = Schema.TaggedStruct('RouteChanged', {})
+export type RouteChanged = typeof RouteChanged.Type
 
-export class ControlMissing extends Schema.TaggedClass<ControlMissing>()('ControlMissing', {
+export const ControlMissing = Schema.TaggedStruct('ControlMissing', {
   control: ControlDescriptor,
-}) {}
+})
+export type ControlMissing = typeof ControlMissing.Type
 
-export class ControlAmbiguous extends Schema.TaggedClass<ControlAmbiguous>()('ControlAmbiguous', {
+export const ControlAmbiguous = Schema.TaggedStruct('ControlAmbiguous', {
   control: ControlDescriptor,
-}) {}
+})
+export type ControlAmbiguous = typeof ControlAmbiguous.Type
 
-export class ActionRejected extends Schema.TaggedClass<ActionRejected>()('ActionRejected', { code: FailureCode }) {}
+export const ActionRejected = Schema.TaggedStruct('ActionRejected', { code: FailureCode })
+export type ActionRejected = typeof ActionRejected.Type
 
-export class ActionNotRun extends Schema.TaggedClass<ActionNotRun>()('ActionNotRun', {}) {}
+export const ActionNotRun = Schema.TaggedStruct('ActionNotRun', {})
+export type ActionNotRun = typeof ActionNotRun.Type
 
-export class EndRouteChanged extends Schema.TaggedClass<EndRouteChanged>()('EndRouteChanged', {}) {}
+export const EndRouteChanged = Schema.TaggedStruct('EndRouteChanged', {})
+export type EndRouteChanged = typeof EndRouteChanged.Type
 
-export class AnchorMissing extends Schema.TaggedClass<AnchorMissing>()('AnchorMissing', { anchor: Anchor }) {}
+export const AnchorMissing = Schema.TaggedStruct('AnchorMissing', { anchor: Anchor })
+export type AnchorMissing = typeof AnchorMissing.Type
 
-export class NoChangeEvidenced extends Schema.TaggedClass<NoChangeEvidenced>()('NoChangeEvidenced', {}) {}
+export const NoChangeEvidenced = Schema.TaggedStruct('NoChangeEvidenced', {})
+export type NoChangeEvidenced = typeof NoChangeEvidenced.Type
 
-export class UnexpectedAlert
-  extends Schema.TaggedClass<UnexpectedAlert>()('UnexpectedAlert', { text: Schema.String })
-{}
+export const UnexpectedAlert = Schema.TaggedStruct('UnexpectedAlert', { text: Schema.String })
+export type UnexpectedAlert = typeof UnexpectedAlert.Type
 
 export const ReplayStopReason = Schema.Union([
   RouteChanged,
@@ -181,7 +191,7 @@ const stopUnless = (
   Option.map(Option.filter(Option.some(reason), () => !passed), (failed) => stop(failed, prefix))
 
 const startRouteStopOf = (entry: TraceEntry, transcript: ReplayTranscript): Option.Option<Stop> =>
-  stopUnless(new RouteChanged({}), [], sameRoute(entry.start, transcript.start.route))
+  stopUnless({ _tag: 'RouteChanged' }, [], sameRoute(entry.start, transcript.start.route))
 
 const controlStopOf = (
   control: ControlDescriptor,
@@ -189,9 +199,9 @@ const controlStopOf = (
   prefix: ReadonlyArray<Action>,
 ): Option.Option<Stop> =>
   Match.value(matchCountOf(control, observation)).pipe(
-    Match.when(0, () => Option.some(stop(new ControlMissing({ control }), prefix))),
+    Match.when(0, () => Option.some(stop({ _tag: 'ControlMissing', control }, prefix))),
     Match.when(1, () => Option.none()),
-    Match.orElse(() => Option.some(stop(new ControlAmbiguous({ control }), prefix))),
+    Match.orElse(() => Option.some(stop({ _tag: 'ControlAmbiguous', control }, prefix))),
   )
 
 const controlsStopOf = (
@@ -203,12 +213,12 @@ const controlsStopOf = (
 
 const outcomeStopOf = (step: Option.Option<ReplayStep>, prefix: ReadonlyArray<Action>): Option.Option<Stop> =>
   Option.match(step, {
-    onNone: () => Option.some(stop(new ActionNotRun({}), prefix)),
+    onNone: () => Option.some(stop({ _tag: 'ActionNotRun' }, prefix)),
     onSome: (replayStep) =>
       Match.value(replayStep.outcome).pipe(
         Match.tag('Performed', () => Option.none()),
-        Match.tag('Rejected', (rejected) => Option.some(stop(new ActionRejected({ code: rejected.code }), prefix))),
-        Match.tag('NotRun', () => Option.some(stop(new ActionNotRun({}), prefix))),
+        Match.tag('Rejected', (rejected) => Option.some(stop({ _tag: 'ActionRejected', code: rejected.code }, prefix))),
+        Match.tag('NotRun', () => Option.some(stop({ _tag: 'ActionNotRun' }, prefix))),
         Match.exhaustive,
       ),
   })
@@ -232,7 +242,7 @@ const endRouteStopOf = (
   entry: TraceEntry,
   transcript: ReplayTranscript,
   prefix: ReadonlyArray<Action>,
-): Option.Option<Stop> => stopUnless(new EndRouteChanged({}), prefix, sameRoute(entry.end, transcript.end.route))
+): Option.Option<Stop> => stopUnless({ _tag: 'EndRouteChanged' }, prefix, sameRoute(entry.end, transcript.end.route))
 
 const firstAnchorStopOf = (
   anchors: ReadonlyArray<Anchor>,
@@ -241,7 +251,7 @@ const firstAnchorStopOf = (
 ): Option.Option<Stop> =>
   Option.map(
     Arr.findFirst(anchors, (anchor) => !present(anchor)),
-    (missing) => stop(new AnchorMissing({ anchor: missing }), prefix),
+    (missing) => stop({ _tag: 'AnchorMissing', anchor: missing }, prefix),
   )
 
 const changeEvidenced = (entry: TraceEntry, transcript: ReplayTranscript): boolean =>
@@ -270,7 +280,7 @@ const endStopOf = (
       (anchor) => !anchorPresentIn(anchor, transcript.end),
       prefix,
     ),
-    stopUnless(new NoChangeEvidenced({}), prefix, changeEvidenced(entry, transcript)),
+    stopUnless({ _tag: 'NoChangeEvidenced' }, prefix, changeEvidenced(entry, transcript)),
   ])
 
 const alertStopOf = (
@@ -280,7 +290,7 @@ const alertStopOf = (
 ): Option.Option<Stop> =>
   Option.map(
     Arr.findFirst(transcript.alerts, (text) => !Arr.contains(entry.alerts, text)),
-    (text) => stop(new UnexpectedAlert({ text }), prefix),
+    (text) => stop({ _tag: 'UnexpectedAlert', text }, prefix),
   )
 
 const stopOf = (entry: TraceEntry, transcript: ReplayTranscript): Option.Option<Stop> =>
