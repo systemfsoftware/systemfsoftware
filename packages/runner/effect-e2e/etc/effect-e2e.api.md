@@ -15,10 +15,12 @@ export const AgentConfig: Schema.Struct<{
         readonly baseURL: Schema.String;
         readonly model: Schema.String;
         readonly apiKeyEnv: Schema.String;
+        readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
     }>, Schema.Struct<{
         readonly gateway: Schema.withDecodingDefaultKey<Schema.Literal<"openrouter">, never>;
         readonly model: Schema.withDecodingDefaultKey<Schema.String, never>;
         readonly apiKeyEnv: Schema.withDecodingDefaultKey<Schema.String, never>;
+        readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
     }>]>;
     readonly system: Schema.withDecodingDefaultKey<Schema.String, never>;
     readonly context: Schema.withDecodingDefaultKey<Schema.String, never>;
@@ -154,10 +156,12 @@ export const e2eConfigSchema: (defaults: ConfigDefaults) => Schema.Struct<{
             readonly baseURL: Schema.String;
             readonly model: Schema.String;
             readonly apiKeyEnv: Schema.String;
+            readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
         }>, Schema.Struct<{
             readonly gateway: Schema.withDecodingDefaultKey<Schema.Literal<"openrouter">, never>;
             readonly model: Schema.withDecodingDefaultKey<Schema.String, never>;
             readonly apiKeyEnv: Schema.withDecodingDefaultKey<Schema.String, never>;
+            readonly maxInputTokens: Schema.optionalKey<Schema.Int>;
         }>]>;
         readonly system: Schema.withDecodingDefaultKey<Schema.String, never>;
         readonly context: Schema.withDecodingDefaultKey<Schema.String, never>;

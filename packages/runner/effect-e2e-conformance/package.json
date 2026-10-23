@@ -1,0 +1,30 @@
+{
+  "name": "@systemfsoftware/effect-e2e-conformance",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "Private conformance suite for @systemfsoftware/effect-e2e engines: one engine law suite that every engine runs against the law site.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/engine-law.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "devDependencies": {
+    "@systemfsoftware/effect-e2e": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "vitest": "catalog:"
+  }
+}

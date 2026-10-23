@@ -2438,6 +2438,39 @@ importers:
         specifier: 'catalog:'
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
 
+  packages/runner/effect-e2e-conformance:
+    devDependencies:
+      '@systemfsoftware/effect-e2e':
+        specifier: workspace:^
+        version: link:../effect-e2e
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../gherkin/effect-gherkin-spec
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/vitest':
+        specifier: workspace:^
+        version: link:../vitest
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.5
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.87.0(oxlint-tsgolint@7.0.2003)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+
   packages/runner/vitest:
     dependencies:
       '@effect/platform-node':
