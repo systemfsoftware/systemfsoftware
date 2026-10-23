@@ -302,8 +302,8 @@ export type Written = typeof Written.Type;
 
 // Warnings were encountered during analysis:
 //
-// dist/cache.d.ts:316:9 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point cache.d.ts
-// dist/cache.d.ts:443:3 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point cache.d.ts
+// dist/cache-store.service-CPVlpy2e.d.ts:342:9 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point cache.d.ts
+// dist/cache-store.service-CPVlpy2e.d.ts:469:3 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point cache.d.ts
 
 // (No @packageDocumentation comment for this package)
 

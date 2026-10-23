@@ -312,7 +312,12 @@ it.prop(
 
 it.prop(
   '∀e_SettleRecordings_→NotWrittenOverCap',
-  { of: [TraceEntry, Schema.String, Schema.String], subject: settleRecordings, arbitrary: { seed: 498_035 } },
+  {
+    of: [TraceEntry, Schema.String, Schema.String],
+    subject: settleRecordings,
+    runs: 100,
+    arbitrary: { seed: 498_035 },
+  },
   (subject, [drawn, left, right]) => {
     const slim = withAlertsOf(drawn, [], [])
     const baseBytes = entryWireBytesOf(slim)
