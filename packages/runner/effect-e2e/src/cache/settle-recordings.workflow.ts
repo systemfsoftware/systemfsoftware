@@ -107,7 +107,7 @@ const passed = (step: StepRecord): boolean =>
 const confirmedAt = (steps: ReadonlyArray<StepRecord>, stepIndex: number): boolean =>
   Arr.some(steps, (step, at) =>
     Arr.every(
-      [at > stepIndex, Arr.contains(VERIFICATION_TAGS, step._tag), passed(step)],
+      [at >= stepIndex, Arr.contains(VERIFICATION_TAGS, step._tag), passed(step)],
       (condition) => condition,
     ))
 

@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { type Check } from '../../verdict/check.schema.js'
+import { type Check, CheckRecord } from '../../verdict/check.schema.js'
 import { type FailureCode, FailureCode as FailureCodeSchema } from '../../verdict/failure.schema.js'
 import { type CacheWrite, StepId, StepRecord } from '../../verdict/step-record.schema.js'
 import { entryWireBytesOf, entryWireTextOf, TraceEntry } from '../entry.schema.js'
@@ -258,6 +258,49 @@ it.prop(
       outcomeAt(settled, keepStaged.stepIndex) === 'unconfirmed' &&
       settled.writes.length === 0 &&
       settled.deletes.length === 0
+  },
+)
+
+it.prop(
+  '∀s_SettleRecordings_≡PassingJudgmentConfirmsItself',
+  {
+    of: [Schema.Array(StepRecord), CheckRecord, TraceEntry, Schema.Boolean, FailureCodeSchema],
+    subject: settleRecordings,
+    arbitrary: { seed: 506_031 },
+  },
+  (subject, [pool, record, entry, waits, code]) => {
+    const stagedIndex = pool.length
+    const judgment: StepRecord = waits
+      ? { _tag: 'WaitForStep', id: StepId.make(record.sentence), record, outcome: PASSED }
+      : { _tag: 'AssertStep', id: StepId.make(record.sentence), record, outcome: PASSED }
+    const act: StepRecord = {
+      _tag: 'ActStep',
+      id: StepId.make(record.sentence),
+      instruction: record.sentence,
+      params: {},
+      actions: [],
+      summary: record.sentence,
+      outcome: PASSED,
+      cache: { lookup: { _tag: 'Missed' }, write: 'unconfirmed' },
+      modelCalls: 1,
+      tokens: { input: 0, output: 0 },
+    }
+    const settleWith = (last: StepRecord) =>
+      settledOf(decisionOf(
+        subject,
+        new SettleRecordings({
+          mode: 'read-write',
+          ending: { _tag: 'Failed', failure: code },
+          steps: Arr.append(neutralizedOf(pool), last),
+          staged: [writeStagedOf(stagedIndex, digestOf(`judgment:${record.sentence}`), entry)],
+        }),
+      ))
+    const byJudgment = settleWith(judgment)
+    const byAct = settleWith(act)
+    return byJudgment !== undefined &&
+      byAct !== undefined &&
+      isConfirmedWrite(outcomeAt(byJudgment, stagedIndex)) &&
+      outcomeAt(byAct, stagedIndex) === 'unconfirmed'
   },
 )
 

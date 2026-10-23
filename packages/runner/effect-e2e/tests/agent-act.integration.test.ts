@@ -236,6 +236,7 @@ const secretOverHttp = Effect.scoped(Effect.gen(function*() {
       baseURL: stub.origin,
       model: 'act-model',
       apiKeyEnv: 'ACT_API_KEY',
+      vision: false,
     },
     apiKey: Option.some(Redacted.make(API_KEY)),
   }).pipe(Layer.provide(FetchHttpClient.layer))

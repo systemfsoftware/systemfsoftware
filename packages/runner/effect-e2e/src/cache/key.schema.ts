@@ -41,7 +41,11 @@ const slotOf = ([name, value]: readonly [string, ParamValue]): ReadonlyArray<Uni
 export const uniqueSlotsOf = (params: StepParams): ReadonlyArray<UniqueSlot> =>
   Arr.sort(Object.entries(params).flatMap(slotOf), bySlotName)
 
+export const StepKind = Schema.Literals(['act', 'judgment'])
+export type StepKind = typeof StepKind.Type
+
 export const CacheKeyContext = Schema.Struct({
+  step: StepKind,
   project: ProjectId,
   test: TestId,
   target: TargetName,

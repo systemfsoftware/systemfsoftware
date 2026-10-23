@@ -14,7 +14,7 @@ import type { KeyDigest, ParamValue, StepParams } from '../key.schema.js'
 
 type Derive = typeof deriveKey
 
-const KEYED_FIELDS = ['project', 'test', 'target', 'engine', 'app', 'instruction', 'agent'] as const
+const KEYED_FIELDS = ['project', 'test', 'target', 'engine', 'app', 'instruction', 'agent', 'step'] as const
 
 const isUnique = Schema.is(Unique)
 
@@ -32,6 +32,7 @@ type DeriveKeyFields = ConstructorParameters<typeof DeriveKey>[0]
 
 const fieldsOf = (command: DeriveKey): DeriveKeyFields => ({
   mode: command.mode,
+  step: command.step,
   project: command.project,
   test: command.test,
   target: command.target,
