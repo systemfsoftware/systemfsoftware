@@ -29,6 +29,7 @@ const ENTRIES: ReadonlyArray<Entry> = [
   { entry: 'the root entry', load: () => import('@systemfsoftware/effect-e2e') },
   { entry: 'the engine entry', load: () => import('@systemfsoftware/effect-e2e/engine') },
   { entry: 'the model entry', load: () => import('@systemfsoftware/effect-e2e/model') },
+  { entry: 'the cache entry', load: () => import('@systemfsoftware/effect-e2e/cache') },
 ]
 
 /** Evaluates the entry and every module under it again, in a module graph cleared of earlier imports. */
