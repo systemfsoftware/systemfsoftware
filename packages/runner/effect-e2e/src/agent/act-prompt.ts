@@ -1,6 +1,5 @@
 import * as Arr from 'effect/Array'
 import * as Function from 'effect/Function'
-import * as JsonSchema from 'effect/JsonSchema'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
@@ -16,6 +15,7 @@ import type { Action, CredentialPasswordRef, FillValue, SelectOption } from '../
 import { EngineCapability } from '../engine/capability.schema.js'
 import type { Message, ModelAnswer, ModelRequest, ToolCall, ToolDefinition } from '../model/model.schema.js'
 import { ActTool } from './next-act.workflow.js'
+import { toolDefinitionOf } from './tool-definition.js'
 
 export const ACT_MAX_OUTPUT_TOKENS = 1024
 
@@ -28,12 +28,6 @@ const ACT_FRAMEWORK_SYSTEM = [
 ].join('\n')
 
 const SKIPPED_CONTENT = 'not run: one action per turn'
-
-const DEFS_PREFIX = '#/$defs/'
-
-const isJsonArray = (value: Schema.Json): value is Schema.JsonArray => Array.isArray(value)
-
-const isJsonObject = (value: Schema.Json): value is Schema.JsonObject => Predicate.isObject(value)
 
 const unionMembersOf = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.AST> =>
   Match.value(ast).pipe(
@@ -81,69 +75,6 @@ const descriptionOf = (member: SchemaAST.AST): Option.Option<string> =>
     (present) => Option.filter(Option.some(present['description']), Predicate.isString),
   )
 
-const definitionNamed = (definitions: JsonSchema.Definitions, ref: string): Option.Option<Schema.JsonObject> =>
-  Match.value(ref.startsWith(DEFS_PREFIX)).pipe(
-    Match.when(true, () => Schema.decodeUnknownOption(Schema.JsonObject)(definitions[ref.slice(DEFS_PREFIX.length)])),
-    Match.when(false, () => Option.none()),
-    Match.exhaustive,
-  )
-
-const refDefinitionOf = (
-  definitions: JsonSchema.Definitions,
-  ref: Schema.Json | undefined,
-): Option.Option<Schema.JsonObject> =>
-  Option.flatMap(
-    Match.value(ref).pipe(
-      Match.when(Predicate.isString, (value) => Option.some(value)),
-      Match.orElse(() => Option.none()),
-    ),
-    (value) => definitionNamed(definitions, value),
-  )
-
-const withoutRef = (record: Schema.JsonObject): Schema.JsonObject =>
-  Object.fromEntries(Object.entries(record).filter(([key]) => key !== '$ref'))
-
-const mergedRecordOf = (definition: Schema.JsonObject, record: Schema.JsonObject): Schema.JsonObject =>
-  Object.fromEntries([...Object.entries(definition), ...Object.entries(record)])
-
-const resolvedRecordOf = (definitions: JsonSchema.Definitions, record: Schema.JsonObject): Schema.JsonObject =>
-  Option.match(refDefinitionOf(definitions, record['$ref']), {
-    onNone: () => record,
-    onSome: (definition) => mergedRecordOf(definition, withoutRef(record)),
-  })
-
-const recordInlinedOf = (definitions: JsonSchema.Definitions, record: Schema.JsonObject): Schema.JsonObject =>
-  Object.fromEntries(
-    Object.entries(resolvedRecordOf(definitions, record)).map(([key, value]) => [key, inlinedOf(definitions, value)]),
-  )
-
-const inlinedOf = (definitions: JsonSchema.Definitions, node: Schema.Json): Schema.Json =>
-  Match.value(node).pipe(
-    Match.when(isJsonArray, (items) => items.map((item) => inlinedOf(definitions, item))),
-    Match.when(isJsonObject, (record) => recordInlinedOf(definitions, record)),
-    Match.orElse((leaf) => leaf),
-  )
-
-const inlinedObjectOf = (
-  definitions: JsonSchema.Definitions,
-  node: Schema.JsonObject,
-): Option.Option<Schema.JsonObject> =>
-  Match.value(inlinedOf(definitions, node)).pipe(
-    Match.when(isJsonObject, (record) => Option.some(mergedRecordOf({ type: 'object' }, record))),
-    Match.orElse(() => Option.none()),
-  )
-
-const parametersOf = (args: Schema.Constraint): Option.Option<Schema.JsonObject> => {
-  const document = Schema.toJsonSchemaDocument(args)
-  return Option.flatMap(
-    Schema.decodeUnknownOption(Schema.JsonObject)(document.schema),
-    (schema) => inlinedObjectOf(document.definitions, schema),
-  )
-}
-
-const parametersOfMember = (member: SchemaAST.AST): Option.Option<Schema.JsonObject> =>
-  Option.flatMap(argumentsAstOf(member), (args) => parametersOf(Schema.make(args)))
-
 const declaresCapability = (capabilities: ReadonlyArray<EngineCapability>) => (member: SchemaAST.AST): boolean =>
   Option.match(capabilityOf(member), {
     onNone: () => true,
@@ -159,7 +90,10 @@ const definitionOf =
           Option.flatMap(
             descriptionOf(member),
             (description) =>
-              Option.map(parametersOfMember(member), (parameters) => ({ name, description, parameters })),
+              Option.flatMap(
+                argumentsAstOf(member),
+                (args) => toolDefinitionOf({ name, description, arguments: Schema.make(args) }),
+              ),
           ),
       ),
       () => declaresCapability(capabilities)(member),
