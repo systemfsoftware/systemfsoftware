@@ -30,3 +30,7 @@ The agent that built a screen cannot grade it: it saw its intentions, not the pa
 **Copy** is judged by the same panel in a separate call over the text extracted from the rendered page, with the banned patterns named in the brief as the rubric, so a banned phrase in the page is found by reading, not by matching a string.
 
 Gate: `judge` — Does the judge verdict file for this unit list the cited evidence per criterion, an overall score of at least 8, no criterion under 6 and no claim from "Not yet true"? Is the judge a different model from the builder, and is its calibration current?
+
+**Blind-read clarity gate.** A Gemini read of the matrix screenshots, not told what the product is, must state the product correctly (who it is for, what it does and what the person gets) at 90% or more across the captures. Each capture is read in a fresh call with no brief and no page text, and the statement is compared with the brief's "What the product is" section by the judge. Below 90% the unit is `violated` for clarity and the copy goes back to its writer (Gemini, see `each-step-loads-its-curated-skills`) with the misreadings as the next order.
+
+Gate: `judge` — Does the verdict file record the blind-read statements per capture and a correct-product rate of at least 90%?

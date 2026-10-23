@@ -18,9 +18,9 @@ Rules:
 
 - `ui-work-starts-from-a-brief`: the brief template, its required sections and what a section may not leave empty.
 - `four-directions-then-reference-images`: four genuinely different directions, then a reference image per section, before any implementation code.
-- `each-step-loads-its-curated-skills`: the skills each step loads by name, the ones it must not, and why the list is short.
+- `each-step-loads-its-curated-skills`: the skills each step loads by name (including `saas-landing-anatomy`), the ones it must not, why the list is short, and that Gemini writes the copy while Claude and GPT build layout and motion.
 - `the-build-loop-scores-from-screenshots`: the evidence matrix (390, 768, 1440, light and dark, reduced motion), the facts a capture records and the loop to a score of 8.
-- `an-independent-judge-gates-the-merge`: the judge, its rubric, what it may and may not decide, and what its verdict does to the merge.
+- `an-independent-judge-gates-the-merge`: the judge, its rubric, the blind-read clarity gate (a Gemini read not told the product must name it at 90% or more), what it may and may not decide, and what its verdict does to the merge.
 - `claims-are-true-on-production`: every claim and every number on a screen is true today, and copy comes from real users' words.
 - `the-judge-is-calibrated-on-pass-and-fail-cases`: the labelled cases a judge must agree with before its verdict gates anything.
 - `production-is-rechecked-after-deploy`: the production capture and the signed-in walk that close the unit.
