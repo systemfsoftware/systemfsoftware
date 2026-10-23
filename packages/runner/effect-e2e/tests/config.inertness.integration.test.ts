@@ -27,6 +27,7 @@ type Entry = {
 
 const ENTRIES: ReadonlyArray<Entry> = [
   { entry: 'the root entry', load: () => import('@systemfsoftware/effect-e2e') },
+  { entry: 'the engine entry', load: () => import('@systemfsoftware/effect-e2e/engine') },
   { entry: 'the model entry', load: () => import('@systemfsoftware/effect-e2e/model') },
 ]
 

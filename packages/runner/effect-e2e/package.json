@@ -27,6 +27,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./engine": {
+      "@systemfsoftware/source": "./src/engine/mod.ts",
+      "types": "./dist/engine.d.ts",
+      "default": "./dist/engine.mjs"
+    },
     "./model": {
       "@systemfsoftware/source": "./src/model/mod.ts",
       "types": "./dist/model.d.ts",
@@ -43,8 +48,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.model.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.model.json",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -81,6 +86,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./engine": {
+        "types": "./dist/engine.d.ts",
+        "default": "./dist/engine.mjs"
       },
       "./model": {
         "types": "./dist/model.d.ts",

@@ -1,4 +1,13 @@
 export {
+  ActionFailed,
+  AppNotOpen,
+  AppUnreachable,
+  ArtifactWriteFailed,
+  AutomationUnsupported,
+  LocatorAmbiguous,
+  LocatorNotFound,
+} from '../verdict/failure.schema.js'
+export {
   Action,
   CredentialPasswordRef,
   FillValue,
@@ -10,6 +19,9 @@ export {
 } from './action.schema.js'
 export { EngineCapability } from './capability.schema.js'
 export { decodeAction, decodeObservation } from './decode.js'
+export { ConsoleLevel, LogEntry, ReadRequest, ReadResult, ScreenshotRequest } from './engine.schema.js'
+export type { EngineError, EngineShape } from './engine.service.js'
+export { Engine } from './engine.service.js'
 export {
   ByLabel,
   ByPlaceholder,
@@ -25,6 +37,7 @@ export {
   Selector,
   TextPattern,
 } from './locator.schema.js'
+export { MemoryPage, MemorySite } from './memory-site.schema.js'
 export { Observation, observationDepth, ScreenshotRef, TreeDepthExceeded } from './observation.schema.js'
 export { NormalizedRoute, normalizeRoute, Route, sameRoute } from './route.schema.js'
 export { NodeBounds, NodeRef, NodeStates, SemanticNode, semanticTreeDepth } from './semantic-node.schema.js'
