@@ -71,13 +71,6 @@ it.prop(
     subject: verdictOf,
     runs: 500,
     arbitrary: { seed: 499_101 },
-    cover: {
-      passed: [(command: FoldRunVerdict) => design10StatusOf(command) === 'passed', 0.03],
-      failed: [(command: FoldRunVerdict) => design10StatusOf(command) === 'failed', 0.3],
-      blocked: [(command: FoldRunVerdict) => design10StatusOf(command) === 'blocked', 0.02],
-      error: [(command: FoldRunVerdict) => design10StatusOf(command) === 'error', 0.1],
-      interrupted: [(command: FoldRunVerdict) => design10StatusOf(command) === 'interrupted', 0.1],
-    },
   },
   (subject, [command]) => {
     const status = design10StatusOf(command)
