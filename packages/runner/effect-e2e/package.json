@@ -27,6 +27,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./agent": {
+      "@systemfsoftware/source": "./src/agent/mod.ts",
+      "types": "./dist/agent.d.ts",
+      "default": "./dist/agent.mjs"
+    },
     "./cache": {
       "@systemfsoftware/source": "./src/cache/mod.ts",
       "types": "./dist/cache.d.ts",
@@ -54,8 +59,8 @@
     "test": "vitest run",
     "mutation": "stryker run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json && api-extractor-quiet run --config api-extractor.cache.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json && api-extractor run --local --config api-extractor.cache.json",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json && api-extractor-quiet run --config api-extractor.cache.json && api-extractor-quiet run --config api-extractor.agent.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json && api-extractor run --local --config api-extractor.cache.json && api-extractor run --local --config api-extractor.agent.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -101,6 +106,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./agent": {
+        "types": "./dist/agent.d.ts",
+        "default": "./dist/agent.mjs"
       },
       "./cache": {
         "types": "./dist/cache.d.ts",

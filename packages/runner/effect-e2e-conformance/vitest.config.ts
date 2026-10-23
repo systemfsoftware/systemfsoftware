@@ -1,8 +1,8 @@
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
-// The one test file that drives a real browser. `test` runs every other test and needs no browser;
-// `test:engine` runs this file and needs Chromium.
-const BROWSER_TESTS = ['tests/web-engine-law.integration.test.ts']
+// The test files that drive a real browser. `test` runs every other test and needs no browser;
+// `test:engine` runs these files and needs Chromium.
+const BROWSER_TESTS = ['tests/web-engine-law.integration.test.ts', 'tests/agent-act-web.integration.test.ts']
 
 export default defineConfig({
   ...sharedConfig,
