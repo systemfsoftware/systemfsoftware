@@ -251,6 +251,11 @@ export interface EngineShape {
     readonly screenshot: (request: ScreenshotRequest) => Effect.Effect<Uint8Array, AutomationUnsupported | ArtifactWriteFailed | AppNotOpen>;
 }
 
+// Warning: (ae-forgotten-export) The symbol "EnvironmentUnavailable_base" needs to be exported by the entry point engine.d.ts
+//
+// @public (undocumented)
+export class EnvironmentUnavailable extends EnvironmentUnavailable_base {}
+
 // @public (undocumented)
 export const FillValue: Schema.Union<readonly [Schema.String, Schema.Struct<{
     readonly secret: Schema.String;
