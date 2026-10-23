@@ -2,6 +2,7 @@ import { web } from '@systemfsoftware/effect-e2e'
 import { layer } from '@systemfsoftware/effect-e2e-web'
 import {
   Engine,
+  type EngineError,
   type EngineShape,
   type EnvironmentUnavailable,
   type Locator,
@@ -10,8 +11,10 @@ import {
   type SemanticNode,
 } from '@systemfsoftware/effect-e2e/engine'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Predicate from 'effect/Predicate'
 import * as Redacted from 'effect/Redacted'
 
 import {
@@ -44,6 +47,9 @@ const agree = byRole('checkbox', 'Agree')
 
 const nodesIn = (tree: ReadonlyArray<SemanticNode>): ReadonlyArray<SemanticNode> =>
   tree.flatMap((node) => [node, ...nodesIn(node.children)])
+
+const evidenceIdsOf = (failure: EngineError): Array<string> =>
+  failure.evidence.flatMap((evidence) => (Predicate.isTagged(evidence, 'NodeEvidence') ? [evidence.ref.id] : []))
 
 const summaryOf = (tree: ReadonlyArray<SemanticNode>, role: string, name: string) =>
   nodesIn(tree)
@@ -193,6 +199,48 @@ Feature('Driving a real browser through the web engine')
     )
 
     scenario(
+      'Each match stands for its own element, and failure evidence names nodes an observation holds',
+      Gherkin.Do.pipe(
+        When('the two inline totals are queried and tapped, Delete is tapped, and the page is observed')(
+          'matched',
+          () =>
+            onSite((engine, site) =>
+              Effect.gen(function*() {
+                yield* opened(engine, site)
+                const totals = yield* engine.query(byTestId('total'))
+                const totalsTapped = yield* Effect.flip(engine.act({ _tag: 'Tap', target: byTestId('total') }))
+                const deletesTapped = yield* Effect.flip(
+                  engine.act({ _tag: 'Tap', target: byRole('button', 'Delete') }),
+                )
+                const observed = yield* engine.observe
+                return {
+                  totals: totals.map((node) => ({ text: node.text, boxed: node.bounds !== undefined })),
+                  distinctTotals: Arr.dedupe(totals.map((node) => node.ref.id)).length,
+                  totalsTapped,
+                  distinctTotalEvidence: totalsTapped.pipe(evidenceIdsOf, Arr.dedupe).length,
+                  deleteEvidence: evidenceIdsOf(deletesTapped).toSorted(),
+                  observedDeletes: nodesIn(observed.tree)
+                    .filter((node) => node.role === 'button' && node.name === 'Delete')
+                    .map((node) => node.ref.id)
+                    .toSorted(),
+                }
+              })
+            ),
+        ),
+        Then('each total is its own boxed node, every evidence ref is distinct, and the Delete refs are observed')(
+          (s, expect) =>
+            expect(s.matched).toMatchObject({
+              totals: [{ text: 'Subtotal', boxed: true }, { text: 'Total', boxed: true }],
+              distinctTotals: 2,
+              totalsTapped: { _tag: 'LOCATOR_AMBIGUOUS' },
+              distinctTotalEvidence: 2,
+              deleteEvidence: s.matched.observedDeletes,
+            }),
+        ),
+      ),
+    )
+
+    scenario(
       'Opening an address nothing serves fails as unreachable and leaves no page open',
       Gherkin.Do.pipe(
         Given('an origin that refuses connections')('origin', () => refusedOrigin),
@@ -274,7 +322,7 @@ Feature('Driving a real browser through the web engine')
     )
 
     scenario(
-      'A context header reaches every request and appears in no engine output',
+      'A context header reaches every request, and the engine writes it into none of its outputs',
       Gherkin.Do.pipe(
         Given('a secret header value')('secret', () => Effect.succeed(`s3cr3t-${crypto.randomUUID()}`)),
         When('a session observes, queries, fails, reads logs and the route, and fails to open an unserved address')(

@@ -31,7 +31,7 @@ import { unreachable } from './failure.js'
 import { appended, consoleEntry, requestFailedEntry, responseEntries } from './logs.js'
 import { readOn } from './reads.js'
 import { routeOf } from './route.js'
-import { attempt, type OpenSession, revisionOf, snapshotOf } from './session.js'
+import { attempt, matchedAt, namingOf, type OpenSession, snapshotOf } from './session.js'
 
 export const WEB_CAPABILITIES = ['web', 'screenshot', 'vision', 'network', 'drag', 'frames'] as const
 
@@ -91,49 +91,49 @@ const closed = (session: Session): Effect.Effect<void> =>
     onSome: (open) => Effect.ignore(attempt(() => open.context.close())),
   })
 
-const started = (browser: Browser, options: WebEngineOptions) => (url: string): Effect.Effect<OpenSession, string> =>
-  Effect.gen(function*() {
-    const context = yield* attempt(() =>
-      browser.newContext({ extraHTTPHeaders: Record.map(options.contextHeaders, Redacted.value) })
-    )
-    context.setDefaultTimeout(ACTION_TIMEOUT_MS)
-    context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS)
-    const page = yield* attempt(() => context.newPage())
-    const logs = yield* Ref.make<ReadonlyArray<LogEntry>>([])
-    listened(page, logs)
-    yield* attempt(() => page.goto(url)).pipe(Effect.tapError(() => Effect.ignore(attempt(() => context.close()))))
-    return { context, page, logs, revision: yield* Ref.make(0) }
-  })
+const started =
+  (browser: Browser, options: WebEngineOptions, snapshots: Ref.Ref<number>) =>
+  (url: string): Effect.Effect<OpenSession, string> =>
+    Effect.gen(function*() {
+      const context = yield* attempt(() =>
+        browser.newContext({ extraHTTPHeaders: Record.map(options.contextHeaders, Redacted.value) })
+      )
+      context.setDefaultTimeout(ACTION_TIMEOUT_MS)
+      context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS)
+      const page = yield* attempt(() => context.newPage())
+      const logs = yield* Ref.make<ReadonlyArray<LogEntry>>([])
+      listened(page, logs)
+      yield* attempt(() => page.goto(url)).pipe(Effect.tapError(() => Effect.ignore(attempt(() => context.close()))))
+      return { context, page, logs, revision: yield* Ref.make(0), snapshots }
+    })
 
-const opening = (browser: Browser, options: WebEngineOptions, url: string) => (current: Session) =>
-  closed(current).pipe(
-    Effect.andThen(Effect.result(started(browser, options)(url))),
-    Effect.map((outcome) => [outcome, Result.getSuccess(outcome)] as const),
-  )
+const opening =
+  (browser: Browser, options: WebEngineOptions, snapshots: Ref.Ref<number>, url: string) => (current: Session) =>
+    closed(current).pipe(
+      Effect.andThen(Effect.result(started(browser, options, snapshots)(url))),
+      Effect.map((outcome) => [outcome, Result.getSuccess(outcome)] as const),
+    )
 
 const observed = (open: OpenSession): Effect.Effect<Observation> =>
   Effect.gen(function*() {
-    const revision = yield* revisionOf(open)
+    const naming = yield* namingOf(open)
     const snapshot = yield* snapshotOf(open.page.locator('body'))
     return yield* decodeObservation({
       route: routeOf(open.page.url()),
-      revision,
-      tree: semanticTreeOf(revision)(snapshot),
+      revision: naming.revision,
+      tree: semanticTreeOf(naming)(snapshot),
     })
   }).pipe(Effect.orDie)
 
 const matchedNodes = (open: OpenSession, target: EngineLocator) =>
   Effect.gen(function*() {
     const { locator } = yield* located(open)(target)
-    const revision = yield* revisionOf(open)
     const count = yield* attempt(() => locator.count()).pipe(Effect.orDie)
-    const snapshots = yield* Effect.forEach(
+    const nodes = yield* Effect.forEach(
       Array.from({ length: count }, (_, index) => index),
-      (index) => Effect.orDie(snapshotOf(locator.nth(index))),
+      (index) => Effect.orDie(matchedAt({ open, locator })(index)),
     )
-    return yield* Effect.orDie(
-      Schema.decodeEffect(Schema.Array(SemanticNode))(snapshots.flatMap(semanticTreeOf(revision))),
-    )
+    return yield* Effect.orDie(Schema.decodeEffect(Schema.Array(SemanticNode))(nodes))
   })
 
 const screenshotted = (open: OpenSession, request: ScreenshotRequest) =>
@@ -164,6 +164,7 @@ export const layer = (options: WebEngineOptions): Layer.Layer<Engine, Environmen
       const browser = yield* Effect.acquireRelease(launched(options.spec), (running) =>
         Effect.ignore(attempt(() => running.close())))
       const session = yield* SynchronizedRef.make<Session>(Option.none())
+      const snapshots = yield* Ref.make(0)
       const opened = Effect.flatMap(SynchronizedRef.get(session), (current) =>
         Effect.fromOption(current)).pipe(
           Effect.mapError(notOpen),
@@ -171,7 +172,7 @@ export const layer = (options: WebEngineOptions): Layer.Layer<Engine, Environmen
       return Engine.of({
         capabilities: WEB_CAPABILITIES,
         open: (url) =>
-          SynchronizedRef.modifyEffect(session, opening(browser, options, url)).pipe(
+          SynchronizedRef.modifyEffect(session, opening(browser, options, snapshots, url)).pipe(
             Effect.flatMap(Effect.fromResult),
             Effect.mapError(unreachable(url)),
             Effect.asVoid,

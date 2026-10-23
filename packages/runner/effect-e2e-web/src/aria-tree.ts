@@ -1,4 +1,5 @@
-import type { NodeStates, SemanticNode } from '@systemfsoftware/effect-e2e/engine'
+import type { NodeBounds, NodeRef, NodeStates, SemanticNode } from '@systemfsoftware/effect-e2e/engine'
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
@@ -16,15 +17,25 @@ const CHECKABLE_ROLES: Readonly<Record<string, true>> = {
   menuitemradio: true,
 }
 
-const isElement = (child: AriaChild): child is AriaNode => !Predicate.isString(child)
+const TEXT_FRAGMENT_ROLE = 'text'
+
+const isElement = (child: AriaChild): child is AriaNode =>
+  !Predicate.isString(child) && child.role !== TEXT_FRAGMENT_ROLE
 
 const childrenOf = (node: AriaNode): ReadonlyArray<AriaChild> =>
   Option.getOrElse(Option.fromNullishOr(node.children), () => [])
 
-const fragmentsOf = (node: AriaNode): string =>
-  childrenOf(node).filter(Predicate.isString).map(Str.trim).filter(Str.isNonEmpty).join(' ')
+const fragmentTextOf = (node: AriaNode): ReadonlyArray<string> =>
+  node.role === TEXT_FRAGMENT_ROLE ? Option.toArray(Option.fromNullishOr(node.text)) : []
 
-const ownText = (node: AriaNode): string => Option.getOrElse(Option.fromNullishOr(node.text), () => fragmentsOf(node))
+const fragmentOf = (child: AriaChild): ReadonlyArray<string> =>
+  Predicate.isString(child) ? [child] : fragmentTextOf(child)
+
+const fragmentsIn = (children: ReadonlyArray<AriaChild>): string =>
+  children.flatMap(fragmentOf).map(Str.trim).filter(Str.isNonEmpty).join(' ')
+
+const ownText = (node: AriaNode): string =>
+  Option.getOrElse(Option.fromNullishOr(node.text), () => fragmentsIn(childrenOf(node)))
 
 const uncheckedUnlessCheckable = (role: string): Pick<NodeStates, 'checked'> =>
   CHECKABLE_ROLES[role] === true ? { checked: false } : {}
@@ -54,11 +65,13 @@ const statesOf = (node: AriaNode): NodeStates => ({
   ...pressedOf(node),
 })
 
-const displayedTextOf = (node: AriaNode): Pick<SemanticNode, 'text'> =>
-  Option.match(Option.liftPredicate(ownText(node), Str.isNonEmpty), {
+const textOf = (text: string): Pick<SemanticNode, 'text'> =>
+  Option.match(Option.liftPredicate(text, Str.isNonEmpty), {
     onNone: () => ({}),
-    onSome: (text) => ({ text }),
+    onSome: (present) => ({ text: present }),
   })
+
+const displayedTextOf = (node: AriaNode): Pick<SemanticNode, 'text'> => textOf(ownText(node))
 
 const textFieldsOf = (node: AriaNode): Pick<SemanticNode, 'text' | 'value'> =>
   VALUE_ROLES[node.role] === true
@@ -71,21 +84,62 @@ const nameOf = (node: AriaNode): Pick<SemanticNode, 'name'> =>
     onSome: (name) => ({ name }),
   })
 
-const boundsOf = (node: AriaNode): Pick<SemanticNode, 'bounds'> =>
-  Option.match(Option.fromNullishOr(node.box), { onNone: () => ({}), onSome: (bounds) => ({ bounds }) })
+const boundsFrom = (bounds: Option.Option<NodeBounds>): Pick<SemanticNode, 'bounds'> =>
+  Option.match(bounds, { onNone: () => ({}), onSome: (present) => ({ bounds: present }) })
 
-const refIdOf = (node: AriaNode, index: number): string =>
-  Option.getOrElse(Option.fromNullishOr(node.ref), () => `unreferenced-${index}`)
+export interface SnapshotNaming {
+  readonly revision: string
+  readonly snapshot: string
+}
 
-const semanticNodeOf = (revision: string) => (node: AriaNode, index: number): SemanticNode => ({
-  ref: { id: refIdOf(node, index), revision },
+const childPath = (path: string, index: number): string => (path === '' ? String(index) : `${path}.${index}`)
+
+const refOf = (naming: SnapshotNaming, node: AriaNode, path: string): NodeRef => ({
+  id: Option.getOrElse(Option.fromNullishOr(node.ref), () => `${naming.snapshot}:${path}`),
+  revision: naming.revision,
+})
+
+const semanticNodeAt = (naming: SnapshotNaming, path: string) => (node: AriaNode): SemanticNode => ({
+  ref: refOf(naming, node, path),
   role: node.role,
   ...nameOf(node),
   ...textFieldsOf(node),
   states: statesOf(node),
-  ...boundsOf(node),
-  children: semanticTreeOf(revision)(childrenOf(node)),
+  ...boundsFrom(Option.fromNullishOr(node.box)),
+  children: treeAt(naming, path)(childrenOf(node)),
 })
 
-export const semanticTreeOf = (revision: string) => (snapshot: ReadonlyArray<AriaChild>): Array<SemanticNode> =>
-  snapshot.filter(isElement).map(semanticNodeOf(revision))
+const treeAt = (naming: SnapshotNaming, path: string) => (children: ReadonlyArray<AriaChild>): Array<SemanticNode> =>
+  children.filter(isElement).map((node, index) => semanticNodeAt(naming, childPath(path, index))(node))
+
+export const semanticTreeOf = (naming: SnapshotNaming): (snapshot: ReadonlyArray<AriaChild>) => Array<SemanticNode> =>
+  treeAt(naming, '')
+
+export const unrootedRefOf = (naming: SnapshotNaming): NodeRef => ({
+  id: `${naming.snapshot}:match`,
+  revision: naming.revision,
+})
+
+export interface MatchedSnapshot {
+  readonly naming: SnapshotNaming
+  readonly answer: ReadonlyArray<AriaChild>
+  readonly bounds: Option.Option<NodeBounds>
+}
+
+const rootOf = (answer: ReadonlyArray<AriaChild>): Option.Option<AriaNode> =>
+  answer.length === 1 ? Option.filter(Arr.head(answer), isElement) : Option.none()
+
+const unrootedNodeOf = (match: MatchedSnapshot): SemanticNode => ({
+  ref: unrootedRefOf(match.naming),
+  role: 'generic',
+  ...textOf(fragmentsIn(match.answer)),
+  states: { disabled: false, hidden: false },
+  ...boundsFrom(match.bounds),
+  children: treeAt(match.naming, 'match')(match.answer),
+})
+
+export const matchedNodeOf = (match: MatchedSnapshot): SemanticNode =>
+  Option.match(rootOf(match.answer), {
+    onNone: () => unrootedNodeOf(match),
+    onSome: semanticNodeAt(match.naming, '0'),
+  })

@@ -25,6 +25,7 @@ export const FORM_PAGE = `<!doctype html>
       <button type="button" disabled>Archive</button>
       <button type="button" data-testid="submit-order">Place order</button>
     </form>
+    <p><span data-testid="total">Subtotal</span> <span data-testid="total">Total</span></p>
   </body>
 </html>`
 

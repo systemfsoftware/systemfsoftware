@@ -1,4 +1,4 @@
-import type { LogEntry, NodeRef } from '@systemfsoftware/effect-e2e/engine'
+import type { LogEntry, NodeRef, SemanticNode } from '@systemfsoftware/effect-e2e/engine'
 import { type Locator as EngineLocator } from '@systemfsoftware/effect-e2e/engine'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
@@ -8,15 +8,17 @@ import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import type { BrowserContext, Locator, Page } from 'playwright'
 
+import { matchedNodeOf, type SnapshotNaming, unrootedRefOf } from './aria-tree.js'
 import { type TargetFailure, targetFailureOf } from './failure.js'
 import { routeOf } from './route.js'
-import { AriaAnswer, type AriaChild } from './web.schema.js'
+import { AriaAnswer } from './web.schema.js'
 
 export interface OpenSession {
   readonly context: BrowserContext
   readonly page: Page
   readonly logs: Ref.Ref<ReadonlyArray<LogEntry>>
   readonly revision: Ref.Ref<number>
+  readonly snapshots: Ref.Ref<number>
 }
 
 export const SNAPSHOT_DEPTH = 60
@@ -29,33 +31,44 @@ export const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, string> =>
     catch: (cause) => (Predicate.isError(cause) ? firstLineOf(cause.message) : 'the browser driver rejected the call'),
   })
 
-export const revisionOf = (open: OpenSession): Effect.Effect<string> => Effect.map(Ref.get(open.revision), String)
+const revisionOf = (open: OpenSession): Effect.Effect<string> => Effect.map(Ref.get(open.revision), String)
+
+export const namingOf = (open: OpenSession): Effect.Effect<SnapshotNaming> =>
+  Effect.all({
+    revision: revisionOf(open),
+    snapshot: Ref.modify(open.snapshots, (taken) => [`s${taken}`, taken + 1] as const),
+  })
 
 export const snapshotOf = (locator: Locator): Effect.Effect<AriaAnswer, string | Schema.SchemaError> =>
   attempt(() => locator.ariaSnapshotJSON({ mode: 'ai', boxes: true, depth: SNAPSHOT_DEPTH })).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(AriaAnswer)),
   )
 
-const refIn = (snapshot: AriaAnswer): Option.Option<string> =>
-  Arr.findFirst(
-    snapshot,
-    (child: AriaChild) => (Predicate.isString(child) ? Option.none() : Option.fromNullishOr(child.ref)),
-  )
+export interface Matching {
+  readonly open: OpenSession
+  readonly locator: Locator
+}
 
-const refAt = (locator: Locator, revision: string) => (index: number): Effect.Effect<NodeRef> =>
-  attempt(() => locator.nth(index).ariaSnapshotJSON({ mode: 'ai', depth: 1 })).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(AriaAnswer)),
-    Effect.map(refIn),
-    Effect.map(Option.getOrElse(() => `match-${index}`)),
-    Effect.orElseSucceed(() => `match-${index}`),
-    Effect.map((id) => ({ id, revision })),
+export const matchedAt =
+  ({ open, locator }: Matching) => (index: number): Effect.Effect<SemanticNode, string | Schema.SchemaError> =>
+    Effect.gen(function*() {
+      const match = locator.nth(index)
+      const naming = yield* namingOf(open)
+      const answer = yield* snapshotOf(match)
+      const bounds = yield* attempt(() => match.boundingBox())
+      return matchedNodeOf({ naming, answer, bounds: Option.fromNullishOr(bounds) })
+    })
+
+const refAt = (open: OpenSession, locator: Locator) => (index: number): Effect.Effect<NodeRef> =>
+  matchedAt({ open, locator })(index).pipe(
+    Effect.map((node) => node.ref),
+    Effect.catch(() => Effect.map(namingOf(open), unrootedRefOf)),
   )
 
 const matchesOf = (open: OpenSession, locator: Locator): Effect.Effect<ReadonlyArray<NodeRef>> =>
   Effect.gen(function*() {
-    const revision = yield* revisionOf(open)
     const count = yield* attempt(() => locator.count()).pipe(Effect.orElseSucceed(() => 0))
-    return yield* Effect.forEach(Array.from({ length: count }, (_, index) => index), refAt(locator, revision))
+    return yield* Effect.forEach(Array.from({ length: count }, (_, index) => index), refAt(open, locator))
   })
 
 export interface Targeted {
