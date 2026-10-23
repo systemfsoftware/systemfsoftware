@@ -47,6 +47,7 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "mutation": "stryker run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json",
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json",
@@ -54,6 +55,7 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
+    "@noble/hashes": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
@@ -63,6 +65,12 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest": "workspace:^",
@@ -74,6 +82,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
