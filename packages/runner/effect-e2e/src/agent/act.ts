@@ -36,7 +36,6 @@ import type { Action } from '../engine/action.schema.js'
 import type { EngineShape } from '../engine/engine.service.js'
 import { Engine } from '../engine/engine.service.js'
 import type { Observation } from '../engine/observation.schema.js'
-import type { SemanticNode } from '../engine/semantic-node.schema.js'
 import type { Message, ModelAnswer, ModelFailure, ModelRequest, ModelResponse } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
@@ -71,7 +70,7 @@ import {
   toolResultOf,
 } from './act-prompt.js'
 import { type Capture, type Execute, NextAct, nextAct, type NextActDecision } from './next-act.workflow.js'
-import { formatObservation } from './observation.js'
+import { formatObservation, stableTextOf } from './observation.js'
 import { recordedFlow, RecordFlow } from './recorded-flow.workflow.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
@@ -226,22 +225,6 @@ const isSecretRef = Schema.is(SecretRef)
 
 const secretNamesOf = (params: StepParams): ReadonlyArray<string> =>
   Object.values(params).flatMap((value) => (isSecretRef(value) ? [value.secret] : []))
-
-interface StableNode {
-  readonly id: string
-  readonly node: Omit<SemanticNode, 'ref' | 'children'>
-  readonly children: ReadonlyArray<StableNode>
-}
-
-const stableNodeOf = ({ ref, children, ...node }: SemanticNode): StableNode => ({
-  id: ref.id,
-  node,
-  children: children.map(stableNodeOf),
-})
-
-/** The observation without its revisions, which change on every observe even when nothing moved. */
-const stableTextOf = (observation: Observation): string =>
-  JSON.stringify([observation.route, observation.tree.map(stableNodeOf)])
 
 const update = (step: Step, change: (run: Run) => Run): Effect.Effect<void> => Ref.update(step.run, change)
 

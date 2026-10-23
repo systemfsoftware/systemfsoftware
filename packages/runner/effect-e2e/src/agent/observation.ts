@@ -213,6 +213,21 @@ export const formatObservation: {
     Arr.join([routeLineOf(observation, redactField), ...visibleLinesOf(observation.tree, 0, redactField)], '\n'),
 )
 
+interface StableNode {
+  readonly id: string
+  readonly node: Omit<SemanticNode, 'ref' | 'children'>
+  readonly children: ReadonlyArray<StableNode>
+}
+
+const stableNodeOf = ({ ref, children, ...node }: SemanticNode): StableNode => ({
+  id: ref.id,
+  node,
+  children: children.map(stableNodeOf),
+})
+
+export const stableTextOf = (observation: Observation): string =>
+  JSON.stringify([observation.route, observation.tree.map(stableNodeOf)])
+
 // The property laws below pin the redaction contract of this module: masking by name, the cut-at-limit
 // prefix rule, and hidden-subtree skipping. Inputs are drawn from the production schemas; secrets are
 // derived words (lowercase-alphanumeric, >= 3 chars) so they never collide with the uppercase constants.
