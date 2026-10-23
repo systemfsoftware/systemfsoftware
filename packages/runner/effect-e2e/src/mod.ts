@@ -18,4 +18,5 @@ export type { CredentialHandles, CredentialPasswordRef, CredentialUser, SecretHa
 export { credentials, secrets, Unique, unique } from './Config/values.schema.js'
 export type { Attempt } from './report/report.schema.js'
 export type { TestPlatform } from './run/admit-platforms.workflow.js'
-export type { RunVerdict } from './verdict/run-verdict.schema.js'
+export { exitCodeOf } from './verdict/exit-code.js'
+export type { RunEnding, RunVerdict } from './verdict/run-verdict.schema.js'
