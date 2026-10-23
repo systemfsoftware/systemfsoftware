@@ -24,7 +24,7 @@ A brand is a theme, not a stylesheet of overrides. Astryx derives its whole toke
    })
    ```
 
-2. **Generate the theme's CSS and module with the CLI.** A `theme:build` package script runs `astryx theme build <theme source> --out <theme>.css`, which writes the CSS and the typed theme module beside it. The app entry and the Storybook preview import the generated CSS, and the root's `Theme` takes the generated theme object (pack: astryx, astryx-styles-and-providers-load-at-every-root.md).
+2. **Generate the theme's CSS and module with the CLI.** A `theme:build` package script runs `astryx theme build <theme source> --out <theme>.css`, which writes the CSS and the typed theme module beside it. The global stylesheet imports the generated CSS after `astryx.css` and before `tailwind-theme.css`, so it lands in the `astryx-theme` layer of the declared order (pack: astryx, astryx-is-consumed-as-prebuilt-css-under-tailwind-with-one-layer-order.md); the app entry and the Storybook preview load that stylesheet, and the root's `Theme` takes the generated theme object (pack: astryx, astryx-styles-and-providers-load-at-every-root.md).
 3. **The theme build runs before typecheck and before build.** Wire it as `pretypecheck` and `prebuild` (or as an upstream task of both in the task runner), so neither can run against a missing or stale theme.
 4. **Generated files are not committed.** The generated CSS, module and declaration files are ignored by git and rebuilt. A committed copy goes stale the first time someone edits the source and forgets to rebuild.
 5. **No brand overrides outside the theme.** `--color-*` and the other Astryx custom properties are never redefined in `:root` or a global stylesheet; a change to the brand is a change to the theme source.
