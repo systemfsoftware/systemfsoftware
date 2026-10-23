@@ -18,7 +18,7 @@ export interface ConfigDefaults {
 /** The suite's test globs when config names none. */
 const DEFAULT_TESTS: readonly [string, ...Array<string>] = ['tests/**/*.e2e.ts']
 
-const ProjectId = Schema.String.check(
+export const ProjectId = Schema.String.check(
   Schema.isMinLength(1, { message: 'a project id is between 1 and 256 characters' }),
   Schema.isMaxLength(256, { message: 'a project id is between 1 and 256 characters' }),
 ).pipe(Schema.brand('ProjectId'))
