@@ -22,6 +22,7 @@ Add it as a devDependency. It is distributed as a workspace tarball of the [syst
 | `--timeout <ms>`                     | Whole-test deadline and session budget                                                                                                        |
 | `--output <dir>`                     | Where the report and artifacts go, relative to the suite                                                                                      |
 | `--trace off\|on\|retain-on-failure` | When the trace page is kept                                                                                                                   |
+| `--ai-trace`                         | Write `ai-trace.json`, the masked model calls, into each failed test's result directory, whatever `--trace` says                              |
 | `--last-failed`                      | Rerun what the previous report in this run's output directory did not pass or skip; a green previous run, or none, starts nothing and exits 0 |
 
 Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/effect-e2e-cli#readme).

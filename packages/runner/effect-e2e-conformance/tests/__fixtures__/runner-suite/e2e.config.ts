@@ -3,7 +3,7 @@ import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
-import { ORIGIN } from './site.js'
+import { ORIGIN, PLANTED_SECRET_ENV } from './site.js'
 
 // The suite's edge, as a generated e2e.config.ts is: the only fixture file that reads the run's configuration from the
 // environment. A scenario picks the run shape by setting these variables on the nested run.
@@ -31,6 +31,7 @@ export default defineConfig({
     },
   },
   cache: { mode: 'off' },
+  secrets: { planted: { env: PLANTED_SECRET_ENV } },
   assertionTimeout: 400,
   ...countOf('retries', 'RUNNER_SUITE_RETRIES'),
   ...countOf('workers', 'RUNNER_SUITE_WORKERS'),
