@@ -1,7 +1,7 @@
 /// <reference types="vitest/import-meta" />
-import { it } from '@systemfsoftware/vitest'
 import { Effect, Function, Schema as S, SchemaAST } from 'effect'
 import * as Arbitrary from 'effect/Arbitrary'
+import { effectProp, prop } from './property.js'
 
 const SAMPLE_DRAWS = 2000
 const TREE_SAMPLE_SEEDS = 3
@@ -227,6 +227,52 @@ const sampledAt = (
 ): Effect.Effect<ReadonlyArray<unknown>, Arbitrary.SampleError> =>
   Arbitrary.sampleEffect(arbitrary, { count: SAMPLE_DRAWS, seed, size })
 
+// Effect's Arbitrary spends one unit of `size` per recursive Suspend it crosses, so one nesting level costs as many
+// units as the Suspends on the shortest path from a union member back to the union. A depth of `maxDepth` levels is
+// that many levels' worth of crossings; costing each level at its cheapest path keeps every sampled value within
+// `maxDepth + 1` nesting levels.
+const zeroCrossingClosure = (
+  starts: ReadonlyArray<SchemaAST.AST>,
+  visited: Set<SchemaAST.AST>,
+  resolved: Map<SchemaAST.Suspend, SchemaAST.AST>,
+): ReadonlyArray<SchemaAST.AST> => {
+  const reached = starts.filter((node) => !visited.has(node))
+  reached.forEach((node) => visited.add(node))
+  if (reached.length === 0) return reached
+  const descendants = reached.filter((node) => !SchemaAST.isSuspend(node)).flatMap((node) =>
+    childAstsOf(node, resolved)
+  )
+  return [...reached, ...zeroCrossingClosure(descendants, visited, resolved)]
+}
+
+type CrossingSearch = {
+  readonly union: SchemaAST.Union
+  readonly visited: Set<SchemaAST.AST>
+  readonly resolved: Map<SchemaAST.Suspend, SchemaAST.AST>
+}
+
+const crossingsPastSuspends = (
+  layer: ReadonlyArray<SchemaAST.AST>,
+  crossings: number,
+  search: CrossingSearch,
+): number => {
+  const bodies = layer.filter(SchemaAST.isSuspend).map((suspend) => resolveSuspend(suspend, search.resolved))
+  if (bodies.length === 0) return 1
+  return crossingsFromLayer(zeroCrossingClosure(bodies, search.visited, search.resolved), crossings + 1, search)
+}
+
+function crossingsFromLayer(layer: ReadonlyArray<SchemaAST.AST>, crossings: number, search: CrossingSearch): number {
+  return layer.includes(search.union) ? crossings : crossingsPastSuspends(layer, crossings, search)
+}
+
+const levelCrossingsOf = (union: SchemaAST.Union): number => {
+  const search: CrossingSearch = { union, visited: new Set(), resolved: new Map() }
+  return crossingsFromLayer(zeroCrossingClosure(union.types, search.visited, search.resolved), 0, search)
+}
+
+const sampleSizeOf = (maxDepth: number, union: SchemaAST.Union | undefined): number =>
+  union === undefined ? maxDepth : maxDepth * levelCrossingsOf(union)
+
 const deepShareOf = (sample: ReadonlyArray<unknown>): number =>
   sample.filter((value) => maxNestingDepthOf(value) >= DEEP_DEPTH).length / sample.length
 
@@ -285,9 +331,9 @@ type RecursionSubject = {
 const recursionSubjectOf = (
   arbitrary: Arbitrary.Arbitrary<unknown>,
   members: ReadonlyArray<S.Top>,
-  maxDepth: number,
+  size: number,
 ): RecursionSubject => ({
-  sample: (seed: number) => sampledAt(arbitrary, seed, maxDepth),
+  sample: (seed: number) => sampledAt(arbitrary, seed, size),
   depth: maxNestingDepthOf,
   deepShare: deepShareOf,
   covers: coversMemberOf(members),
@@ -299,7 +345,7 @@ const registerDeepShareLaw = (
   maxDepth: number,
 ): void => {
   if (maxDepth <= STOCK_MAX_DEPTH) return
-  it.effect.prop(
+  effectProp(
     `∀s_${label}DeepShare_≠Zero`,
     { of: [S.Int], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => subject.sample(seed).pipe(Effect.map((sample) => subject.deepShare(sample) > 0)),
@@ -320,9 +366,9 @@ export const recursionLaws: {
     const arbitrary = Arbitrary.schema(schema)
     const members = union.types.map(memberSchemaOf)
     const maxDepth = maxDepthOfBudget(budget)
-    const recursionSubject = recursionSubjectOf(arbitrary, members, maxDepth)
+    const recursionSubject = recursionSubjectOf(arbitrary, members, sampleSizeOf(maxDepth, union))
 
-    it.prop(
+    prop(
       `∀x_${label}Nesting_≤MaxDepth1`,
       { of: [arbitrary], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [value]) => subject.depth(value) <= maxDepth + 1,
@@ -330,13 +376,13 @@ export const recursionLaws: {
 
     registerDeepShareLaw(label, recursionSubject, maxDepth)
 
-    it.effect.prop(
+    effectProp(
       `∀s_${label}Variants_⊇Declared`,
       { of: [S.Int], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [seed]) => subject.sample(seed).pipe(Effect.map((sample) => subject.covers(sample))),
     )
 
-    it.prop(
+    prop(
       `∀v_${label}_DepthPlusOne`,
       { of: [arbitrary], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [value]) => subject.depth({ v: value }) === subject.depth(value) + 1,
@@ -345,7 +391,6 @@ export const recursionLaws: {
 )
 
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@systemfsoftware/vitest')
   const { Schema: S, Exit } = await import('effect')
   type Codec = S.Codec<unknown, unknown>
   const MAX_DEPTH = 8
@@ -397,6 +442,16 @@ if (import.meta.vitest !== void 0) {
 
   const COLLAPSED_GENERATION = S.Union([Lit, Id])
 
+  const wrappedIn = (suspends: number, recur: () => Codec): Codec =>
+    suspends === 0 ? recur() : S.suspend((): Codec => wrappedIn(suspends - 1, recur))
+
+  const wrappedExpr = (suspends: number): Codec => {
+    const Expr: Codec = S.suspend((): Codec => S.Union([Lit, Id, binaryOf(wrappedIn(suspends, () => Expr))]))
+    return Expr
+  }
+
+  const NESTED_SUSPEND_EXPR = wrappedExpr(1)
+
   const arbitraryCache = new Map<S.Constraint, Arbitrary.Arbitrary<unknown>>()
 
   const arbitraryOf = (schema: S.Constraint): Arbitrary.Arbitrary<unknown> => {
@@ -407,7 +462,8 @@ if (import.meta.vitest !== void 0) {
     return arbitrary
   }
 
-  const sizeOf = (schema: S.Constraint): number => maxDepthOfBudget(budgetOf(schema.ast))
+  const sizeOf = (schema: S.Constraint): number =>
+    sampleSizeOf(maxDepthOfBudget(budgetOf(schema.ast)), rootCycleUnion(schema.ast))
 
   const sampleOf = (schema: S.Constraint, seed: number) => sampledAt(arbitraryOf(schema), seed, sizeOf(schema))
 
@@ -455,11 +511,24 @@ if (import.meta.vitest !== void 0) {
     deepShareOf,
     coversEveryVariant,
     assertDerivationHook,
+    levelCrossingsOf,
+    rootCycleUnion,
   }
+
+  const ExtraSuspends = S.Int.pipe(S.check(S.isBetween({ minimum: 0, maximum: 4 })))
+
+  prop(
+    '∀k_WrappedReference_LevelCrossings=k+1',
+    { of: [ExtraSuspends], subject: IN_SOURCE_SUBJECT },
+    (subject, [extra]) => {
+      const union = subject.rootCycleUnion(wrappedExpr(extra).ast)
+      return union !== undefined && subject.levelCrossingsOf(union) === extra + 1
+    },
+  )
 
   const refusesOf = (run: () => void): boolean => Exit.isFailure(Effect.runSyncExit(Effect.try(run)))
 
-  it.prop(
+  prop(
     '∀b_BudgetWithoutHook_RequiresTransform',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT },
     (subject, [maxDepth]) => {
@@ -469,13 +538,13 @@ if (import.meta.vitest !== void 0) {
     },
   )
 
-  it.prop(
+  prop(
     '∀v_Measure_DepthPlusOne',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT },
     (subject, [value]) => subject.maxNestingDepthOf({ v: value }) === subject.maxNestingDepthOf(value) + 1,
   )
 
-  it.prop(
+  prop(
     '∀s_NonRecursiveSchemas_⊥Cycle',
     { of: [NonRecursiveIndex], subject: IN_SOURCE_SUBJECT },
     (subject, [index]) => {
@@ -485,19 +554,19 @@ if (import.meta.vitest !== void 0) {
     },
   )
 
-  it.prop(
+  prop(
     '∀d_ChainPastCap_=Depth',
     { of: [DeepChain], subject: IN_SOURCE_SUBJECT },
     (subject, [depth]) => subject.decodedDepthOf(depth) === depth,
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_StockExprDeepShare_=Zero',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(STOCK_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) === 0)),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_StockExprNesting_≤StockCap',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
@@ -506,7 +575,7 @@ if (import.meta.vitest !== void 0) {
       ),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_DeclaredDeepShare_≠Zero',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(ANNOTATED_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) > 0)),
@@ -525,20 +594,20 @@ if (import.meta.vitest !== void 0) {
 
   const BASE_HEAVY_EXPR = baseHeavyExpr()
 
-  it.effect.prop(
+  effectProp(
     '∀s_BaseHeavyDeepShare_≠Zero',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(BASE_HEAVY_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) > 0)),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_CollapsedSubsetDeepShare_=Zero',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(COLLAPSED_GENERATION, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) === 0)),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_AnnotatedExprNesting_≤DeclaredCap',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
@@ -549,7 +618,7 @@ if (import.meta.vitest !== void 0) {
       ),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_AnnotatedExprVariants_⊇Declared',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
@@ -558,12 +627,32 @@ if (import.meta.vitest !== void 0) {
       ),
   )
 
-  it.effect.prop(
+  effectProp(
     '∀s_CollapsedSubset_⊥FullUnionCoverage',
     { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(COLLAPSED_GENERATION, seed).pipe(
         Effect.map((sample) => !subject.coversEveryVariant(sample, declaredMembersOf(DROPPED_MEMBER_EXPR))),
+      ),
+  )
+
+  effectProp(
+    '∀s_NestedSuspendExprVariants_⊇Declared',
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
+    (subject, [seed]) =>
+      sampleOf(NESTED_SUSPEND_EXPR, seed).pipe(
+        Effect.map((sample) => subject.coversEveryVariant(sample, declaredMembersOf(NESTED_SUSPEND_EXPR))),
+      ),
+  )
+
+  effectProp(
+    '∀s_NestedSuspendExprNesting_≤StockCap',
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
+    (subject, [seed]) =>
+      sampleOf(NESTED_SUSPEND_EXPR, seed).pipe(
+        Effect.map((sample) =>
+          sample.every((value) => subject.maxNestingDepthOf(value) <= declaredCapOf(NESTED_SUSPEND_EXPR))
+        ),
       ),
   )
 }
