@@ -24,8 +24,7 @@
     "npm:@systemfsoftware/stryker-js@17.0.2": "17.0.2_effect@4.0.1_@opentelemetry+semantic-conventions@1.43.0_redis@6.3.0__@opentelemetry+api@1.9.1_vite@8.3.4_vitest@5.0.3__@opentelemetry+api@1.9.1__vite@8.3.4",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
     "npm:arktype@2.2.3": "2.2.3",
-    "npm:effect@4.0.1": "4.0.1",
-    "npm:typescript@5.9.3": "5.9.3"
+    "npm:effect@4.0.1": "4.0.1"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -1011,10 +1010,6 @@
         "picomatch"
       ]
     },
-    "typescript@5.9.3": {
-      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
-      "bin": true
-    },
     "undici-types@8.9.0": {
       "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="
     },
@@ -1113,8 +1108,7 @@
       "npm:@systemfsoftware/stryker-js@17.0.2",
       "npm:@toon-format/toon@^4.1.1",
       "npm:arktype@2.2.3",
-      "npm:effect@4.0.1",
-      "npm:typescript@5.9.3"
+      "npm:effect@4.0.1"
     ]
   }
 }

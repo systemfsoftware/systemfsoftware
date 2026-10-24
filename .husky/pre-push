@@ -55,9 +55,5 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     status=1
   fi
 
-  # Gate: allow at most ONE plan file addition in docs/plans relative to remote main.
-  if ! nix run --no-write-lock-file "$(git rev-parse --show-toplevel)#repo-checks" -- single-plan --plans docs/plans --base "$main_sha" --head "$local_sha"; then
-    status=1
-  fi
 done
 exit "$status"

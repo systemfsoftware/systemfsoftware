@@ -1,5 +1,7 @@
 export { exitCodeReporter } from './exit-code-reporter.js'
 export type { AgentFixture, AppFixture, E2EFixtures, ScreenFixture } from './fixtures.js'
+export type { E2EGlobalSetup, E2EGlobalSetupProject, E2EGlobalSetupTeardown } from './global-setup.js'
+export { makeGlobalSetup } from './global-setup.js'
 export { type E2ERunnerClass, makeRunner } from './make-runner.js'
 export type {
   E2EExpect,
