@@ -73,7 +73,7 @@ _Gate:_ `review` — verified by code review that `Cell.provideContext` and `Eff
 
 A port over shared state that outlives one interaction and ships a law suite that its in-memory fake and its real adapter both pass. A port with no law suite is not a store.
 
-_Gate:_ `review` — `compound-packs/boundary-testing/fake-and-real-store-laws.md`.
+_Gate:_ `review` — `compound-packs/testing/port-fakes-share-a-contract-suite.md`.
 
 ### Unit of Work
 
