@@ -7,9 +7,16 @@ import { RunId } from '../report/report.schema.js'
 /** The provided-context key under which the generated global setup hands every worker of a run its one run id. */
 export const RUN_ID_KEY = '@systemfsoftware/effect-e2e:run-id'
 
+export const RUN_OUTPUT_KEY = '@systemfsoftware/effect-e2e:run-output'
+
+/** The provided-context key under which the global setup names why it refused the suite config. */
+export const RUN_REFUSAL_KEY = '@systemfsoftware/effect-e2e:run-refusal'
+
 declare module 'vitest' {
   interface ProvidedContext {
     '@systemfsoftware/effect-e2e:run-id': string
+    '@systemfsoftware/effect-e2e:run-output': string
+    '@systemfsoftware/effect-e2e:run-refusal': string
   }
 }
 
