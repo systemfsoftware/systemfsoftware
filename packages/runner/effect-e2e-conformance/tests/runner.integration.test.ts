@@ -75,6 +75,23 @@ Feature('Running a suite under vitest run with the e2e runner')
     )
 
     scenario(
+      'A test that fails its first try and passes its retry passes, and the run exits 0',
+      Gherkin.Do.pipe(
+        When('the suite runs a test with one retry whose first try fails a value assertion')(
+          'run',
+          () => runSuite({ config: 'vitest.config.ts', files: ['tests/retry.e2e.ts'] }),
+        ),
+        Then('Vitest and the e2e report both pass it on its final try, and the run exits 0')((s, expect) =>
+          expect({ exitCode: s.run.exitCode, vitest: statusesOf(s.run), e2e: e2eStatusesOf(s.run) }).toEqual({
+            exitCode: 0,
+            vitest: { Should_Pass_When_TheRetryHolds: 'passed' },
+            e2e: { Should_Pass_When_TheRetryHolds: 'passed' },
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A locator assertion retries to its deadline and fails with the last value, while a value assertion fails through Vitest',
       Gherkin.Do.pipe(
         When('the suite runs a locator assertion that never holds and a value assertion that does not hold')(
@@ -127,7 +144,7 @@ Feature('Running a suite under vitest run with the e2e runner')
           }).toEqual({
             exitCode: 2,
             failures: ['failed: config projectId: a project id is between 1 and 256 characters'],
-            tests: 5,
+            tests: 6,
             opens: 0,
             partials: [],
           })

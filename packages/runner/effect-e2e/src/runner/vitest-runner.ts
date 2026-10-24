@@ -64,7 +64,15 @@ const skipFor = (test: RunnerTask) => (admission: PlatformAdmission): void =>
 const errorsOf = (test: RunnerTask): ReadonlyArray<BodyError> =>
   Option.getOrElse(Option.fromNullishOr(test.result?.errors), (): ReadonlyArray<BodyError> => [])
 
-const endingOf = (test: RunnerTask): TryEnding => ({ _tag: 'Finished', errors: bodyFailuresOf(errorsOf(test)) })
+interface RunningTry {
+  readonly open: OpenTry
+  readonly errorsBefore: number
+}
+
+const endingOf = (test: RunnerTask, errorsBefore: number): TryEnding => ({
+  _tag: 'Finished',
+  errors: bodyFailuresOf(errorsOf(test).slice(errorsBefore)),
+})
 
 /**
  * The e2e runner (design §7.3): Vitest's `TestRunner` with the per-try session lifecycle added. Collection,
@@ -73,7 +81,7 @@ const endingOf = (test: RunnerTask): TryEnding => ({ _tag: 'Finished', errors: b
  */
 export class E2EVitestRunner extends HookedTestRunner {
   private readonly wiring: Result.Result<Wiring, ConfigInvalid>
-  private readonly tries = new WeakMap<RunnerTask, OpenTry>()
+  private readonly tries = new WeakMap<RunnerTask, RunningTry>()
 
   constructor(config: SerializedConfig, wiring: Result.Result<Wiring, ConfigInvalid>) {
     super(config)
@@ -101,7 +109,7 @@ export class E2EVitestRunner extends HookedTestRunner {
     await super.onBeforeTryTask(test, options)
     const wiring = Result.getOrThrowWith(this.wiring, (invalid) => invalid)
     const open = await Effect.runPromise(openTry({ wiring, test: attemptTestOf(test), retry: options.retry }))
-    this.tries.set(test, open)
+    this.tries.set(test, { open, errorsBefore: errorsOf(test).length })
     publishTry({ task: test, binding: open.binding })
   }
 
@@ -131,11 +139,13 @@ export class E2EVitestRunner extends HookedTestRunner {
   }
 
   private async endTry(test: RunnerTestCase) {
-    const open = this.tries.get(test)
+    const running = this.tries.get(test)
     this.tries.delete(test)
     clearTry(test)
-    return open === undefined
+    return running === undefined
       ? Option.none()
-      : Option.some(await Effect.runPromise(endTry({ open, ending: endingOf(test) })))
+      : Option.some(
+        await Effect.runPromise(endTry({ open: running.open, ending: endingOf(test, running.errorsBefore) })),
+      )
   }
 }
