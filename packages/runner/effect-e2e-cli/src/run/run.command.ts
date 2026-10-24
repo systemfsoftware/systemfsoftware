@@ -90,6 +90,6 @@ export const runCommand = Command.make(
   ({ dir: root, cache: useCache, ...flags }) => run({ dir: root, flags: { ...flags, noCache: !useCache } }),
 ).pipe(
   Command.withDescription(
-    'Run an effect-e2e suite under Vitest, print one report, and exit with its code (0 passed, 1 failed, 2 refused, 3 blocked, 4 error)',
+    'Run an effect-e2e suite under Vitest, print one report, and exit with its code (0 passed, 1 failed, 2 refused, 3 blocked, 4 error, 130 interrupted)',
   ),
 )

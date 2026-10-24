@@ -3,7 +3,7 @@ export const vitestConfigTemplate = (): string =>
 import { sourceResolveConditions } from '@systemfsoftware/vitest-config'
 import { configDefaults, defineConfig } from 'vitest/config'
 
-import config, { baseUrl, output } from './e2e.config.ts'
+import config, { baseUrl } from './e2e.config.ts'
 
 const setExitCode = (code: number): void => {
   process.exitCode = code
@@ -15,7 +15,7 @@ export default defineConfig({
     include: [...e2eTestFiles.include],
     exclude: [...configDefaults.exclude, ...e2eTestFiles.exclude],
     includeSource: [],
-    env: { BASE_URL: baseUrl, E2E_OUTPUT: output },
+    env: { BASE_URL: baseUrl },
     runner: './runner.ts',
     globalSetup: ['./global-setup.ts'],
     reporters: ['default', exitCodeReporter(setExitCode)],

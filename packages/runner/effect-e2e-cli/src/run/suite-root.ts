@@ -6,7 +6,7 @@ import * as Path from 'effect/Path'
 
 import { RunRefused } from './run-failure.schema.js'
 
-const SUITE_CONFIG = 'e2e.config.ts'
+export const SUITE_CONFIG = 'e2e.config.ts'
 const VITEST_CONFIG = 'vitest.config.ts'
 
 const fileExistsAt = (root: string, file: string): Effect.Effect<boolean, never, FileSystem.FileSystem | Path.Path> =>

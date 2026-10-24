@@ -6,6 +6,7 @@ import * as Result from 'effect/Result'
 import { RUN_OVERRIDE_ENV } from '@systemfsoftware/effect-e2e'
 
 import { RunRefused } from './run-failure.schema.js'
+import { Selection } from './selection.schema.js'
 
 /** The reporters `effect-e2e run` renders after the run (requirements FR-10). */
 export const REPORTERS = ['list', 'json', 'junit', 'markdown'] as const
@@ -45,8 +46,7 @@ export interface RunChannels {
   readonly env: Readonly<Record<string, string>>
   readonly vitest: VitestChannels
   readonly reporter: Reporter
-  readonly lastFailed: boolean
-  readonly files: ReadonlyArray<string>
+  readonly selection: Selection
 }
 
 const entryOf = (name: string) => (value: Option.Option<string>): ReadonlyArray<readonly [string, string]> =>
@@ -91,12 +91,14 @@ const refusalsOf = (flags: RunFlagValues): ReadonlyArray<string> => [
   ...when(lastFailedWithFiles(flags), SELECTION_CONFLICT),
 ]
 
+const selectionOf = (flags: RunFlagValues): Selection =>
+  flags.lastFailed ? { _tag: 'LastFailed' } : { _tag: 'Files', filters: flags.files }
+
 const channelsAt = (flags: RunFlagValues): RunChannels => ({
   env: envOf(flags),
   vitest: vitestOf(flags),
   reporter: flags.reporter,
-  lastFailed: flags.lastFailed,
-  files: flags.files,
+  selection: selectionOf(flags),
 })
 
 /**
@@ -133,7 +135,7 @@ if (import.meta.vitest !== void 0) {
     files: [],
   })
 
-  const NO_CHANNELS: RunChannels = { env: {}, vitest: {}, reporter: 'list', lastFailed: false, files: [] }
+  const NO_CHANNELS: RunChannels = { env: {}, vitest: {}, reporter: 'list', selection: { _tag: 'LastFailed' } }
 
   const succeeded = (decided: Result.Result<RunChannels, RunRefused>): RunChannels =>
     Result.match(decided, { onFailure: () => NO_CHANNELS, onSuccess: (channels) => channels })
@@ -197,5 +199,26 @@ if (import.meta.vitest !== void 0) {
     (channels, [file]) =>
       Result.isFailure(channels({ ...unset('list'), lastFailed: true, files: [file] })) &&
       Result.isSuccess(channels({ ...unset('list'), files: [file] })),
+  )
+
+  const filtersOf = (selection: Selection): Option.Option<ReadonlyArray<string>> =>
+    Selection.match(selection, { Files: ({ filters }) => Option.some(filters), LastFailed: () => Option.none() })
+
+  it.prop(
+    '∀s_FileArguments_≡TheirFilesSelection',
+    { of: [Schema.Array(Schema.String)], subject: channelsOf },
+    (channels, [files]) => {
+      const filters = filtersOf(succeeded(channels({ ...unset('list'), files })).selection)
+      return Option.isSome(filters) && JSON.stringify(filters.value) === JSON.stringify(files)
+    },
+  )
+
+  it.prop(
+    '∀r_LastFailedFlag_≡LastFailedSelection',
+    { of: [Schema.Literals([...REPORTERS])], subject: channelsOf },
+    (channels, [reporter]) => {
+      const decided = channels({ ...unset(reporter), files: [], lastFailed: true })
+      return Result.isSuccess(decided) && Option.isNone(filtersOf(decided.success.selection))
+    },
   )
 }
