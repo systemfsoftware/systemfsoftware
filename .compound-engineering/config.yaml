@@ -1,13 +1,11 @@
 packs:
   - source: compound-packs/cell-architecture
-  - source: compound-packs/boundary-testing
-  - source: compound-packs/schema-laws
-  - source: compound-packs/package-topology
-  - source: compound-packs/mutation-discipline
-  - source: compound-packs/storybook-testing
-  - source: compound-packs/ci-wall-clock
+  - source: compound-packs/schema-modelling
+  - source: compound-packs/package-surface
+  - source: compound-packs/testing
   - source: compound-packs/ui-state
-  - source: compound-packs/turbo-task-graph
-  - source: compound-packs/path-trust
-  - source: compound-packs/ui-craft
-  - source: compound-packs/agent-knowledge
+  - source: compound-packs/ui-testing
+  - source: compound-packs/design-system
+  - source: compound-packs/screen-content
+  - source: compound-packs/ci-workflows
+  - source: compound-packs/public-repository

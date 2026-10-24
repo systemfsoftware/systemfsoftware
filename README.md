@@ -195,8 +195,16 @@ const program = Effect.gen(function*() {
 
 The principles and design laws governing code in this repository live in standalone Compound Engineering packs:
 
-- [Cell Architecture](compound-packs/cell-architecture): Five-phase continuation chains, pure decision workflows, service and layer boundaries, four-channel separation, and scoped resource lifecycles.
-- [Boundary Testing](compound-packs/boundary-testing): Local system oracles, zero driver mocks on internal glue, and dual-condition acceptance/refusal tests.
+- [Cell Architecture](compound-packs/cell-architecture): File kinds, services and layers, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
+- [Schema Modelling](compound-packs/schema-modelling): How Effect Schema declares invariants, states and foreign wire shapes, how refined values generate, and how failing generated laws and refusal properties are handled.
+- [Package Surface](compound-packs/package-surface): What a workspace package exposes through its exports map, under how many names, and how a change to that surface is versioned.
+- [Testing](compound-packs/testing): What a behaviour test proves and is named for, what a test imports, where test doubles live, how fakes and adapters are proven, and how a failing test or a surviving mutant is resolved.
+- [UI State](compound-packs/ui-state): How React component and hook code in an effect-atom application reads data, runs Effects and derives display values.
+- [UI Testing](compound-packs/ui-testing): How a UI's behaviour is proven by Storybook stories: where a story's I/O comes from, how its fakes stay fresh, how a journey reads, and how stories query, size and fail.
+- [Design System](compound-packs/design-system): How an app builds and styles UI with the Astryx design system through Tailwind: components and utilities, stylesheet order, roots, themes and navigation.
+- [Screen Content](compound-packs/screen-content): What a user-facing screen shows and says: real data, claims the deployed product delivers, failure states that say what happened and what to do next, and copy without stock AI patterns.
+- [CI Workflows](compound-packs/ci-workflows): What each CI lane runs, how a pull-request job is set up and fails, who writes the cache, how long a job may run, and what CI never grades.
+- [Public Repository](compound-packs/public-repository): What a public repository never contains: private repository, package and product names, private tracker ids or local filesystem paths.
 
 Concepts, definitions, and verification gates are indexed in [CONCEPTS.md](CONCEPTS.md).
 
