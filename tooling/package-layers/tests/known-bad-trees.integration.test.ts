@@ -15,7 +15,18 @@ const ROWS = [
   { tree: 'missing-package', tag: 'MissingPackage', fragment: 'no manifest under packages/ declares it' },
   { tree: 'unmapped-package', tag: 'UnmappedPackage', fragment: 'is not in package-layers.json' },
   { tree: 'schema-law-peer', tag: 'SchemaLawPeer', fragment: 'not marked optional in peerDependenciesMeta' },
+  { tree: 'schema-law-fork', tag: 'SchemaLawPeer', fragment: 'has a peer on the @systemfsoftware/vitest fork' },
+  {
+    tree: 'schema-law-fork-alias',
+    tag: 'SchemaLawPeer',
+    fragment: "'vitest' peer that aliases the @systemfsoftware/vitest fork",
+  },
   { tree: 'forbidden-edge', tag: 'ForbiddenEdge', fragment: 'core @f/source reaches harness @f/target' },
+  {
+    tree: 'forbidden-edge-transitive',
+    tag: 'ForbiddenEdge',
+    fragment: '@f/source -[dependencies]-> @f/mid -[peerDependencies]-> @f/target',
+  },
 ] as const
 
 Feature('Refusing known-bad layer trees')

@@ -14,7 +14,7 @@ import {
 import { assignments } from './layers/list.ts'
 import { failureLines, listJson, listLines, passLines } from './report.ts'
 
-export { failureLines, LayersRefused }
+export { failureLines, LayersRefused, passLines }
 
 class PrintedRefusal extends LayersRefused {
   override readonly [Runtime.errorReported] = false
