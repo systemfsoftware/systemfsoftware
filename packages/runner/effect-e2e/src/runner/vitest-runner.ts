@@ -132,7 +132,7 @@ export class E2EVitestRunner extends HookedTestRunner {
     await this.endTry(test)
   }
 
-  async onBeforeRunFiles(): Promise<void> {
+  async onBeforeCollect(): Promise<void> {
     await this.snapshot('in-progress')
   }
 

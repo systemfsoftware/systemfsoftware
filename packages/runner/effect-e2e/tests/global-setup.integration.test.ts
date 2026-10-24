@@ -23,6 +23,7 @@ const PROJECT = 'global-setup'
 const OUTPUT = '.e2e'
 const STARTED = DateTime.makeUnsafe('2026-10-24T09:00:00.000Z')
 const FINISHED = DateTime.makeUnsafe('2026-10-24T09:05:00.000Z')
+const RUN_ID_PATTERN = /^global-setup-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u
 
 const CONFIG = defineConfig({
   targets: [{
@@ -165,13 +166,13 @@ Feature("Merging the report partials a run's workers wrote into one run report")
               yield* partialWritten(root, 'worker-a', runId, yield* greetsPassed)
               yield* partialWritten(root, 'worker-b', runId, yield* savesFailed)
               yield* Effect.promise(teardown)
+              const report = yield* mergedReportOf(root)
               return {
                 provided: host.provided.length,
-                runIdNamesProject: runId.startsWith(`${PROJECT}-`),
+                runIdNamesProject: RUN_ID_PATTERN.test(runId),
                 partials: (yield* partialFilesOf(root)).toSorted(),
                 cacheKept: yield* present(root, 'cache/entry.json'),
-                report: yield* mergedReportOf(root),
-                runId,
+                report: { ...report, runId: report.runId === runId },
               }
             }),
         ),
@@ -179,13 +180,12 @@ Feature("Merging the report partials a run's workers wrote into one run report")
           'report.json holds greets passed and saves failed once each under the provided run id, and the run failed',
         )(
           (s, expect) =>
-            expect({ ...s.run, report: { ...s.run.report, runId: s.run.report.runId === s.run.runId } }).toEqual({
+            expect(s.run).toEqual({
               provided: 1,
               runIdNamesProject: true,
               partials: ['worker-a.json', 'worker-b.json'],
               cacheKept: true,
               report: { runId: true, run: ['failed', 1], results: [['greets', 'passed'], ['saves', 'failed']] },
-              runId: s.run.runId,
             }),
         ),
       ),

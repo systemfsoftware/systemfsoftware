@@ -258,4 +258,28 @@ Feature('Running a suite under vitest run with the e2e runner')
         ),
       ),
     )
+
+    scenario(
+      "A worker that dies while collecting its file turns the run's report to error beside the other worker's results",
+      Gherkin.Do.pipe(
+        When("the suite runs worker A's file beside a file that kills its own worker while it is being collected")(
+          'run',
+          () =>
+            runSuite({ config: 'vitest.config.ts', files: ['tests/worker-a.e2e.ts', 'tests/collect-crash.e2e.ts'] }),
+        ),
+        Then("report.json holds worker A's two passed tests, one INTERNAL_ERROR, run status error with exit code 4")((
+          s,
+          expect,
+        ) =>
+          expect({ exitCode: s.run.exitCode, report: mergedOf(s.run) }).toEqual({
+            exitCode: 1,
+            report: {
+              run: ['error', 4],
+              errors: ['INTERNAL_ERROR'],
+              tests: { [A_READS_FREE]: 'passed', [A_PASSES]: 'passed' },
+            },
+          })
+        ),
+      ),
+    )
   })
