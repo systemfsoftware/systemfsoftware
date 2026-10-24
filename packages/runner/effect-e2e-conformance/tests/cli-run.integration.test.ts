@@ -262,7 +262,7 @@ Feature('Running a suite with effect-e2e run')
     )
 
     scenario(
-      'A failing agent test under --ai-trace leaves its model calls with the planted secret masked',
+      'An agent test blocked on the model under --ai-trace leaves its model calls with the planted secret masked',
       { scenarioLayer: NodeServices.layer },
       Gherkin.Do.pipe(
         Given('a copy of the suite whose config declares the planted secret')(
@@ -273,7 +273,7 @@ Feature('Running a suite with effect-e2e run')
           'run',
           ({ suite }) => tracedRun(suite, ['--ai-trace', MODEL_CALL_FILE]),
         ),
-        Then('the run exits 1, one trace names the failed call, and its bytes hold the mask but not the secret')((
+        Then('the run exits 3, one trace names the failed call, and its bytes hold the mask but not the secret')((
           s,
           expect,
         ) =>
@@ -287,8 +287,8 @@ Feature('Running a suite with effect-e2e run')
             ),
             masked: s.run.traces.every(({ text }) => text.includes('[secret:planted]')),
           }).toEqual({
-            exitCode: 1,
-            report: { [MODEL_CALL_TEST]: 'failed' },
+            exitCode: 3,
+            report: { [MODEL_CALL_TEST]: 'blocked' },
             traces: 1,
             firstCall: {
               step: 'step-2',
@@ -303,7 +303,7 @@ Feature('Running a suite with effect-e2e run')
     )
 
     scenario(
-      'The same failing agent test without --ai-trace leaves no ai-trace.json',
+      'The same blocked agent test without --ai-trace leaves no ai-trace.json',
       { scenarioLayer: NodeServices.layer },
       Gherkin.Do.pipe(
         Given('a copy of the suite whose config declares the planted secret')(
@@ -314,12 +314,12 @@ Feature('Running a suite with effect-e2e run')
           'run',
           ({ suite }) => tracedRun(suite, [MODEL_CALL_FILE]),
         ),
-        Then('the run exits 1 with the test failed and no ai-trace.json under the results')((s, expect) =>
+        Then('the run exits 3 with the test blocked and no ai-trace.json under the results')((s, expect) =>
           expect({
             exitCode: s.run.cli.exitCode,
             report: statusesOf(s.run.cli.report),
             traces: s.run.traces.length,
-          }).toEqual({ exitCode: 1, report: { [MODEL_CALL_TEST]: 'failed' }, traces: 0 })
+          }).toEqual({ exitCode: 3, report: { [MODEL_CALL_TEST]: 'blocked' }, traces: 0 })
         ),
       ),
     )
