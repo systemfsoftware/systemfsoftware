@@ -149,6 +149,9 @@ on:
       turbo-token:
         description: Remote Turbo cache token
         required: false
+      sfs-fetch-token:
+        description: GitHub token Nix fetches `github:` flake inputs with in the `sfs-deps` job, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
+        required: false
 
 permissions:
   contents: read
@@ -384,6 +387,9 @@ jobs:
       key: ${{ steps.produce.outputs.key }}
     steps:
       - *checkout
+      - uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: produce
         uses: $/.github/actions/sfs-deps
         with:
@@ -399,6 +405,11 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
+          remove: true
 
   lanes:
     name: ${{ matrix.lane.name }}
