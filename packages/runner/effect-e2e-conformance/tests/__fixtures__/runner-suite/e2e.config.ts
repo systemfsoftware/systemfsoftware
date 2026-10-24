@@ -1,6 +1,6 @@
 import { defineConfig, web } from '@systemfsoftware/effect-e2e'
 
-import { ORIGIN } from './site.js'
+import { ORIGIN, PLANTED_SECRET_ENV } from './site.js'
 
 export default defineConfig({
   projectId: 'runner-suite',
@@ -16,5 +16,6 @@ export default defineConfig({
     },
   },
   cache: { mode: 'off' },
+  secrets: { planted: { env: PLANTED_SECRET_ENV } },
   assertionTimeout: 400,
 })

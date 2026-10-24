@@ -1,4 +1,5 @@
 import { Report1 } from '@systemfsoftware/effect-e2e/report'
+import * as Arr from 'effect/Array'
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -26,6 +27,36 @@ const VitestReport = Schema.fromJsonString(
 )
 
 const decodeReport = Schema.decodeEffect(Schema.fromJsonString(Report1))
+
+const AiTraceCall = Schema.Struct({
+  step: Schema.String,
+  request: Schema.Struct({ model: Schema.String }),
+  outcome: Schema.Struct({ _tag: Schema.String, code: Schema.optional(Schema.String) }),
+})
+
+export const AiTraceFile = Schema.fromJsonString(
+  Schema.Struct({ schema: Schema.Literal('ai-trace-1'), calls: Schema.Array(AiTraceCall) }),
+)
+
+export interface WrittenAiTrace {
+  readonly directory: string
+  readonly text: string
+}
+
+export const aiTracesIn = (suite: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const results = `${suite}/.e2e/results`
+    const directories = yield* Effect.option(fs.readDirectory(results)).pipe(
+      Effect.map(Option.getOrElse((): ReadonlyArray<string> => [])),
+    )
+    const found = yield* Effect.forEach(directories, (directory) =>
+      Effect.map(
+        Effect.option(fs.readFileString(`${results}/${directory}/ai-trace.json`)),
+        Option.map((text): WrittenAiTrace => ({ directory, text })),
+      ))
+    return Arr.getSomes(found)
+  })
 
 export const STALE_REPORT = '{"stale":"a previous run left this report"}\n'
 

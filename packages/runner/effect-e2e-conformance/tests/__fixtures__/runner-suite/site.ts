@@ -6,6 +6,10 @@ export const SUITE_OUTPUT = `${import.meta.dirname}/.e2e`
 
 export const ENGINE_OPENS = `${SUITE_OUTPUT}/engine-opens`
 
+export const PLANTED_SECRET_ENV = 'RUNNER_SUITE_PLANTED'
+
+export const PLANTED_SECRET = 'planted-643-"q\\b-wörd'
+
 const node = (id: string, role: string, name: string): SemanticNode => ({
   ref: { id, revision: '1' },
   role,
