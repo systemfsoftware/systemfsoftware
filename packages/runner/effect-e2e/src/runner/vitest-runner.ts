@@ -6,13 +6,14 @@ import { TestRunner } from 'vitest'
 import type { RunnerTask, RunnerTestCase, RunnerTestFile, SerializedConfig, TestContext, TestTryOptions } from 'vitest'
 
 import type { ConfigInvalid, PathSegment } from '../Config/config-invalid.schema.js'
+import type { PartialState } from '../report/partials.schema.js'
 import { TestId } from '../report/report.schema.js'
 import type { PlatformAdmission, TestPlatform } from '../run/admit-platforms.workflow.js'
 import type { AttemptTest } from '../run/attempt.js'
 import type { TryEnding } from '../run/conclude-attempt.workflow.js'
 import { clearTry, publishedTryOf, publishTry } from './fixtures.js'
 import { attemptFailureOf, type BodyError, bodyFailuresOf } from './try-ending.js'
-import { admitOf, endTry, type OpenTry, openTry, skipOf, type Wiring, writePartial } from './wiring.js'
+import { admitOf, endTry, type OpenTry, openTry, skipOf, snapshotPartial, type Wiring } from './wiring.js'
 
 declare module 'vitest' {
   interface TaskMeta {
@@ -24,7 +25,13 @@ declare module 'vitest' {
   }
 }
 
-type Hook = 'extendTaskContext' | 'onBeforeRunTask' | 'onBeforeTryTask' | 'onAfterTryTask' | 'onAfterRunFiles'
+type Hook =
+  | 'extendTaskContext'
+  | 'onBeforeRunTask'
+  | 'onBeforeTryTask'
+  | 'onAfterTryTask'
+  | 'onAfterRunTask'
+  | 'onAfterRunFiles'
 
 /**
  * The hooks this runner overrides, typed as Vitest's `VitestRunner` contract and its run loop treat them: the loop
@@ -36,6 +43,7 @@ interface Hooks {
   onBeforeRunTask(test: RunnerTask): Promise<void>
   onBeforeTryTask(test: RunnerTestCase, options: TestTryOptions): void | Promise<void>
   onAfterTryTask(test: RunnerTestCase, options: TestTryOptions): void | Promise<void>
+  onAfterRunTask(test: RunnerTask): void | Promise<void>
   onAfterRunFiles(files: ReadonlyArray<RunnerTestFile>): void | Promise<void>
 }
 
@@ -137,11 +145,24 @@ export class E2EVitestRunner extends HookedTestRunner {
     await this.endTry(test)
   }
 
+  async onBeforeCollect(): Promise<void> {
+    await this.snapshot('in-progress')
+  }
+
+  override async onAfterRunTask(test: RunnerTask): Promise<void> {
+    await super.onAfterRunTask(test)
+    await this.snapshot('in-progress')
+  }
+
   override async onAfterRunFiles(files: ReadonlyArray<RunnerTestFile>): Promise<void> {
     await super.onAfterRunFiles(files)
+    await this.snapshot('finished')
+  }
+
+  private async snapshot(state: PartialState): Promise<void> {
     await Result.match(this.wiring, {
       onFailure: () => Promise.resolve(),
-      onSuccess: (wiring) => writePartial(wiring).pipe(Effect.asVoid, Effect.runPromise),
+      onSuccess: (wiring) => snapshotPartial({ wiring, state }).pipe(Effect.runPromise),
     })
   }
 

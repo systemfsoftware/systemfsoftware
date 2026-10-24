@@ -2,7 +2,7 @@ import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as FileSystem from 'effect/FileSystem'
+import type * as FileSystem from 'effect/FileSystem'
 import type * as HttpClient from 'effect/http/HttpClient'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -12,6 +12,7 @@ import * as Record from 'effect/Record'
 import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
+import * as Semaphore from 'effect/Semaphore'
 
 import * as MemoryCacheStore from '../cache/cache-store.memory.js'
 import * as FileCacheStore from '../cache/file-cache-store.js'
@@ -21,9 +22,9 @@ import type { AgentConfig, ConfigDefaults, E2EConfig, E2EConfigInput, Target } f
 import { decodeConfig } from '../Config/decode.js'
 import { Engine } from '../engine/engine.service.js'
 import * as OpenAiCompatible from '../model/openai-compatible.js'
-import { buildReport } from '../report/build.js'
-import { type Attempt, RunId } from '../report/report.schema.js'
-import { renderJson } from '../report/reporters/json.js'
+import { writePartial } from '../report/partials.js'
+import type { PartialState } from '../report/partials.schema.js'
+import type { Attempt, RunId } from '../report/report.schema.js'
 import type { PlatformAdmission, TestPlatform } from '../run/admit-platforms.workflow.js'
 import { admitTest, type AttemptLog, type AttemptTest, makeAttemptLog, recordSkip } from '../run/attempt.js'
 import type { TryEnding } from '../run/conclude-attempt.workflow.js'
@@ -31,6 +32,7 @@ import * as FileArtifactStore from '../run/file-artifact-store.js'
 import { type EngineSource, type SessionInput, TestSession } from '../run/test-session.service.js'
 import type { EnvironmentUnavailable } from '../verdict/failure.schema.js'
 import { makeTryBinding, type TryBinding } from './fixtures.js'
+import { mintRunId } from './run-identity.js'
 
 /** The platform services the core reaches the world through; a Node suite passes `NodeServices` and `NodeHttpClient`. */
 export type PlatformLayer = Layer.Layer<FileSystem.FileSystem | Path.Path | HttpClient.HttpClient>
@@ -64,7 +66,12 @@ export interface Wiring {
   readonly options: RunnerOptions
   readonly root: string
   readonly log: AttemptLog
+  /** The run every worker stamps its partial with: the global setup's, or this instance's own without one. */
   readonly runId: RunId
+  /** Names this runner instance's partial file, so workers never write each other's. */
+  readonly worker: string
+  /** Serializes this instance's partial writes, so an older snapshot never replaces a newer one. */
+  readonly writes: Semaphore.Semaphore
   readonly startedAt: DateTime.Utc
 }
 
@@ -95,12 +102,15 @@ const engineOf = (config: E2EConfig, options: RunnerOptions): Result.Result<Engi
       }),
   )
 
-const decodedOf = (value: E2EConfigInput, defaults: ConfigDefaults): Result.Result<E2EConfig, ConfigInvalid> =>
-  decodeConfig(value, defaults).pipe(Effect.result, Effect.runSync)
+export const decodedConfigOf = (request: {
+  readonly config: E2EConfigInput
+  readonly defaults: ConfigDefaults
+}): Result.Result<E2EConfig, ConfigInvalid> =>
+  decodeConfig(request.config, request.defaults).pipe(Effect.result, Effect.runSync)
 
 const wiringFor = (
   config: E2EConfig,
-  request: { readonly options: RunnerOptions; readonly root: string },
+  request: { readonly options: RunnerOptions; readonly root: string; readonly runId: Option.Option<RunId> },
 ): Result.Result<Wiring, ConfigInvalid> =>
   Result.flatMap(agentOf(config), (agent) =>
     Result.map(engineOf(config, request.options), (engine): Wiring => ({
@@ -111,7 +121,9 @@ const wiringFor = (
       options: request.options,
       root: request.root,
       log: Effect.runSync(makeAttemptLog),
-      runId: RunId.make(`${config.projectId}-${globalThis.crypto.randomUUID()}`),
+      runId: Option.getOrElse(request.runId, () => mintRunId(config.projectId)),
+      worker: globalThis.crypto.randomUUID(),
+      writes: Semaphore.makeUnsafe(1),
       startedAt: Effect.runSync(DateTime.now),
     })))
 
@@ -123,8 +135,12 @@ export const wiringOf = (request: {
   readonly config: E2EConfigInput
   readonly options: RunnerOptions
   readonly root: string
+  readonly runId: Option.Option<RunId>
 }): Result.Result<Wiring, ConfigInvalid> =>
-  Result.flatMap(decodedOf(request.config, request.options.defaults), (config) => wiringFor(config, request))
+  Result.flatMap(
+    decodedConfigOf({ config: request.config, defaults: request.options.defaults }),
+    (config) => wiringFor(config, request),
+  )
 
 export const admitOf = (request: {
   readonly wiring: Wiring
@@ -220,27 +236,20 @@ export const endTry = (request: { readonly open: OpenTry; readonly ending: TryEn
     Effect.ensuring(Scope.close(request.open.scope, Exit.void)),
   )
 
-/**
- * Writes the runner instance's `Report1` fragment to `<output>/partials/<run id>.json` (design §7.3) and returns
- * its suite-relative path. The id is unique per runner instance, so workers sharing one process cannot collide.
- */
-export const writePartial = (wiring: Wiring) =>
-  Effect.gen(function*() {
-    const path = yield* Path.Path
-    const fs = yield* FileSystem.FileSystem
-    const report = buildReport({
-      run: {
-        id: wiring.runId,
-        project: wiring.config.projectId,
-        startedAt: wiring.startedAt,
-        finishedAt: yield* DateTime.now,
-        errors: [],
-      },
-      entries: yield* wiring.log.entries,
-    })
-    const relative = path.join(wiring.config.output, 'partials', `${wiring.runId}.json`)
-    const absolute = path.join(wiring.root, relative)
-    yield* fs.makeDirectory(path.dirname(absolute), { recursive: true })
-    yield* fs.writeFileString(absolute, yield* renderJson(report))
-    return relative
-  }).pipe(Effect.provide(wiring.options.platform))
+export const snapshotPartial = (request: { readonly wiring: Wiring; readonly state: PartialState }) =>
+  Semaphore.withPermits(
+    request.wiring.writes,
+    1,
+    Effect.flatMap(request.wiring.log.entries, (entries) =>
+      writePartial({
+        location: { root: request.wiring.root, output: request.wiring.config.output },
+        run: {
+          id: request.wiring.runId,
+          project: request.wiring.config.projectId,
+          startedAt: request.wiring.startedAt,
+        },
+        worker: request.wiring.worker,
+        state: request.state,
+        entries,
+      })),
+  ).pipe(Effect.provide(request.wiring.options.platform))
