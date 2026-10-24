@@ -252,6 +252,14 @@ pnpm map
 | [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw`              |
 | [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
 
+### End-to-End Testing
+
+| Package                                                             | Purpose                                                                   | Verification Gates                                        |
+| :------------------------------------------------------------------ | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/effect-e2e`](packages/runner/effect-e2e)         | Runtime-neutral end-to-end testing core: suite config, agent, and reports | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-e2e-web`](packages/runner/effect-e2e-web) | Playwright web engine for effect-e2e                                      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-e2e-cli`](packages/runner/effect-e2e-cli) | The `effect-e2e` command: scaffold and run suites                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
+
 ### Oxlint Static Plugins & Presets
 
 | Package                                                                                                       | Purpose                                                                   | Verification Gates                                        |
@@ -315,6 +323,12 @@ Pre-delivery check command:
 ```bash
 pnpm check:local
 ```
+
+---
+
+## Credits
+
+effect-e2e rebuilds [TesterArmy's e2e](https://github.com/tester-army/e2e) (commit `72abddd`, npm `e2e` 0.21.2, Apache-2.0); see [NOTICE](NOTICE).
 
 ---
 
