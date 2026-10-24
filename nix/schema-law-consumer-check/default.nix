@@ -122,7 +122,10 @@ pkgs.runCommand "schema-law-consumer-check" { nativeBuildInputs = [ pkgs.openssl
     || fail "vitest is not an optional peer"
   # A module specifier naming the fork or one of its subpaths; the `test.provide` key
   # "@systemfsoftware/vitest:property-check" is data the run budget is read under, not an import.
-  if tar -xzOf ${tarball} package/dist/index.mjs | grep -Eq "[\"']@systemfsoftware/vitest(/[^\"']*)?[\"']"; then
+  # grep reads a file, not the tar stream: an early match closes the pipe and
+  # pipefail would turn the found import into a non-match.
+  tar -xzOf ${tarball} package/dist/index.mjs > "$TMPDIR/index.mjs"
+  if grep -Eq "[\"']@systemfsoftware/vitest(/[^\"']*)?[\"']" "$TMPDIR/index.mjs"; then
     fail "dist/index.mjs imports @systemfsoftware/vitest"
   fi
 
@@ -172,7 +175,10 @@ pkgs.runCommand "schema-law-consumer-check" { nativeBuildInputs = [ pkgs.openssl
   fi
   jq -e 'any(.testResults[]?.assertionResults[]?; .status == "failed" and (.fullName | contains("Broken_=x")))' broken.json >/dev/null \
     || fail "the broken codec failed without the round-trip law failing by name"
-  jq -r '[.testResults[]?.assertionResults[]?.failureMessages[]?] | join("\n")' broken.json | grep -q "refuted" \
+  # grep reads a file, not the jq pipe: grep -q exits at the first match and
+  # pipefail would fail the check exactly when it passed.
+  jq -r '[.testResults[]?.assertionResults[]?.failureMessages[]?] | join("\n")' broken.json > "$TMPDIR/failures.txt"
+  grep -q "refuted" "$TMPDIR/failures.txt" \
     || fail "the broken codec failed without a refutation"
   touch "$out"
 ''
