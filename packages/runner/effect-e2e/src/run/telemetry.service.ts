@@ -1,6 +1,5 @@
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import type { TelemetryCount } from './telemetry.schema.js'
 
 /** What one span attribute may carry: the shapes OTLP serialises (design §14). */
@@ -40,12 +39,11 @@ const SILENT: TelemetryShape = {
 }
 
 /**
- * The run's telemetry sink (design §14): `noop` unless the composition root selects the OTLP layer, so
- * nothing is sent anywhere by default (requirements FR-11).
+ * The run's telemetry sink (design §14). Its default is silent - no span, no counter, no egress - so
+ * nothing is sent anywhere unless the composition root provides the OTLP layer (requirements FR-11), and
+ * a step reads it without naming it among its requirements.
  */
-export class Telemetry extends Context.Service<Telemetry, TelemetryShape>()(
+export const Telemetry: Context.Reference<TelemetryShape> = Context.Reference<TelemetryShape>(
   '@systemfsoftware/effect-e2e/run/Telemetry',
-) {
-  /** The default sink: no span, no counter, no egress. */
-  static readonly noop: Layer.Layer<Telemetry> = Layer.succeed(this)(SILENT)
-}
+  { defaultValue: () => SILENT },
+)

@@ -25,6 +25,6 @@ describe('Telemetry', () => {
   })
 
   it('counts only the events design §14 names', () => {
-    expect<{ readonly _tag: 'AssertOutcome' }>().type.not.toBeAssignableFrom<TelemetryCount>()
+    expect<TelemetryCount>().type.not.toBeAssignableFrom<{ readonly _tag: 'AssertOutcome' }>()
   })
 })

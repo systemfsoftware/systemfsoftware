@@ -37,7 +37,7 @@ const stepWork = (telemetry: TelemetryShape) =>
         span.set('e2e.tokens.input', 120)
         span.set('e2e.tokens.output', 8)
         yield* telemetry.count({ _tag: 'ReplayOutcome', outcome: 'missed' })
-        yield* telemetry.count({ _tag: 'ModelCall' })
+        yield* telemetry.count({ _tag: 'ModelCalls', calls: 1 })
         yield* telemetry.count({ _tag: 'ModelTokens', kind: 'input', tokens: 120 })
         yield* telemetry.count({ _tag: 'ModelTokens', kind: 'output', tokens: 8 })
       }),

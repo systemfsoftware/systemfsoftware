@@ -5,8 +5,11 @@ const StringValue = Schema.Struct({ stringValue: Schema.String })
 const IntValue = Schema.Struct({ intValue: Schema.Finite })
 const DoubleValue = Schema.Struct({ doubleValue: Schema.Finite })
 const BoolValue = Schema.Struct({ boolValue: Schema.Boolean })
+const ArrayValue = Schema.Struct({ arrayValue: Schema.Struct({ values: Schema.Array(StringValue) }) })
 
-const OtlpValue = Schema.Union([StringValue, IntValue, DoubleValue, BoolValue])
+const OtlpValue = Schema.Union([StringValue, IntValue, DoubleValue, BoolValue, ArrayValue])
+
+export type ReceivedValue = string | number | boolean | ReadonlyArray<string>
 
 const OtlpAttribute = Schema.Struct({ key: Schema.String, value: OtlpValue })
 const OtlpAttributes = Schema.Array(OtlpAttribute)
@@ -57,11 +60,11 @@ const MetricsExport = Schema.Struct({
 
 export interface ReceivedSpan {
   readonly name: string
-  readonly attributes: Record<string, string | number | boolean>
+  readonly attributes: Record<string, ReceivedValue>
 }
 
 export interface ReceivedMetricPoint {
-  readonly attributes: Record<string, string | number | boolean>
+  readonly attributes: Record<string, ReceivedValue>
   readonly value: number
 }
 
@@ -70,19 +73,21 @@ export interface ReceivedMetric {
   readonly points: ReadonlyArray<ReceivedMetricPoint>
 }
 
+const valueOf = (value: Schema.Schema.Type<typeof OtlpValue>): ReceivedValue =>
+  'stringValue' in value
+    ? value.stringValue
+    : 'intValue' in value
+    ? value.intValue
+    : 'doubleValue' in value
+    ? value.doubleValue
+    : 'boolValue' in value
+    ? value.boolValue
+    : value.arrayValue.values.map((each) => each.stringValue)
+
 const projected = (
   attributes: ReadonlyArray<Schema.Schema.Type<typeof OtlpAttribute>>,
-): Record<string, string | number | boolean> =>
-  Object.fromEntries(attributes.map((attribute) => [
-    attribute.key,
-    'stringValue' in attribute.value
-      ? attribute.value.stringValue
-      : 'intValue' in attribute.value
-      ? attribute.value.intValue
-      : 'doubleValue' in attribute.value
-      ? attribute.value.doubleValue
-      : attribute.value.boolValue,
-  ]))
+): Record<string, ReceivedValue> =>
+  Object.fromEntries(attributes.map((attribute) => [attribute.key, valueOf(attribute.value)]))
 
 export const spansOf = (body: string): Effect.Effect<ReadonlyArray<ReceivedSpan>, Schema.SchemaError> =>
   Effect.map(

@@ -21,13 +21,13 @@ Feature('Staying silent when no collector is configured')
     scenario(
       'A failing step fails exactly as it would without telemetry',
       Gherkin.Do.pipe(
-        Given('a step that fails, with and without the silent sink')('exits', () =>
+        Given('a step that fails, with and without the default sink')('exits', () =>
           Effect.gen(function*() {
             const telemetry = yield* Telemetry
             const failing: Effect.Effect<number, string> = Effect.fail('boom')
             const watched = telemetry.span('e2e.act', { 'e2e.test': 'login', 'e2e.step.index': 0 }, () => failing)
             return { bare: yield* Effect.exit(failing), watched: yield* Effect.exit(watched) }
-          }).pipe(Effect.provide(Telemetry.noop))),
+          })),
         Then('both runs end with the same failure')((s, expect) => expect(s.exits.watched).toStrictEqual(s.exits.bare)),
       ),
     )
@@ -35,7 +35,7 @@ Feature('Staying silent when no collector is configured')
     scenario(
       'No trace is opened for a step the silent sink watches',
       Gherkin.Do.pipe(
-        Given('a tracer that records every trace it is asked to open, and the silent sink')(
+        Given('a tracer that records every trace it is asked to open, and the default sink')(
           'opened',
           () =>
             Effect.gen(function*() {
@@ -48,7 +48,7 @@ Feature('Staying silent when no collector is configured')
                   ))
                 .pipe(Effect.withTracer(recordingTracer(opened)))
               return { count: opened.length }
-            }).pipe(Effect.provide(Telemetry.noop)),
+            }),
         ),
         Then('the recorder was asked for nothing')((s, expect) => expect(s.opened.count).toBe(0)),
       ),

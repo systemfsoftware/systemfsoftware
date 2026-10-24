@@ -44,13 +44,13 @@ const OTLP: TelemetryShape = {
   count: (event) =>
     Match.value(event).pipe(
       Match.tag('ReplayOutcome', ({ outcome }) => Metric.update(REPLAY_OUTCOMES[outcome], 1)),
-      Match.tag('ModelCall', () => Metric.update(MODEL_CALLS, 1)),
+      Match.tag('ModelCalls', ({ calls }) => Metric.update(MODEL_CALLS, calls)),
       Match.orElse(({ kind, tokens }) => Metric.update(MODEL_TOKENS[kind], tokens)),
     ),
 }
 
 /** The sink alone: spans ride the tracer the context already carries, counters update native metrics. Compose `layerFromEnv` to export them. */
-export const layer: Layer.Layer<Telemetry> = Layer.succeed(Telemetry)(OTLP)
+export const layer: Layer.Layer<never> = Layer.succeed(Telemetry)(OTLP)
 
 const signalUrl = (endpoint: URL, signal: 'traces' | 'metrics'): string => {
   const url = new URL(endpoint.toString())
@@ -67,15 +67,15 @@ const transport = (endpoint: URL): Layer.Layer<never, never, HttpClient.HttpClie
 
 /**
  * The OTLP layer, selected only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, over the `HttpClient` the
- * edge provides; the noop layer otherwise, so nothing is composed and nothing leaves the process
+ * edge provides; nothing otherwise, so the silent default stays and nothing leaves the process
  * (design §14, requirements FR-11).
  */
-export const layerFromEnv: Layer.Layer<Telemetry, never, HttpClient.HttpClient> = Config.option(
+export const layerFromEnv: Layer.Layer<never, never, HttpClient.HttpClient> = Config.option(
   Config.URL('OTEL_EXPORTER_OTLP_ENDPOINT'),
 ).pipe(
   Effect.map((endpoint) =>
     Option.match(endpoint, {
-      onNone: () => Telemetry.noop,
+      onNone: () => Layer.empty,
       onSome: (url) => Layer.mergeAll(transport(url), layer),
     })
   ),

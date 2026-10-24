@@ -214,20 +214,18 @@ export interface StepHandle<A, E> {
     readonly join: Effect.Effect<A, E>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "Telemetry_base" needs to be exported by the entry point run.d.ts
-//
 // @public
-export class Telemetry extends Telemetry_base {
-    static readonly noop: Layer.Layer<Telemetry>;
-}
+export const Telemetry: Context.Reference<TelemetryShape>;
 
 // @public
 export type TelemetryAttributeValue = string | number | boolean | ReadonlyArray<string>;
 
-// @public
+// @public (undocumented)
 export const TelemetryCount: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"ReplayOutcome", {
     readonly outcome: Schema.Literals<readonly ["replayed", "handed_off", "missed"]>;
-}>, Schema.TaggedStruct<"ModelCall", {}>, Schema.TaggedStruct<"ModelTokens", {
+}>, Schema.TaggedStruct<"ModelCalls", {
+    readonly calls: Schema.Finite;
+}>, Schema.TaggedStruct<"ModelTokens", {
     readonly kind: Schema.Literals<readonly ["input", "output"]>;
     readonly tokens: Schema.Finite;
 }>]>;
