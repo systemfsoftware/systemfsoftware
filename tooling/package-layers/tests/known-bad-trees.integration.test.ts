@@ -14,12 +14,16 @@ const ROWS = [
   { tree: 'duplicate-manifest', tag: 'DuplicateManifest', fragment: 'is declared by both' },
   { tree: 'missing-package', tag: 'MissingPackage', fragment: 'no manifest under packages/ declares it' },
   { tree: 'unmapped-package', tag: 'UnmappedPackage', fragment: 'is not in package-layers.json' },
-  { tree: 'schema-law-peer', tag: 'SchemaLawPeer', fragment: 'not marked optional in peerDependenciesMeta' },
-  { tree: 'schema-law-fork', tag: 'SchemaLawPeer', fragment: 'has a peer on the @systemfsoftware/vitest fork' },
+  { tree: 'schema-law-peer', tag: 'SchemaLawVitest', fragment: 'not marked optional in peerDependenciesMeta' },
+  {
+    tree: 'schema-law-fork',
+    tag: 'SchemaLawVitest',
+    fragment: 'names the @systemfsoftware/vitest fork in peerDependencies',
+  },
   {
     tree: 'schema-law-fork-alias',
-    tag: 'SchemaLawPeer',
-    fragment: "'vitest' peer that aliases the @systemfsoftware/vitest fork",
+    tag: 'SchemaLawVitest',
+    fragment: "'vitest' entry in peerDependencies that aliases the @systemfsoftware/vitest fork",
   },
   { tree: 'forbidden-edge', tag: 'ForbiddenEdge', fragment: 'core @f/source reaches harness @f/target' },
   {

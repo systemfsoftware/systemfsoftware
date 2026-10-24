@@ -1,12 +1,12 @@
 import { Match } from 'effect'
 import { type Decision, SCHEMA_LAW, VITEST_FORK } from './layers/check.ts'
-import type { Finding, SchemaLawPeer } from './layers/layers.schema.ts'
+import type { Finding, SchemaLawVitest } from './layers/layers.schema.ts'
 import type { Assignment } from './layers/list.ts'
 
-const SCHEMA_LAW_MESSAGE: Record<SchemaLawPeer['peer'], string> = {
-  'fork': `${SCHEMA_LAW} has a peer on the ${VITEST_FORK} fork`,
-  'fork-alias': `${SCHEMA_LAW} has a 'vitest' peer that aliases the ${VITEST_FORK} fork`,
-  'required': `${SCHEMA_LAW} has a 'vitest' peer not marked optional in peerDependenciesMeta`,
+const SCHEMA_LAW_MESSAGE: Record<SchemaLawVitest['rule'], (field: string) => string> = {
+  'fork': (field) => `${SCHEMA_LAW} names the ${VITEST_FORK} fork in ${field}`,
+  'fork-alias': (field) => `${SCHEMA_LAW} has a 'vitest' entry in ${field} that aliases the ${VITEST_FORK} fork`,
+  'required': () => `${SCHEMA_LAW} has a 'vitest' peer not marked optional in peerDependenciesMeta`,
 }
 
 export const findingMessage = (finding: Finding): string =>
@@ -21,7 +21,7 @@ export const findingMessage = (finding: Finding): string =>
     MissingPackage: (f) =>
       `package-layers.json lists ${f.name} under '${f.layer}', but no manifest under packages/ declares it`,
     UnmappedPackage: (f) => `${f.path}: ${f.name} is not in package-layers.json`,
-    SchemaLawPeer: (f) => SCHEMA_LAW_MESSAGE[f.peer],
+    SchemaLawVitest: (f) => SCHEMA_LAW_MESSAGE[f.rule](f.field),
     ForbiddenEdge: (f) => {
       const hops = f.path.slice(1).map((name, i) => ` -[${f.fields[i]}]-> ${name}`).join('')
       return `${f.fromLayer} ${f.path[0]} reaches ${f.toLayer} ${f.path.at(-1)}: ${f.path[0]}${hops}`

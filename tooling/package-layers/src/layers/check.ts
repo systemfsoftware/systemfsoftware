@@ -13,7 +13,7 @@ import {
   ManifestDoc,
   type ManifestRefused,
   MissingPackage,
-  SchemaLawPeer,
+  SchemaLawVitest,
   toManifest,
   UnmappedPackage,
 } from './layers.schema.ts'
@@ -61,7 +61,7 @@ const ORDER: Record<Finding['_tag'], number> = {
   DuplicateManifest: 3,
   MissingPackage: 4,
   UnmappedPackage: 5,
-  SchemaLawPeer: 6,
+  SchemaLawVitest: 6,
   ForbiddenEdge: 7,
 }
 
@@ -70,12 +70,17 @@ export const VITEST_FORK = '@systemfsoftware/vitest'
 const VITEST = 'vitest'
 
 const SCHEMA_LAW_RULES: readonly {
-  readonly peer: SchemaLawPeer['peer']
+  readonly rule: SchemaLawVitest['rule']
+  readonly fields: readonly EdgeField[]
   readonly breaks: (edge: Edge, manifest: Manifest) => boolean
 }[] = [
-  { peer: 'fork', breaks: (edge) => edge.key === VITEST_FORK },
-  { peer: 'fork-alias', breaks: (edge) => edge.key === VITEST && edge.to === VITEST_FORK },
-  { peer: 'required', breaks: (edge, manifest) => edge.key === VITEST && !manifest.optionalPeers.has(VITEST) },
+  { rule: 'fork', fields: EdgeField.literals, breaks: (edge) => edge.to === VITEST_FORK && edge.key !== VITEST },
+  { rule: 'fork-alias', fields: EdgeField.literals, breaks: (edge) => edge.key === VITEST && edge.to === VITEST_FORK },
+  {
+    rule: 'required',
+    fields: ['peerDependencies'],
+    breaks: (edge, manifest) => edge.key === VITEST && !manifest.optionalPeers.has(VITEST),
+  },
 ]
 
 interface Listing {
@@ -113,14 +118,12 @@ const firstByName = <A extends { readonly name: string }, B>(
 
 const lookup = <A>(map: ReadonlyMap<string, A>, key: string): Option.Option<A> => Option.fromUndefinedOr(map.get(key))
 
-const schemaLawFindings = (manifest: Manifest): readonly SchemaLawPeer[] =>
-  manifest.packed
-    .filter((edge) => edge.field === 'peerDependencies')
-    .flatMap((edge) =>
-      SCHEMA_LAW_RULES.filter((rule) => rule.breaks(edge, manifest)).map((rule) =>
-        SchemaLawPeer.make({ peer: rule.peer })
-      )
+const schemaLawFindings = (manifest: Manifest): readonly SchemaLawVitest[] =>
+  manifest.packed.flatMap((edge) =>
+    SCHEMA_LAW_RULES.filter((rule) => rule.fields.includes(edge.field) && rule.breaks(edge, manifest)).map((rule) =>
+      SchemaLawVitest.make({ rule: rule.rule, field: edge.field })
     )
+  )
 
 const freshSteps = (steps: readonly Trail[], reached: ReadonlySet<string>): readonly Trail[] =>
   Arr.dedupeWith(steps.filter((step) => !reached.has(step.to)), (a, b) => a.to === b.to)
@@ -172,7 +175,7 @@ const findingKey = (finding: Finding): string =>
     DuplicateManifest: (f) => [f.name, ...f.paths].join('\0'),
     MissingPackage: (f) => `${f.layer}\0${f.name}`,
     UnmappedPackage: (f) => f.path,
-    SchemaLawPeer: (f) => f.peer,
+    SchemaLawVitest: (f) => `${f.rule}\0${f.field}`,
     ForbiddenEdge: (f) => f.path.join('\0'),
   })
 
@@ -250,7 +253,7 @@ if (import.meta.vitest !== void 0) {
 
   const buildMap = (pairs: readonly (readonly [Layer, string])[]): LayerMap => pairs.reduce(under, EMPTY_MAP)
 
-  const pkg = (name: string, fields: Readonly<Record<string, Readonly<Record<string, string>>>> = {}): Manifest =>
+  const pkg = (name: string, fields: Readonly<Record<string, object>> = {}): Manifest =>
     toManifest({
       path: `packages/${name}/package.json`,
       doc: Result.getOrThrow(decodeDoc({ name, version: '0.0.0', ...fields })),
@@ -261,32 +264,118 @@ if (import.meta.vitest !== void 0) {
   const ordered = (one: Layer, two: Layer): readonly [Layer, Layer] =>
     LAYER_ORDER.indexOf(one) <= LAYER_ORDER.indexOf(two) ? [one, two] : [two, one]
 
-  const aliasKey = (alias: boolean): string => (alias ? 'innocent' : '@t/target')
+  const aliasKey = (alias: boolean, target: string): string => (alias ? 'innocent' : target)
 
-  const aliasSpecifier = (alias: boolean): string => (alias ? 'npm:@t/target@^1' : 'workspace:^')
+  const aliasSpecifier = (alias: boolean, target: string): string => (alias ? `npm:${target}@^1` : 'workspace:^')
+
+  // The forbidden runtime/peer pairs as the SYS-648 layer rules state them, never read from FORBIDDEN above.
+  const RULE_FORBIDS: Record<string, true> = {
+    'core>harness': true,
+    'core>spec-trace': true,
+    'core>extracted': true,
+    'core>frontend': true,
+    'harness>core': true,
+    'harness>spec-trace': true,
+    'harness>extracted': true,
+    'spec-trace>extracted': true,
+  }
+
+  const PAIRS = LAYER_ORDER.flatMap((from) => LAYER_ORDER.map((to) => ({ from, to })))
+
+  const sourceOf = (pair: { readonly from: Layer; readonly to: Layer }): string => `@t/${pair.from}.to.${pair.to}`
+
+  const targetOf = (pair: { readonly from: Layer; readonly to: Layer }): string => `@t/${pair.to}.of.${pair.from}`
+
+  const byPath = (a: ForbiddenEdge, b: ForbiddenEdge): number => compare(a.path.join('\0'), b.path.join('\0'))
+
+  const everyPairTree = (field: EdgeField, alias: boolean): CheckInput => ({
+    map: buildMap(PAIRS.flatMap((pair) => [[pair.from, sourceOf(pair)], [pair.to, targetOf(pair)]] as const)),
+    manifests: PAIRS.flatMap((pair) => [
+      pkg(sourceOf(pair), { [field]: { [aliasKey(alias, targetOf(pair))]: aliasSpecifier(alias, targetOf(pair)) } }),
+      pkg(targetOf(pair)),
+    ]),
+    refused: [],
+  })
+
+  const ruleRefusals = (field: EdgeField): readonly ForbiddenEdge[] =>
+    PAIRS.filter((pair) => RULE_FORBIDS[`${pair.from}>${pair.to}`] === true)
+      .map((pair) =>
+        ForbiddenEdge.make({
+          fromLayer: pair.from,
+          toLayer: pair.to,
+          path: [sourceOf(pair), targetOf(pair)],
+          fields: [field],
+        })
+      )
+      .toSorted(byPath)
 
   it.prop(
-    '∀f_CoreHarness_∈ForbiddenEdge',
+    '∀f_EveryLayerPair_=RuleTable',
+    { of: [EdgeField, Schema.Boolean], subject: decide },
+    (decide, [field, alias]) => same(decide(everyPairTree(field, alias)).findings, ruleRefusals(field)),
+  )
+
+  const NON_CORE: readonly Layer[] = ['harness', 'spec-trace', 'extracted', 'frontend']
+
+  const chainTree = (first: EdgeField, second: EdgeField): CheckInput => ({
+    map: buildMap(NON_CORE.flatMap((layer) =>
+      [
+        ['core', `@t/source.${layer}`],
+        ['core', `@t/mid.${layer}`],
+        [layer, `@t/target.${layer}`],
+      ] as const
+    )),
+    manifests: NON_CORE.flatMap((layer) => [
+      pkg(`@t/source.${layer}`, { [first]: { [`@t/mid.${layer}`]: 'workspace:^' } }),
+      pkg(`@t/mid.${layer}`, { [second]: { [`@t/target.${layer}`]: 'workspace:^' } }),
+      pkg(`@t/target.${layer}`),
+    ]),
+    refused: [],
+  })
+
+  const chainRefusals = (first: EdgeField, second: EdgeField): readonly ForbiddenEdge[] =>
+    NON_CORE.flatMap((layer) => [
+      ForbiddenEdge.make({
+        fromLayer: 'core',
+        toLayer: layer,
+        path: [`@t/mid.${layer}`, `@t/target.${layer}`],
+        fields: [second],
+      }),
+      ForbiddenEdge.make({
+        fromLayer: 'core',
+        toLayer: layer,
+        path: [`@t/source.${layer}`, `@t/mid.${layer}`, `@t/target.${layer}`],
+        fields: [first, second],
+      }),
+    ]).toSorted(byPath)
+
+  it.prop(
+    '∀f_CoreChain_=RuleTable',
+    { of: [EdgeField, EdgeField], subject: decide },
+    (decide, [first, second]) => same(decide(chainTree(first, second)).findings, chainRefusals(first, second)),
+  )
+
+  const forkEntry = (alias: boolean): readonly [string, string] =>
+    alias ? [VITEST, `npm:${VITEST_FORK}@^4`] : [VITEST_FORK, 'workspace:^']
+
+  const forkTree = (field: EdgeField, alias: boolean): CheckInput => {
+    const [key, specifier] = forkEntry(alias)
+    return {
+      map: buildMap([['core', SCHEMA_LAW]]),
+      manifests: [
+        pkg(SCHEMA_LAW, { [field]: { [key]: specifier }, peerDependenciesMeta: { [VITEST]: { optional: true } } }),
+      ],
+      refused: [],
+    }
+  }
+
+  it.prop(
+    '∀f_VitestFork_∈SchemaLawVitest',
     { of: [EdgeField, Schema.Boolean], subject: decide },
     (decide, [field, alias]) =>
-      same(
-        decide({
-          map: buildMap([['core', '@t/source'], ['harness', '@t/target']]),
-          manifests: [
-            pkg('@t/source', { [field]: { [aliasKey(alias)]: aliasSpecifier(alias) } }),
-            pkg('@t/target'),
-          ],
-          refused: [],
-        }).findings,
-        [
-          ForbiddenEdge.make({
-            fromLayer: 'core',
-            toLayer: 'harness',
-            path: ['@t/source', '@t/target'],
-            fields: [field],
-          }),
-        ],
-      ),
+      same(decide(forkTree(field, alias)).findings, [
+        SchemaLawVitest.make({ rule: alias ? 'fork-alias' : 'fork', field }),
+      ]),
   )
 
   it.prop(

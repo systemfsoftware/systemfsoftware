@@ -68,8 +68,9 @@ export const MissingPackage = Schema.TaggedStruct('MissingPackage', { name: Sche
 
 export const UnmappedPackage = Schema.TaggedStruct('UnmappedPackage', { name: Schema.String, path: Schema.String })
 
-export const SchemaLawPeer = Schema.TaggedStruct('SchemaLawPeer', {
-  peer: Schema.Literals(['fork', 'fork-alias', 'required']),
+export const SchemaLawVitest = Schema.TaggedStruct('SchemaLawVitest', {
+  rule: Schema.Literals(['fork', 'fork-alias', 'required']),
+  field: EdgeField,
 })
 
 export const ForbiddenEdge = Schema.TaggedStruct('ForbiddenEdge', {
@@ -85,7 +86,7 @@ export const Finding = Schema.Union([
   DuplicateManifest,
   MissingPackage,
   UnmappedPackage,
-  SchemaLawPeer,
+  SchemaLawVitest,
   ForbiddenEdge,
   MapRefused,
 ])
@@ -96,7 +97,7 @@ export type DuplicateName = typeof DuplicateName.Type
 export type DuplicateManifest = typeof DuplicateManifest.Type
 export type MissingPackage = typeof MissingPackage.Type
 export type UnmappedPackage = typeof UnmappedPackage.Type
-export type SchemaLawPeer = typeof SchemaLawPeer.Type
+export type SchemaLawVitest = typeof SchemaLawVitest.Type
 export type ForbiddenEdge = typeof ForbiddenEdge.Type
 export type Finding = typeof Finding.Type
 export class LayersRefused extends Schema.TaggedError<LayersRefused>()('LayersRefused', {
