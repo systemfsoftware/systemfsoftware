@@ -252,6 +252,7 @@ const reportOf = (steps: Steps, text: string, edit: AttemptEdit = unedited): Row
     interrupted: 0,
     skipped: 1,
     cache: { replayed: 1, handedOff: 2, missed: 0 },
+    hitRate: 1 / 3,
   },
 })
 

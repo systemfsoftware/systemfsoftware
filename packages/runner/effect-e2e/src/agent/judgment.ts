@@ -24,6 +24,8 @@ import type { Route } from '../engine/route.schema.js'
 import type { ModelFailure } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
+import type { TelemetryShape, TelemetrySpan } from '../run/telemetry.service.js'
+import { Telemetry } from '../run/telemetry.service.js'
 import {
   type Check,
   checkLocatorsOf,
@@ -70,6 +72,7 @@ import {
 import { redactedNodeFieldsOf, stableTextOf } from './observation.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
+import { annotated, cacheOutcomeOf, counted, stepAttributesOf } from './step-telemetry.js'
 import { visionGate } from './vision.js'
 
 export type JudgmentKind = 'assert' | 'waitFor'
@@ -181,6 +184,7 @@ interface JudgmentStep {
   readonly gateway: ModelGatewayShape
   readonly store: CacheStoreShape
   readonly ledger: SecretLedgerShape
+  readonly telemetry: TelemetryShape
   readonly state: Ref.Ref<JudgmentState>
 }
 
@@ -687,12 +691,24 @@ const recordOf = (step: JudgmentStep, state: JudgmentState, outcome: StepOutcome
 })
 
 /** A cancelled step records nothing, so the cache is left as it was (design §9.5). */
-const recorded = (step: JudgmentStep, exit: Exit.Exit<JudgmentSuccess, JudgmentFailure>): Effect.Effect<void> =>
-  Option.match(outcomeOf(exit), {
-    onNone: () => Effect.void,
-    onSome: (outcome) =>
-      Effect.flatMap(Ref.get(step.state), (state) => step.context.record(recordOf(step, state, outcome))),
-  })
+const recorded = (
+  step: JudgmentStep,
+  span: TelemetrySpan,
+  exit: Exit.Exit<JudgmentSuccess, JudgmentFailure>,
+): Effect.Effect<void> =>
+  Effect.flatMap(Ref.get(step.state), (state) =>
+    Effect.andThen(
+      annotated(span)({
+        'e2e.check.kind': Option.match(state.record, { onNone: () => 'none', onSome: (record) => record.check._tag }),
+        'e2e.cache.outcome': cacheOutcomeOf(state.lookup),
+        'e2e.model.calls': state.modelCalls,
+      }),
+      Option.match(outcomeOf(exit), {
+        onNone: () => Effect.void,
+        onSome: (outcome) =>
+          Effect.andThen(counted(step.telemetry)(state), step.context.record(recordOf(step, state, outcome))),
+      }),
+    ))
 
 const FRESH_STATE: JudgmentState = {
   keying: Option.none(),
@@ -722,6 +738,7 @@ const stepOf = (request: JudgedRequest) =>
       gateway: yield* ModelGateway,
       store: yield* CacheStore,
       ledger: yield* SecretLedger,
+      telemetry: yield* Telemetry,
       state: yield* Ref.make(FRESH_STATE),
     } satisfies JudgmentStep
   })
@@ -801,4 +818,9 @@ const stepped = (
 export const judged = (
   request: JudgedRequest,
 ): Effect.Effect<JudgmentSuccess, JudgmentFailure, Engine | ModelGateway | CacheStore | SecretLedger> =>
-  Effect.flatMap(stepOf(request), (step) => stepped(step).pipe(Effect.onExit((exit) => recorded(step, exit))))
+  Effect.flatMap(stepOf(request), (step) =>
+    step.telemetry.span(
+      `e2e.${step.mode}`,
+      { ...stepAttributesOf(step.context), 'e2e.vision.mode': String(step.vision) },
+      (span) => stepped(step).pipe(Effect.onExit((exit) => recorded(step, span, exit))),
+    ))
