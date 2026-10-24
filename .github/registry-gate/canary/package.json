@@ -1,0 +1,21 @@
+{
+  "name": "@systemfsoftware/registry-gate-canary",
+  "version": "0.0.0",
+  "description": "Canary the registry gate publishes to GitHub Packages and installs with a GitHub App installation token. Each run deletes its version.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": ".github/registry-gate/canary"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
