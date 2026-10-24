@@ -1,10 +1,10 @@
-import { Match, Option, Result, Schema } from 'effect'
+import { Array as Arr, Match, Option, Result, Schema } from 'effect'
 import {
   DuplicateManifest,
   DuplicateName,
   type Edge,
   EdgeField,
-  type Finding,
+  Finding,
   ForbiddenEdge,
   HostedLayer,
   Layer,
@@ -18,13 +18,13 @@ import {
   UnmappedPackage,
 } from './layers.schema.ts'
 
-export interface LayerRow {
+interface LayerRow {
   readonly layer: Layer
   readonly names: readonly string[]
   readonly absent: readonly string[]
 }
 
-export interface DevEdge {
+interface DevEdge {
   readonly from: string
   readonly fromLayer: Layer
   readonly to: string
@@ -38,21 +38,15 @@ export interface Decision {
   readonly present: number
 }
 
-export interface CheckInput {
+interface CheckInput {
   readonly map: LayerMap
   readonly manifests: readonly Manifest[]
   readonly refused: readonly ManifestRefused[]
 }
 
-const HOSTED: Record<Layer, boolean> = {
-  'core': true,
-  'harness': true,
-  'spec-trace': true,
-  'extracted': false,
-  'frontend': false,
-}
+const isHosted = Schema.is(HostedLayer)
 
-export const FORBIDDEN: Record<Layer, readonly Layer[]> = {
+const FORBIDDEN: Record<Layer, readonly Layer[]> = {
   'core': ['harness', 'spec-trace', 'extracted', 'frontend'],
   'harness': ['core', 'spec-trace', 'extracted'],
   'spec-trace': ['extracted'],
@@ -108,8 +102,8 @@ const listings = (map: LayerMap): readonly Listing[] =>
   Layer.literals.flatMap((layer) => map[layer].map((name) => ({ name, layer })))
 
 const repeats = <A extends { readonly name: string }>(items: readonly A[]): readonly (readonly [A, A])[] =>
-  items.flatMap((item, i) =>
-    items.slice(0, i).filter((earlier) => earlier.name === item.name).slice(0, 1).map((first) => [first, item] as const)
+  Object.values(Arr.groupBy(items, (item) => item.name)).flatMap(([first, ...again]) =>
+    again.map((item) => [first, item] as const)
   )
 
 const firstByName = <A extends { readonly name: string }, B>(
@@ -129,7 +123,7 @@ const schemaLawFindings = (manifest: Manifest): readonly SchemaLawPeer[] =>
     )
 
 const freshSteps = (steps: readonly Trail[], reached: ReadonlySet<string>): readonly Trail[] =>
-  steps.filter((step, i) => !reached.has(step.to) && steps.findIndex((other) => other.to === step.to) === i)
+  Arr.dedupeWith(steps.filter((step) => !reached.has(step.to)), (a, b) => a.to === b.to)
 
 const coreWalk = (edgesOf: EdgesOf, frontier: readonly Trail[], reached: ReadonlySet<string>): readonly Trail[] => {
   const steps = frontier.flatMap((trail) =>
@@ -191,8 +185,11 @@ export const decide = ({ map, manifests, refused }: CheckInput): Decision => {
   const manifestOf = firstByName(manifests, (manifest) => manifest)
   const mapped = (edge: Edge): readonly MappedEdge[] =>
     Option.toArray(lookup(layerOf, edge.to)).map((toLayer) => ({ ...edge, toLayer }))
-  const packedOf = firstByName(manifests, (manifest) => manifest.packed.flatMap(mapped))
-  const edgesOf: EdgesOf = (name) => Option.getOrElse(lookup(packedOf, name), () => [])
+  const edgesOf: EdgesOf = (name) =>
+    Option.match(lookup(manifestOf, name), {
+      onNone: () => [],
+      onSome: (manifest) => manifest.packed.flatMap(mapped),
+    })
 
   const findings: readonly Finding[] = [
     ...refused,
@@ -203,7 +200,7 @@ export const decide = ({ map, manifests, refused }: CheckInput): Decision => {
       DuplicateManifest.make({ name: again.name, paths: [first.path, again.path] })
     ),
     ...[...layerOf]
-      .filter(([name, layer]) => HOSTED[layer] && !manifestOf.has(name))
+      .filter(([name, layer]) => isHosted(layer) && !manifestOf.has(name))
       .map(([name, layer]) => MissingPackage.make({ name, layer })),
     ...manifests
       .filter((manifest) => !layerOf.has(manifest.name))
@@ -259,8 +256,7 @@ if (import.meta.vitest !== void 0) {
       doc: Result.getOrThrow(decodeDoc({ name, version: '0.0.0', ...fields })),
     })
 
-  const same = (actual: readonly Finding[], expected: readonly Finding[]): boolean =>
-    JSON.stringify(actual) === JSON.stringify(expected)
+  const same = Schema.toEquivalence(Schema.Array(Finding))
 
   const ordered = (one: Layer, two: Layer): readonly [Layer, Layer] =>
     LAYER_ORDER.indexOf(one) <= LAYER_ORDER.indexOf(two) ? [one, two] : [two, one]

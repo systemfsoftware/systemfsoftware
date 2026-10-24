@@ -11,16 +11,17 @@ import {
   toManifest,
 } from './layers/layers.schema.ts'
 
-export { LayersRefused } from './layers/layers.schema.ts'
-export { failureLines } from './report.ts'
 import { assignments } from './layers/list.ts'
 import { failureLines, listJson, listLines, passLines } from './report.ts'
+
+export { failureLines, LayersRefused }
 
 class PrintedRefusal extends LayersRefused {
   override readonly [Runtime.errorReported] = false
 }
 
-const refuse = (finding: MapRefused) => Effect.fail(new PrintedRefusal({ findings: [finding] }))
+const refuseAt = (at: string) => (error: { readonly message: string }) =>
+  Effect.fail(new PrintedRefusal({ findings: [MapRefused.make({ path: at, reason: error.message })] }))
 
 const decodeMapText = Schema.decodeUnknownEffect(Schema.fromJsonString(LayerMap))
 const decodeManifestText = Schema.decodeUnknownEffect(Schema.fromJsonString(ManifestDoc))
@@ -28,6 +29,8 @@ const decodeManifestText = Schema.decodeUnknownEffect(Schema.fromJsonString(Mani
 const SKIPPED: Record<string, true> = { node_modules: true, dist: true }
 
 const walked = (name: string): boolean => !name.startsWith('.') && SKIPPED[name] !== true
+
+const manifestLeaf = (name: string, full: string): readonly string[] => name === 'package.json' ? [full] : []
 
 const manifestPaths = (
   fs: FileSystem.FileSystem,
@@ -40,9 +43,7 @@ const manifestPaths = (
       Effect.gen(function*() {
         const full = path.join(dir, name)
         const info = yield* fs.stat(full)
-        return info.type === 'Directory'
-          ? yield* manifestPaths(fs, path, full)
-          : [full].filter(() => name === 'package.json')
+        return info.type === 'Directory' ? yield* manifestPaths(fs, path, full) : manifestLeaf(name, full)
       }), { concurrency: 8 })
     return found.flat()
   })
@@ -54,9 +55,7 @@ const readMap = (root: string) =>
     const file = path.join(root, 'package-layers.json')
     return yield* fs.readFileString(file).pipe(
       Effect.flatMap((text) => decodeMapText(text, { onExcessProperty: 'error' })),
-      Effect.catch((error) =>
-        refuse(MapRefused.make({ path: path.relative(root, file) || 'package-layers.json', reason: error.message }))
-      ),
+      Effect.catch(refuseAt('package-layers.json')),
     )
   })
 
@@ -74,7 +73,7 @@ const readManifests = (root: string) =>
     const path = yield* Path.Path
     const packages = path.join(root, 'packages')
     const files = yield* manifestPaths(fs, path, packages).pipe(
-      Effect.catch((error) => refuse(MapRefused.make({ path: 'packages', reason: error.message }))),
+      Effect.catch(refuseAt('packages')),
     )
     const results = yield* Effect.forEach(files, (file) => readManifest(fs, path.relative(root, file), file), {
       concurrency: 8,
