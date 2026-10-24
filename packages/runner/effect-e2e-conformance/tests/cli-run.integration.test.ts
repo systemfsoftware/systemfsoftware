@@ -8,6 +8,7 @@ import * as Schema from 'effect/Schema'
 import {
   AiTraceFile,
   aiTracesIn,
+  attemptsOf,
   copiedRunnerSuite,
   runCli,
   runIdOf,
@@ -54,6 +55,8 @@ const TWO_WORKER_STATUSES = {
 
 const ranStatusesOf = (statuses: Readonly<Record<string, string>>) =>
   Object.fromEntries(Object.entries(statuses).filter(([, status]) => status !== 'skipped'))
+
+const SHAPED_SUITE = { RUNNER_SUITE_RETRIES: '2', RUNNER_SUITE_WORKERS: '1' }
 
 Feature('Running a suite with effect-e2e run')
   .withLayer(Layer.empty)
@@ -216,6 +219,51 @@ Feature('Running a suite with effect-e2e run')
           s,
           expect,
         ) => expect({ exitCode: s.run.exitCode, partials: s.run.partials }).toEqual({ exitCode: 1, partials: 2 })),
+      ),
+    )
+
+    scenario(
+      "A run without flags retries and pools as the suite's config says",
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite whose config sets two retries and one worker')(
+          'suite',
+          () => copiedRunnerSuite('valid'),
+        ),
+        When('the run selects both worker files with no flags')(
+          'run',
+          ({ suite }) => runCli({ suite, args: WORKER_FILES, env: SHAPED_SUITE }),
+        ),
+        Then('the failing sum has three tries, both files ran in pool slot 1, and the run exits 1')((s, expect) =>
+          expect({ exitCode: s.run.exitCode, attempts: attemptsOf(s.run.report), poolIds: s.run.poolIds }).toEqual({
+            exitCode: 1,
+            attempts: { [A_READS_FREE]: 1, [A_PASSES]: 1, [B_PASSES]: 1, [B_FAILS]: 3 },
+            poolIds: [1],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      "The workers and retries flags override the suite's config",
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite whose config sets two retries and one worker')(
+          'suite',
+          () => copiedRunnerSuite('valid'),
+        ),
+        When('the run selects both worker files with two workers and no retries')(
+          'run',
+          ({ suite }) =>
+            runCli({ suite, args: ['--workers', '2', '--retries', '0', ...WORKER_FILES], env: SHAPED_SUITE }),
+        ),
+        Then('the failing sum has one try, a second pool slot was used, and the run exits 1')((s, expect) =>
+          expect({
+            exitCode: s.run.exitCode,
+            failingSumTries: attemptsOf(s.run.report)[B_FAILS],
+            usedSecondSlot: s.run.poolIds.includes(2),
+          }).toEqual({ exitCode: 1, failingSumTries: 1, usedSecondSlot: true })
+        ),
       ),
     )
 

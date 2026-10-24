@@ -109,6 +109,20 @@ export type E2EGlobalSetupTeardown = () => Promise<void>;
 // @public (undocumented)
 export type E2ERunnerClass = new (config: SerializedConfig) => VitestTestRunner;
 
+// @public
+export interface E2ERunShape {
+    // (undocumented)
+    readonly maxWorkers?: number;
+    // (undocumented)
+    readonly retry?: number;
+}
+
+// @public
+export const e2eRunShape: {
+    (options: RunShapeOptions): (config: E2EConfigInput) => E2ERunShape;
+    (config: E2EConfigInput, options: RunShapeOptions): E2ERunShape;
+};
+
 // @public (undocumented)
 export interface E2ETest {
     // (undocumented)
@@ -213,6 +227,9 @@ export interface RunnerOptions {
 }
 
 // @public
+export type RunShapeOptions = Pick<RunnerOptions, 'defaults' | 'env'>;
+
+// @public
 export interface ScreenExpectation {
     // (undocumented)
     readonly toBeChecked: (options?: LocatorAssertionOptions) => Promise<void>;
@@ -255,7 +272,7 @@ export const test: E2ETest;
 
 // Warnings were encountered during analysis:
 //
-// dist/runner.d.ts:97:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
+// dist/runner.d.ts:136:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
 
 // (No @packageDocumentation comment for this package)
 

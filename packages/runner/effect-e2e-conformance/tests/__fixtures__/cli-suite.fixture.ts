@@ -75,6 +75,7 @@ export interface GeneratedRun {
   readonly skipReasons: ReadonlyArray<string>
   /** Model calls summed over every step of every attempt in the merged report. */
   readonly modelCalls: number
+  readonly attempts: Readonly<Record<string, number>>
 }
 
 const stepsOf = (attempt: Attempt) => Match.valueTags(attempt, { Ran: ({ steps }) => steps, Skipped: () => [] })
@@ -92,6 +93,7 @@ const summaryOf = (exitCode: number, vitest: typeof VitestReport.Type, report: R
     e2e: Object.fromEntries(report.results.map((result) => [result.title, result.status])),
     skipReasons: attempts.flatMap(skipReasonOf),
     modelCalls: attempts.flatMap(stepsOf).reduce((sum, step) => sum + ('modelCalls' in step ? step.modelCalls : 0), 0),
+    attempts: Object.fromEntries(report.results.map((result) => [result.title, result.attempts.length])),
   }
 }
 
@@ -170,3 +172,20 @@ export interface PlantRequest {
 
 export const plantIn = ({ suite, file, content }: PlantRequest) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.writeFileString(`${suite}/${file}`, content))
+
+export interface RetriesRequest {
+  readonly suite: string
+  readonly retries: number
+}
+
+const CONFIG_OPENING = 'export default defineConfig({'
+
+export const retriesWrittenIn = ({ suite, retries }: RetriesRequest) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const file = `${suite}/e2e.config.ts`
+    const generated = yield* fs.readFileString(file)
+    return yield* generated.includes(CONFIG_OPENING)
+      ? fs.writeFileString(file, generated.replace(CONFIG_OPENING, `${CONFIG_OPENING}\n  retries: ${retries},`))
+      : Effect.die(`${file} has no '${CONFIG_OPENING}' to write retries into`)
+  })

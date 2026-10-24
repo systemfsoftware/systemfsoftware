@@ -8,6 +8,7 @@ import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
+import { ci } from './e2e.config.js'
 import { BILLING_SITE, ENGINE_OPENS, PLANTED_SECRET, PLANTED_SECRET_ENV, SUITE_OUTPUT } from './site.js'
 
 const recordOpen = Layer.effectDiscard(
@@ -41,6 +42,6 @@ export const options: RunnerOptions = {
       onSome: (value) => ({ [RUN_OVERRIDE_ENV.aiTrace]: value }),
     }),
   },
-  defaults: { ci: false, projectId: 'runner-suite', cores: 1 },
+  defaults: { ci, projectId: 'runner-suite', cores: 4 },
   version: '0.0.0-conformance',
 }
