@@ -1,0 +1,18 @@
+systemfsoftware
+Copyright 2026 systemfsoftware
+
+This product includes software developed by systemfsoftware
+(https://github.com/systemfsoftware/systemfsoftware).
+
+----------------------------------------------------------------------
+
+@systemfsoftware/effect-e2e contains source ported from TesterArmy's e2e
+(https://github.com/tester-army/e2e) at commit
+72abdddd961e2e3a7d24c973eeb2783bea43ee47 (npm `e2e` 0.21.2), licensed under
+the Apache License, Version 2.0. Its NOTICE reads:
+
+e2e
+Copyright 2026 TesterArmy, Inc.
+
+This product includes software developed at TesterArmy, Inc.
+(https://tester.army).
