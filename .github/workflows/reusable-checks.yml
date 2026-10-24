@@ -142,6 +142,11 @@ on:
         required: false
         type: string
         default: .#sfs-deps
+      sfs-deps-runs-on:
+        description: JSON runner labels for the `sfs-deps` producer job; empty uses `runs-on`. A cold producer builds the flake installable, so a caller with small default runners can give it a larger machine without moving plan, classify and the gate
+        required: false
+        type: string
+        default: ""
     secrets:
       turbo-api:
         description: Remote Turbo cache API URL
@@ -380,7 +385,7 @@ jobs:
     name: sfs-deps · tarballs the lockfile names
     needs: classify
     if: needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    runs-on: ${{ fromJSON(inputs.sfs-deps-runs-on || inputs.runs-on) }}
     timeout-minutes: 60
     defaults: *defaults
     outputs:
