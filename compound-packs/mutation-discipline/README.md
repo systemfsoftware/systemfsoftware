@@ -9,5 +9,6 @@ Rules in this pack govern:
 - Killing a survivor with a property whose expected value comes from the contract the mutant breaks, and reading a recurring survivor cluster as a circular oracle (`kill-survivors-with-contract-properties`).
 - Deleting, or making unconstructable, code that no reachable input can kill, only where nothing reads it at runtime, with a baseline row as the last resort for equivalent mutants on live code (`unkillable-survivors-are-dead-code`).
 - Excluding mutants no test should observe through a shared ignorer keyed on declaration shape, never through a disable comment or an excluded mutator (`suppress-by-shape-in-an-ignorer`).
+- Turning a Stryker speed filter (`coverageAnalysis`, `vitest.related`) off only for a named dropped killer, and never keeping stacked filters that drop a covering test (`speed-filters-never-drop-a-killing-test`).
 
 No tool enforces these judgments; each rule's gate is review.

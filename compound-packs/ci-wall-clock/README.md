@@ -38,6 +38,7 @@ Rules in this pack govern:
 - A red per-push postsubmit verdict: its P0, its culprit, the merge freeze and the revert (`red-main-reverts-its-culprit-same-day`).
 - What a release reads and promotes, and how a runner image reaches the fleet (`release-promotes-the-staging-proven-build`).
 - The stated daily cost of a heavy lane (`heavy-lanes-state-their-daily-minutes`).
+- That every independent check runs and reports under its own name, and that a cache, an emitter or a report directory is proven by a forced failure or a measured effect (`every-check-runs-and-names-its-own-failure`).
 - CI jobs whose subject is the repo's own docs, plans or layout (`no-lane-grades-the-repos-own-docs`).
 
 No tool enforces these judgments; each rule's gate is review.
