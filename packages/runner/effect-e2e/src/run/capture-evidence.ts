@@ -3,15 +3,18 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 
 import { formatObservation } from '../agent/observation.js'
+import { redactJson } from '../agent/redaction.js'
 import type { SecretLedgerShape } from '../agent/secret-ledger.service.js'
 import { maskedScreenshotOf } from '../agent/vision.js'
 import type { EngineShape } from '../engine/engine.service.js'
 import type { Observation } from '../engine/observation.schema.js'
 import type { ArtifactKind, ArtifactRef, RanAttempt } from '../report/report.schema.js'
 import { failureClassOf } from '../verdict/failure-class.schema.js'
-import type { ArtifactWriteFailed, EnvironmentUnavailable, FailureRecord } from '../verdict/failure.schema.js'
+import { ArtifactWriteFailed, type EnvironmentUnavailable, type FailureRecord } from '../verdict/failure.schema.js'
+import { AiTraceJson, type ModelCall } from './ai-trace.schema.js'
 import type { ArtifactStoreShape } from './artifact-store.service.js'
 import type { ResultDirectory } from './artifact.schema.js'
 import type { AttemptTest } from './attempt.js'
@@ -77,19 +80,27 @@ export const captureScreen = (request: CaptureScreenRequest): Effect.Effect<Scre
     }),
   })
 
-export interface WriteEvidenceRequest {
+/** Which result directory a try's files go to: the test, target and agent it ran as. */
+export interface EvidenceOwner {
   readonly store: ArtifactStoreShape
   readonly ledger: SecretLedgerShape
   readonly test: AttemptTest
   readonly target: string
   readonly agent: string
-  readonly attempt: RanAttempt
-  readonly screen: ScreenSnapshot
 }
 
 export interface WrittenEvidence {
   readonly artifacts: ReadonlyArray<ArtifactRef>
   readonly failures: ReadonlyArray<FailureRecord>
+}
+
+export const NOTHING_WRITTEN: WrittenEvidence = { artifacts: [], failures: [] }
+
+export interface WriteEvidenceRequest extends EvidenceOwner {
+  readonly attempt: RanAttempt
+  readonly screen: ScreenSnapshot
+  /** What the try already wrote into the directory, so `trace.md` links it. */
+  readonly written: WrittenEvidence
 }
 
 const failureRecordOf = (error: ArtifactWriteFailed): FailureRecord => ({
@@ -111,19 +122,58 @@ const writtenOf = (results: ReadonlyArray<Result.Result<ArtifactRef, FailureReco
   failures: Arr.getFailures(results),
 })
 
+const directoryOf = (owner: EvidenceOwner): ResultDirectory =>
+  resultDirectoryOf({ title: owner.test.title, test: owner.test.id, target: owner.target, agent: owner.agent })
+
+export interface WriteAiTraceRequest extends EvidenceOwner {
+  readonly retry: number
+  readonly calls: ReadonlyArray<ModelCall>
+}
+
+const unencodableOf = (ledger: SecretLedgerShape, error: Schema.SchemaError): FailureRecord =>
+  failureRecordOf(
+    new ArtifactWriteFailed({
+      message: 'could not encode ai-trace.json',
+      evidence: [{ _tag: 'LogEvidence', text: ledger.redact(error.message) }],
+    }),
+  )
+
+/**
+ * Writes one try's model calls as `ai-trace.json` into its result directory. The document is encoded to JSON, every
+ * object key and string in it is masked with the ledger, and only then serialized, so a held secret cannot survive
+ * in JSON-escaped form. A refused encode or store write is answered as a failure record, never raised.
+ */
+export const writeAiTrace = (request: WriteAiTraceRequest): Effect.Effect<WrittenEvidence> =>
+  Result.match(
+    Schema.encodeResult(AiTraceJson)({
+      schema: 'ai-trace-1',
+      test: { id: request.test.id, title: request.test.title },
+      target: request.target,
+      agent: request.agent,
+      retry: request.retry,
+      calls: request.calls,
+    }),
+    {
+      onFailure: (error) =>
+        Effect.succeed<WrittenEvidence>({ artifacts: [], failures: [unencodableOf(request.ledger, error)] }),
+      onSuccess: (encoded) =>
+        Effect.map(
+          put(request.store, directoryOf(request), 'ai-trace')(
+            textBytesOf(`${JSON.stringify(redactJson(request.ledger.redact)(encoded), null, 2)}\n`),
+          ),
+          (result) => writtenOf([result]),
+        ),
+    },
+  )
+
 /**
  * Writes one try's evidence into its result directory: the screenshot and screen text when they were captured, then
- * `trace.md` linking what was written, with every held secret masked. A store refusal is answered as a failure
- * record for the attempt, never raised.
+ * `trace.md` linking those and what the try already wrote, with every held secret masked. A store refusal is answered
+ * as a failure record for the attempt, never raised.
  */
 export const writeEvidence = (request: WriteEvidenceRequest): Effect.Effect<WrittenEvidence> =>
   Effect.gen(function*() {
-    const directory = resultDirectoryOf({
-      title: request.test.title,
-      test: request.test.id,
-      target: request.target,
-      agent: request.agent,
-    })
+    const directory = directoryOf(request)
     const screen = writtenOf(
       yield* Effect.all([
         ...request.screen.screenshot.pipe(
@@ -138,10 +188,11 @@ export const writeEvidence = (request: WriteEvidenceRequest): Effect.Effect<Writ
         ),
       ]),
     )
-    const page = request.ledger.redact(renderTracePage({ ...request, artifacts: screen.artifacts }))
+    const artifacts = [...screen.artifacts, ...request.written.artifacts]
+    const page = request.ledger.redact(renderTracePage({ ...request, artifacts }))
     const trace = writtenOf([yield* put(request.store, directory, 'trace-page')(textBytesOf(page))])
     return {
-      artifacts: [...screen.artifacts, ...trace.artifacts],
-      failures: [...screen.failures, ...trace.failures],
+      artifacts: [...artifacts, ...trace.artifacts],
+      failures: [...screen.failures, ...request.written.failures, ...trace.failures],
     }
   })

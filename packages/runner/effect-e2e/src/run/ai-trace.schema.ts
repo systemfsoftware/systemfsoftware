@@ -84,6 +84,8 @@ export const AiTrace = Schema.Struct({
 })
 export type AiTrace = typeof AiTrace.Type
 
+export const AiTraceJson = Schema.toCodecJson(AiTrace)
+
 const BASE64_QUAD = 4
 const BASE64_QUAD_BYTES = 3
 
