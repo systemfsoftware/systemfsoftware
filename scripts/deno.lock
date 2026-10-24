@@ -19,14 +19,12 @@
     "jsr:@std/toml@^1.0.3": "1.0.11",
     "jsr:@std/yaml@^1.0.5": "1.2.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
-    "npm:@andrewbranch/untar.js@1.0.4": "1.0.4",
     "npm:@effect/platform-node@4.0.1": "4.0.1_effect@4.0.1_redis@6.3.0__@opentelemetry+api@1.9.1_@opentelemetry+api@1.9.1",
     "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1": "0.3.1",
     "npm:@systemfsoftware/stryker-js@17.0.2": "17.0.2_effect@4.0.1_@opentelemetry+semantic-conventions@1.43.0_redis@6.3.0__@opentelemetry+api@1.9.1_vite@8.3.4_vitest@5.0.3__@opentelemetry+api@1.9.1__vite@8.3.4",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
     "npm:arktype@2.2.3": "2.2.3",
-    "npm:effect@4.0.1": "4.0.1",
-    "npm:es-module-lexer@3.0.2": "3.0.2"
+    "npm:effect@4.0.1": "4.0.1"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -99,9 +97,6 @@
     }
   },
   "npm": {
-    "@andrewbranch/untar.js@1.0.4": {
-      "integrity": "sha512-pVXSwPsLuw8IGLo2Di0EaOfsk+ntVvpkk942J/sHYIkwvtKUakEcPh7HBgZ6tuimgzKSEHgCvO4XgQ05DEbwDw=="
-    },
     "@ark/schema@0.56.2": {
       "integrity": "sha512-Qx4D2JFbBWpntiHZaTv7bGG4H/M2rigiknezKg/WVyDSaLdE4YCcWAOoFB7pjjDqHbbV2OqRfntm1nnXvwMexg==",
       "dependencies": [
@@ -764,9 +759,6 @@
     "es-module-lexer@2.3.2": {
       "integrity": "sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw=="
     },
-    "es-module-lexer@3.0.2": {
-      "integrity": "sha512-BuIB67FngDSyQ/dpQNOZybwdEBDUGJQvOqwWr4ha/ufYiqzuEwPkKO2zLhRAgay28tStRIHUeWmszZAJo3GCOg=="
-    },
     "es-module-lexer@3.0.3": {
       "integrity": "sha512-yWGe1O/j+almnV4hOYrmZo8u58JdnmXEMneRQAYkWtqSiT86yoMIEKF4rpqEDj52tbYl3xceBD3DQIBwcsC9Pw=="
     },
@@ -1111,14 +1103,12 @@
       "jsr:@std/path@1",
       "jsr:@std/toml@^1.0.3",
       "jsr:@std/yaml@^1.2.0",
-      "npm:@andrewbranch/untar.js@1.0.4",
       "npm:@effect/platform-node@4.0.1",
       "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
       "npm:@systemfsoftware/stryker-js@17.0.2",
       "npm:@toon-format/toon@^4.1.1",
       "npm:arktype@2.2.3",
-      "npm:effect@4.0.1",
-      "npm:es-module-lexer@3.0.2"
+      "npm:effect@4.0.1"
     ]
   }
 }
