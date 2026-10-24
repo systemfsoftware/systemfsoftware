@@ -12,12 +12,14 @@ import type { AttemptTest } from '../run/attempt.js'
 import type { TryEnding } from '../run/conclude-attempt.workflow.js'
 import { clearTry, publishedTryOf, publishTry } from './fixtures.js'
 import { attemptFailureOf, type BodyError, bodyFailuresOf } from './try-ending.js'
-import { admitOf, endTry, type OpenTry, openTry, type Wiring, writePartial } from './wiring.js'
+import { admitOf, endTry, type OpenTry, openTry, skipOf, type Wiring, writePartial } from './wiring.js'
 
 declare module 'vitest' {
   interface TaskMeta {
     /** The platforms a test declared with the `platforms` option (requirements AC-2.5). */
     platforms?: ReadonlyArray<TestPlatform>
+    /** The reason a test declared with a string `skip` option; the report and Vitest's skip note both carry it. */
+    skipReason?: string
     e2eConfigRefused?: { readonly path: ReadonlyArray<PathSegment>; readonly expected: string }
   }
 }
@@ -60,6 +62,17 @@ const skipFor = (test: RunnerTask) => (admission: PlatformAdmission): void =>
       test.result = { state: 'skip' }
     },
   })
+
+const admitPlatforms = async (wiring: Wiring, test: RunnerTask): Promise<void> => {
+  const platforms = isQueued(test) ? test.meta.platforms : undefined
+  skipFor(test)(await Effect.runPromise(admitOf({ wiring, test: attemptTestOf(test), platforms })))
+}
+
+const skipWithReason = async (wiring: Wiring, test: RunnerTask, reason: string): Promise<void> => {
+  await Effect.runPromise(skipOf({ wiring, test: attemptTestOf(test), reason }))
+  test.mode = 'skip'
+  test.result = Object.assign({ state: 'skip' as const }, { note: reason })
+}
 
 const errorsOf = (test: RunnerTask): ReadonlyArray<BodyError> =>
   Option.getOrElse(Option.fromNullishOr(test.result?.errors), (): ReadonlyArray<BodyError> => [])
@@ -133,9 +146,10 @@ export class E2EVitestRunner extends HookedTestRunner {
   }
 
   private async admit(wiring: Wiring, test: RunnerTask): Promise<void> {
-    const platforms = isQueued(test) ? test.meta.platforms : undefined
-    const admission = await Effect.runPromise(admitOf({ wiring, test: attemptTestOf(test), platforms }))
-    skipFor(test)(admission)
+    await Option.match(Option.fromNullishOr(test.meta.skipReason), {
+      onNone: () => admitPlatforms(wiring, test),
+      onSome: (reason) => skipWithReason(wiring, test, reason),
+    })
   }
 
   private async endTry(test: RunnerTestCase) {
