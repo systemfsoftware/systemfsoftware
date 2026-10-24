@@ -2199,6 +2199,7 @@ export const Report1: Schema.Struct<{
             readonly handedOff: Schema.Int;
             readonly missed: Schema.Int;
         }>;
+        readonly hitRate: Schema.Finite;
     }>;
 }>;
 
@@ -2370,6 +2371,7 @@ export const RunSummary: Schema.Struct<{
         readonly handedOff: Schema.Int;
         readonly missed: Schema.Int;
     }>;
+    readonly hitRate: Schema.Finite;
 }>;
 
 // @public (undocumented)
@@ -3773,8 +3775,8 @@ export type TestStatus = typeof TestStatus.Type;
 
 // Warnings were encountered during analysis:
 //
-// dist/run-verdict.schema-CMbdMtE5.d.ts:739:11 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point report.d.ts
-// dist/run-verdict.schema-CMbdMtE5.d.ts:913:7 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point report.d.ts
+// dist/run-verdict.schema-Ca6kURxN.d.ts:739:11 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point report.d.ts
+// dist/run-verdict.schema-Ca6kURxN.d.ts:913:7 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point report.d.ts
 
 // (No @packageDocumentation comment for this package)
 

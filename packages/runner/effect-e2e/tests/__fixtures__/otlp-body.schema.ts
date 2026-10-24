@@ -119,3 +119,12 @@ export const metricsOf = (body: string): Effect.Effect<ReadonlyArray<ReceivedMet
         )
       ),
   )
+
+export const totalIn =
+  (metrics: ReadonlyArray<ReceivedMetric>) =>
+  (name: string, dimensions: Readonly<Record<string, string>> = {}): number =>
+    metrics
+      .filter((metric) => metric.name === name)
+      .flatMap((metric) => metric.points)
+      .filter((point) => Object.entries(dimensions).every(([key, value]) => point.attributes[key] === value))
+      .reduce((total, point) => total + point.value, 0)

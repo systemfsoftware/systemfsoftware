@@ -157,6 +157,7 @@ Feature('Building the run report from attempt records')
               interrupted: 0,
               skipped: 0,
               cache: { replayed: 0, handedOff: 0, missed: 3 },
+              hitRate: 0,
             },
             results: [['greets', 'passed', 1], ['saves', 'failed', 1]],
             modelSteps: [

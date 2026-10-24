@@ -41,7 +41,7 @@ export const collected =
       return {
         value,
         spans: yield* decodedAll(bodiesAt('/v1/traces'), spansOf),
-        metrics: yield* decodedAll(bodiesAt('/v1/metrics'), metricsOf),
+        metrics: yield* decodedAll(bodiesAt('/v1/metrics').slice(-1), metricsOf),
         bodies: exports.map((each) => each.body),
       }
     }))

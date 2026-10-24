@@ -8,23 +8,11 @@ import * as HttpClient from 'effect/http/HttpClient'
 import * as Layer from 'effect/Layer'
 import * as Metric from 'effect/Metric'
 
-import { metricsOf, type ReceivedMetric, spansOf } from './__fixtures__/otlp-body.schema.js'
+import { metricsOf, spansOf, totalIn } from './__fixtures__/otlp-body.schema.js'
 import type { OtlpReceiver, ReceivedExport } from './__fixtures__/otlp-receiver.fixture.js'
 import { otlpReceiver } from './__fixtures__/otlp-receiver.fixture.js'
 
 const Feature = makeFeature({ it })
-
-const sumOf = (
-  metrics: ReadonlyArray<ReceivedMetric>,
-  name: string,
-  attribute: string,
-  value: string | number | boolean,
-): number =>
-  metrics
-    .filter((metric) => metric.name === name)
-    .flatMap((metric) => metric.points)
-    .filter((point) => attribute === '' || point.attributes[attribute] === value)
-    .reduce((total, point) => total + point.value, 0)
 
 const stepWork = (telemetry: TelemetryShape) =>
   telemetry.span(
@@ -90,10 +78,10 @@ Feature('Exporting a run to the collector its endpoint names')
             paths: s.received.raw,
             spans: s.received.traces.map((span) => span.name),
             attributes: s.received.traces[0]?.attributes,
-            replayMissed: sumOf(s.received.metrics, 'e2e.replay.outcomes', 'outcome', 'missed'),
-            modelCalls: sumOf(s.received.metrics, 'e2e.model.calls', '', ''),
-            tokensIn: sumOf(s.received.metrics, 'e2e.model.tokens', 'kind', 'input'),
-            tokensOut: sumOf(s.received.metrics, 'e2e.model.tokens', 'kind', 'output'),
+            replayMissed: totalIn(s.received.metrics)('e2e.replay.outcomes', { outcome: 'missed' }),
+            modelCalls: totalIn(s.received.metrics)('e2e.model.calls'),
+            tokensIn: totalIn(s.received.metrics)('e2e.model.tokens', { kind: 'input' }),
+            tokensOut: totalIn(s.received.metrics)('e2e.model.tokens', { kind: 'output' }),
           }).toEqual({
             paths: '/v1/metrics|/v1/traces',
             spans: ['e2e.act'],
