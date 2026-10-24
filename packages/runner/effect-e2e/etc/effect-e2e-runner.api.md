@@ -161,9 +161,10 @@ export interface EngineBinding {
 }
 
 // Warning: (ae-forgotten-export) The symbol "ExitCode" needs to be exported by the entry point runner.d.ts
+// Warning: (ae-forgotten-export) The symbol "ConfigInvalid" needs to be exported by the entry point runner.d.ts
 //
 // @public
-export const exitCodeReporter: (setExitCode: (code: ExitCode) => void) => {
+export const exitCodeReporter: (setExitCode: (code: ExitCode, refusal: ConfigInvalid) => void) => {
     onTestRunEnd: (modules: ReadonlyArray<TestModule>) => void;
 };
 
@@ -249,7 +250,7 @@ export const test: E2ETest;
 
 // Warnings were encountered during analysis:
 //
-// dist/runner.d.ts:96:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
+// dist/runner.d.ts:98:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
 
 // (No @packageDocumentation comment for this package)
 

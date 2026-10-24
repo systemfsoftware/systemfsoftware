@@ -223,6 +223,16 @@ export const ReporterConfig: Schema.NonEmptyArray<Schema.Literals<readonly ["lis
 export type ReporterConfig = typeof ReporterConfig.Type;
 
 // @public
+export const RUN_OVERRIDE_ENV: {
+    readonly target: 'E2E_TARGET';
+    readonly agent: 'E2E_AGENT';
+    readonly cache: 'E2E_CACHE';
+    readonly timeout: 'E2E_TIMEOUT';
+    readonly output: 'E2E_OUTPUT';
+    readonly trace: 'E2E_TRACE';
+};
+
+// @public
 export const RunEnding: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Judged", {
     readonly verdict: Schema.Struct<{
         readonly status: Schema.Literals<readonly ["passed", "failed", "blocked", "error", "interrupted"]>;
@@ -277,6 +287,9 @@ export const RunEnding: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStru
 
 // @public (undocumented)
 export type RunEnding = typeof RunEnding.Type;
+
+// @public
+export type RunOverrideEnvironment = Readonly<Record<string, string | undefined>>;
 
 // @public (undocumented)
 export const RunVerdict: Schema.Struct<{
