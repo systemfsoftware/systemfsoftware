@@ -115,8 +115,10 @@ pkgs.runCommand "schema-law-consumer-check" { nativeBuildInputs = [ pkgs.openssl
     || fail "the packed peers are not effect + vitest"
   printf '%s' "$packed" | jq -e '.peerDependenciesMeta.vitest.optional == true' >/dev/null \
     || fail "vitest is not an optional peer"
-  if tar -xzOf ${tarball} package/dist/index.mjs | grep -q '@systemfsoftware/vitest'; then
-    fail "dist/index.mjs references @systemfsoftware/vitest"
+  # A module specifier naming the fork or one of its subpaths; the `test.provide` key
+  # "@systemfsoftware/vitest:property-check" is data the run budget is read under, not an import.
+  if tar -xzOf ${tarball} package/dist/index.mjs | grep -Eq "[\"']@systemfsoftware/vitest(/[^\"']*)?[\"']"; then
+    fail "dist/index.mjs imports @systemfsoftware/vitest"
   fi
 
   # 2. Offline install of the packed tarball with upstream vitest.
