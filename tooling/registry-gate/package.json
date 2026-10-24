@@ -1,0 +1,31 @@
+{
+  "name": "@systemfsoftware/registry-gate",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "The registry gate: publishes a canary to GitHub Packages, installs it with a GitHub App installation token, and records which registry the workspace's private packages use.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
