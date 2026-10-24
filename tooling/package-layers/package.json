@@ -1,0 +1,33 @@
+{
+  "name": "@systemfsoftware/tooling-package-layers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Checks package-layers.json and every packages/**/package.json against the layer rules: one category per package, no forbidden runtime or peer edge.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "test": "vitest run --config vitest.config.ts",
+    "properties": "vitest run --config vitest.config.ts src"
+  },
+  "exports": {
+    ".": "./src/cli.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node-shared": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

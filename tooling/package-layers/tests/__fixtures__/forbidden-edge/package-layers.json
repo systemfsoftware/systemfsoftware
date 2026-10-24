@@ -1,0 +1,7 @@
+{
+  "core": ["@f/source"],
+  "harness": ["@f/target"],
+  "spec-trace": [],
+  "extracted": [],
+  "frontend": []
+}
