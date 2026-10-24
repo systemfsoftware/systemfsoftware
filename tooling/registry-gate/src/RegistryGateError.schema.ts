@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 
-export const MintStage = Schema.Literals(['doppler', 'sign', 'mint'])
+export const MintStage = Schema.Literals(['doppler', 'oidc', 'sign', 'mint'])
 export type MintStage = typeof MintStage.Type
 
 export class TokenMintFailed extends Schema.TaggedError<TokenMintFailed>()('TokenMintFailed', {

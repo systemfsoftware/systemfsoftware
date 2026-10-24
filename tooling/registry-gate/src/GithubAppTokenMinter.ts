@@ -1,4 +1,4 @@
-import { Clock, Config, Effect, Layer, Match, Redacted, Schema } from 'effect'
+import { Clock, Effect, Layer, Match, Redacted, Schema } from 'effect'
 import * as Base64Url from 'effect/encoding/Base64Url'
 import * as HttpClient from 'effect/http/HttpClient'
 import type * as HttpClientError from 'effect/http/HttpClientError'
@@ -7,6 +7,7 @@ import * as HttpClientResponse from 'effect/http/HttpClientResponse'
 import { AppTokenMinter } from './app-token-minter.service.js'
 import { appJwtClaimsOf, pkcs8DerOf, signingInputOf } from './AppJwt.schema.js'
 import { AppCredentials, InstallationTokenResponse, type MintedToken, mintedTokenOf } from './AppToken.schema.js'
+import { DopplerOidcToken } from './doppler-oidc.service.js'
 import { type MintStage, TokenMintFailed } from './RegistryGateError.schema.js'
 
 const dopplerSecretsUrl = 'https://api.doppler.com/v3/configs/config/secrets/download'
@@ -94,11 +95,13 @@ const mintWith = (
     return yield* requestToken(client, credentials.KIRO_APP_INSTALLATION_ID, jwt)
   })
 
-export const layer: Layer.Layer<AppTokenMinter, Config.ConfigError, HttpClient.HttpClient> = Layer.effect(
+export const layer: Layer.Layer<AppTokenMinter, never, DopplerOidcToken | HttpClient.HttpClient> = Layer.effect(
   AppTokenMinter,
   Effect.gen(function*() {
     const client = yield* HttpClient.HttpClient
-    const dopplerToken = yield* Config.schema(Schema.Redacted(Schema.NonEmptyString), 'DOPPLER_TOKEN')
-    return AppTokenMinter.of({ mint: mintWith(client, dopplerToken) })
+    const oidc = yield* DopplerOidcToken
+    return AppTokenMinter.of({
+      mint: Effect.flatMap(oidc.token, (dopplerToken) => mintWith(client, dopplerToken)),
+    })
   }),
 )
