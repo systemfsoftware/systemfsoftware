@@ -34,10 +34,10 @@ export interface RunFlagValues {
 
 /** The Vitest options the flags carry: pool width, per-test retries, tag selection, and the whole-test deadline. */
 export interface VitestChannels {
-  readonly maxWorkers?: number | undefined
-  readonly retry?: number | undefined
-  readonly tagsFilter?: ReadonlyArray<string> | undefined
-  readonly testTimeout?: number | undefined
+  readonly maxWorkers?: number
+  readonly retry?: number
+  readonly tagsFilter?: Array<string>
+  readonly testTimeout?: number
 }
 
 /** Where each flag lands: the suite environment, the Vitest options, and the run's own choices. */
@@ -67,11 +67,14 @@ const envOf = (flags: RunFlagValues): Readonly<Record<string, string>> =>
     ...entryOf(RUN_OVERRIDE_ENV.trace)(flags.trace),
   ])
 
+const keyed = <K extends keyof VitestChannels>(key: K) => (value: Option.Option<VitestChannels[K]>): VitestChannels =>
+  Option.match(value, { onNone: () => ({}), onSome: (held) => ({ [key]: held }) })
+
 const vitestOf = (flags: RunFlagValues): VitestChannels => ({
-  maxWorkers: Option.getOrUndefined(flags.workers),
-  retry: Option.getOrUndefined(flags.retries),
-  tagsFilter: Option.getOrUndefined(Option.map(flags.tag, (tag) => [tag])),
-  testTimeout: Option.getOrUndefined(flags.timeout),
+  ...keyed('maxWorkers')(flags.workers),
+  ...keyed('retry')(flags.retries),
+  ...keyed('tagsFilter')(Option.map(flags.tag, (tag) => [tag])),
+  ...keyed('testTimeout')(flags.timeout),
 })
 
 const CACHE_CONFLICT = '--no-cache and --strict-cache both choose the cache mode; pass one'

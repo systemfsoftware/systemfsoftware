@@ -39,3 +39,18 @@ export class RunFailed extends Schema.TaggedError<RunFailed>()('RunFailed', {
   override readonly [EXIT_CODE] = 2
   override readonly [LOGGED_BY_RUNTIME] = false
 }
+
+export class RunEnded extends Schema.TaggedError<RunEnded>()('RunEnded', {
+  status: Schema.String,
+  exitCode: Schema.Int,
+}) {
+  override readonly [LOGGED_BY_RUNTIME] = false
+
+  override get [EXIT_CODE](): number {
+    return this.exitCode
+  }
+
+  override get message(): string {
+    return `the run ended ${this.status} (exit ${String(this.exitCode)})`
+  }
+}
