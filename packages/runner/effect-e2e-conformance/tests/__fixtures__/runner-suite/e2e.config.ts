@@ -5,8 +5,8 @@ import * as Option from 'effect/Option'
 
 import { ORIGIN } from './site.js'
 
-// The suite's edge, as a generated e2e.config.ts is: the only fixture file that reads the environment. A scenario
-// picks the run shape by setting these variables on the nested run.
+// The suite's edge, as a generated e2e.config.ts is: the only fixture file that reads the run's configuration from the
+// environment. A scenario picks the run shape by setting these variables on the nested run.
 
 export const ci: boolean = Effect.runSync(Config.String('CI').pipe(Config.withDefault(''))) !== ''
 
