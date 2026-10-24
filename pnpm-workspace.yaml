@@ -14,6 +14,7 @@ catalog:
   microsandbox: 0.7.8
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": ^4.0.5
+  "@effect/platform-bun": 4.0.5
   "@effect/platform-node-shared": ^4.0.5
   effect: ^4.0.5
   "@effect/sql-pglite": ^4.0.5
@@ -95,6 +96,7 @@ packages:
   - packages/toolchain/*
   - packages/trace/*
   - omp/plugins/*
+  - tooling/*
 patchedDependencies:
   rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
 supportedArchitectures:

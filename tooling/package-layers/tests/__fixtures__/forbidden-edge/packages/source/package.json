@@ -1,0 +1,1 @@
+{ "name": "@f/source", "private": true, "version": "0.0.0", "dependencies": { "@f/target": "workspace:^" } }
