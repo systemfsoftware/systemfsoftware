@@ -6,7 +6,7 @@ applies_when:
 tags: [testing, exports, imports-map, public-api]
 ---
 
-A test under tests/ imports its own package only by the package name and the entries its package.json exports field declares for consumers, never by an imports-map (#...) specifier; it imports helpers only from tests/__fixtures__.
+A test under tests/ imports its own package only by the package name and the entries its package.json exports field declares for consumers, never by an imports-map (#...) specifier; it imports helpers only from tests/**fixtures**.
 
 Never add an imports map, a ./testing, ./test-utils or other subpath, or an export from any entry so that a test can reach a module; a law about a pure module's own code is an in-source property test in that module.
 

@@ -23,8 +23,11 @@ it.prop('∀n_Amount_=Decode', { of: [Amount], subject: amountDecodes }, (subjec
 // RIGHT
 const seeds = [-1, 0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]
 const nonNegativeFinite = (n: number): boolean => Number.isFinite(n) && n >= 0
-it.prop('∀n_AmountRefusal_≡NonNegative', { of: [S.Finite], subject: amountDecodes }, (subject, [value]) =>
-  Arr.every(Arr.append(seeds, value), (n) => subject(n) === nonNegativeFinite(n)))
+it.prop(
+  '∀n_AmountRefusal_≡NonNegative',
+  { of: [S.Finite], subject: amountDecodes },
+  (subject, [value]) => Arr.every(Arr.append(seeds, value), (n) => subject(n) === nonNegativeFinite(n)),
+)
 ```
 
 Gate: judge

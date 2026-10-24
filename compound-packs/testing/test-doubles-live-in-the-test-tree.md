@@ -6,9 +6,9 @@ applies_when:
 tags: [testing, test-double, fake, fixtures]
 ---
 
-A stand-in a package's tests or stories use in place of one of its own services or ports (a fake, stub, in-memory or recording double) lives under that package's tests/__fixtures__, never in src/; the Storybook preview provides port fakes imported from there.
+A stand-in a package's tests or stories use in place of one of its own services or ports (a fake, stub, in-memory or recording double) lives under that package's tests/**fixtures**, never in src/; the Storybook preview provides port fakes imported from there.
 
-No package publishes a test double, as an entry, a subpath or a static such as layerTest or layerNoop on a service; a consumer builds its own double in its own tests/__fixtures__.
+No package publishes a test double, as an entry, a subpath or a static such as layerTest or layerNoop on a service; a consumer builds its own double in its own tests/**fixtures**.
 
 Whether a module or package is a test double or a production adapter is decided by the review judge from its importers and its production wiring; an uncertain case escalates.
 

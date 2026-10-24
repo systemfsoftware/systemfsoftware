@@ -6,7 +6,7 @@ applies_when:
 tags: [testing, fake, contract-test, port, store]
 ---
 
-A port fake is built through the port's own service constructor (Tag.of inside Layer.effect(Tag) or Layer.succeed(Tag)), never through Layer.mock, a partial object, a never-typed stub or a type assertion, the fake's module under tests/__fixtures__ included; it implements every operation of the port.
+A port fake is built through the port's own service constructor (Tag.of inside Layer.effect(Tag) or Layer.succeed(Tag)), never through Layer.mock, a partial object, a never-typed stub or a type assertion, the fake's module under tests/**fixtures** included; it implements every operation of the port.
 
 Every port fake runs in one contract suite whose histories run against the fake and the real adapter through pairwiseFor and expect the same result, the same tagged failure for a refused operation included, and every operation of the port appears in at least one history; no test or story uses a fake that suite does not run, so a consumer that builds its own double runs that suite over it in its own tests.
 

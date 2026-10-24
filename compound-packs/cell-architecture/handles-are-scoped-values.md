@@ -19,9 +19,9 @@ export class RunningContainer extends Context.Service<RunningContainer, Containe
 
 ```typescript
 // RIGHT
-const redis = yield* Container.make('redis:7').scoped
-const postgres = yield* Container.make('postgres:16').scoped
-yield* redis.pipe(Container.exec('redis-cli ping'))
+const redis = yield * Container.make('redis:7').scoped
+const postgres = yield * Container.make('postgres:16').scoped
+yield * redis.pipe(Container.exec('redis-cli ping'))
 ```
 
 Gate: judge

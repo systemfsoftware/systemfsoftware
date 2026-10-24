@@ -16,7 +16,9 @@ An operation that would otherwise be a method (a value derived from one instance
 ```typescript
 // WRONG
 export class Order extends S.TaggedClass<Order>()('Order', { qty: Quantity, price: Money }) {
-  withQty(qty: Quantity) { return Order.make({ ...this, qty }) }
+  withQty(qty: Quantity) {
+    return Order.make({ ...this, qty })
+  }
 }
 ```
 

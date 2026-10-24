@@ -14,7 +14,14 @@ A handler never sequences work after its command, such as a second command, a re
 
 ```tsx
 // WRONG
-<Button onClick={async () => { await save(draft); navigate(`/orders/${draft.id}`) }}>Place order</Button>
+<Button
+  onClick={async () => {
+    await save(draft)
+    navigate(`/orders/${draft.id}`)
+  }}
+>
+  Place order
+</Button>
 ```
 
 ```tsx
