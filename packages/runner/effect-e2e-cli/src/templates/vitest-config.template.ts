@@ -3,7 +3,7 @@ export const vitestConfigTemplate = (): string =>
 import { sourceResolveConditions } from '@systemfsoftware/vitest-config'
 import { configDefaults, defineConfig } from 'vitest/config'
 
-import { baseUrl } from './e2e.config.ts'
+import config, { baseUrl } from './e2e.config.ts'
 
 const setExitCode = (code: number): void => {
   process.exitCode = code
@@ -19,6 +19,7 @@ export default defineConfig({
     runner: './runner.ts',
     globalSetup: ['./global-setup.ts'],
     reporters: ['default', exitCodeReporter(setExitCode)],
+    testTimeout: config.timeout ?? 120_000,
   },
 })
 `
