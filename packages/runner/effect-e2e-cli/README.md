@@ -9,8 +9,8 @@ The command line for [`@systemfsoftware/effect-e2e`](../effect-e2e). `effect-e2e
 | `--target <name>`, `--agent <name>`  | Run one target; make the named agent the default                                                                                              |
 | `--tag <tag>`                        | Run only tests carrying the tag (the suite declares its tags)                                                                                 |
 | `--no-cache`, `--strict-cache`       | Cache mode `off` or `read-only`                                                                                                               |
-| `--workers <n>`                      | Vitest's `maxWorkers`; the config's `workers` is not consulted                                                                                |
-| `--retries <n>`                      | Retries per failed test                                                                                                                       |
+| `--workers <n>`                      | Vitest's `maxWorkers`; overrides the config's `workers`                                                                                       |
+| `--retries <n>`                      | Retries per failed test; overrides the config's `retries`                                                                                     |
 | `--timeout <ms>`                     | Whole-test deadline and session budget                                                                                                        |
 | `--output <dir>`                     | Where the report and artifacts go, relative to the suite                                                                                      |
 | `--trace off\|on\|retain-on-failure` | When the trace page is kept                                                                                                                   |
