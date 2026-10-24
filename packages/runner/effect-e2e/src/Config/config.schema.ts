@@ -151,6 +151,8 @@ export type ReporterConfig = typeof ReporterConfig.Type
 export const Trace = Schema.Literals(['off', 'on', 'retain-on-failure'])
 export type Trace = typeof Trace.Type
 
+export const BooleanFlag = Schema.Literals(['true', 'false'])
+
 const workersOf = (defaults: ConfigDefaults): number => Math.min(1024, Math.max(1, Math.floor(defaults.cores / 2)))
 
 const CI_RUN_SHAPE = { retries: 1, workers: 1, cacheMode: 'read-only' } as const
@@ -180,6 +182,7 @@ const configSchemaFor = (defaults: ConfigDefaults, shape: ReturnType<typeof runS
     reporters: ReporterConfig.pipe(Schema.withDecodingDefaultKey(Effect.succeed(['list'] as const))),
     output: SuitePath.pipe(Schema.withDecodingDefaultKey(Effect.succeed('.e2e'))),
     trace: Trace.pipe(Schema.withDecodingDefaultKey(Effect.succeed('retain-on-failure' as const))),
+    aiTrace: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   })
 
 /** The config schema under one run's defaults (requirements §3.2, design §3.1); `decodeConfig` decodes with it. */
