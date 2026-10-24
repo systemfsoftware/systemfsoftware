@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-law",
   "license": "Apache-2.0",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/schema/effect-schema-law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability, generated with @systemfsoftware/vitest and fast-check.",
+  "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability — as plain Vitest tests, generated from Effect Arbitrary and driven by fast-check.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -47,6 +47,9 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "fast-check": "catalog:"
+  },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
@@ -58,16 +61,19 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
-    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:peers",
     "vitest": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "access": "public",

@@ -1,0 +1,71 @@
+name: Nix fetch token for github.com
+description: >-
+  Appends `access-tokens = github.com=<token>` to the user Nix config (`$NIX_CONFIG_HOME/nix.conf`, else
+  `$XDG_CONFIG_HOME/nix/nix.conf`, else `~/.config/nix/nix.conf`), so Nix fetches `github:` flake inputs with the
+  caller's token instead of the job's `GITHUB_TOKEN`. Nix reads that file after `/etc/nix/nix.conf`, and a plain
+  `access-tokens` line replaces the whole setting, so the token wins over the system file whichever step installed Nix.
+  With `remove: true` it deletes the line it appended, and the file when nothing else is left in it; a job runs that
+  as its last step under `if: always()`. An empty token does nothing in either mode.
+inputs:
+  sfs-fetch-token:
+    description: GitHub token with read access to the private repositories the flake's inputs name; pass the caller's `sfs-fetch-token` secret
+    required: false
+    default: ""
+  remove:
+    description: "`true` deletes the line an earlier run of this action appended with the same token"
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Nix fetch token
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.sfs-fetch-token }}
+        REMOVE: ${{ inputs.remove }}
+      run: |
+        if [ -z "$TOKEN" ]; then
+          echo "No sfs-fetch-token passed; Nix fetches github.com with the job's GITHUB_TOKEN"
+          exit 0
+        fi
+        echo "::add-mask::$TOKEN"
+        dir="${NIX_CONFIG_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/nix}"
+        conf="$dir/nix.conf"
+        line="access-tokens = github.com=$TOKEN"
+        fail() {
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          [ -s "$RUNNER_TEMP/sfs-reason" ] || echo sfs-fetch-auth-failed > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=sfs-fetch-auth-failed::$1"
+          exit 1
+        }
+        if [ "$REMOVE" = true ]; then
+          found=0
+          [ -f "$conf" ] && grep -qxF -- "$line" "$conf" || found=$?
+          case "$found" in
+            0) ;;
+            1) echo "No sfs-fetch-token line in $conf to remove"; exit 0 ;;
+            *) fail "could not read $conf to remove the sfs-fetch-token line" ;;
+          esac
+          kept="$conf.sfs-fetch-auth"
+          if ! (
+            umask 077 &&
+              : > "$kept" &&
+              { grep -vxF -- "$line" "$conf" > "$kept" || [ $? -eq 1 ]; } &&
+              if [ -s "$kept" ]; then chmod 600 "$kept" && mv "$kept" "$conf"; else rm -f "$kept" "$conf"; fi
+          ); then
+            rm -f "$kept"
+            fail "could not remove the sfs-fetch-token line from $conf"
+          fi
+          echo "Removed the sfs-fetch-token line from $conf"
+          exit 0
+        fi
+        if ! (
+          umask 077 &&
+            mkdir -p "$dir" &&
+            { [ ! -s "$conf" ] || [ -z "$(tail -c 1 "$conf")" ] || echo >> "$conf"; } &&
+            printf '%s\n' "$line" >> "$conf" &&
+            chmod 600 "$conf"
+        ); then
+          fail "could not write the sfs-fetch-token line to $conf"
+        fi
+        echo "Nix fetches github.com with the sfs-fetch-token from $conf"

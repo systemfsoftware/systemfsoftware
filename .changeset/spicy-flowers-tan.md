@@ -1,5 +1,0 @@
----
-"@systemfsoftware/effect-e2e": minor
----
-
-New `@systemfsoftware/effect-e2e/cache` entry: the `CacheStore` service that persists replay recordings, and two stores for it. `CacheStore` exposes `writable`, `read(digest)`, `write(digest, entry)` and `delete(digest)`. A read never fails: it answers `Hit` with the decoded `trace-1` entry, `Miss`, or `Invalid` with a reason (`unreadable`, `oversized` or `not-trace-1`), which a run treats as a miss. A write answers `Written`, `ReadOnly` or `Oversized` (entries over 1 MiB are never stored), a delete answers `Deleted` or `ReadOnly`, and only a storage failure is `CacheStorageFailed`. `FileCacheStore.layer({ directory, mode })` requires `FileSystem` and `Path` and keeps one `<digest>.json` file per entry with mode 0600, replaced atomically through a temporary file and a rename. `MemoryCacheStore.layer({ mode, seed })` is an in-memory store that answers every operation the same way. Both open as `read-only` or `read-write`; a read-only store never writes or deletes.

@@ -20,6 +20,7 @@ import type { EngineIdentity } from '../cache/key.schema.js'
 import { ConfigInvalid } from '../Config/config-invalid.schema.js'
 import type { AgentConfig, ConfigDefaults, E2EConfig, E2EConfigInput, Target } from '../Config/config.schema.js'
 import { decodeConfig } from '../Config/decode.js'
+import { type RunOverrideEnvironment, withRunOverrides } from '../Config/run-overrides.js'
 import { Engine } from '../engine/engine.service.js'
 import * as OpenAiCompatible from '../model/openai-compatible.js'
 import { writePartial } from '../report/partials.js'
@@ -105,8 +106,12 @@ const engineOf = (config: E2EConfig, options: RunnerOptions): Result.Result<Engi
 export const decodedConfigOf = (request: {
   readonly config: E2EConfigInput
   readonly defaults: ConfigDefaults
+  readonly env: RunOverrideEnvironment
 }): Result.Result<E2EConfig, ConfigInvalid> =>
-  decodeConfig(request.config, request.defaults).pipe(Effect.result, Effect.runSync)
+  Result.flatMap(
+    withRunOverrides(request.config, request.env),
+    (overridden) => decodeConfig(overridden, request.defaults).pipe(Effect.result, Effect.runSync),
+  )
 
 const wiringFor = (
   config: E2EConfig,
@@ -138,7 +143,7 @@ export const wiringOf = (request: {
   readonly runId: Option.Option<RunId>
 }): Result.Result<Wiring, ConfigInvalid> =>
   Result.flatMap(
-    decodedConfigOf({ config: request.config, defaults: request.options.defaults }),
+    decodedConfigOf({ config: request.config, defaults: request.options.defaults, env: request.options.env }),
     (config) => wiringFor(config, request),
   )
 

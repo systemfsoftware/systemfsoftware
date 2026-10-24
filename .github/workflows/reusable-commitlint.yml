@@ -18,6 +18,10 @@ on:
         required: false
         type: string
         default: .#sfs-deps
+    secrets:
+      sfs-fetch-token:
+        description: GitHub token Nix fetches `github:` flake inputs with in the `sfs-deps` job, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
+        required: false
 
 permissions:
   contents: read
@@ -40,6 +44,9 @@ jobs:
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      - uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: produce
         uses: $/.github/actions/sfs-deps
         with:
@@ -55,6 +62,11 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
+          remove: true
 
   commitlint:
     name: lint PR commits
