@@ -121,7 +121,7 @@ export interface EngineSource {
 
 // @public (undocumented)
 export namespace FileArtifactStore {
-    export { FileArtifactStoreOptions, layer, make };
+    export { FileArtifactStoreOptions, layer$1 as layer, make };
 }
 
 // @public (undocumented)
@@ -132,7 +132,12 @@ export const makeAttemptLog: Effect.Effect<AttemptLog>;
 
 // @public (undocumented)
 export namespace MemoryArtifactStore {
-    export { MemoryArtifactStore, MemoryArtifactStoreOptions, layer$1 as layer, make$1 as make };
+    export { MemoryArtifactStore, MemoryArtifactStoreOptions, layer$2 as layer, make$1 as make };
+}
+
+// @public (undocumented)
+export namespace OtlpTelemetry {
+    export { layer, layerFromEnv };
 }
 
 // Warning: (ae-forgotten-export) The symbol "Admitted" needs to be exported by the entry point run.d.ts
@@ -207,6 +212,44 @@ export type SessionWaitForRequest = Omit<WaitForRequest, 'context'>;
 export interface StepHandle<A, E> {
     // (undocumented)
     readonly join: Effect.Effect<A, E>;
+}
+
+// @public
+export const Telemetry: Context.Reference<TelemetryShape>;
+
+// @public
+export type TelemetryAttributeValue = string | number | boolean | ReadonlyArray<string>;
+
+// @public (undocumented)
+export const TelemetryCount: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"ReplayOutcome", {
+    readonly outcome: Schema.Literals<readonly ["replayed", "handed_off", "missed"]>;
+}>, Schema.TaggedStruct<"ModelCalls", {
+    readonly calls: Schema.Finite;
+}>, Schema.TaggedStruct<"ModelTokens", {
+    readonly kind: Schema.Literals<readonly ["input", "output"]>;
+    readonly tokens: Schema.Finite;
+}>]>;
+
+// @public (undocumented)
+export type TelemetryCount = typeof TelemetryCount.Type;
+
+// @public
+export interface TelemetryShape {
+    readonly count: (event: TelemetryCount) => Effect.Effect<void>;
+    // (undocumented)
+    readonly span: TelemetrySpanFn;
+}
+
+// @public
+export interface TelemetrySpan {
+    // (undocumented)
+    readonly set: (key: string, value: TelemetryAttributeValue) => void;
+}
+
+// @public
+export interface TelemetrySpanFn {
+    // (undocumented)
+    <A, E, R>(name: string, attributes: Readonly<Record<string, TelemetryAttributeValue>>, use: (span: TelemetrySpan) => Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
 }
 
 // Warning: (ae-forgotten-export) The symbol "TestSession_base" needs to be exported by the entry point run.d.ts

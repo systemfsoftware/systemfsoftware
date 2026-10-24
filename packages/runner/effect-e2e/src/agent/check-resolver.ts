@@ -12,6 +12,7 @@ import type { Observation } from '../engine/observation.schema.js'
 import type { Message, ModelFailure, ModelRequest, ModelResponse, ToolDefinition } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
+import { Telemetry } from '../run/telemetry.service.js'
 import type { Check, CheckRecord, VisionMode } from '../verdict/check.schema.js'
 import {
   type AppNotOpen,
@@ -28,6 +29,7 @@ import { AdmitCheckAnswer, admitCheckAnswer, ResolveCheckArguments } from './adm
 import { redactMessage, redactRequest } from './redaction.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
+import { spannedGateway } from './step-telemetry.js'
 import { toolDefinitionOf } from './tool-definition.js'
 import { type VisionEvidence, visionEvidenceOf } from './vision.js'
 
@@ -273,7 +275,7 @@ const stepOf = (request: ResolveCheckRequest) =>
       observation: request.observation,
       agent: request.agent,
       maxAttempts: Math.max(0, Math.min(MAX_ATTEMPTS, request.maxModelCalls - request.modelCalls)),
-      gateway: yield* ModelGateway,
+      gateway: spannedGateway(yield* Telemetry)(yield* ModelGateway),
       ledger,
       evidence,
       run: yield* Ref.make<ResolveRun>({ history: [], modelCalls: 0, tokens: { input: 0, output: 0 } }),

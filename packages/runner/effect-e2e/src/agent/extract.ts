@@ -24,6 +24,8 @@ import type {
 } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
+import type { TelemetryShape, TelemetrySpan } from '../run/telemetry.service.js'
+import { Telemetry } from '../run/telemetry.service.js'
 import type { VisionMode } from '../verdict/check.schema.js'
 import { failureClassOf } from '../verdict/failure-class.schema.js'
 import {
@@ -43,6 +45,7 @@ import type { ActContext } from './act.js'
 import { redactRequest } from './redaction.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
+import { annotated, counted, spannedGateway, stepAttributesOf } from './step-telemetry.js'
 import { type VisionEvidence, visionEvidenceOf, visionGate } from './vision.js'
 
 const EXTRACT_MAX_OUTPUT_TOKENS = 4096
@@ -123,6 +126,7 @@ interface Step<I, O> {
   readonly engine: EngineShape
   readonly gateway: ModelGatewayShape
   readonly ledger: SecretLedgerShape
+  readonly telemetry: TelemetryShape
   readonly run: Ref.Ref<Run>
 }
 
@@ -410,12 +414,21 @@ const recordOf = <I, O>(step: Step<I, O>, run: Run, outcome: StepOutcome): Extra
 /** A cancelled step records nothing, as `act` does (design §9.5). */
 const recorded = <I, O>(
   step: Step<I, O>,
+  span: TelemetrySpan,
   exit: Exit.Exit<ExtractResult<O>, ExtractFailure>,
 ): Effect.Effect<void> =>
-  Option.match(outcomeOf(exit), {
-    onNone: () => Effect.void,
-    onSome: (outcome) => Effect.flatMap(Ref.get(step.run), (run) => step.context.record(recordOf(step, run, outcome))),
-  })
+  Effect.flatMap(Ref.get(step.run), (run) =>
+    Effect.andThen(
+      annotated(span)({ 'e2e.model.calls': run.modelCalls }),
+      Option.match(outcomeOf(exit), {
+        onNone: () => Effect.void,
+        onSome: (outcome) =>
+          Effect.andThen(
+            counted(step.telemetry)({ lookup: { _tag: 'Off' }, modelCalls: run.modelCalls, tokens: run.tokens }),
+            step.context.record(recordOf(step, run, outcome)),
+          ),
+      }),
+    ))
 
 const timedOut = <I, O>(step: Step<I, O>): StepTimeout =>
   new StepTimeout({
@@ -427,6 +440,7 @@ const orDefault = <A>(value: A | undefined, fallback: A): A => value ?? fallback
 
 const stepOf = <I, O>(request: ExtractRequest<I, O>) =>
   Effect.gen(function*() {
+    const telemetry = yield* Telemetry
     return {
       context: request.context,
       instruction: request.instruction,
@@ -435,8 +449,9 @@ const stepOf = <I, O>(request: ExtractRequest<I, O>) =>
       maxModelCalls: orDefault(request.maxModelCalls, 2),
       timeout: Duration.fromInputUnsafe(orDefault(request.timeout, request.context.timeout)),
       engine: yield* Engine,
-      gateway: yield* ModelGateway,
+      gateway: spannedGateway(telemetry)(yield* ModelGateway),
       ledger: yield* SecretLedger,
+      telemetry,
       run: yield* Ref.make(FRESH_RUN),
     } satisfies Step<I, O>
   })
@@ -449,7 +464,12 @@ export const extract = <I, O>(
   request: ExtractRequest<I, O>,
 ): Effect.Effect<ExtractResult<O>, ExtractFailure, Engine | ModelGateway | SecretLedger> =>
   Effect.flatMap(stepOf(request), (step) =>
-    stepped(step).pipe(
-      Effect.timeoutOrElse({ duration: step.timeout, orElse: () => Effect.fail(timedOut(step)) }),
-      Effect.onExit((exit) => recorded(step, exit)),
+    step.telemetry.span(
+      'e2e.extract',
+      { ...stepAttributesOf(step.context), 'e2e.vision.mode': String(step.vision) },
+      (span) =>
+        stepped(step).pipe(
+          Effect.timeoutOrElse({ duration: step.timeout, orElse: () => Effect.fail(timedOut(step)) }),
+          Effect.onExit((exit) => recorded(step, span, exit)),
+        ),
     ))

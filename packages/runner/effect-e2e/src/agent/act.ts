@@ -39,6 +39,8 @@ import type { Observation } from '../engine/observation.schema.js'
 import type { Message, ModelAnswer, ModelFailure, ModelRequest, ModelResponse } from '../model/model.schema.js'
 import type { ModelGatewayShape } from '../model/model.service.js'
 import { ModelGateway } from '../model/model.service.js'
+import type { TelemetryShape, TelemetrySpan } from '../run/telemetry.service.js'
+import { Telemetry } from '../run/telemetry.service.js'
 import type { ModelRef } from '../verdict/check.schema.js'
 import { failureClassOf } from '../verdict/failure-class.schema.js'
 import {
@@ -75,6 +77,14 @@ import { recordedFlow, RecordFlow } from './recorded-flow.workflow.js'
 import { redactMessage, redactRequest } from './redaction.js'
 import type { SecretLedgerShape } from './secret-ledger.service.js'
 import { SecretLedger } from './secret-ledger.service.js'
+import {
+  annotated,
+  cacheOutcomeOf,
+  counted,
+  engineActionAttributesOf,
+  spannedGateway,
+  stepAttributesOf,
+} from './step-telemetry.js'
 
 /** One committed action, as `onAction` receives it. */
 export interface ActionEvent {
@@ -193,6 +203,7 @@ interface Step {
   readonly gateway: ModelGatewayShape
   readonly store: CacheStoreShape
   readonly ledger: SecretLedgerShape
+  readonly telemetry: TelemetryShape
   readonly run: Ref.Ref<Run>
 }
 
@@ -263,10 +274,15 @@ const performed = (
   step: Step,
   action: Action,
 ): Effect.Effect<Result.Result<void, Rejection>, SecretUnavailable | AppNotOpen | AppUnreachable> =>
-  resolvedOf(step, action).pipe(
-    Effect.flatMap((resolved) => step.engine.act(resolved)),
-    Effect.map(() => Result.succeed<void>(undefined)),
-    Effect.catchTag(REJECTIONS, (rejected) => rejected.pipe(Result.fail, Effect.succeed)),
+  step.telemetry.span(
+    'e2e.engine.action',
+    engineActionAttributesOf((text) => step.ledger.redact(text))(action),
+    () =>
+      resolvedOf(step, action).pipe(
+        Effect.flatMap((resolved) => step.engine.act(resolved)),
+        Effect.map(() => Result.succeed<void>(undefined)),
+        Effect.catchTag(REJECTIONS, (rejected) => rejected.pipe(Result.fail, Effect.succeed)),
+      ),
   )
 
 const committed = (
@@ -338,23 +354,41 @@ const replayLookupOf = (decision: ReplayDecision): CacheLookup =>
 const replayedSummaryOf = (step: Step, actions: ReadonlyArray<RecordedAction>): string =>
   step.ledger.redact(`replayed ${actions.map((recorded) => describeAction(recorded.action)).join(', ')}`)
 
+const stopReasonOf = (decision: ReplayDecision): string =>
+  Match.valueTags(decision, {
+    Miss: () => 'none',
+    Replayed: () => 'none',
+    HandOff: ({ reason }) => reason._tag,
+  })
+
 /** Replays a recording; `Some` is the finished step, `None` hands the step to the live loop. */
 const replayed = (step: Step, keying: Keying, stored: TraceEntry, entry: TraceEntry, start: Observation) =>
-  Effect.gen(function*() {
-    const steps = yield* replayFrom(step, entry.actions, 0)
-    const end = yield* settled(step.engine)
-    const decision = decided(
-      classifyReplay(
-        new ClassifyReplay({ mode: step.context.cache.mode, entry, transcript: { start, steps, end, alerts: [] } }),
-      ),
-    )
-    yield* update(step, (run) => ({ ...run, lookup: replayLookupOf(decision), existing: Option.some(stored) }))
-    return Match.valueTags(decision, {
-      Replayed: (): Option.Option<Finished> => Option.some({ summary: replayedSummaryOf(step, entry.actions), end }),
-      HandOff: (): Option.Option<Finished> => Option.none(),
-      Miss: (): Option.Option<Finished> => Option.none(),
-    })
-  })
+  step.telemetry.span(
+    'e2e.replay',
+    { 'e2e.replay.recorded_actions': entry.actions.length },
+    (span) =>
+      Effect.gen(function*() {
+        const steps = yield* replayFrom(step, entry.actions, 0)
+        const end = yield* settled(step.engine)
+        const decision = decided(
+          classifyReplay(
+            new ClassifyReplay({ mode: step.context.cache.mode, entry, transcript: { start, steps, end, alerts: [] } }),
+          ),
+        )
+        const lookup = replayLookupOf(decision)
+        yield* annotated(span)({
+          'e2e.cache.outcome': cacheOutcomeOf(lookup),
+          'e2e.replay.stop_reason': stopReasonOf(decision),
+        })
+        yield* update(step, (run) => ({ ...run, lookup, existing: Option.some(stored) }))
+        return Match.valueTags(decision, {
+          Replayed: (): Option.Option<Finished> =>
+            Option.some({ summary: replayedSummaryOf(step, entry.actions), end }),
+          HandOff: (): Option.Option<Finished> => Option.none(),
+          Miss: (): Option.Option<Finished> => Option.none(),
+        })
+      }),
+  )
 
 const missed = (step: Step): Effect.Effect<Option.Option<Finished>> =>
   Effect.as(update(step, (run) => ({ ...run, lookup: { _tag: 'Missed' } })), Option.none<Finished>())
@@ -648,11 +682,21 @@ const recordOf = (step: Step, run: Run, outcome: StepOutcome): ActRecord => ({
 })
 
 /** A cancelled step records nothing, so the cache is left as it was (design §9.5). */
-const recorded = (step: Step, exit: Exit.Exit<ActResult, ActFailure>): Effect.Effect<void> =>
-  Option.match(outcomeOf(exit), {
-    onNone: () => Effect.void,
-    onSome: (outcome) => Effect.flatMap(Ref.get(step.run), (run) => step.context.record(recordOf(step, run, outcome))),
-  })
+const recorded = (step: Step, span: TelemetrySpan, exit: Exit.Exit<ActResult, ActFailure>): Effect.Effect<void> =>
+  Effect.flatMap(Ref.get(step.run), (run) =>
+    Effect.andThen(
+      annotated(span)({
+        'e2e.cache.outcome': cacheOutcomeOf(run.lookup),
+        'e2e.model.calls': run.modelCalls,
+        'e2e.tokens.input': run.tokens.input,
+        'e2e.tokens.output': run.tokens.output,
+      }),
+      Option.match(outcomeOf(exit), {
+        onNone: () => Effect.void,
+        onSome: (outcome) =>
+          Effect.andThen(counted(step.telemetry)(run), step.context.record(recordOf(step, run, outcome))),
+      }),
+    ))
 
 const timedOut = (step: Step): StepTimeout =>
   new StepTimeout({
@@ -668,6 +712,7 @@ const stepOf = (request: ActRequest) =>
   Effect.gen(function*() {
     const { context } = request
     const params = orDefault(request.params, {})
+    const telemetry = yield* Telemetry
     return {
       context,
       instruction: request.instruction,
@@ -678,9 +723,10 @@ const stepOf = (request: ActRequest) =>
       timeout: Duration.fromInputUnsafe(orDefault(request.timeout, context.timeout)),
       onAction: orDefault(request.onAction, NO_EVENTS),
       engine: yield* Engine,
-      gateway: yield* ModelGateway,
+      gateway: spannedGateway(telemetry)(yield* ModelGateway),
       store: yield* CacheStore,
       ledger: yield* SecretLedger,
+      telemetry,
       run: yield* Ref.make(FRESH_RUN),
     } satisfies Step
   })
@@ -692,8 +738,12 @@ const stepOf = (request: ActRequest) =>
 export const act = (
   request: ActRequest,
 ): Effect.Effect<ActResult, ActFailure, Engine | ModelGateway | CacheStore | SecretLedger> =>
-  Effect.flatMap(stepOf(request), (step) =>
-    stepped(step).pipe(
-      Effect.timeoutOrElse({ duration: step.timeout, orElse: () => Effect.fail(timedOut(step)) }),
-      Effect.onExit((exit) => recorded(step, exit)),
-    ))
+  Effect.flatMap(
+    stepOf(request),
+    (step) =>
+      step.telemetry.span('e2e.act', stepAttributesOf(step.context), (span) =>
+        stepped(step).pipe(
+          Effect.timeoutOrElse({ duration: step.timeout, orElse: () => Effect.fail(timedOut(step)) }),
+          Effect.onExit((exit) => recorded(step, span, exit)),
+        )),
+  )

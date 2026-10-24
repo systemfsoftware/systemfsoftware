@@ -27,6 +27,12 @@ export type TestStatus = typeof TestStatus.Type
 export const CacheCounts = Schema.Struct({ replayed: Count, handedOff: Count, missed: Count })
 export type CacheCounts = typeof CacheCounts.Type
 
+export const HitRate = Schema.Finite.check(
+  Schema.isGreaterThanOrEqualTo(0, { message: 'a hit rate is a fraction between 0 and 1' }),
+  Schema.isLessThanOrEqualTo(1, { message: 'a hit rate is a fraction between 0 and 1' }),
+)
+export type HitRate = typeof HitRate.Type
+
 export const ArtifactKind = Schema.Literals(['screenshot', 'screen-text', 'trace-page', 'ai-trace'])
 export type ArtifactKind = typeof ArtifactKind.Type
 
@@ -93,6 +99,7 @@ export const RunSummary = Schema.Struct({
   interrupted: Count,
   skipped: Count,
   cache: CacheCounts,
+  hitRate: HitRate,
 })
 export type RunSummary = typeof RunSummary.Type
 
@@ -124,21 +131,32 @@ const countOf = (results: ReadonlyArray<TestResult>, status: TestStatus): number
 const sumOf = (results: ReadonlyArray<TestResult>, field: keyof CacheCounts): number =>
   Arr.reduce(results, 0, (total, result) => total + result.cache[field])
 
-/** The summary is counted from the results, never carried, so it cannot disagree with them. */
-export const summaryOf = (results: ReadonlyArray<TestResult>): RunSummary => ({
-  tests: results.length,
-  passed: countOf(results, 'passed'),
-  failed: countOf(results, 'failed'),
-  blocked: countOf(results, 'blocked'),
-  error: countOf(results, 'error'),
-  interrupted: countOf(results, 'interrupted'),
-  skipped: countOf(results, 'skipped'),
-  cache: {
-    replayed: sumOf(results, 'replayed'),
-    handedOff: sumOf(results, 'handedOff'),
-    missed: sumOf(results, 'missed'),
-  },
+const hitRateOf = (cache: CacheCounts): HitRate => {
+  const eligible = cache.replayed + cache.handedOff + cache.missed
+  return eligible === 0 ? 0 : cache.replayed / eligible
+}
+
+const cacheCountsOf = (results: ReadonlyArray<TestResult>): CacheCounts => ({
+  replayed: sumOf(results, 'replayed'),
+  handedOff: sumOf(results, 'handedOff'),
+  missed: sumOf(results, 'missed'),
 })
+
+/** The summary is counted from the results, never carried, so it cannot disagree with them. */
+export const summaryOf = (results: ReadonlyArray<TestResult>): RunSummary => {
+  const cache = cacheCountsOf(results)
+  return {
+    tests: results.length,
+    passed: countOf(results, 'passed'),
+    failed: countOf(results, 'failed'),
+    blocked: countOf(results, 'blocked'),
+    error: countOf(results, 'error'),
+    interrupted: countOf(results, 'interrupted'),
+    skipped: countOf(results, 'skipped'),
+    cache,
+    hitRate: hitRateOf(cache),
+  }
+}
 
 const outcomeCodesOf = (outcome: StepOutcome): ReadonlyArray<string> =>
   Match.valueTags(outcome, {
