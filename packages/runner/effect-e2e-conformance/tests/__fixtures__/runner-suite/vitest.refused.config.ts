@@ -3,4 +3,7 @@ import { defineConfig } from 'vitest/config'
 
 import { suiteTestOf } from './suite-config.js'
 
-export default defineConfig({ ...sourceResolveConditions, test: suiteTestOf('./refused-runner.ts') })
+export default defineConfig({
+  ...sourceResolveConditions,
+  test: suiteTestOf({ runner: './refused-runner.ts', globalSetup: './refused-global-setup.ts' }),
+})

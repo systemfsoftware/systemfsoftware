@@ -5,9 +5,17 @@ const setExitCode = (code: number): void => {
   process.exitCode = code
 }
 
-export const suiteTestOf = (runner: string): NonNullable<ViteUserConfig['test']> => ({
+export interface SuiteModules {
+  readonly runner: string
+  readonly globalSetup: string
+}
+
+export const suiteTestOf = (modules: SuiteModules): NonNullable<ViteUserConfig['test']> => ({
   include: [...e2eTestFiles.include],
   exclude: [...e2eTestFiles.exclude],
-  runner,
+  runner: modules.runner,
+  globalSetup: modules.globalSetup,
+  pool: 'forks',
+  maxWorkers: 2,
   reporters: ['default', ['json', { outputFile: '.e2e/vitest.json' }], exitCodeReporter(setExitCode)],
 })
