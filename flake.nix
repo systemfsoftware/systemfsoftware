@@ -126,6 +126,7 @@
             pkgs.nodejs_24
             pkgs.pnpm_12
             pkgs.deno
+            pkgs.bun
           ];
           SANDBOX_PNPM_STORE = self.packages.${pkgs.stdenv.hostPlatform.system}.pnpm-store;
         };
