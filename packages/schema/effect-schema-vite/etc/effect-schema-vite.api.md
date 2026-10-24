@@ -10,14 +10,16 @@ import { Schema } from 'effect';
 // Warning: (ae-forgotten-export) The symbol "LawSuiteSource" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => LawSuiteSource;
+export const generateSchemaLaws: (lawFilePath: string, srcDir: string, runs?: Readonly<Record<string, number>>) => LawSuiteSource;
 
 // @public (undocumented)
 export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2;
 
 // @public
 export interface InlineSchemaTestsOptions {
+    // (undocumented)
     dir?: string;
+    runs?: Readonly<Record<string, number>>;
 }
 
 // @public

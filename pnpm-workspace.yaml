@@ -24,6 +24,7 @@ catalog:
   "@opentelemetry/resources": ^2.12.0
   "@opentelemetry/semantic-conventions": ^1.43.0
   fast-check: ^4.10.2
+  "@noble/hashes": ^2.4.0
   vitest: ^5.0.5
   "@vitest/coverage-v8": ^5.0.5
   "@vitest/coverage-istanbul": ^5.0.5

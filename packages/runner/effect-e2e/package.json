@@ -1,0 +1,157 @@
+{
+  "name": "@systemfsoftware/effect-e2e",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/runner/effect-e2e"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/effect-e2e#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Effect-native end-to-end testing: a runtime-neutral core whose suite config is plain data, decoded once at the edge.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "e2e",
+    "end-to-end",
+    "testing",
+    "schema",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./agent": {
+      "@systemfsoftware/source": "./src/agent/mod.ts",
+      "types": "./dist/agent.d.ts",
+      "default": "./dist/agent.mjs"
+    },
+    "./cache": {
+      "@systemfsoftware/source": "./src/cache/mod.ts",
+      "types": "./dist/cache.d.ts",
+      "default": "./dist/cache.mjs"
+    },
+    "./engine": {
+      "@systemfsoftware/source": "./src/engine/mod.ts",
+      "types": "./dist/engine.d.ts",
+      "default": "./dist/engine.mjs"
+    },
+    "./model": {
+      "@systemfsoftware/source": "./src/model/mod.ts",
+      "types": "./dist/model.d.ts",
+      "default": "./dist/model.mjs"
+    },
+    "./report": {
+      "@systemfsoftware/source": "./src/report/mod.ts",
+      "types": "./dist/report.d.ts",
+      "default": "./dist/report.mjs"
+    },
+    "./run": {
+      "@systemfsoftware/source": "./src/run/mod.ts",
+      "types": "./dist/run.d.ts",
+      "default": "./dist/run.mjs"
+    },
+    "./runner": {
+      "@systemfsoftware/source": "./src/runner/mod.ts",
+      "types": "./dist/runner.d.ts",
+      "default": "./dist/runner.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "mutation": "stryker run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.engine.json && api-extractor-quiet run --config api-extractor.model.json && api-extractor-quiet run --config api-extractor.cache.json && api-extractor-quiet run --config api-extractor.agent.json && api-extractor-quiet run --config api-extractor.run.json && api-extractor-quiet run --config api-extractor.report.json && api-extractor-quiet run --config api-extractor.runner.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.engine.json && api-extractor run --local --config api-extractor.model.json && api-extractor run --local --config api-extractor.cache.json && api-extractor run --local --config api-extractor.agent.json && api-extractor run --local --config api-extractor.run.json && api-extractor run --local --config api-extractor.report.json && api-extractor run --local --config api-extractor.runner.json",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@noble/hashes": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./agent": {
+        "types": "./dist/agent.d.ts",
+        "default": "./dist/agent.mjs"
+      },
+      "./cache": {
+        "types": "./dist/cache.d.ts",
+        "default": "./dist/cache.mjs"
+      },
+      "./engine": {
+        "types": "./dist/engine.d.ts",
+        "default": "./dist/engine.mjs"
+      },
+      "./model": {
+        "types": "./dist/model.d.ts",
+        "default": "./dist/model.mjs"
+      },
+      "./report": {
+        "types": "./dist/report.d.ts",
+        "default": "./dist/report.mjs"
+      },
+      "./run": {
+        "types": "./dist/run.d.ts",
+        "default": "./dist/run.mjs"
+      },
+      "./runner": {
+        "types": "./dist/runner.d.ts",
+        "default": "./dist/runner.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

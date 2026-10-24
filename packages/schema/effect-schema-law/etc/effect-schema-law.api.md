@@ -13,10 +13,16 @@ export const recursionLaws: {
 };
 
 // @public (undocumented)
-export const ruleOfSchemas: {
-    (name: string): <A, I>(schema: Schema.Codec<A, I>) => void;
-    <A, I>(name: string, schema: Schema.Codec<A, I>): void;
-};
+export function ruleOfSchemas(name: string): <A, I>(schema: Schema.Codec<A, I>, options?: RuleOfSchemasOptions) => void;
+
+// @public (undocumented)
+export function ruleOfSchemas<A, I>(name: string, schema: Schema.Codec<A, I>, options?: RuleOfSchemasOptions): void;
+
+// @public
+export interface RuleOfSchemasOptions {
+    // (undocumented)
+    readonly runs?: number | undefined;
+}
 
 // (No @packageDocumentation comment for this package)
 

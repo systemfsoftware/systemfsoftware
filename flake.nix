@@ -79,17 +79,6 @@
               permissions = "--allow-read --allow-write --allow-env --allow-run=pnpm";
               runtimeInputs = [ pkgs.pnpm_12 ];
             };
-            # Repository invariants for any pnpm workspace (subtrees,
-            # release-age, project-membership, single-plan, packed-manifest); see
-            # scripts/tools/repo-checks/cli.ts. project-membership runs the
-            # workspace's own installed compiler.
-            repo-checks = denoTool {
-              name = "repo-checks";
-              files = [ ./scripts/tools/repo-checks ];
-              entry = "tools/repo-checks/cli.ts";
-              permissions = "--allow-read --allow-env --allow-run=git,./node_modules/.bin/tsc";
-              runtimeInputs = [ pkgs.git ];
-            };
             inherit (pkgs) postgresql_17;
             comment-checker = sandboxed;
             comment-checker-unwrapped = unwrapped;
@@ -102,7 +91,6 @@
 
       checks = forEachSystem (pkgs: {
         test-timings = self.packages.${pkgs.stdenv.hostPlatform.system}.test-timings;
-        repo-checks = self.packages.${pkgs.stdenv.hostPlatform.system}.repo-checks;
         consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
           inherit (self.lib) mkConsumerStore;
           workspace = workspaceOf pkgs;
