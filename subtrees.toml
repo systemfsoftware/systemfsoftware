@@ -27,3 +27,9 @@ name = "worktrunk-scripts"
 url = "https://github.com/systemfsoftware/worktrunk-scripts"
 description = "Deno worktree hooks for worktrunk automating environment setup, warm-copy indexing, and path isolation"
 branch = "main"
+
+[[repos]]
+name = "alchemy"
+url = "https://github.com/alchemy-run/alchemy"
+description = "Alchemy: infrastructure-as-effects framework for provisioning cloud resources from TypeScript"
+tag_prefix = "v2.0.0-beta."
