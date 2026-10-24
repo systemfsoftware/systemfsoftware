@@ -1,0 +1,13 @@
+{
+  "name": "@systemfsoftware/effect-schema-law",
+  "private": true,
+  "version": "0.0.0",
+  "peerDependencies": {
+    "vitest": "npm:@systemfsoftware/vitest@^4"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  }
+}

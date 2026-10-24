@@ -1,0 +1,13 @@
+{
+  "core": [
+    "@f/core"
+  ],
+  "harness": [
+    "@f/harness"
+  ],
+  "spec-trace": [],
+  "extracted": [],
+  "frontend": [
+    "@f/app"
+  ]
+}

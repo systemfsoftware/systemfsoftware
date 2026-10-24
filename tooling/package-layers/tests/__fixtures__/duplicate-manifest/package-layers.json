@@ -1,0 +1,7 @@
+{
+  "core": ["@f/dup"],
+  "harness": [],
+  "spec-trace": [],
+  "extracted": [],
+  "frontend": []
+}

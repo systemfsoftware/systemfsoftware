@@ -1,0 +1,9 @@
+{
+  "core": [
+    "@systemfsoftware/effect-schema-law"
+  ],
+  "harness": [],
+  "spec-trace": [],
+  "extracted": [],
+  "frontend": []
+}

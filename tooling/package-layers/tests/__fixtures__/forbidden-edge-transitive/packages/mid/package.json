@@ -1,0 +1,8 @@
+{
+  "name": "@f/mid",
+  "private": true,
+  "version": "0.0.0",
+  "peerDependencies": {
+    "@f/target": "workspace:^"
+  }
+}
