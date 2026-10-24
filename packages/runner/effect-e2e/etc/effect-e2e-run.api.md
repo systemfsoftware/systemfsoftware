@@ -121,7 +121,7 @@ export interface EngineSource {
 
 // @public (undocumented)
 export namespace FileArtifactStore {
-    export { FileArtifactStoreOptions, layer, make };
+    export { FileArtifactStoreOptions, layer$1 as layer, make };
 }
 
 // @public (undocumented)
@@ -132,7 +132,12 @@ export const makeAttemptLog: Effect.Effect<AttemptLog>;
 
 // @public (undocumented)
 export namespace MemoryArtifactStore {
-    export { MemoryArtifactStore, MemoryArtifactStoreOptions, layer$1 as layer, make$1 as make };
+    export { MemoryArtifactStore, MemoryArtifactStoreOptions, layer$2 as layer, make$1 as make };
+}
+
+// @public (undocumented)
+export namespace OtlpTelemetry {
+    export { layer, layerFromEnv };
 }
 
 // Warning: (ae-forgotten-export) The symbol "Admitted" needs to be exported by the entry point run.d.ts
