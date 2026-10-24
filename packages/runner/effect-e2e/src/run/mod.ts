@@ -9,6 +9,14 @@ export { admitTest, makeAttemptLog } from './attempt.js'
 export { TryEnding } from './conclude-attempt.workflow.js'
 export * as FileArtifactStore from './file-artifact-store.js'
 export type {
+  TelemetryAttributeValue,
+  TelemetryCount,
+  TelemetryShape,
+  TelemetrySpan,
+  TelemetrySpanFn,
+} from './telemetry.service.js'
+export { Telemetry } from './telemetry.service.js'
+export type {
   EngineSource,
   SessionActRequest,
   SessionAgent,

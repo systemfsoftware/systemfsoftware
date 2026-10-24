@@ -209,6 +209,46 @@ export interface StepHandle<A, E> {
     readonly join: Effect.Effect<A, E>;
 }
 
+// Warning: (ae-forgotten-export) The symbol "Telemetry_base" needs to be exported by the entry point run.d.ts
+//
+// @public
+export class Telemetry extends Telemetry_base {
+    static readonly noop: Layer.Layer<Telemetry>;
+}
+
+// @public
+export type TelemetryAttributeValue = string | number | boolean | ReadonlyArray<string>;
+
+// @public
+export const TelemetryCount: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"ReplayOutcome", {
+    readonly outcome: Schema.Literals<readonly ["replayed", "handed_off", "missed"]>;
+}>, Schema.TaggedStruct<"ModelCall", {}>, Schema.TaggedStruct<"ModelTokens", {
+    readonly kind: Schema.Literals<readonly ["input", "output"]>;
+    readonly tokens: Schema.Finite;
+}>]>;
+
+// @public (undocumented)
+export type TelemetryCount = typeof TelemetryCount.Type;
+
+// @public
+export interface TelemetryShape {
+    readonly count: (event: TelemetryCount) => Effect.Effect<void>;
+    // (undocumented)
+    readonly span: TelemetrySpanFn;
+}
+
+// @public
+export interface TelemetrySpan {
+    // (undocumented)
+    readonly set: (key: string, value: TelemetryAttributeValue) => void;
+}
+
+// @public
+export interface TelemetrySpanFn {
+    // (undocumented)
+    <A, E, R>(name: string, attributes: Readonly<Record<string, TelemetryAttributeValue>>, use: (span: TelemetrySpan) => Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+}
+
 // Warning: (ae-forgotten-export) The symbol "TestSession_base" needs to be exported by the entry point run.d.ts
 //
 // @public
