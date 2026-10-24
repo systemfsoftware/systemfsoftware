@@ -27,6 +27,11 @@ const partialRunsOf = (run: SuiteRun) =>
 
 const reportRunIdOf = (run: SuiteRun) => Option.getOrElse(Option.map(run.report, (report) => report.runId), () => '')
 
+const attemptsOf = (run: SuiteRun) =>
+  Option.getOrNull(
+    Option.map(run.report, (report) => Object.fromEntries(report.tests.map((test) => [test.title, test.attempts]))),
+  )
+
 const LOCATOR_TEST = 'Should_Fail_When_TheStatusNeverReadsPro'
 const VALUE_TEST = 'Should_FailThroughVitest_When_TwoValuesDiffer'
 const ASSERTION_TIMEOUT_MS = 400
@@ -44,6 +49,13 @@ const TWO_WORKER_STATUSES = {
   [B_PASSES]: 'passed',
   [B_FAILS]: 'failed',
 }
+
+const attemptsWhenTheSumFailsAfter = (tries: number) => ({
+  [A_READS_FREE]: 1,
+  [A_PASSES]: 1,
+  [B_PASSES]: 1,
+  [B_FAILS]: tries,
+})
 
 const failureOf = (run: SuiteRun, title: string) =>
   run.tests.find((test) => test.title === title) ?? { failure: '', durationMs: 0 }
@@ -214,6 +226,64 @@ Feature('Running a suite under vitest run with the e2e runner')
               { ofTheReportedRun: true, titles: [A_PASSES, A_READS_FREE] },
             ],
             report: { run: ['failed', 1], errors: [], tests: TWO_WORKER_STATUSES },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      "A config's two retries run a failing test three times and a passing test once",
+      Gherkin.Do.pipe(
+        When("the suite runs the two worker files with the config's retries set to 2")(
+          'run',
+          () => runSuite({ config: 'vitest.config.ts', files: WORKER_FILES, env: { RUNNER_SUITE_RETRIES: '2' } }),
+        ),
+        Then('the report records three tries for the failing sum, one for each passing test, and the run exits 1')((
+          s,
+          expect,
+        ) =>
+          expect({ exitCode: s.run.exitCode, attempts: attemptsOf(s.run) }).toEqual({
+            exitCode: 1,
+            attempts: attemptsWhenTheSumFailsAfter(3),
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      "A config's zero retries and one worker run the failing test once and both files in one pool slot",
+      Gherkin.Do.pipe(
+        When("the suite runs the two worker files with the config's retries set to 0 and workers set to 1")(
+          'run',
+          () =>
+            runSuite({
+              config: 'vitest.config.ts',
+              files: WORKER_FILES,
+              env: { RUNNER_SUITE_RETRIES: '0', RUNNER_SUITE_WORKERS: '1' },
+            }),
+        ),
+        Then('the failing sum has one try, both files ran in pool slot 1, and the run exits 1')((s, expect) =>
+          expect({ exitCode: s.run.exitCode, attempts: attemptsOf(s.run), poolIds: s.run.poolIds }).toEqual({
+            exitCode: 1,
+            attempts: attemptsWhenTheSumFailsAfter(1),
+            poolIds: [1],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A CI run whose config writes neither key retries a failing test once and uses one worker',
+      Gherkin.Do.pipe(
+        When('the suite runs the two worker files in CI with no retries or workers in its config')(
+          'run',
+          () => runSuite({ config: 'vitest.config.ts', files: WORKER_FILES, env: { CI: 'true' } }),
+        ),
+        Then('the failing sum has two tries, both files ran in pool slot 1, and the run exits 1')((s, expect) =>
+          expect({ exitCode: s.run.exitCode, attempts: attemptsOf(s.run), poolIds: s.run.poolIds }).toEqual({
+            exitCode: 1,
+            attempts: attemptsWhenTheSumFailsAfter(2),
+            poolIds: [1],
           })
         ),
       ),

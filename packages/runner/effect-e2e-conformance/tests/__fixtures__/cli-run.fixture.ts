@@ -9,6 +9,8 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
+import { distinctPoolIds } from './runner-suite/pool-slot.js'
+
 const PACKAGE_ROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/u, '')
 
 const SCRATCH = `${PACKAGE_ROOT}/.scratch`
@@ -53,6 +55,7 @@ export interface CliRun {
   readonly report: Option.Option<Report1>
   readonly reportText: Option.Option<string>
   readonly partials: number
+  readonly poolIds: ReadonlyArray<number>
 }
 
 export interface CliRequest {
@@ -77,6 +80,12 @@ const partialCountIn = (fs: FileSystem.FileSystem, directory: string) =>
   Effect.option(fs.readDirectory(`${directory}/partials`)).pipe(
     Effect.map(Option.getOrElse((): ReadonlyArray<string> => [])),
     Effect.map((names) => names.filter((name) => name.endsWith('.json') && !name.startsWith('.')).length),
+  )
+
+const poolIdsIn = (fs: FileSystem.FileSystem, suite: string) =>
+  Effect.map(
+    textIn(fs, `${suite}/.e2e/pool-ids`),
+    Option.match({ onNone: (): ReadonlyArray<number> => [], onSome: distinctPoolIds }),
   )
 
 const locatedArgs = ({ suite, args, withoutDirFrom }: CliRequest): ReadonlyArray<string> =>
@@ -118,6 +127,7 @@ export const runCli = (
       report: yield* decodedIn(reportText),
       reportText,
       partials: yield* partialCountIn(fs, directory),
+      poolIds: yield* poolIdsIn(fs, request.suite),
     } satisfies CliRun
   })
 
@@ -153,6 +163,12 @@ export const statusesOf = (report: Option.Option<Report1>): Readonly<Record<stri
   Option.match(report, {
     onNone: () => ({}),
     onSome: ({ results }) => Object.fromEntries(results.map((result) => [result.title, result.status])),
+  })
+
+export const attemptsOf = (report: Option.Option<Report1>): Readonly<Record<string, number>> =>
+  Option.match(report, {
+    onNone: () => ({}),
+    onSome: ({ results }) => Object.fromEntries(results.map((result) => [result.title, result.attempts.length])),
   })
 
 export const runIdOf = (report: Option.Option<Report1>): string | null =>

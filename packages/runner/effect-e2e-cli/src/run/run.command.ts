@@ -38,11 +38,14 @@ const strictCache = Flag.Boolean('strict-cache').pipe(
 )
 
 const workers = Flag.Int('workers').pipe(
-  Flag.withDescription("Vitest's worker count (maxWorkers); the config's own workers value is not consulted"),
+  Flag.withDescription("Vitest's worker count (maxWorkers); overrides the config's workers"),
   Flag.optional,
 )
 
-const retries = Flag.Int('retries').pipe(Flag.withDescription('Retries per failed test'), Flag.optional)
+const retries = Flag.Int('retries').pipe(
+  Flag.withDescription("Retries per failed test; overrides the config's retries"),
+  Flag.optional,
+)
 
 const timeout = Flag.Int('timeout').pipe(
   Flag.withDescription('Milliseconds a whole test may take, the session budget included'),

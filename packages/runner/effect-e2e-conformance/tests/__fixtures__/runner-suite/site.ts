@@ -6,6 +6,8 @@ export const SUITE_OUTPUT = `${import.meta.dirname}/.e2e`
 
 export const ENGINE_OPENS = `${SUITE_OUTPUT}/engine-opens`
 
+export const POOL_IDS = `${SUITE_OUTPUT}/pool-ids`
+
 const node = (id: string, role: string, name: string): SemanticNode => ({
   ref: { id, revision: '1' },
   role,

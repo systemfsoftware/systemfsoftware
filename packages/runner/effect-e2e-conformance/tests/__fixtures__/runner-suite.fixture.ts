@@ -8,6 +8,8 @@ import * as Option from 'effect/Option'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import * as Schema from 'effect/Schema'
 
+import { distinctPoolIds } from './runner-suite/pool-slot.js'
+
 const SUITE_ROOT = `${import.meta.dirname}/runner-suite`
 const OUTPUT = `${SUITE_ROOT}/.e2e`
 
@@ -34,6 +36,7 @@ export interface VitestTest {
 export interface E2ETest {
   readonly title: string
   readonly status: string
+  readonly attempts: number
 }
 
 export interface MergedReport {
@@ -56,6 +59,7 @@ export interface SuiteRun {
   readonly engineOpens: number
   readonly report: Option.Option<MergedReport>
   readonly partials: ReadonlyArray<PartialFile>
+  readonly poolIds: ReadonlyArray<number>
 }
 
 export interface SuiteRequest {
@@ -63,6 +67,7 @@ export interface SuiteRequest {
   readonly config: 'vitest.config.ts' | 'vitest.refused.config.ts'
   readonly files: ReadonlyArray<string>
   readonly stale?: boolean
+  readonly env?: Readonly<Record<string, string>>
 }
 
 const firstLineOf = (messages: ReadonlyArray<string>): string =>
@@ -93,6 +98,12 @@ const engineOpensOf = (fs: FileSystem.FileSystem) =>
     Option.match({ onNone: () => 0, onSome: (text) => text.trim().split('\n').length }),
   )
 
+const poolIdsOf = (fs: FileSystem.FileSystem) =>
+  Effect.map(
+    Effect.option(fs.readFileString(`${OUTPUT}/pool-ids`)),
+    Option.match({ onNone: (): ReadonlyArray<number> => [], onSome: distinctPoolIds }),
+  )
+
 const decodedReport = (text: string) => Schema.decodeEffect(Schema.fromJsonString(Report1))(text)
 
 const mergedReportOf = (report: Report1): MergedReport => ({
@@ -100,7 +111,11 @@ const mergedReportOf = (report: Report1): MergedReport => ({
   status: report.run.status,
   exitCode: report.run.exitCode,
   errors: report.run.errors.map((error) => error.code),
-  tests: report.results.map((result): E2ETest => ({ title: result.title, status: result.status })).toSorted(byTitle),
+  tests: report.results.map((result): E2ETest => ({
+    title: result.title,
+    status: result.status,
+    attempts: result.attempts.length,
+  })).toSorted(byTitle),
 })
 
 const reportOf = (fs: FileSystem.FileSystem) =>
@@ -155,7 +170,7 @@ const staleOutputWritten = (fs: FileSystem.FileSystem) =>
 const nestedRun = (request: SuiteRequest) =>
   Effect.gen(function*() {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-    const env = { PATH: yield* Config.String('PATH'), HOME: yield* Config.String('HOME') }
+    const env = { PATH: yield* Config.String('PATH'), HOME: yield* Config.String('HOME'), ...request.env }
     return yield* spawner.exitCode(
       ChildProcess.make('pnpm', ['exec', 'vitest', 'run', '--config', request.config, ...request.files], {
         cwd: SUITE_ROOT,
@@ -182,6 +197,7 @@ export const runSuite = (request: SuiteRequest) =>
         engineOpens: yield* engineOpensOf(fs),
         report: yield* reportOf(fs),
         partials: yield* partialsOf(fs),
+        poolIds: yield* poolIdsOf(fs),
       } satisfies SuiteRun
     }).pipe(Effect.ensuring(Effect.orDie(clearOutput(fs))))
   }).pipe(Effect.provide(NodeServices.layer), Effect.orDie)
