@@ -1,6 +1,4 @@
----
-"@systemfsoftware/effect-schema-law": minor
----
+# @systemfsoftware/effect-schema-law@6.1.0
 
 Laws register as plain Vitest tests: `@systemfsoftware/vitest` is no longer a peer, `vitest` is an optional peer, and `fast-check` is a dependency. Signatures and test names are unchanged, except the single-inhabitant law drops its `[exempt: deterministic]` suffix. A failure reports the shrunk counterexample and replay seed; an undrawable input or a failed Effect verdict is its own failure, never a refutation. `@systemfsoftware/vitest-config` suites keep their guard and run budget.
 
