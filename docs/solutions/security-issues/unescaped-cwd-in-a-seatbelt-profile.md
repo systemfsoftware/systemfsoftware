@@ -151,6 +151,5 @@ exit=0
 - The same wrapper mounts no `/proc`: mounting procfs inside a new pid
   namespace is refused on hosts that forbid it, and the hook needs no procfs.
   Recorded in the file's own comment next to the bwrap invocation.
-- [`path-mediation-splits-asserted-from-executed.md`](./path-mediation-splits-asserted-from-executed.md)
   — the adjacent boundary defect: a guard whose asserted object and executed
   object differ
