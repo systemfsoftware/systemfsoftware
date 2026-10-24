@@ -1,8 +1,8 @@
 # Installs the effect-schema-law tarball into a consumer outside the monorepo,
 # offline from lib.mkConsumerStore, and proves a plain consumer needs no fork:
 # the packed manifest resolves no @systemfsoftware/* package, vitest is an
-# optional peer, dist imports no fork, and under upstream vitest the codec laws
-# pass through the sync and deterministic registration lanes while a broken
+# optional peer, dist imports no fork, and under upstream vitest the laws pass
+# through every registration lane (sync, Effect, deterministic) while a broken
 # codec fails by refutation, not by a generation error.
 # consumer-load-check proves the toolchain configs load; this one proves the
 # laws run.
@@ -36,14 +36,37 @@ let
 
   lockTemplate = ./pnpm-lock.yaml;
 
-  # The laws a plain consumer registers: a branded string (the sync lane) and a
-  # single-inhabitant literal (the deterministic lane).
+  # The laws a plain consumer registers: a branded string (the sync lane), a
+  # single-inhabitant literal (the deterministic lane), and a budget-less
+  # recursive union whose fields suspend again (the sync and Effect lanes of
+  # recursionLaws, sampled at the crossings one nesting level costs).
   goodLaws = builtins.toFile "law-good.test.ts" ''
-    import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
+    import { recursionLaws, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
     import { Schema as S } from 'effect'
+
+    interface Binary {
+      readonly _tag: 'Binary'
+      readonly left: Expr
+      readonly right: Expr
+    }
+    type Expr =
+      | { readonly _tag: 'Lit'; readonly value: number }
+      | { readonly _tag: 'Id'; readonly name: string }
+      | Binary
+
+    const Lit = S.TaggedStruct('Lit', { value: S.Finite })
+    const Id = S.TaggedStruct('Id', { name: S.String })
+    const Binary = S.TaggedStruct('Binary', {
+      left: S.suspend((): S.Schema<Expr> => Expr),
+      right: S.suspend((): S.Schema<Expr> => Expr),
+    })
+    const Expr: S.Schema<Expr> = S.suspend(
+      (): S.Schema<Expr> => S.Union([Lit, Id, Binary]) as unknown as S.Schema<Expr>,
+    )
 
     ruleOfSchemas('Email', S.String.pipe(S.brand('Email')))
     ruleOfSchemas('Single', S.Literal(1))
+    recursionLaws('Expr', Expr)
   '';
 
   # A codec whose decode is not the inverse of encode: every value refutes the
@@ -136,7 +159,7 @@ pkgs.runCommand "schema-law-consumer-check" { nativeBuildInputs = [ pkgs.openssl
   cp ${goodLaws} law-good.test.ts
   pnpm exec vitest run law-good.test.ts --reporter=json --outputFile=good.json >/dev/null 2>&1 \
     || { jq -r '.testResults[]? | (.message // empty), (.assertionResults[]? | select(.status == "failed") | .fullName, .failureMessages[]?)' good.json >&2 2>/dev/null; fail "the law file failed under upstream vitest"; }
-  for law in "Email_=x" "EmailEnc_=x" "Single_=x"; do
+  for law in "Email_=x" "EmailEnc_=x" "Single_=x" "ExprNesting" "ExprVariants" "Expr_DepthPlusOne"; do
     jq -e --arg law "$law" \
       'any(.testResults[]?.assertionResults[]?; .status == "passed" and (.fullName | contains($law)))' good.json >/dev/null \
       || fail "law $law did not pass under upstream vitest"
