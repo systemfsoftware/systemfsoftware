@@ -80,6 +80,9 @@
               runtimeInputs = [ pkgs.pnpm_12 ];
             };
             inherit (pkgs) postgresql_17;
+            # Bun runs the tooling/* packages; nixpkgs pinned by flake.lock fixes its version
+            # for the dev shell and for CI, which puts this output on PATH.
+            inherit (pkgs) bun;
             comment-checker = sandboxed;
             comment-checker-unwrapped = unwrapped;
             default = dprint;
@@ -126,6 +129,7 @@
             pkgs.nodejs_24
             pkgs.pnpm_12
             pkgs.deno
+            self.packages.${pkgs.stdenv.hostPlatform.system}.bun
           ];
           SANDBOX_PNPM_STORE = self.packages.${pkgs.stdenv.hostPlatform.system}.pnpm-store;
         };

@@ -2,7 +2,7 @@ name: systemfsoftware checks lane
 description: systemfsoftware's steps for each phase of reusable-checks.yml
 inputs:
   lane:
-    description: plan, static, gritlint, test, test-after, timings, gate or docs
+    description: plan, static, gritlint, layers, test, test-after, timings, gate or docs
     required: true
   job:
     description: The test job from the plan, as JSON
@@ -77,6 +77,15 @@ runs:
         test "$status" -ne 0 || { echo '::error::a mutation run outside CI must exit non-zero' >&2; exit 1; }
         printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
           { echo '::error::the run did not end in a refused event for mutation-runs-on-main-ci' >&2; exit 1; }
+
+    - uses: ./.github/actions/install-deps
+      if: inputs.lane == 'layers'
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'layers'
+    - name: bun from the flake
+      if: inputs.lane == 'layers'
+      shell: bash -e {0}
+      run: echo "$(nix build --no-link --print-out-paths .#bun)/bin" >> "$GITHUB_PATH"
 
     - uses: cachix/install-nix-action@v31
       if: inputs.lane == 'docs'

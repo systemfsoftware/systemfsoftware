@@ -70,7 +70,8 @@ jobs:
       lanes: >-
         [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static",
           "docs-run": "./bin/dprint check"},
-        {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}]
+        {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30},
+        {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}]
   scope:
     name: classify · docs-only or full
     runs-on: ubuntu-latest
