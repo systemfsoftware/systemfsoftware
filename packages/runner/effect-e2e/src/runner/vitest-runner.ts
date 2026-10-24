@@ -109,8 +109,15 @@ const endingOf = (test: RunnerTask, errorsBefore: number): TryEnding => ({
 
 /**
  * The e2e runner (design §7.3): Vitest's `TestRunner` with the per-try session lifecycle added. Collection,
- * grouping, selection, retries and reporters stay Vitest's. A config the core refuses fails every test with
- * `CONFIG_INVALID` before any try, so no engine is ever built.
+ * grouping, selection, reporters and the running of retries stay Vitest's. A config the core refuses fails every
+ * test with `CONFIG_INVALID` before any try, so no engine is ever built.
+ *
+ * The run's retries and worker pool follow one precedence rule: CLI flag > config > Vitest default. The config
+ * tier is the decoded `retries` and `workers`, which `e2eRunShape` hands the suite's `vitest.config.ts`; a flag
+ * (`effect-e2e run --retries/--workers`, or Vitest's own `--retry/--maxWorkers`) wins because Vitest merges CLI
+ * options over the config file. Vitest adds two tiers of its own: a test's or `describe`'s own `retries` option
+ * outranks every run-level value, and the `VITEST_MAX_WORKERS` environment variable outranks flag and config
+ * for the pool.
  */
 export class E2EVitestRunner extends HookedTestRunner {
   private readonly wiring: Result.Result<Wiring, ConfigInvalid>
