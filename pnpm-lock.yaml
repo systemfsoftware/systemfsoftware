@@ -2443,6 +2443,9 @@ importers:
 
   packages/runner/effect-e2e-conformance:
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/effect-e2e':
         specifier: workspace:^
         version: link:../effect-e2e

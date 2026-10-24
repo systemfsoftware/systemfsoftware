@@ -17,6 +17,7 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@systemfsoftware/effect-e2e": "workspace:^",
     "@systemfsoftware/effect-e2e-web": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
