@@ -3,6 +3,7 @@ import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import { ChildProcess, ChildProcessSpawner } from 'effect/process'
 import * as Schema from 'effect/Schema'
@@ -129,14 +130,18 @@ export const runVitestJson = ({ suite, files }: VitestJsonRequest) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const path = yield* Path.Path
     const inherited = { PATH: yield* Config.String('PATH'), HOME: yield* Config.String('HOME') }
-    const output = `${suite}/vitest-run.json`
+    const root = path.resolve(suite)
+    const output = path.join(root, '.e2e', 'vitest.json')
     yield* spawner.exitCode(
-      ChildProcess.make(
-        VITEST_BIN,
-        ['run', '--reporter=json', `--outputFile.json=${output}`, ...files],
-        { cwd: suite, env: inherited, extendEnv: false, stdout: 'ignore', stderr: 'ignore' },
-      ),
+      ChildProcess.make(VITEST_BIN, ['run', ...files], {
+        cwd: root,
+        env: inherited,
+        extendEnv: false,
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }),
     )
     const report = yield* Effect.flatMap(fs.readFileString(output), Schema.decodeEffect(VitestReport))
     return Object.fromEntries(
