@@ -10,8 +10,14 @@ import { LawSuiteSource } from './LawSuiteSource.schema.js'
 
 /** @since 0.1.0 */
 export interface InlineSchemaTestsOptions {
-  /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
   dir?: string
+  /**
+   * Property budgets for the generated codec law pairs, keyed by the schema's export name. A schema named here
+   * gets `ruleOfSchemas(name, schema, { runs })`, so its two laws run under that budget instead of the
+   * configured default — for a schema whose round trip is heavy per run and cannot finish the default tier
+   * inside the test timeout.
+   */
+  runs?: Readonly<Record<string, number>>
 }
 
 /**
@@ -58,7 +64,16 @@ const schemaLabelOf = (s: FoundSchema, count: number, specifier: string): string
   return s.name
 }
 
-export const generateSchemaLaws = (lawFilePath: string, srcDir: string): LawSuiteSource => {
+const budgetOf = (runs: Readonly<Record<string, number>> | undefined, name: string): number | undefined => runs?.[name]
+
+const optionsTextOf = (budget: number | undefined): string =>
+  budget === undefined ? '' : `, { runs: ${String(budget)} }`
+
+export const generateSchemaLaws = (
+  lawFilePath: string,
+  srcDir: string,
+  runs?: Readonly<Record<string, number>>,
+): LawSuiteSource => {
   const schemas = findExportedSchemas(srcDir)
   if (schemas.length === 0) return LawSuiteSource.make('// no schemas found\nexport {}\n')
 
@@ -75,7 +90,8 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): LawSuit
         const spec = formatSpecifier(baseDir, s.filePath)
         const count = nameCount.get(s.name) ?? 0
         const label = schemaLabelOf(s, count, spec)
-        return `ruleOfSchemas(${quote(label)}, schema_${i})\nrecursionLaws(${quote(label)}, schema_${i})`
+        const options = optionsTextOf(budgetOf(runs, s.name))
+        return `ruleOfSchemas(${quote(label)}, schema_${i}${options})\nrecursionLaws(${quote(label)}, schema_${i})`
       })
       .join('\n'),
   ].join('\n'))
@@ -125,6 +141,7 @@ const resolveTargetDir = (options: InlineSchemaTestsOptions | undefined): string
   return 'src'
 }
 export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin => {
+  const runBudgets = options?.runs
   const budgets = recursionBudgetTransform()
   let config: ResolvedConfig
 
@@ -144,7 +161,7 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     transform(code, id) {
       const lawFile = targetLawFile(id)
       if (lawFile === undefined) return budgets.transform(code, id)
-      return generateSchemaLaws(lawFile, resolve(config.root, resolveTargetDir(options)))
+      return generateSchemaLaws(lawFile, resolve(config.root, resolveTargetDir(options)), runBudgets)
     },
   }
 }

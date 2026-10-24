@@ -59,23 +59,39 @@ const actStepOf = (text: string): Row => ({
   tokens: { input: 0, output: 0 },
 })
 
+const modelFacts: Row = {
+  cache: { lookup: { _tag: 'Missed' }, write: 'unconfirmed' },
+  modelCalls: 1,
+  tokens: { input: 900, output: 40 },
+}
+
 const judgedStepOf = (text: string): Row => ({
   _tag: 'AssertStep',
   id: 'step-2',
   record: checkRecordOf(text),
   outcome: failedOutcomeOf(text),
+  ...modelFacts,
 })
 
 const stepRowsOf = (text: string): ReadonlyArray<Row> => [
   actStepOf(text),
   judgedStepOf(text),
-  { _tag: 'WaitForStep', id: 'step-3', record: checkRecordOf(text), outcome: inconclusiveOutcomeOf(text) },
+  {
+    _tag: 'WaitForStep',
+    id: 'step-3',
+    record: checkRecordOf(text),
+    outcome: inconclusiveOutcomeOf(text),
+    ...modelFacts,
+  },
   {
     _tag: 'ExtractStep',
     id: 'step-4',
     schemaId: 'Invoice',
     result: { total: 12, lines: [text] },
     outcome: { _tag: 'Passed' },
+    cache: { lookup: { _tag: 'Off' }, write: 'no-change' },
+    modelCalls: 1,
+    tokens: { input: 700, output: 30 },
   },
   {
     _tag: 'LocatorStep',
@@ -90,6 +106,8 @@ const stepRowsOf = (text: string): ReadonlyArray<Row> => [
 
 const refusedStepRowsOf = (text: string): ReadonlyArray<Row> => [
   without(actStepOf(text), 'cache'),
+  without(judgedStepOf(text), 'cache'),
+  without(judgedStepOf(text), 'tokens'),
   without(judgedStepOf(text), 'record'),
   without({ ...judgedStepOf(text), _tag: 'WaitForStep' }, 'record'),
   { ...judgedStepOf(text), record: without(checkRecordOf(text), 'check') },

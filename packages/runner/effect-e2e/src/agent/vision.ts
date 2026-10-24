@@ -35,11 +35,14 @@ export interface VisionGateRequest {
   readonly capabilities: ReadonlyArray<EngineCapability>
 }
 
-export interface VisionEvidenceRequest {
-  readonly mode: VisionMode
+export interface MaskedScreenshotRequest {
   readonly observation: Observation
   readonly engine: EngineShape
   readonly ledger: SecretLedgerShape
+}
+
+export interface VisionEvidenceRequest extends MaskedScreenshotRequest {
+  readonly mode: VisionMode
 }
 
 export interface VisionEvidence {
@@ -85,7 +88,7 @@ const unmaskable: PolicyDenied = new PolicyDenied({
   evidence: [{ _tag: 'LogEvidence', text: 'unmaskable secret on screen' }],
 })
 
-const masksOf = (request: VisionEvidenceRequest): Effect.Effect<ReadonlyArray<Locator>, PolicyDenied> =>
+const masksOf = (request: MaskedScreenshotRequest): Effect.Effect<ReadonlyArray<Locator>, PolicyDenied> =>
   Effect.forEach(
     Arr.filter(visibleNodesOf(request.observation.tree), showsSecret(request.ledger)),
     (node) =>
@@ -106,11 +109,13 @@ const capturedOf = (bytes: Uint8Array): Captured => ({
   screenshot: { _tag: 'ScreenshotEvidence', screenshot: { digest: bytesToHex(sha256(bytes)) } },
 })
 
+export const maskedScreenshotOf = (
+  request: MaskedScreenshotRequest,
+): Effect.Effect<Uint8Array, VisionEvidenceFailure> =>
+  Effect.flatMap(masksOf(request), (mask) => request.ledger.screenshot(request.engine.screenshot({ mask })))
+
 const captured = (request: VisionEvidenceRequest): Effect.Effect<Captured, VisionEvidenceFailure> =>
-  Effect.flatMap(
-    masksOf(request),
-    (mask) => Effect.map(request.ledger.screenshot(request.engine.screenshot({ mask })), capturedOf),
-  )
+  Effect.map(maskedScreenshotOf(request), capturedOf)
 
 const treePartOf = (request: VisionEvidenceRequest): ContentPart => ({
   _tag: 'TextPart',

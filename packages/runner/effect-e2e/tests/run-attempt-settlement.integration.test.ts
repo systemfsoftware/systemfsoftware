@@ -1,6 +1,6 @@
-import type { Attempt } from '@systemfsoftware/effect-e2e'
 import type { StoreMode } from '@systemfsoftware/effect-e2e/cache'
 import type { ModelAnswer } from '@systemfsoftware/effect-e2e/model'
+import type { Attempt } from '@systemfsoftware/effect-e2e/report'
 import type { StepHandle, TestSessionShape, TryEnding } from '@systemfsoftware/effect-e2e/run'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
@@ -10,7 +10,14 @@ import * as Predicate from 'effect/Predicate'
 
 import { done, GREET_SITE, tap } from './__fixtures__/agent-sites.fixture.js'
 import { proposeCause, resolveCheck } from './__fixtures__/judgment-sites.fixture.js'
-import { countedEngine, inTry, type World, worldOf } from './__fixtures__/run-sessions.fixture.js'
+import {
+  countedEngine,
+  EXTRACTS_GREETING,
+  GREETING_SCHEMA,
+  inTry,
+  type World,
+  worldOf,
+} from './__fixtures__/run-sessions.fixture.js'
 import { D1, E1, entryOf } from './__fixtures__/trace-entries.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -52,6 +59,31 @@ const unawaitedAct: Body = (session, world) =>
 
 const openMissing: Body = (session) => session.open('/missing').pipe(Effect.flatMap(joined), Effect.ignore)
 
+const actAssertExtract: Body = (session, world) =>
+  Effect.andThen(
+    actThenAssert('the greeting says hello')(session, world),
+    session.extract({ instruction: 'read the greeting', schema: GREETING_SCHEMA }).pipe(
+      Effect.flatMap(joined),
+      Effect.ignore,
+    ),
+  )
+
+const modelStepsOf = (attempt: Attempt) =>
+  Match.valueTags(attempt, {
+    Ran: ({ steps }) =>
+      steps.flatMap((step) =>
+        Match.valueTags(step, {
+          ActStep: ({ cache, modelCalls, tokens }) => [['act', cache, modelCalls, tokens]],
+          AssertStep: ({ cache, modelCalls, tokens }) => [['assert', cache, modelCalls, tokens]],
+          WaitForStep: ({ cache, modelCalls, tokens }) => [['waitFor', cache, modelCalls, tokens]],
+          ExtractStep: ({ cache, modelCalls, tokens }) => [['extract', cache, modelCalls, tokens]],
+          LocatorStep: () => [],
+          ValueStep: () => [],
+        })
+      ),
+    Skipped: () => [],
+  })
+
 const writesOf = (attempt: Attempt) =>
   Match.valueTags(attempt, {
     Ran: ({ status, errors, steps }) => ({
@@ -62,14 +94,16 @@ const writesOf = (attempt: Attempt) =>
     Skipped: ({ reason }) => ({ skipped: reason }),
   })
 
-const settledAfter = (input: {
+interface TryInput {
   readonly mode: StoreMode
   readonly answers: ReadonlyArray<ModelAnswer>
   readonly body: Body
   readonly ending?: TryEnding
   readonly seeded?: boolean
   readonly failingStore?: boolean
-}) =>
+}
+
+const triedOnce = (input: TryInput) =>
   Effect.gen(function*() {
     const world = yield* worldOf({
       mode: input.mode,
@@ -84,6 +118,12 @@ const settledAfter = (input: {
       engine: engine.source,
       body: (session) => Effect.andThen(input.body(session, world), session.endAttempt(input.ending ?? FINISHED)),
     })
+    return { attempt, world, engine }
+  })
+
+const settledAfter = (input: TryInput) =>
+  Effect.gen(function*() {
+    const { attempt, world, engine } = yield* triedOnce(input)
     const stored = yield* world.store.digests
     const acquisitions = yield* engine.acquisitions
     return {
@@ -246,6 +286,33 @@ Feature('Settling the replay cache and recording the attempt on every ending')
             seededKept: false,
             balanced: true,
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'Every model-driven step keeps its cache decision, model calls and tokens',
+      Gherkin.Do.pipe(
+        When('the try presses Greet, asserts the greeting says hello and extracts the greeting in read-write mode')(
+          'steps',
+          () =>
+            Effect.map(
+              triedOnce({
+                mode: 'read-write',
+                answers: [...PRESS_GREET, ...HOLDS, EXTRACTS_GREETING],
+                body: actAssertExtract,
+              }),
+              ({ attempt }) => modelStepsOf(attempt),
+            ),
+        ),
+        Then(
+          'the act and the assert missed the cache and were saved, the extract never used it, and each reports its own calls and tokens',
+        )((s, expect) =>
+          expect(s.steps).toEqual([
+            ['act', { lookup: { _tag: 'Missed' }, write: 'saved' }, 2, { input: 200, output: 20 }],
+            ['assert', { lookup: { _tag: 'Missed' }, write: 'saved' }, 1, { input: 100, output: 10 }],
+            ['extract', { lookup: { _tag: 'Off' }, write: 'no-change' }, 1, { input: 100, output: 10 }],
+          ])
         ),
       ),
     )

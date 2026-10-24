@@ -3,7 +3,7 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests({ runs: { MergeReports: 150 } })],
   test: {
     ...sharedConfig.test,
     name: 'unit',

@@ -3,6 +3,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import type * as Redacted from 'effect/Redacted'
 import * as Ref from 'effect/Ref'
@@ -27,11 +28,14 @@ import type { EngineIdentity } from '../cache/key.schema.js'
 import type { AgentConfig, E2EConfig, Target } from '../Config/config.schema.js'
 import { Engine, type EngineShape } from '../engine/engine.service.js'
 import { ModelGateway, type ModelGatewayShape } from '../model/model.service.js'
-import type { Attempt } from '../report/report.schema.js'
+import type { ArtifactRef, Attempt, RanAttempt } from '../report/report.schema.js'
 import { failureClassOf } from '../verdict/failure-class.schema.js'
 import type { AppUnreachable, EnvironmentUnavailable, FailureRecord } from '../verdict/failure.schema.js'
 import { StepId, type StepRecord } from '../verdict/step-record.schema.js'
-import { type AttemptLog, type AttemptTest, settleAttempt } from './attempt.js'
+import { AdmitEvidence, admitEvidence, type EvidenceAdmission } from './admit-evidence.workflow.js'
+import { ArtifactStore, type ArtifactStoreShape } from './artifact-store.service.js'
+import { type AttemptLog, type AttemptTest, settleAttempt, withEvidenceFailures } from './attempt.js'
+import { captureScreen, writeEvidence } from './capture-evidence.js'
 import {
   ConcludeAttempt,
   concludeAttempt,
@@ -95,8 +99,9 @@ export interface TestSessionShape {
     request: SessionExtractRequest<I, O>,
   ) => Effect.Effect<StepHandle<ExtractResult<O>, ExtractFailure | EnvironmentUnavailable>>
   /**
-   * Ends the try: interrupts steps still running, closes the engine, settles and writes the cache, and
-   * appends the attempt to the log. Runs uninterruptibly, so every ending reaches the cache decision.
+   * Ends the try: interrupts steps still running, settles and writes the cache, captures the screen when the
+   * `trace` setting admits evidence for the try's status, closes the engine, writes the evidence, and appends the
+   * attempt with its artifacts to the log. Runs uninterruptibly, so every ending reaches the cache decision.
    */
   readonly endAttempt: (ending: TryEnding) => Effect.Effect<Attempt>
 }
@@ -110,6 +115,7 @@ interface Books {
   readonly input: SessionInput
   readonly gateway: ModelGatewayShape
   readonly store: CacheStoreShape
+  readonly artifacts: ArtifactStoreShape
   readonly ledger: SecretLedgerShape
   readonly cell: SynchronizedRef.SynchronizedRef<EngineCell>
   readonly launches: Ref.Ref<ReadonlyArray<Launch>>
@@ -226,17 +232,20 @@ const actRecorder = (books: Books, index: number) => (record: ActRecord): Effect
     tokens: record.tokens,
   }, record.staged)
 
+const judgedStepFields = (index: number, record: JudgmentRecord) => ({
+  id: stepIdOf(index),
+  record: record.record,
+  outcome: record.outcome,
+  cache: { lookup: record.lookup, write: 'no-change' as const },
+  modelCalls: record.modelCalls,
+  tokens: record.tokens,
+})
+
 const assertRecorder = (books: Books, index: number) => (record: JudgmentRecord): Effect.Effect<void> =>
-  recorded(books, index)(
-    { _tag: 'AssertStep', id: stepIdOf(index), record: record.record, outcome: record.outcome },
-    record.staged,
-  )
+  recorded(books, index)({ _tag: 'AssertStep', ...judgedStepFields(index, record) }, record.staged)
 
 const waitForRecorder = (books: Books, index: number) => (record: JudgmentRecord): Effect.Effect<void> =>
-  recorded(books, index)(
-    { _tag: 'WaitForStep', id: stepIdOf(index), record: record.record, outcome: record.outcome },
-    record.staged,
-  )
+  recorded(books, index)({ _tag: 'WaitForStep', ...judgedStepFields(index, record) }, record.staged)
 
 const extractRecorder = (books: Books, index: number) => (record: ExtractRecord): Effect.Effect<void> =>
   recorded(books, index)(
@@ -246,6 +255,9 @@ const extractRecorder = (books: Books, index: number) => (record: ExtractRecord)
       schemaId: record.schemaId,
       result: record.value,
       outcome: record.outcome,
+      cache: { lookup: { _tag: 'Off' }, write: 'no-change' },
+      modelCalls: record.modelCalls,
+      tokens: record.tokens,
     },
     Option.none(),
   )
@@ -256,11 +268,44 @@ const opened = (books: Books, path: string): Effect.Effect<void, AppUnreachable 
     (engine) => Effect.tapError(engine.open(new URL(path, books.input.target.app.url).href), noted(books)),
   )
 
+interface Evidenced {
+  readonly attempt: RanAttempt
+  readonly artifacts: ReadonlyArray<ArtifactRef>
+}
+
+const admissionOf = (books: Books, attempt: RanAttempt): EvidenceAdmission =>
+  Result.match(admitEvidence(new AdmitEvidence({ trace: books.input.config.trace, status: attempt.status })), {
+    onFailure: (missing: never) => missing,
+    onSuccess: (admission) => admission,
+  })
+
+const captured = (books: Books, attempt: RanAttempt): Effect.Effect<Evidenced> =>
+  Effect.gen(function*() {
+    const screen = yield* captureScreen({ engine: yield* SynchronizedRef.get(books.cell), ledger: books.ledger })
+    yield* closeEngine(books)
+    const written = yield* writeEvidence({
+      store: books.artifacts,
+      ledger: books.ledger,
+      test: books.input.test,
+      target: books.input.target.name,
+      agent: books.input.agent.name,
+      attempt,
+      screen,
+    })
+    return { attempt: withEvidenceFailures({ attempt, failures: written.failures }), artifacts: written.artifacts }
+  })
+
+// The screen is read before the engine closes and after the cache settles, so the trace shows the settled writes.
+const evidenced = (books: Books) => (attempt: RanAttempt): Effect.Effect<Evidenced> =>
+  Match.valueTags(admissionOf(books, attempt), {
+    EvidenceAdmitted: () => captured(books, attempt),
+    EvidenceDeclined: () => Effect.as(closeEngine(books), { attempt, artifacts: [] }),
+  })
+
 const endedWith = (books: Books) => (ending: TryEnding): Effect.Effect<Attempt> =>
   Effect.uninterruptible(Effect.gen(function*() {
     const launches = yield* Ref.get(books.launches)
     yield* Scope.close(books.steps, Exit.void)
-    yield* closeEngine(books)
     const conclusion = concludeAttempt(
       new ConcludeAttempt({
         ending,
@@ -269,17 +314,18 @@ const endedWith = (books: Books) => (ending: TryEnding): Effect.Effect<Attempt> 
         sessionErrors: yield* Ref.get(books.errors),
       }),
     )
-    const attempt = yield* settleAttempt({
+    const { attempt, artifacts } = yield* settleAttempt({
       retry: books.input.retry,
       mode: books.input.config.cache.mode,
       store: books.store,
       conclusion: Result.match(conclusion, { onFailure: (missing: never) => missing, onSuccess: (decided) => decided }),
-    })
+    }).pipe(Effect.flatMap(evidenced(books)))
     yield* books.input.log.append({
       test: books.input.test,
       target: books.input.target.name,
       agent: books.input.agent.name,
       attempt,
+      artifacts,
     })
     return attempt
   }))
@@ -316,13 +362,16 @@ const shapeOf = (books: Books): TestSessionShape => ({
   endAttempt: endedWith(books),
 })
 
-const make = (input: SessionInput): Effect.Effect<TestSessionShape, never, Scope.Scope | ModelGateway | CacheStore> =>
+const make = (
+  input: SessionInput,
+): Effect.Effect<TestSessionShape, never, Scope.Scope | ModelGateway | CacheStore | ArtifactStore> =>
   Effect.gen(function*() {
     const scope = yield* Scope.Scope
     const books: Books = {
       input,
       gateway: yield* ModelGateway,
       store: yield* CacheStore,
+      artifacts: yield* ArtifactStore,
       ledger: yield* SecretLedger.make(input.secrets),
       cell: yield* SynchronizedRef.make<EngineCell>(Option.none()),
       launches: yield* Ref.make<ReadonlyArray<Launch>>([]),
@@ -345,6 +394,7 @@ const make = (input: SessionInput): Effect.Effect<TestSessionShape, never, Scope
 export class TestSession extends Context.Service<TestSession, TestSessionShape>()(
   '@systemfsoftware/effect-e2e/run/TestSession',
 ) {
-  static readonly layer = (input: SessionInput): Layer.Layer<TestSession, never, ModelGateway | CacheStore> =>
-    Layer.effect(this)(make(input))
+  static readonly layer = (
+    input: SessionInput,
+  ): Layer.Layer<TestSession, never, ModelGateway | CacheStore | ArtifactStore> => Layer.effect(this)(make(input))
 }

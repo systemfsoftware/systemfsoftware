@@ -34,642 +34,6 @@ export const AgentConfig: Schema.Struct<{
 export type AgentConfig = typeof AgentConfig.Type;
 
 // @public (undocumented)
-export const Attempt: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Ran", {
-    readonly id: Schema.brand<Schema.String, "AttemptId">;
-    readonly retry: Schema.Int;
-    readonly status: Schema.Literals<readonly ["passed", "failed", "blocked", "error", "interrupted"]>;
-    readonly steps: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"ActStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly instruction: Schema.String;
-        readonly params: Schema.$Record<Schema.String, Schema.Codec<Schema.Json, Schema.Json, never, never>>;
-        readonly actions: Schema.$Array<Schema.Struct<{
-            readonly action: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Navigate", {
-                readonly url: Schema.String;
-            }>, Schema.TaggedStruct<"Tap", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"Fill", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly value: Schema.Union<readonly [Schema.String, Schema.Struct<{
-                    readonly secret: Schema.String;
-                }>, Schema.Struct<{
-                    readonly credential: Schema.String;
-                }>]>;
-            }>, Schema.TaggedStruct<"Type", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly text: Schema.String;
-            }>, Schema.TaggedStruct<"Press", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly key: Schema.String;
-            }>, Schema.TaggedStruct<"Select", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly option: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"ByValue", {
-                    readonly value: Schema.String;
-                }>, Schema.TaggedStruct<"ByLabel", {
-                    readonly label: Schema.String;
-                }>]>;
-            }>, Schema.TaggedStruct<"Check", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly checked: Schema.Boolean;
-            }>, Schema.TaggedStruct<"Hover", {
-                readonly target: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"Drag", {
-                readonly from: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly to: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"Swipe", {
-                readonly direction: Schema.Literals<readonly ["up", "down", "left", "right"]>;
-                readonly momentum: Schema.Literals<readonly ["none", "slow", "fast"]>;
-            }>, Schema.TaggedStruct<"SwipePath", {
-                readonly path: Schema.$Array<Schema.Struct<{
-                    readonly x: Schema.Finite;
-                    readonly y: Schema.Finite;
-                }>>;
-            }>, Schema.TaggedStruct<"TapAt", {
-                readonly point: Schema.Struct<{
-                    readonly x: Schema.Finite;
-                    readonly y: Schema.Finite;
-                }>;
-            }>, Schema.TaggedStruct<"TypeAt", {
-                readonly point: Schema.Struct<{
-                    readonly x: Schema.Finite;
-                    readonly y: Schema.Finite;
-                }>;
-                readonly text: Schema.Union<readonly [Schema.String, Schema.Struct<{
-                    readonly secret: Schema.String;
-                }>, Schema.Struct<{
-                    readonly credential: Schema.String;
-                }>]>;
-            }>, Schema.TaggedStruct<"Screenshot", {
-                readonly label: Schema.String;
-            }>, Schema.TaggedStruct<"WaitFor", {
-                readonly locator: Schema.Struct<{
-                    readonly expression: Schema.Codec<LocatorExpression, LocatorExpression, never, never>;
-                    readonly label: Schema.String;
-                }>;
-                readonly state: Schema.Literals<readonly ["visible", "hidden", "attached", "detached"]>;
-                readonly timeout: Schema.Int;
-            }>]>;
-            readonly located: Schema.$Array<Schema.Struct<{
-                readonly id: Schema.String;
-                readonly revision: Schema.String;
-            }>>;
-        }>>;
-        readonly summary: Schema.String;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-        readonly cache: Schema.Struct<{
-            readonly lookup: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Replayed", {}>, Schema.TaggedStruct<"HandedOff", {
-                readonly reason: Schema.String;
-            }>, Schema.TaggedStruct<"Missed", {}>, Schema.TaggedStruct<"Off", {}>]>;
-            readonly write: Schema.Literals<readonly ["saved", "kept", "unconfirmed", "evicted", "no-change", "not-written"]>;
-        }>;
-        readonly modelCalls: Schema.Int;
-        readonly tokens: Schema.Struct<{
-            readonly input: Schema.Int;
-            readonly output: Schema.Int;
-        }>;
-    }>, Schema.TaggedStruct<"AssertStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly record: Schema.Struct<{
-            readonly sentence: Schema.String;
-            readonly check: Schema.Codec<Check, Check, never, never>;
-            readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly vision: Schema.Literals<readonly [false, true, "only"]>;
-            readonly resolvedBy: Schema.optionalKey<Schema.Struct<{
-                readonly provider: Schema.String;
-                readonly model: Schema.String;
-            }>>;
-            readonly resolvedAt: Schema.optionalKey<Schema.DateTimeUtcFromString>;
-        }>;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-    }>, Schema.TaggedStruct<"WaitForStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly record: Schema.Struct<{
-            readonly sentence: Schema.String;
-            readonly check: Schema.Codec<Check, Check, never, never>;
-            readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly vision: Schema.Literals<readonly [false, true, "only"]>;
-            readonly resolvedBy: Schema.optionalKey<Schema.Struct<{
-                readonly provider: Schema.String;
-                readonly model: Schema.String;
-            }>>;
-            readonly resolvedAt: Schema.optionalKey<Schema.DateTimeUtcFromString>;
-        }>;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-    }>, Schema.TaggedStruct<"ExtractStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly schemaId: Schema.String;
-        readonly result: Schema.Codec<Schema.Json, Schema.Json, never, never>;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-    }>, Schema.TaggedStruct<"LocatorStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly matcher: Schema.String;
-        readonly expected: Schema.String;
-        readonly observed: Schema.String;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-    }>, Schema.TaggedStruct<"ValueStep", {
-        readonly id: Schema.brand<Schema.String, "StepId">;
-        readonly matcher: Schema.String;
-        readonly expected: Schema.String;
-        readonly observed: Schema.String;
-        readonly outcome: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Passed", {}>, Schema.TaggedStruct<"Skipped", {
-            readonly reason: Schema.String;
-        }>, Schema.TaggedStruct<"Inconclusive", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>, Schema.TaggedStruct<"Failed", {
-            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-            readonly proposed: Schema.optionalKey<Schema.Struct<{
-                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                    readonly ref: Schema.Struct<{
-                        readonly id: Schema.String;
-                        readonly revision: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                    readonly screenshot: Schema.Struct<{
-                        readonly digest: Schema.String;
-                    }>;
-                }>, Schema.TaggedStruct<"RouteEvidence", {
-                    readonly route: Schema.Struct<{
-                        readonly origin: Schema.String;
-                        readonly path: Schema.String;
-                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                    }>;
-                }>, Schema.TaggedStruct<"LogEvidence", {
-                    readonly text: Schema.String;
-                }>]>>;
-            }>>;
-        }>]>;
-    }>]>>;
-    readonly errors: Schema.$Array<Schema.Struct<{
-        readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
-        readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-        readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-            readonly ref: Schema.Struct<{
-                readonly id: Schema.String;
-                readonly revision: Schema.String;
-            }>;
-        }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-            readonly screenshot: Schema.Struct<{
-                readonly digest: Schema.String;
-            }>;
-        }>, Schema.TaggedStruct<"RouteEvidence", {
-            readonly route: Schema.Struct<{
-                readonly origin: Schema.String;
-                readonly path: Schema.String;
-                readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-            }>;
-        }>, Schema.TaggedStruct<"LogEvidence", {
-            readonly text: Schema.String;
-        }>]>>;
-        readonly proposed: Schema.optionalKey<Schema.Struct<{
-            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
-            readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
-                readonly ref: Schema.Struct<{
-                    readonly id: Schema.String;
-                    readonly revision: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
-                readonly screenshot: Schema.Struct<{
-                    readonly digest: Schema.String;
-                }>;
-            }>, Schema.TaggedStruct<"RouteEvidence", {
-                readonly route: Schema.Struct<{
-                    readonly origin: Schema.String;
-                    readonly path: Schema.String;
-                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-                }>;
-            }>, Schema.TaggedStruct<"LogEvidence", {
-                readonly text: Schema.String;
-            }>]>>;
-        }>>;
-    }>>;
-}>, Schema.TaggedStruct<"Skipped", {
-    readonly id: Schema.brand<Schema.String, "AttemptId">;
-    readonly retry: Schema.Int;
-    readonly reason: Schema.String;
-}>]>;
-
-// @public (undocumented)
-export type Attempt = typeof Attempt.Type;
-
-// @public (undocumented)
 export const Browser: Schema.Literals<readonly ["chromium", "firefox", "webkit"]>;
 
 // @public (undocumented)
@@ -838,6 +202,11 @@ export const EngineSpec: Schema.Union<readonly [Schema.TaggedStruct<"WebEngine",
 // @public (undocumented)
 export type EngineSpec = typeof EngineSpec.Type;
 
+// Warning: (ae-forgotten-export) The symbol "ExitCode" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const exitCodeOf: (ending: RunEnding) => ExitCode;
+
 // @public
 export const PathSegment: Schema.Union<readonly [Schema.String, Schema.Int]>;
 
@@ -852,6 +221,62 @@ export const ReporterConfig: Schema.NonEmptyArray<Schema.Literals<readonly ["lis
 
 // @public (undocumented)
 export type ReporterConfig = typeof ReporterConfig.Type;
+
+// @public
+export const RunEnding: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"Judged", {
+    readonly verdict: Schema.Struct<{
+        readonly status: Schema.Literals<readonly ["passed", "failed", "blocked", "error", "interrupted"]>;
+        readonly exitCode: Schema.Literals<readonly [0, 1, 2, 3, 4, 130]>;
+        readonly failures: Schema.$Array<Schema.Struct<{
+            readonly code: Schema.Literals<readonly ["MODEL_UNAVAILABLE", "MODEL_PROVIDER_FAILED", "MODEL_REFUSED", "AUTH_CREDENTIAL_UNAVAILABLE", "AUTH_CREDENTIAL_INVALID", "SECRET_UNAVAILABLE", "ENVIRONMENT_UNAVAILABLE", "APP_UNREACHABLE", "APP_NOT_OPEN", "ARTIFACT_WRITE_FAILED", "LOCATOR_NOT_FOUND", "LOCATOR_AMBIGUOUS", "ACTION_FAILED", "AUTOMATION_UNSUPPORTED", "UNSUPPORTED_CAPABILITY", "STEP_BUDGET_EXHAUSTED", "STEP_TIMEOUT", "STEP_NO_CONCLUSION", "STEP_NOT_AWAITED", "REPLAY_STALE", "POLICY_DENIED", "CONTEXT_OVERFLOW", "MODEL_OUTPUT_INVALID", "ASSERTION_INCONCLUSIVE", "ASSERTION_FAILED", "INTERRUPTED", "INTERNAL_ERROR"]>;
+            readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
+            readonly evidence: Schema.NonEmptyArray<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
+                readonly ref: Schema.Struct<{
+                    readonly id: Schema.String;
+                    readonly revision: Schema.String;
+                }>;
+            }>, Schema.TaggedStruct<"ScreenshotEvidence", {
+                readonly screenshot: Schema.Struct<{
+                    readonly digest: Schema.String;
+                }>;
+            }>, Schema.TaggedStruct<"RouteEvidence", {
+                readonly route: Schema.Struct<{
+                    readonly origin: Schema.String;
+                    readonly path: Schema.String;
+                    readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
+                }>;
+            }>, Schema.TaggedStruct<"LogEvidence", {
+                readonly text: Schema.String;
+            }>]>>;
+            readonly proposed: Schema.optionalKey<Schema.Struct<{
+                readonly cause: Schema.Literals<readonly ["product", "automation", "environment", "unclassified"]>;
+                readonly evidence: Schema.$Array<Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruct<"NodeEvidence", {
+                    readonly ref: Schema.Struct<{
+                        readonly id: Schema.String;
+                        readonly revision: Schema.String;
+                    }>;
+                }>, Schema.TaggedStruct<"ScreenshotEvidence", {
+                    readonly screenshot: Schema.Struct<{
+                        readonly digest: Schema.String;
+                    }>;
+                }>, Schema.TaggedStruct<"RouteEvidence", {
+                    readonly route: Schema.Struct<{
+                        readonly origin: Schema.String;
+                        readonly path: Schema.String;
+                        readonly query: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
+                    }>;
+                }>, Schema.TaggedStruct<"LogEvidence", {
+                    readonly text: Schema.String;
+                }>]>>;
+            }>>;
+        }>>;
+    }>;
+}>, Schema.TaggedStruct<"ConfigRefused", {
+    readonly error: typeof ConfigInvalid;
+}>]>;
+
+// @public (undocumented)
+export type RunEnding = typeof RunEnding.Type;
 
 // @public (undocumented)
 export const RunVerdict: Schema.Struct<{
@@ -1009,11 +434,6 @@ export interface WebOptions {
     // (undocumented)
     readonly headless?: boolean;
 }
-
-// Warnings were encountered during analysis:
-//
-// dist/run-verdict.schema-B5rIdrVG.d.ts:21:11 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point index.d.ts
-// dist/run-verdict.schema-B5rIdrVG.d.ts:195:7 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

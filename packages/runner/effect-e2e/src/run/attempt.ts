@@ -16,8 +16,8 @@ import {
   type StagedRecording,
 } from '../cache/settle-recordings.workflow.js'
 import type { CacheMode, Target } from '../Config/config.schema.js'
-import { type Attempt, AttemptId, type RanAttempt, type TestId } from '../report/report.schema.js'
-import { runVerdictOf } from '../verdict/exit-code.js'
+import { type ArtifactRef, type Attempt, AttemptId, type RanAttempt, type TestId } from '../report/report.schema.js'
+import { finalVerdictOf, runVerdictOf } from '../verdict/exit-code.js'
 import type { FailureRecord } from '../verdict/failure.schema.js'
 import { FoldRunVerdict, foldRunVerdict } from '../verdict/fold-run-verdict.workflow.js'
 import type { RunVerdict } from '../verdict/run-verdict.schema.js'
@@ -43,6 +43,7 @@ export interface AttemptEntry {
   readonly target: Target['name']
   readonly agent: string
   readonly attempt: Attempt
+  readonly artifacts: ReadonlyArray<ArtifactRef>
 }
 
 export interface AttemptLog {
@@ -68,26 +69,13 @@ const keyOf = (entry: AttemptEntry): string => JSON.stringify([entry.test.id, en
 const finalAttemptsOf = (entries: ReadonlyArray<AttemptEntry>): ReadonlyArray<Attempt> =>
   Array.from(new Map(entries.map((entry) => [keyOf(entry), entry.attempt])).values())
 
-const ranOf = (attempt: Attempt): ReadonlyArray<RanAttempt> =>
-  Match.valueTags(attempt, { Ran: (ran): ReadonlyArray<RanAttempt> => [ran], Skipped: () => [] })
-
-const logVerdictOf = (entries: ReadonlyArray<AttemptEntry>): RunVerdict => {
-  const ran = Arr.flatMap(finalAttemptsOf(entries), ranOf)
-  return foldRunVerdict(
-    new FoldRunVerdict({
-      steps: Arr.flatMap(ran, (run) => run.steps),
-      runErrors: Arr.flatMap(ran, (run) => run.errors),
-    }),
-  ).pipe(decided, runVerdictOf)
-}
-
 /** A worker's record of every attempt, which the report and the run verdict are read from. */
 export const makeAttemptLog: Effect.Effect<AttemptLog> = Effect.map(
   Ref.make<ReadonlyArray<AttemptEntry>>([]),
   (entries) => ({
     append: (entry) => Ref.update(entries, (all) => [...all, entry]),
     entries: Ref.get(entries),
-    verdict: Effect.map(Ref.get(entries), logVerdictOf),
+    verdict: Effect.map(Ref.get(entries), (all) => finalVerdictOf({ finals: finalAttemptsOf(all), runErrors: [] })),
   }),
 )
 
@@ -117,6 +105,7 @@ export const admitTest = (request: AdmitTestRequest): Effect.Effect<PlatformAdmi
           target: request.target.name,
           agent: request.agent,
           attempt: { _tag: 'Skipped', id: AttemptId.make('attempt-0'), retry: 0, reason },
+          artifacts: [],
         }),
     }),
     admission,
@@ -210,6 +199,8 @@ const writeAt = (
 const withWrite = (write: CacheWrite) => (step: StepRecord): StepRecord =>
   Match.value(step).pipe(
     Match.tag('ActStep', (act): StepRecord => ({ ...act, cache: { lookup: act.cache.lookup, write } })),
+    Match.tag('AssertStep', (judged): StepRecord => ({ ...judged, cache: { lookup: judged.cache.lookup, write } })),
+    Match.tag('WaitForStep', (judged): StepRecord => ({ ...judged, cache: { lookup: judged.cache.lookup, write } })),
     Match.orElse(() => step),
   )
 
@@ -241,4 +232,18 @@ export const settleAttempt = (request: SettleAttemptRequest): Effect.Effect<RanA
     steps: Arr.map(concluded.steps, (step, position) => withWrite(writeAt(concluded, settled, failed, position))(step)),
     errors: concluded.errors,
   }))
+}
+
+export interface EvidenceFailuresRequest {
+  readonly attempt: RanAttempt
+  readonly failures: ReadonlyArray<FailureRecord>
+}
+
+export const withEvidenceFailures = (request: EvidenceFailuresRequest): RanAttempt => {
+  const errors = [...request.attempt.errors, ...request.failures]
+  const verdict = foldRunVerdict(new FoldRunVerdict({ steps: request.attempt.steps, runErrors: errors })).pipe(
+    decided,
+    runVerdictOf,
+  )
+  return { ...request.attempt, status: verdict.status, errors }
 }
