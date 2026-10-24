@@ -109,7 +109,7 @@ const checkLaw = <V extends ReadonlyArray<unknown>, E>(
   runs: number,
 ): Promise<void> => {
   const at = lawAt(law, arbitrary, holds)
-  return fc.assert(fc.asyncProperty(DRAW, (draw) => runDraw(at(draw))), { numRuns: runs })
+  return fc.assert(fc.asyncProperty(DRAW, (draw) => runDraw(at(draw))), { numRuns: runs, includeErrorInReport: true })
 }
 
 const register = (name: string, run: () => Promise<void>): void => {
