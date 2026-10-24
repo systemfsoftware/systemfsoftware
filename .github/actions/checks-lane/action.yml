@@ -17,6 +17,8 @@ runs:
   steps:
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'plan' || inputs.lane == 'timings'
+    - uses: ./.github/actions/setup-bun
+      if: inputs.lane == 'plan' || inputs.lane == 'timings'
     - if: inputs.lane == 'plan'
       shell: bash -e {0}
       run: corepack enable

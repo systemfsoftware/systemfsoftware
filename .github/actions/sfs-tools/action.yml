@@ -1,7 +1,7 @@
 name: systemfsoftware tools
 description: >-
-  Check out systemfsoftware's scripts/ at the calling reusable workflow's own commit and put its Deno tools on PATH as
-  `test-timings`, `mutation-job`, `classify-diff` and `sfs-deps`
+  Check out systemfsoftware's scripts/ at the calling reusable workflow's own commit, install the Bun its
+  `.bun-version` pins, and put its Deno tools on PATH as `test-timings`, `mutation-job`, `classify-diff` and `sfs-deps`
 inputs:
   repository:
     description: The reusable workflow's repository; pass `job.workflow_repository`
@@ -31,6 +31,9 @@ runs:
         path: .sfs-tools
         sparse-checkout: scripts
         persist-credentials: false
+    - uses: $/.github/actions/setup-bun
+      with:
+        version-file: .sfs-tools/.bun-version
     - uses: denoland/setup-deno@v2
     - name: Tools on PATH
       shell: bash
