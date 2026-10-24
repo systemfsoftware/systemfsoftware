@@ -16,6 +16,8 @@ const RUNNER_SUITE = `${import.meta.dirname}/runner-suite`
 
 const BIN = `${PACKAGE_ROOT}/node_modules/.bin/effect-e2e`
 
+const VITEST_BIN = `${PACKAGE_ROOT}/node_modules/.bin/vitest`
+
 const AssertionResult = Schema.Struct({ title: Schema.String, status: Schema.String })
 
 const VitestReport = Schema.fromJsonString(
@@ -131,8 +133,8 @@ export const runVitestJson = ({ suite, files }: VitestJsonRequest) =>
     const output = `${suite}/vitest-run.json`
     yield* spawner.exitCode(
       ChildProcess.make(
-        'pnpm',
-        ['exec', 'vitest', 'run', '--reporter=json', `--outputFile.json=${output}`, ...files],
+        VITEST_BIN,
+        ['run', '--reporter=json', `--outputFile.json=${output}`, ...files],
         { cwd: suite, env: inherited, extendEnv: false, stdout: 'ignore', stderr: 'ignore' },
       ),
     )

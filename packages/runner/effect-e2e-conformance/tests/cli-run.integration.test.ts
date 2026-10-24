@@ -181,20 +181,21 @@ Feature('Running a suite with effect-e2e run')
     )
 
     scenario(
-      'One worker runs both worker files and leaves one partial',
+      'Both worker files run under one worker slot and each isolated worker leaves its partial',
       { scenarioLayer: NodeServices.layer },
       Gherkin.Do.pipe(
         Given('a copy of the suite with its valid config, which runs two workers')(
           'suite',
           () => copiedRunnerSuite('valid'),
         ),
-        When('the run selects both worker files with one worker')(
+        When('the run selects both worker files with one worker slot')(
           'run',
           ({ suite }) => runCli({ suite, args: ['--workers', '1', ...WORKER_FILES] }),
         ),
-        Then('one partial holds the run, and the run exits 1 for the failing sum')((s, expect) =>
-          expect({ exitCode: s.run.exitCode, partials: s.run.partials }).toEqual({ exitCode: 1, partials: 1 })
-        ),
+        Then('both isolated workers left their partial of one run, and the run exits 1 for the failing sum')((
+          s,
+          expect,
+        ) => expect({ exitCode: s.run.exitCode, partials: s.run.partials }).toEqual({ exitCode: 1, partials: 2 })),
       ),
     )
 
