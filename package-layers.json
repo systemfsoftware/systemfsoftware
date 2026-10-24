@@ -1,0 +1,64 @@
+{
+  "core": [
+    "@systemfsoftware/effect-cell-types",
+    "@systemfsoftware/tsconfig",
+    "@systemfsoftware/tsdown-config",
+    "@systemfsoftware/vitest-config",
+    "@systemfsoftware/stryker-config",
+    "@systemfsoftware/oxlint-config-recommended",
+    "@systemfsoftware/oxlint-config-cell-architecture",
+    "@systemfsoftware/oxlint-config-dmmf",
+    "@systemfsoftware/oxlint-config-rule-authoring",
+    "@systemfsoftware/oxlint-plugin-cell-architecture",
+    "@systemfsoftware/oxlint-plugin-dmmf-workflow",
+    "@systemfsoftware/oxlint-plugin-effect-platform",
+    "@systemfsoftware/oxlint-plugin-effect-schema",
+    "@systemfsoftware/oxlint-plugin-test-discipline",
+    "@systemfsoftware/oxlint-import-origin",
+    "@systemfsoftware/oxlint-make-boundary",
+    "@systemfsoftware/effect-schema-law",
+    "@systemfsoftware/effect-schema-vite",
+    "@systemfsoftware/effect-schema-discovery",
+    "@systemfsoftware/effect-schema-recursion-budget"
+  ],
+  "harness": [
+    "@systemfsoftware/vitest",
+    "@systemfsoftware/vitest-conformance",
+    "@systemfsoftware/effect-sim-kernel",
+    "@systemfsoftware/effect-sim-kernel-tests",
+    "@systemfsoftware/conformance-spec",
+    "@systemfsoftware/effect-spec-runtime",
+    "@systemfsoftware/effect-gherkin-spec"
+  ],
+  "spec-trace": [
+    "@systemfsoftware/trace-taxonomy",
+    "@systemfsoftware/trace-spec",
+    "@systemfsoftware/differential-spec"
+  ],
+  "extracted": [
+    "@systemfsoftware/effect-readiness",
+    "@systemfsoftware/effect-daemon-spec",
+    "@systemfsoftware/effect-daemon-conformance",
+    "@systemfsoftware/effect-daemon-process",
+    "@systemfsoftware/effect-daemon-socket",
+    "@systemfsoftware/effect-daemon-cluster",
+    "@systemfsoftware/effect-microsandbox",
+    "@systemfsoftware/microvm-test-images",
+    "@systemfsoftware/effect-daemon-microvm",
+    "@systemfsoftware/effect-e2e",
+    "@systemfsoftware/effect-e2e-web",
+    "@systemfsoftware/effect-e2e-cli",
+    "@systemfsoftware/effect-e2e-conformance",
+    "@systemfsoftware/hex-schema",
+    "@systemfsoftware/effect-schema-extensions",
+    "@systemfsoftware/discern",
+    "@systemfsoftware/effect-memfs",
+    "@systemfsoftware/npm-package",
+    "@systemfsoftware/rx-effect"
+  ],
+  "frontend": [
+    "@systemfsoftware/effect-atom",
+    "@systemfsoftware/effect-atom-react",
+    "@systemfsoftware/storybook-gherkin"
+  ]
+}

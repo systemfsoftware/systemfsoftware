@@ -153,6 +153,19 @@ Deno.test('unmapped manifests, missing packages and both kinds of duplicate are 
   ])
 })
 
+Deno.test('an extracted or frontend name may be absent; a core, harness or spec-trace name may not', () => {
+  const targets = decide(map({ extracted: ['gone-x'], frontend: ['gone-f'] }), [])
+  assertEquals(targets.findings, [])
+  assertEquals(targets.table.flatMap((row) => [...row.absent]).toSorted(), ['gone-f', 'gone-x'])
+
+  const hosted = decide(map({ core: ['gone-c'], harness: ['gone-h'], 'spec-trace': ['gone-s'] }), [])
+  assertEquals(lines(hosted.findings), [
+    "package-layers.json lists gone-c under 'core', but no manifest under packages/ declares it",
+    "package-layers.json lists gone-h under 'harness', but no manifest under packages/ declares it",
+    "package-layers.json lists gone-s under 'spec-trace', but no manifest under packages/ declares it",
+  ])
+})
+
 const LAW = '@systemfsoftware/effect-schema-law'
 const FORK = '@systemfsoftware/vitest'
 

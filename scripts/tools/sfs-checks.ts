@@ -7,9 +7,10 @@
 // layer, each an array of package names) and every package manifest under
 // `packages/`, and refuses (exit 1, one `::error` line per finding) on:
 //
-//   - a mapped package with no manifest, a manifest name the map does not
-//     list, one name listed twice or in two layers, or two manifests sharing
-//     a name;
+//   - a `core`, `harness` or `spec-trace` name with no manifest (`extracted`
+//     and `frontend` are target categories, so their names may be absent), a
+//     manifest name the map does not list, one name listed twice or in two
+//     layers, or two manifests sharing a name;
 //   - a forbidden runtime or peer edge: core to any non-core layer, harness to
 //     core/spec-trace/extracted, spec-trace to extracted. Harness and
 //     spec-trace sources are judged on their direct edges; a core source on
@@ -73,9 +74,23 @@ export type Finding =
 
 export interface Decision {
   readonly findings: readonly Finding[]
-  readonly table: readonly { readonly layer: Layer; readonly names: readonly string[] }[]
+  /** Every mapped name per layer; `absent` are the target-category names with no manifest here. */
+  readonly table: readonly {
+    readonly layer: Layer
+    readonly names: readonly string[]
+    readonly absent: ReadonlySet<string>
+  }[]
   /** Cross-layer `devDependencies` edges, one rendered line each, never judged. */
   readonly devEdges: readonly string[]
+}
+
+/** The layers this repository hosts: each of their names must have a manifest under `packages/`. */
+const HOSTED: Record<Layer, boolean> = {
+  'core': true,
+  'harness': true,
+  'spec-trace': true,
+  'extracted': false,
+  'frontend': false,
 }
 
 /** The layers each source layer may not reach. */
@@ -245,7 +260,7 @@ export const decide = (map: LayerMap, manifests: readonly Manifest[]): Decision 
     }
   }
   for (const [name, layer] of layerOf) {
-    if (!manifestOf.has(name)) findings.push({ kind: 'missing-package', name, layer })
+    if (!manifestOf.has(name) && HOSTED[layer]) findings.push({ kind: 'missing-package', name, layer })
   }
 
   const mappedEdges = (name: string): readonly Edge[] =>
@@ -309,7 +324,10 @@ export const decide = (map: LayerMap, manifests: readonly Manifest[]): Decision 
 
   return {
     findings: keyed.map(({ finding }) => finding),
-    table: LAYERS.map((layer) => ({ layer, names: [...new Set(map[layer])].toSorted() })),
+    table: LAYERS.map((layer) => {
+      const names = [...new Set(map[layer])].toSorted()
+      return { layer, names, absent: new Set(names.filter((name) => !manifestOf.has(name))) }
+    }),
     devEdges,
   }
 }
@@ -367,14 +385,17 @@ const layers = async (root: string): Promise<void> => {
     ], 1)
   }
 
-  for (const { layer, names } of decision.table) {
+  for (const { layer, names, absent } of decision.table) {
     console.log(`${layer} (${names.length})`)
-    for (const name of names) console.log(`  ${name}`)
+    for (const name of names) console.log(absent.has(name) ? `  ${name} (not in this repository)` : `  ${name}`)
   }
   console.log(`devDependencies across layers, reported only (${decision.devEdges.length})`)
   for (const edge of decision.devEdges) console.log(`  ${edge}`)
   const total = decision.table.reduce((n, { names }) => n + names.length, 0)
-  console.log(`layers: ${total} packages, each in exactly one of ${decision.table.length} layers; no forbidden edge`)
+  const present = manifests.length
+  console.log(
+    `layers: ${total} mapped packages, ${present} present, each present package in exactly one of ${decision.table.length} layers; no forbidden edge`,
+  )
 }
 
 if (import.meta.main) {
