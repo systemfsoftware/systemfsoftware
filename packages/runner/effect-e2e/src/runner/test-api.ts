@@ -1,4 +1,6 @@
 import * as Function from 'effect/Function'
+import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 import * as Vitest from 'vitest'
 import type { Assertion, ExpectStatic, TestOptions } from 'vitest'
@@ -15,7 +17,11 @@ export interface E2ETestOptions {
   readonly timeout?: number
   readonly retries?: number
   readonly tags?: ReadonlyArray<string>
-  readonly skip?: boolean
+  /**
+   * Skips the test. A non-blank string is the reason: the report records it on the skipped result and Vitest shows
+   * it as the skip note.
+   */
+  readonly skip?: boolean | string
   readonly only?: boolean
   readonly platforms?: ReadonlyArray<TestPlatform>
 }
@@ -35,14 +41,28 @@ const retryOf = (retries: number | undefined): Pick<TestOptions, 'retry'> =>
 const tagsOf = (tags: ReadonlyArray<string> | undefined): Pick<TestOptions, 'tags'> =>
   tags === undefined ? {} : { tags: [...tags] }
 
-const metaOf = (platforms: ReadonlyArray<TestPlatform> | undefined): Pick<TestOptions, 'meta'> =>
-  platforms === undefined ? {} : { meta: { platforms } }
+const skipOf = (skip: boolean | string | undefined): Pick<TestOptions, 'skip'> =>
+  skip === undefined ? {} : { skip: skip !== false }
 
-const vitestOptionsOf = ({ retries, tags, platforms, ...same }: E2ETestOptions): TestOptions => ({
+const skipReasonOf = (skip: boolean | string | undefined): { readonly skipReason?: string } =>
+  Option.match(Option.filter(Option.liftPredicate(skip, Predicate.isString), (reason) => /\S/u.test(reason)), {
+    onNone: () => ({}),
+    onSome: (skipReason) => ({ skipReason }),
+  })
+
+const platformsOf = (platforms: ReadonlyArray<TestPlatform> | undefined) => platforms === undefined ? {} : { platforms }
+
+const metaOf = (
+  platforms: ReadonlyArray<TestPlatform> | undefined,
+  skip: boolean | string | undefined,
+): Pick<TestOptions, 'meta'> => ({ meta: { ...platformsOf(platforms), ...skipReasonOf(skip) } })
+
+const vitestOptionsOf = ({ retries, tags, platforms, skip, ...same }: E2ETestOptions): TestOptions => ({
   ...same,
+  ...skipOf(skip),
   ...retryOf(retries),
   ...tagsOf(tags),
-  ...metaOf(platforms),
+  ...metaOf(platforms, skip),
 })
 
 const register = (name: string, options: E2ETestOptions, body: E2ETestBody): void => {

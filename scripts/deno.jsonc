@@ -1,6 +1,6 @@
 {
   // Config for everything under scripts/ — the map tool, the release tools, and
-  // the flake-delivered tools (test-timings, repo-checks; nix/deno-tool.nix).
+  // the flake-delivered tools (test-timings; nix/deno-tool.nix).
   // Deno discovers it by walking up from each script, so direct invocations
   // need no --config flag. nodeModulesDir none keeps pnpm's
   // node_modules untouched and stops Deno from migrating pnpm-workspace.yaml
@@ -18,8 +18,6 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
-    // The compiler API the composition gates read import graphs, env access and Layer calls from (repo-checks).
-    "typescript": "npm:typescript@5.9.3",
     // The Stryker the workspace lockfile resolves, its published plan contract, and the platform its config reader
     // runs on: the mutation planner decodes `stryker plan --out` with `ShardPlan`, and its tests read configs with
     // Stryker's own reader. mutation-probe.contract.test.ts fails when pnpm-lock.yaml resolves another version.

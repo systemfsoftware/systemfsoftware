@@ -82,6 +82,16 @@ export const makeAttemptLog: Effect.Effect<AttemptLog> = Effect.map(
 const declaredOf = (platforms: ReadonlyArray<TestPlatform> | undefined) =>
   Option.filter(Option.fromNullishOr(platforms), Arr.isReadonlyArrayNonEmpty)
 
+/** Records the one skipped attempt of a test that never runs on this target, and why. */
+export const recordSkip = (request: Omit<AdmitTestRequest, 'platforms'> & { readonly reason: string }) =>
+  request.log.append({
+    test: request.test,
+    target: request.target.name,
+    agent: request.agent,
+    attempt: { _tag: 'Skipped', id: AttemptId.make('attempt-0'), retry: 0, reason: request.reason },
+    artifacts: [],
+  })
+
 /**
  * Runs the platform gate before any try (requirements AC-2.5): a test declared for platforms the target
  * lacks records one skipped attempt with the reason, and no session or engine is ever built for it.
@@ -99,14 +109,7 @@ export const admitTest = (request: AdmitTestRequest): Effect.Effect<PlatformAdmi
   return Effect.as(
     Match.valueTags(admission, {
       Admitted: () => Effect.void,
-      PlatformSkipped: ({ reason }) =>
-        request.log.append({
-          test: request.test,
-          target: request.target.name,
-          agent: request.agent,
-          attempt: { _tag: 'Skipped', id: AttemptId.make('attempt-0'), retry: 0, reason },
-          artifacts: [],
-        }),
+      PlatformSkipped: ({ reason }) => recordSkip({ ...request, reason }),
     }),
     admission,
   )

@@ -26,7 +26,7 @@ import { writePartial } from '../report/partials.js'
 import type { PartialState } from '../report/partials.schema.js'
 import type { Attempt, RunId } from '../report/report.schema.js'
 import type { PlatformAdmission, TestPlatform } from '../run/admit-platforms.workflow.js'
-import { admitTest, type AttemptLog, type AttemptTest, makeAttemptLog } from '../run/attempt.js'
+import { admitTest, type AttemptLog, type AttemptTest, makeAttemptLog, recordSkip } from '../run/attempt.js'
 import type { TryEnding } from '../run/conclude-attempt.workflow.js'
 import * as FileArtifactStore from '../run/file-artifact-store.js'
 import { type EngineSource, type SessionInput, TestSession } from '../run/test-session.service.js'
@@ -153,6 +153,19 @@ export const admitOf = (request: {
     target: request.wiring.target,
     agent: DEFAULT_AGENT,
     platforms: request.platforms,
+  })
+
+export const skipOf = (request: {
+  readonly wiring: Wiring
+  readonly test: AttemptTest
+  readonly reason: string
+}): Effect.Effect<void> =>
+  recordSkip({
+    log: request.wiring.log,
+    test: request.test,
+    target: request.wiring.target,
+    agent: DEFAULT_AGENT,
+    reason: request.reason,
   })
 
 const envOf = (wiring: Wiring, name: string): Option.Option<Redacted.Redacted<string>> =>

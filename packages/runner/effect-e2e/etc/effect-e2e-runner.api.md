@@ -138,8 +138,7 @@ export interface E2ETestOptions {
     readonly platforms?: ReadonlyArray<TestPlatform>;
     // (undocumented)
     readonly retries?: number;
-    // (undocumented)
-    readonly skip?: boolean;
+    readonly skip?: boolean | string;
     // (undocumented)
     readonly tags?: ReadonlyArray<string>;
     // (undocumented)
