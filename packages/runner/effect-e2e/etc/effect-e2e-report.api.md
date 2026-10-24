@@ -3773,8 +3773,8 @@ export type TestStatus = typeof TestStatus.Type;
 
 // Warnings were encountered during analysis:
 //
-// dist/attempt-29rJdyZH.d.ts:742:11 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point report.d.ts
-// dist/attempt-29rJdyZH.d.ts:916:7 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point report.d.ts
+// dist/run-verdict.schema-CMbdMtE5.d.ts:739:11 - (ae-forgotten-export) The symbol "LocatorExpression" needs to be exported by the entry point report.d.ts
+// dist/run-verdict.schema-CMbdMtE5.d.ts:913:7 - (ae-forgotten-export) The symbol "Check" needs to be exported by the entry point report.d.ts
 
 // (No @packageDocumentation comment for this package)
 

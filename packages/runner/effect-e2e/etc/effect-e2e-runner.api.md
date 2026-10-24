@@ -4,9 +4,16 @@
 
 ```ts
 
+import { afterAll } from 'vitest';
+import { afterEach } from 'vitest';
+import { Assertion } from 'vitest';
+import { beforeAll } from 'vitest';
+import { beforeEach } from 'vitest';
 import * as Context from 'effect/Context';
+import { describe } from 'vitest';
 import * as Duration from 'effect/Duration';
 import * as Effect from 'effect/Effect';
+import { ExpectStatic } from 'vitest';
 import * as FileSystem_2 from 'effect/FileSystem';
 import * as HttpClient from 'effect/http/HttpClient';
 import * as Layer from 'effect/Layer';
@@ -19,6 +26,10 @@ import { StandardSchemaV1 } from 'effect/StandardSchema';
 import { TestModule } from 'vitest/node';
 import { VitestTestRunner } from 'vitest';
 import { YieldableError } from 'effect/Cause';
+
+export { afterAll }
+
+export { afterEach }
 
 // @public
 export interface AgentFixture {
@@ -50,6 +61,22 @@ export interface AppFixture {
     readonly open: (path: string) => Promise<void>;
 }
 
+export { beforeAll }
+
+export { beforeEach }
+
+export { describe }
+
+// @public (undocumented)
+export interface E2EExpect extends Omit<ExpectStatic, never> {
+    // Warning: (ae-forgotten-export) The symbol "Locator" needs to be exported by the entry point runner.d.ts
+    //
+    // (undocumented)
+    (actual: Locator): ScreenExpectation;
+    // (undocumented)
+    <T>(actual: T): Assertion<void, T>;
+}
+
 // @public
 export interface E2EFixtures {
     // (undocumented)
@@ -67,11 +94,42 @@ export interface E2EFixtures {
 // @public (undocumented)
 export type E2ERunnerClass = new (config: SerializedConfig) => VitestTestRunner;
 
+// @public (undocumented)
+export interface E2ETest {
+    // (undocumented)
+    (name: string, body: E2ETestBody): void;
+    // (undocumented)
+    (name: string, options: E2ETestOptions, body: E2ETestBody): void;
+    // (undocumented)
+    (body: E2ETestBody): (name: string) => void;
+    // (undocumented)
+    (options: E2ETestOptions, body: E2ETestBody): (name: string) => void;
+}
+
+// @public (undocumented)
+export type E2ETestBody = (fixtures: E2EFixtures) => Promise<void> | void;
+
 // @public
 export const e2eTestFiles: {
     readonly include: readonly [string, ...string[]];
     readonly exclude: readonly ['tests/__fixtures__/**', '.e2e/**'];
 };
+
+// @public (undocumented)
+export interface E2ETestOptions {
+    // (undocumented)
+    readonly only?: boolean;
+    // (undocumented)
+    readonly platforms?: ReadonlyArray<TestPlatform>;
+    // (undocumented)
+    readonly retries?: number;
+    // (undocumented)
+    readonly skip?: boolean;
+    // (undocumented)
+    readonly tags?: ReadonlyArray<string>;
+    // (undocumented)
+    readonly timeout?: number;
+}
 
 // @public
 export interface EngineBinding {
@@ -94,6 +152,14 @@ export interface EngineBinding {
 export const exitCodeReporter: (setExitCode: (code: ExitCode) => void) => {
     onTestRunEnd: (modules: ReadonlyArray<TestModule>) => void;
 };
+
+// @public (undocumented)
+export const expect: E2EExpect;
+
+// @public (undocumented)
+export interface LocatorAssertionOptions {
+    readonly timeout?: Duration.Input;
+}
 
 // @public (undocumented)
 export const makeRunner: {
@@ -121,13 +187,32 @@ export interface RunnerOptions {
 }
 
 // @public
+export interface ScreenExpectation {
+    // (undocumented)
+    readonly toBeChecked: (options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toBeDisabled: (options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toBeEnabled: (options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toBeHidden: (options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toBeVisible: (options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toContainText: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toHaveText: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
+    // (undocumented)
+    readonly toHaveValue: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
+}
+
+// @public
 export interface ScreenFixture {
     // (undocumented)
     readonly getByLabel: (text: string | TextPattern) => Locator;
     // (undocumented)
     readonly getByPlaceholder: (text: string | TextPattern) => Locator;
     // Warning: (ae-forgotten-export) The symbol "TextPattern" needs to be exported by the entry point runner.d.ts
-    // Warning: (ae-forgotten-export) The symbol "Locator" needs to be exported by the entry point runner.d.ts
     //
     // (undocumented)
     readonly getByRole: (role: string, name?: string | TextPattern) => Locator;
@@ -139,9 +224,12 @@ export interface ScreenFixture {
     readonly selector: (css: string) => Locator;
 }
 
+// @public (undocumented)
+export const test: E2ETest;
+
 // Warnings were encountered during analysis:
 //
-// dist/runner.d.ts:52:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
+// dist/runner.d.ts:86:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
 
 // (No @packageDocumentation comment for this package)
 

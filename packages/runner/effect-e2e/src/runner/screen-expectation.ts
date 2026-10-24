@@ -6,7 +6,7 @@ import { expect as vitestExpect, type ExpectPollOptions, TestRunner } from 'vite
 
 import type { ReadRequest, ReadResult } from '../engine/engine.schema.js'
 import type { Locator } from '../engine/locator.schema.js'
-import { contextTryOf, type TryBinding } from '../runner/fixtures.js'
+import { contextTryOf, type TryBinding } from './fixtures.js'
 
 export interface LocatorAssertionOptions {
   /** How long the assertion retries; the config's `assertionTimeout` when absent. */

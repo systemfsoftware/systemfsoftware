@@ -1,4 +1,4 @@
-import { expect, test } from '@systemfsoftware/effect-e2e'
+import { expect, test } from '@systemfsoftware/effect-e2e/runner'
 
 test('Should_Fail_When_TheStatusNeverReadsPro', async ({ app, screen }) => {
   await app.open('/settings/billing')

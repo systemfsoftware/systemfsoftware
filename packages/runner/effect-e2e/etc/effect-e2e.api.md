@@ -4,24 +4,9 @@
 
 ```ts
 
-import { afterAll } from 'vitest';
-import { afterEach } from 'vitest';
-import { Assertion } from 'vitest';
-import { beforeAll } from 'vitest';
-import { beforeEach } from 'vitest';
-import { describe } from 'vitest';
-import * as Duration from 'effect/Duration';
 import * as Effect from 'effect/Effect';
-import { ExpectStatic } from 'vitest';
-import * as Option_2 from 'effect/Option';
 import * as Schema from 'effect/Schema';
-import { StandardJSONSchemaV1 } from 'effect/StandardSchema';
-import { StandardSchemaV1 } from 'effect/StandardSchema';
 import { YieldableError } from 'effect/Cause';
-
-export { afterAll }
-
-export { afterEach }
 
 // @public (undocumented)
 export const AgentConfig: Schema.Struct<{
@@ -47,10 +32,6 @@ export const AgentConfig: Schema.Struct<{
 
 // @public (undocumented)
 export type AgentConfig = typeof AgentConfig.Type;
-
-export { beforeAll }
-
-export { beforeEach }
 
 // @public (undocumented)
 export const Browser: Schema.Literals<readonly ["chromium", "firefox", "webkit"]>;
@@ -121,8 +102,6 @@ export const decodeConfig: {
 
 // @public
 export const defineConfig: (config: E2EConfigInput) => E2EConfigInput;
-
-export { describe }
 
 // @public
 export type E2EConfig = ReturnType<typeof e2eConfigSchema>['Type'];
@@ -210,49 +189,6 @@ export const e2eConfigSchema: (defaults: ConfigDefaults) => Schema.Struct<{
     readonly trace: Schema.withDecodingDefaultKey<Schema.Literals<readonly ["off", "on", "retain-on-failure"]>, never>;
 }>;
 
-// @public (undocumented)
-export interface E2EExpect extends Omit<ExpectStatic, never> {
-    // Warning: (ae-forgotten-export) The symbol "Locator" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    (actual: Locator): ScreenExpectation;
-    // (undocumented)
-    <T>(actual: T): Assertion<void, T>;
-}
-
-// @public (undocumented)
-export interface E2ETest {
-    // (undocumented)
-    (name: string, body: E2ETestBody): void;
-    // (undocumented)
-    (name: string, options: E2ETestOptions, body: E2ETestBody): void;
-    // (undocumented)
-    (body: E2ETestBody): (name: string) => void;
-    // (undocumented)
-    (options: E2ETestOptions, body: E2ETestBody): (name: string) => void;
-}
-
-// Warning: (ae-forgotten-export) The symbol "E2EFixtures" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type E2ETestBody = (fixtures: E2EFixtures) => Promise<void> | void;
-
-// @public (undocumented)
-export interface E2ETestOptions {
-    // (undocumented)
-    readonly only?: boolean;
-    // (undocumented)
-    readonly platforms?: ReadonlyArray<TestPlatform>;
-    // (undocumented)
-    readonly retries?: number;
-    // (undocumented)
-    readonly skip?: boolean;
-    // (undocumented)
-    readonly tags?: ReadonlyArray<string>;
-    // (undocumented)
-    readonly timeout?: number;
-}
-
 // @public
 export const EngineSpec: Schema.Union<readonly [Schema.TaggedStruct<"WebEngine", {
     readonly adapter: Schema.Literal<"@systemfsoftware/effect-e2e-web">;
@@ -270,14 +206,6 @@ export type EngineSpec = typeof EngineSpec.Type;
 //
 // @public (undocumented)
 export const exitCodeOf: (ending: RunEnding) => ExitCode;
-
-// @public (undocumented)
-export const expect: E2EExpect;
-
-// @public (undocumented)
-export interface LocatorAssertionOptions {
-    readonly timeout?: Duration.Input;
-}
 
 // @public
 export const PathSegment: Schema.Union<readonly [Schema.String, Schema.Int]>;
@@ -402,26 +330,6 @@ export const RunVerdict: Schema.Struct<{
 // @public (undocumented)
 export type RunVerdict = typeof RunVerdict.Type;
 
-// @public
-export interface ScreenExpectation {
-    // (undocumented)
-    readonly toBeChecked: (options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toBeDisabled: (options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toBeEnabled: (options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toBeHidden: (options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toBeVisible: (options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toContainText: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toHaveText: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
-    // (undocumented)
-    readonly toHaveValue: (expected: string, options?: LocatorAssertionOptions) => Promise<void>;
-}
-
 // @public (undocumented)
 export const SecretConfig: Schema.Struct<{
     readonly env: Schema.String;
@@ -483,9 +391,6 @@ export const Target: Schema.decodeTo<Schema.toType<Schema.Struct<{
 
 // @public (undocumented)
 export type Target = typeof Target.Type;
-
-// @public (undocumented)
-export const test: E2ETest;
 
 // @public
 export const TestPlatform: Schema.Literals<readonly ["web", "ios", "android"]>;

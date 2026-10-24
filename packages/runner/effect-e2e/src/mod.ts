@@ -17,14 +17,5 @@ export { SecretRef } from './Config/names.schema.js'
 export type { CredentialHandles, CredentialPasswordRef, CredentialUser, SecretHandles } from './Config/values.schema.js'
 export { credentials, secrets, Unique, unique } from './Config/values.schema.js'
 export type { TestPlatform } from './run/admit-platforms.workflow.js'
-export type {
-  E2EExpect,
-  E2ETest,
-  E2ETestBody,
-  E2ETestOptions,
-  LocatorAssertionOptions,
-  ScreenExpectation,
-} from './Test/mod.js'
-export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from './Test/mod.js'
 export { exitCodeOf } from './verdict/exit-code.js'
 export type { RunEnding, RunVerdict } from './verdict/run-verdict.schema.js'

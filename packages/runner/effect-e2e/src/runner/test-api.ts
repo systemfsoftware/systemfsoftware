@@ -5,7 +5,7 @@ import type { Assertion, ExpectStatic, TestOptions } from 'vitest'
 
 import { Locator } from '../engine/locator.schema.js'
 import type { TestPlatform } from '../run/admit-platforms.workflow.js'
-import { type E2EFixtures, e2eFixturesOf } from '../runner/fixtures.js'
+import { type E2EFixtures, e2eFixturesOf } from './fixtures.js'
 import { type ScreenExpectation, screenExpectationOf } from './screen-expectation.js'
 
 export { afterAll, afterEach, beforeAll, beforeEach, describe } from 'vitest'

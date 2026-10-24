@@ -1,4 +1,4 @@
-import { expect, test } from '@systemfsoftware/effect-e2e'
+import { expect, test } from '@systemfsoftware/effect-e2e/runner'
 
 test('Should_Pass_When_TheScreenIsNeverTouched', ({ platform }) => {
   expect(platform).toBe('web')
