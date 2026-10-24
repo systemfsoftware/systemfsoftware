@@ -59,6 +59,11 @@ const trace = Flag.Literals('trace', TRACE_MODES).pipe(
   Flag.optional,
 )
 
+const aiTrace = Flag.Boolean('ai-trace').pipe(
+  Flag.withDescription("Write ai-trace.json, the redacted model calls, into each failed test's result directory"),
+  Flag.withDefault(false),
+)
+
 const lastFailed = Flag.Boolean('last-failed').pipe(
   Flag.withDescription("Rerun only the tests the previous run's report did not pass"),
   Flag.withDefault(false),
@@ -84,6 +89,7 @@ export const runCommand = Command.make(
     timeout,
     output,
     trace,
+    aiTrace,
     lastFailed,
     files,
   },
