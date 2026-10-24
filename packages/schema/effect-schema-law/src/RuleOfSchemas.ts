@@ -1,5 +1,5 @@
 import { it } from '@systemfsoftware/vitest'
-import { Equivalence, Function, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
+import { Equivalence, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
 
 type CodecPair<A, I> = {
   readonly decode: (value: I) => Option.Option<A>
@@ -156,41 +156,53 @@ const propSpecOf = <const Of extends readonly unknown[], Subject>(
   readonly subject: Subject
   readonly runs: number
 } => runs === undefined ? { of, subject } : { of, subject, runs }
-export const ruleOfSchemas: {
-  (name: string): <A, I>(schema: S.Codec<A, I>, options?: RuleOfSchemasOptions) => void
-  <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void
-} = Function.dual(
-  2,
-  <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void => {
-    const typeEq = S.toEquivalence(schema)
-    const encodedEq = S.toEquivalence(S.toEncoded(schema))
-    const subject: CodecPair<A, I> = {
-      decode: Schema.decodeOption(schema),
-      encode: Schema.encodeOption(schema),
-    }
+const lawsOf = <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void => {
+  const typeEq = S.toEquivalence(schema)
+  const encodedEq = S.toEquivalence(S.toEncoded(schema))
+  const subject: CodecPair<A, I> = {
+    decode: Schema.decodeOption(schema),
+    encode: Schema.encodeOption(schema),
+  }
 
-    if (isSingleInhabitant(schema.ast)) {
-      it.law.deterministic(
-        `∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`,
-        { of: [schema], subject: roundTripOf(subject) },
-      )
-      return
-    }
-
-    const runs = budgetOf(options)
-    it.prop(
-      `∀x_${name}Enc_=x`,
-      propSpecOf([schema], subject, runs),
-      (codec, [value]) => encodeStableOf(codec, encodedEq)(value),
+  if (isSingleInhabitant(schema.ast)) {
+    it.law.deterministic(
+      `∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`,
+      { of: [schema], subject: roundTripOf(subject) },
     )
+    return
+  }
 
-    it.prop(
-      `∀x_${name}_=x`,
-      propSpecOf([schema, schema], subject, runs),
-      (codec, [value, twin]) => roundTripsOf(codec, typeEq)(value, twin),
-    )
-  },
-)
+  const runs = budgetOf(options)
+  it.prop(
+    `∀x_${name}Enc_=x`,
+    propSpecOf([schema], subject, runs),
+    (codec, [value]) => encodeStableOf(codec, encodedEq)(value),
+  )
+
+  it.prop(
+    `∀x_${name}_=x`,
+    propSpecOf([schema, schema], subject, runs),
+    (codec, [value, twin]) => roundTripsOf(codec, typeEq)(value, twin),
+  )
+}
+
+export function ruleOfSchemas(name: string): <A, I>(schema: S.Codec<A, I>, options?: RuleOfSchemasOptions) => void
+export function ruleOfSchemas<A, I>(
+  name: string,
+  schema: S.Codec<A, I>,
+  options?: RuleOfSchemasOptions,
+): void
+export function ruleOfSchemas<A, I>(
+  name: string,
+  schema?: S.Codec<A, I>,
+  options?: RuleOfSchemasOptions,
+): void | ((curried: S.Codec<A, I>, curriedOptions?: RuleOfSchemasOptions) => void) {
+  if (schema === undefined) {
+    return (curried: S.Codec<A, I>, curriedOptions?: RuleOfSchemasOptions): void =>
+      lawsOf(name, curried, curriedOptions)
+  }
+  return lawsOf(name, schema, options)
+}
 
 if (import.meta.vitest !== void 0) {
   const Lit = S.Literal(1)
