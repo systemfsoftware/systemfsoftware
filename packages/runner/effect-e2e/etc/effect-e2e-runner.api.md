@@ -161,10 +161,9 @@ export interface EngineBinding {
 }
 
 // Warning: (ae-forgotten-export) The symbol "ExitCode" needs to be exported by the entry point runner.d.ts
-// Warning: (ae-forgotten-export) The symbol "ConfigInvalid" needs to be exported by the entry point runner.d.ts
 //
 // @public
-export const exitCodeReporter: (setExitCode: (code: ExitCode, refusal: ConfigInvalid) => void) => {
+export const exitCodeReporter: (setExitCode: (code: ExitCode) => void) => {
     onTestRunEnd: (modules: ReadonlyArray<TestModule>) => void;
 };
 
@@ -190,6 +189,12 @@ export const makeRunner: {
 
 // @public
 export type PlatformLayer = Layer.Layer<FileSystem_2.FileSystem | Path.Path | HttpClient.HttpClient>;
+
+// @public (undocumented)
+export const RUN_OUTPUT_KEY = "@systemfsoftware/effect-e2e:run-output";
+
+// @public
+export const RUN_REFUSAL_KEY = "@systemfsoftware/effect-e2e:run-refusal";
 
 // @public
 export interface RunnerOptions {
@@ -250,7 +255,7 @@ export const test: E2ETest;
 
 // Warnings were encountered during analysis:
 //
-// dist/runner.d.ts:98:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
+// dist/runner.d.ts:97:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
 
 // (No @packageDocumentation comment for this package)
 
