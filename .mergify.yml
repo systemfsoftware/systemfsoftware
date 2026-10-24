@@ -1,8 +1,8 @@
 # Mergify: the policy lives in systemfsoftware/.github (.mergify.yml). This file only names this repo's CI checks.
 #
 # Layering: a PR queues on the static check only (lint + typecheck + dist, ~one lane), so a green
-# PR enters the queue without paying for the full test matrix. The queue draft runs the full gate,
-# so the heavy suites run per queue batch, not per PR.
+# PR enters the queue without paying for the full test matrix. The queue draft runs the full gate
+# and the conflict gate, so the heavy suites run per queue batch, not per PR.
 extends: .github
 
 queue_rules:
@@ -10,7 +10,6 @@ queue_rules:
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
       - check-success = build · lint · typecheck · test / static checks (pnpm check:static)
-      - check-success = abort on mid-run merge conflict
       - or:
           - check-success = commitlint / lint PR commits
           - check-skipped = commitlint / lint PR commits
@@ -20,3 +19,4 @@ queue_rules:
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
       - check-success = build · lint · typecheck · test / the gate (pnpm check:ci)
+      - check-success = abort on mid-run merge conflict
