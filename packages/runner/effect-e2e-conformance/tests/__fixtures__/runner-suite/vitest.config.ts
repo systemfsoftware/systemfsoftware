@@ -1,3 +1,6 @@
-import { suiteConfigOf } from './suite-config.js'
+import { sourceResolveConditions } from '@systemfsoftware/vitest-config'
+import { defineConfig } from 'vitest/config'
 
-export default suiteConfigOf('./runner.ts')
+import { suiteTestOf } from './suite-config.js'
+
+export default defineConfig({ ...sourceResolveConditions, test: suiteTestOf('./runner.ts') })
