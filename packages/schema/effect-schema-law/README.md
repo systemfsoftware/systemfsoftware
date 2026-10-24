@@ -2,7 +2,7 @@
 
 Property-test codec laws for [Effect](https://effect.website) `Schema`.
 
-A schema is a two-way codec. `ruleOfSchemas` asserts the two laws, generating inputs from the schema itself (via `@systemfsoftware/vitest`'s `it.prop` + fast-check):
+A schema is a two-way codec. `ruleOfSchemas` asserts the two laws as ordinary Vitest tests, drawing inputs from the schema itself through Effect's `Arbitrary` and driving the runs with fast-check:
 
 - **Round-trip identity** — `decode(encode(x))` equals `x`.
 - **Encode stability** — re-encoding the decoded value reproduces the original encoded form.
@@ -40,6 +40,8 @@ A `recursionBudget` annotation that nothing materialized — the plugin that bui
 pnpm add -D @systemfsoftware/effect-schema-law
 ```
 
-Install as a **devDependency** — the entry registers tests. `effect`, `vitest`, and `@systemfsoftware/vitest` are peer dependencies: you bring your own (you already have them to run your tests), so the helper shares your single test-runner instance.
+Install as a **devDependency** — the entry registers tests. `effect` and `vitest` are peer dependencies: you bring your own, so the helper shares your single test-runner instance. `vitest` is marked optional only so installing the package outside a test toolchain does not warn; registering laws needs it. `fast-check` is a regular dependency and installs with the package. No other test runner is required.
+
+A failing law reports the drawn counterexample, shrunk by fast-check, and the seed fast-check prints for replaying the run. A draw the schema's `Arbitrary` cannot produce, or an Effect verdict that fails, is reported as its own failure, never as a refutation.
 
 Call `ruleOfSchemas(name, schema)` at the top level of a Vitest test file, or inside an `if (import.meta.vitest !== void 0)` block in the module that declares the schema — a bundler that defines `import.meta.vitest` as `undefined` compiles that branch away, so nothing reaches your published output.

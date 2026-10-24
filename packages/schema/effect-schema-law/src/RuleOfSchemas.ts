@@ -1,5 +1,5 @@
-import { it } from '@systemfsoftware/vitest'
 import { Equivalence, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
+import { deterministic, prop } from './property.js'
 
 type CodecPair<A, I> = {
   readonly decode: (value: I) => Option.Option<A>
@@ -147,15 +147,6 @@ const SINGLE_INHABITANT_REASON = 'single-inhabitant schema: a constant codec is 
 const budgetOf = (options: RuleOfSchemasOptions | undefined): number | undefined =>
   options === undefined ? undefined : options.runs
 
-const propSpecOf = <const Of extends readonly unknown[], Subject>(
-  of: Of,
-  subject: Subject,
-  runs: number | undefined,
-): { readonly of: Of; readonly subject: Subject } | {
-  readonly of: Of
-  readonly subject: Subject
-  readonly runs: number
-} => runs === undefined ? { of, subject } : { of, subject, runs }
 const lawsOf = <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void => {
   const typeEq = S.toEquivalence(schema)
   const encodedEq = S.toEquivalence(S.toEncoded(schema))
@@ -165,7 +156,7 @@ const lawsOf = <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchem
   }
 
   if (isSingleInhabitant(schema.ast)) {
-    it.law.deterministic(
+    deterministic(
       `∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`,
       { of: [schema], subject: roundTripOf(subject) },
     )
@@ -173,15 +164,15 @@ const lawsOf = <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchem
   }
 
   const runs = budgetOf(options)
-  it.prop(
+  prop(
     `∀x_${name}Enc_=x`,
-    propSpecOf([schema], subject, runs),
+    { of: [schema], subject, runs },
     (codec, [value]) => encodeStableOf(codec, encodedEq)(value),
   )
 
-  it.prop(
+  prop(
     `∀x_${name}_=x`,
-    propSpecOf([schema, schema], subject, runs),
+    { of: [schema, schema], subject, runs },
     (codec, [value, twin]) => roundTripsOf(codec, typeEq)(value, twin),
   )
 }
@@ -224,7 +215,7 @@ if (import.meta.vitest !== void 0) {
 
   const DeclarationIndex = S.Int.pipe(S.check(S.isBetween({ minimum: 0, maximum: DECLARED_INHABITANCE.length - 1 })))
 
-  it.prop(
+  prop(
     '∀s_DeclarationInhabitance_=Declared',
     { of: [DeclarationIndex], subject: { isSingleInhabitant } },
     (subject, [index]) => {

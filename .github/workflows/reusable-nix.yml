@@ -41,6 +41,10 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+    secrets:
+      sfs-fetch-token:
+        description: GitHub token Nix fetches `github:` flake inputs with in the build jobs, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
+        required: false
 
 permissions:
   contents: read
@@ -83,6 +87,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@v31
+      - uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: eval
         name: Outputs this diff changed
         env:
@@ -223,6 +230,11 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L .#checks.${{ matrix.system }}
           working-directory: ${{ inputs.working-directory }}
+      - if: always()
+        uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
+          remove: true
 
   compare:
     name: outputs match across systems

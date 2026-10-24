@@ -3,6 +3,7 @@ export type { AgentFixture, AppFixture, E2EFixtures, ScreenFixture } from './fix
 export type { E2EGlobalSetup, E2EGlobalSetupProject, E2EGlobalSetupTeardown } from './global-setup.js'
 export { makeGlobalSetup } from './global-setup.js'
 export { type E2ERunnerClass, makeRunner } from './make-runner.js'
+export { RUN_OUTPUT_KEY, RUN_REFUSAL_KEY } from './run-identity.js'
 export type {
   E2EExpect,
   E2ETest,

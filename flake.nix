@@ -100,6 +100,10 @@
           inherit (self.lib) mkConsumerStore;
           workspace = workspaceOf pkgs;
         };
+        schema-law-consumer = pkgs.callPackage ./nix/schema-law-consumer-check {
+          inherit (self.lib) mkConsumerStore;
+          workspace = workspaceOf pkgs;
+        };
       });
 
       # The consumer-store check against a lockfile that claims a wrong

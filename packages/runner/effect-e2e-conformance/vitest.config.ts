@@ -6,6 +6,7 @@ const BROWSER_TESTS = [
   'tests/web-engine-law.integration.test.ts',
   'tests/agent-act-web.integration.test.ts',
   'tests/cli-init.integration.test.ts',
+  'tests/cli-run-web.integration.test.ts',
 ]
 
 export default defineConfig({
