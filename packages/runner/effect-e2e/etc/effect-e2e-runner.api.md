@@ -24,6 +24,7 @@ import { SerializedConfig } from 'vitest';
 import { StandardJSONSchemaV1 } from 'effect/StandardSchema';
 import { StandardSchemaV1 } from 'effect/StandardSchema';
 import { TestModule } from 'vitest/node';
+import { TestProject } from 'vitest/node';
 import { VitestTestRunner } from 'vitest';
 import { YieldableError } from 'effect/Cause';
 
@@ -90,6 +91,20 @@ export interface E2EFixtures {
     // (undocumented)
     readonly screen: ScreenFixture;
 }
+
+// @public (undocumented)
+export type E2EGlobalSetup = (project: E2EGlobalSetupProject) => Promise<E2EGlobalSetupTeardown>;
+
+// @public (undocumented)
+export interface E2EGlobalSetupProject extends Pick<TestProject, 'provide'> {
+    // (undocumented)
+    readonly config: {
+        readonly root: string;
+    };
+}
+
+// @public (undocumented)
+export type E2EGlobalSetupTeardown = () => Promise<void>;
 
 // @public (undocumented)
 export type E2ERunnerClass = new (config: SerializedConfig) => VitestTestRunner;
@@ -162,6 +177,12 @@ export interface LocatorAssertionOptions {
 }
 
 // @public (undocumented)
+export const makeGlobalSetup: {
+    (options: RunnerOptions): (config: E2EConfigInput) => E2EGlobalSetup;
+    (config: E2EConfigInput, options: RunnerOptions): E2EGlobalSetup;
+};
+
+// @public (undocumented)
 export const makeRunner: {
     (options: RunnerOptions): (config: E2EConfigInput) => E2ERunnerClass;
     (config: E2EConfigInput, options: RunnerOptions): E2ERunnerClass;
@@ -229,7 +250,7 @@ export const test: E2ETest;
 
 // Warnings were encountered during analysis:
 //
-// dist/runner.d.ts:86:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
+// dist/runner.d.ts:96:3 - (ae-forgotten-export) The symbol "E2EConfigInput" needs to be exported by the entry point runner.d.ts
 
 // (No @packageDocumentation comment for this package)
 
