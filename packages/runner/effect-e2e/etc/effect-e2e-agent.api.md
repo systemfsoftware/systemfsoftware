@@ -332,10 +332,10 @@ export interface WaitForResult {
 
 // Warnings were encountered during analysis:
 //
-// dist/wait-for-CPBqH_NO.d.ts:783:5 - (ae-forgotten-export) The symbol "CacheKeyContext" needs to be exported by the entry point agent.d.ts
-// dist/wait-for-CPBqH_NO.d.ts:784:5 - (ae-forgotten-export) The symbol "AgentConfig" needs to be exported by the entry point agent.d.ts
-// dist/wait-for-CPBqH_NO.d.ts:787:5 - (ae-forgotten-export) The symbol "CacheMode" needs to be exported by the entry point agent.d.ts
-// dist/wait-for-CPBqH_NO.d.ts:791:5 - (ae-forgotten-export) The symbol "EngineIdentity" needs to be exported by the entry point agent.d.ts
+// dist/wait-for-bWO_c8bl.d.ts:788:5 - (ae-forgotten-export) The symbol "CacheKeyContext" needs to be exported by the entry point agent.d.ts
+// dist/wait-for-bWO_c8bl.d.ts:789:5 - (ae-forgotten-export) The symbol "AgentConfig" needs to be exported by the entry point agent.d.ts
+// dist/wait-for-bWO_c8bl.d.ts:792:5 - (ae-forgotten-export) The symbol "CacheMode" needs to be exported by the entry point agent.d.ts
+// dist/wait-for-bWO_c8bl.d.ts:796:5 - (ae-forgotten-export) The symbol "EngineIdentity" needs to be exported by the entry point agent.d.ts
 
 // (No @packageDocumentation comment for this package)
 

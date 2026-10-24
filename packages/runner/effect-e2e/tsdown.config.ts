@@ -17,6 +17,7 @@ const typesMap: Record<string, string> = {
   './agent': './dist/agent.d.ts',
   './run': './dist/run.d.ts',
   './report': './dist/report.d.ts',
+  './runner': './dist/runner.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -46,6 +47,7 @@ export default defineConfig({
     agent: './src/agent/mod.ts',
     run: './src/run/mod.ts',
     report: './src/report/mod.ts',
+    runner: './src/runner/mod.ts',
   },
   format: 'esm',
   dts: true,

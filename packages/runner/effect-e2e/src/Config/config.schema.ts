@@ -15,8 +15,9 @@ export interface ConfigDefaults {
   readonly cores: number
 }
 
-/** The suite's test globs when config names none. */
-const DEFAULT_TESTS: readonly [string, ...Array<string>] = ['tests/**/*.e2e.ts']
+export type GlobList = readonly [string, ...Array<string>]
+
+export const DEFAULT_TESTS: GlobList = ['tests/**/*.e2e.ts']
 
 export const ProjectId = Schema.String.check(
   Schema.isMinLength(1, { message: 'a project id is between 1 and 256 characters' }),
