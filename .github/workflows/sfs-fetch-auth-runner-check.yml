@@ -1,0 +1,45 @@
+name: sfs-fetch-auth runner check (temporary)
+
+on:
+  push:
+    branches: [SYS-650-fetch-auth]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: dummy token reaches Nix and is removed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - name: The system config already carries a github.com token
+        run: grep -q '^access-tokens = github.com=' /etc/nix/nix.conf
+      - uses: ./.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: dummy-not-a-secret
+      - name: Nix's effective access-tokens is the dummy token alone
+        run: |
+          effective=$(nix config show access-tokens)
+          if [ "$effective" != "github.com=dummy-not-a-secret" ]; then
+            echo "::error::effective access-tokens is not the sfs-fetch-token line"
+            exit 1
+          fi
+          echo "effective access-tokens: github.com=<the sfs-fetch-token>"
+      - uses: ./.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: dummy-not-a-secret
+          remove: true
+      - name: The user config is gone and Nix is back on the system token
+        run: |
+          test ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/nix/nix.conf"
+          effective=$(nix config show access-tokens)
+          case "$effective" in
+            github.com=dummy-not-a-secret) echo "::error::the dummy token is still in effect"; exit 1 ;;
+            github.com=*) echo "effective access-tokens: github.com=<the job's GITHUB_TOKEN>" ;;
+            *) echo "::error::unexpected access-tokens after removal"; exit 1 ;;
+          esac
