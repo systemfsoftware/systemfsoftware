@@ -139,9 +139,9 @@ const unencodableOf = (ledger: SecretLedgerShape, error: Schema.SchemaError): Fa
   )
 
 /**
- * Writes one try's model calls as `ai-trace.json` into its result directory. The document is encoded to JSON, every
- * object key and string in it is masked with the ledger, and only then serialized, so a held secret cannot survive
- * in JSON-escaped form. A refused encode or store write is answered as a failure record, never raised.
+ * Writes one try's model calls as `ai-trace.json` into its result directory. The document is encoded to JSON, masked
+ * with the ledger before and after serialization, so a held secret survives neither raw nor in JSON-escaped spelling.
+ * A refused encode or store write is answered as a failure record, never raised.
  */
 export const writeAiTrace = (request: WriteAiTraceRequest): Effect.Effect<WrittenEvidence> =>
   Result.match(
@@ -159,7 +159,9 @@ export const writeAiTrace = (request: WriteAiTraceRequest): Effect.Effect<Writte
       onSuccess: (encoded) =>
         Effect.map(
           put(request.store, directoryOf(request), 'ai-trace')(
-            textBytesOf(`${JSON.stringify(redactJson(request.ledger.redact)(encoded), null, 2)}\n`),
+            textBytesOf(
+              `${request.ledger.redact(JSON.stringify(redactJson(request.ledger.redact)(encoded), null, 2))}\n`,
+            ),
           ),
           (result) => writtenOf([result]),
         ),

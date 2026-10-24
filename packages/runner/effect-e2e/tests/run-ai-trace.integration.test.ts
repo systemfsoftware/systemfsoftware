@@ -22,6 +22,11 @@ const SECRET = 'pa"ss\\643-wörd'
 const ESCAPED_SECRET = JSON.stringify(SECRET).slice(1, -1)
 const MASK = '[secret:token]'
 
+/** A held secret whose value is itself a JSON escape spelling, beside the real newline it spells. */
+const ESCAPED_SECRET_VALUE = 'pa\\nss'
+const NEWLINE_TEXT = 'pa\nss'
+const ESCAPED_MASK = '[secret:escaped]'
+
 const FINISHED: TryEnding = { _tag: 'Finished', errors: [] }
 
 const joined = <A, E>(handle: StepHandle<A, E>): Effect.Effect<A, E> => handle.join
@@ -80,6 +85,7 @@ const greetTry = <E>(input: {
   readonly aiTrace: boolean
   readonly trace?: 'off' | 'on' | 'retain-on-failure'
   readonly refusingArtifacts?: boolean
+  readonly secrets?: Readonly<Record<string, Redacted.Redacted<string>>>
   readonly body: (session: TestSessionShape) => Effect.Effect<Attempt, E>
 }) =>
   Effect.gen(function*() {
@@ -95,7 +101,7 @@ const greetTry = <E>(input: {
       world,
       retry: 0,
       engine: engine.source,
-      secrets: { token: Redacted.make(SECRET) },
+      secrets: input.secrets ?? { token: Redacted.make(SECRET) },
       body: input.body,
     })
     return { world, written: yield* writtenOf(world) }
@@ -148,6 +154,21 @@ const assertWithCause = greetTry({
       calls: trace.calls.map((call) => [call.step, call.request.tools.map((tool) => tool.name)]),
     }))
   ),
+)
+
+const escapedRecombined = greetTry({
+  answers: [done(`greeted for ${NEWLINE_TEXT}`)],
+  aiTrace: true,
+  secrets: { escaped: Redacted.make(ESCAPED_SECRET_VALUE) },
+  body: blockedAfter(actOn(`press Greet over ${NEWLINE_TEXT}`)),
+}).pipe(
+  Effect.flatMap(({ written }) => {
+    const text = written.texts['ai-trace'] ?? ''
+    return Effect.succeed({
+      recombinedAbsent: !text.includes(ESCAPED_SECRET_VALUE),
+      masked: text.includes(ESCAPED_MASK),
+    })
+  }),
 )
 
 const kindsUnder = (input: {
@@ -312,6 +333,19 @@ Feature("Writing a failed try's model calls to ai-trace.json")
             masked: true,
             pageLinksIt: true,
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A secret whose value spells a JSON escape is masked after serialization too',
+      Gherkin.Do.pipe(
+        When('the held secret is the escape spelling of a newline the instruction and answer carry')(
+          'state',
+          () => escapedRecombined,
+        ),
+        Then('the file holds the mask and never the escape spelling')((s, expect) =>
+          expect(s.state).toEqual({ recombinedAbsent: true, masked: true })
         ),
       ),
     )
