@@ -73,13 +73,17 @@ let
   # the failure is a refutation rather than a generation error.
   brokenLaw = builtins.toFile "law-broken.test.ts" ''
     import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
-    import { Schema as S } from 'effect'
+    import { Schema as S, SchemaTransformation } from 'effect'
 
-    const Broken = S.transform(S.String, S.String, {
-      strict: true,
-      decode: (encoded) => encoded + '!',
-      encode: (decoded) => decoded + '!',
-    })
+    const Broken = S.String.pipe(
+      S.decodeTo(
+        S.String,
+        SchemaTransformation.transform({
+          decode: (encoded: string) => encoded + '!',
+          encode: (decoded: string) => decoded + '!',
+        }),
+      ),
+    )
 
     ruleOfSchemas('Broken', Broken, { runs: 10 })
   '';
@@ -153,7 +157,7 @@ pkgs.runCommand "schema-law-consumer-check" { nativeBuildInputs = [ pkgs.openssl
   # 3. Every registration lane passes under upstream vitest.
   cp ${goodLaws} law-good.test.ts
   pnpm exec vitest run law-good.test.ts --reporter=json --outputFile=good.json >/dev/null 2>&1 \
-    || { cat good.json 2>/dev/null | jq -r '.testResults[]?.message // empty' >&2; fail "the law file failed under upstream vitest"; }
+    || { jq -r '.testResults[]? | (.message // empty), (.assertionResults[]? | select(.status == "failed") | .fullName, .failureMessages[]?)' good.json >&2 2>/dev/null; fail "the law file failed under upstream vitest"; }
   for law in "Email_=x" "EmailEnc_=x" "Single_=x" "ExprNesting" "ExprVariants" "Expr_DepthPlusOne"; do
     jq -e --arg law "$law" \
       'any(.testResults[]?.assertionResults[]?; .status == "passed" and (.fullName | contains($law)))' good.json >/dev/null \
