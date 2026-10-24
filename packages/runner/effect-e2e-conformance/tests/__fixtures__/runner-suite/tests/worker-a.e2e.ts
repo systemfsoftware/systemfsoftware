@@ -1,4 +1,8 @@
-import { expect, test } from '@systemfsoftware/effect-e2e/runner'
+import { beforeAll, expect, test } from '@systemfsoftware/effect-e2e/runner'
+
+import { recordPoolSlot } from '../pool-slot.js'
+
+beforeAll(recordPoolSlot)
 
 test('Should_ReadTheFreePlan_When_WorkerAOpensBilling', async ({ app, screen }) => {
   await app.open('/settings/billing')

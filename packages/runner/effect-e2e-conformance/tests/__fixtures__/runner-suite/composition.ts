@@ -5,6 +5,7 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 
+import { ci } from './e2e.config.js'
 import { BILLING_SITE, ENGINE_OPENS, SUITE_OUTPUT } from './site.js'
 
 const recordOpen = Layer.effectDiscard(
@@ -29,6 +30,6 @@ export const options: RunnerOptions = {
     },
   },
   env: {},
-  defaults: { ci: false, projectId: 'runner-suite', cores: 1 },
+  defaults: { ci, projectId: 'runner-suite', cores: 4 },
   version: '0.0.0-conformance',
 }
