@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { BunRuntime, BunServices } from '@effect/platform-bun'
 import { Effect } from 'effect'
-import { Command } from 'effect/cli'
-import { cli } from '../src/cli.ts'
+import { main } from '../src/cli.ts'
 
-BunRuntime.runMain(Command.run(cli, { version: '0.0.0' }).pipe(Effect.provide(BunServices.layer)))
+BunRuntime.runMain(main.pipe(Effect.provide(BunServices.layer)))

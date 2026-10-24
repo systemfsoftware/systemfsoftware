@@ -6,6 +6,7 @@ export default defineConfig({
     ...sharedConfig.test,
     name: 'unit',
     include: ['tests/**/*.test.ts'],
+    exclude: ['tests/bin/**'],
     includeSource: ['src/**/*.ts'],
   },
 })

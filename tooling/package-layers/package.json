@@ -8,7 +8,8 @@
     "typecheck": "tsc -b",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run --config vitest.config.ts",
-    "properties": "vitest run --config vitest.config.ts src"
+    "properties": "vitest run --config vitest.config.ts src",
+    "test:bin": "vitest run --config vitest.bin.config.ts"
   },
   "exports": {
     ".": "./src/cli.ts",

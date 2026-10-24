@@ -1,5 +1,5 @@
 import { Console, Effect, FileSystem, Option, Path, type PlatformError, Result, Runtime, Schema } from 'effect'
-import { Command, Flag } from 'effect/cli'
+import { CliError, Command, Flag } from 'effect/cli'
 import { decide, type Decision } from './layers/check.ts'
 import {
   LayerMap,
@@ -19,6 +19,21 @@ export { failureLines, LayersRefused, passLines }
 class PrintedRefusal extends LayersRefused {
   override readonly [Runtime.errorReported] = false
 }
+
+class UsageRefused extends CliError.ShowHelp {
+  override readonly [Runtime.errorExitCode] = 2
+}
+
+const USAGE_EXIT = '2 on bad usage (an unknown subcommand or flag, or a --root that is not a directory)'
+
+const CHECK_EXIT = 'Exit status: 0 when the tree passes; 1 when it is refused (a broken layer rule, or an unreadable ' +
+  `package-layers.json or package.json); ${USAGE_EXIT}.`
+
+const LIST_EXIT =
+  `Exit status: 0 when the map is printed; 1 when package-layers.json cannot be read or decoded; ${USAGE_EXIT}.`
+
+const printRefusal = (refused: LayersRefused) =>
+  Console.error(failureLines(refused.findings).join('\n')).pipe(Effect.andThen(Effect.fail(refused)))
 
 const refuseAt = (at: string) => (error: { readonly message: string }) =>
   Effect.fail(new PrintedRefusal({ findings: [MapRefused.make({ path: at, reason: error.message })] }))
@@ -116,14 +131,14 @@ const check = Command.make('check', { root }, (input) =>
     const at = yield* resolveRoot(input.root)
     yield* runCheck(at).pipe(
       Effect.matchEffect({
-        onFailure: (refused) =>
-          Console.error(failureLines(refused.findings).join('\n')).pipe(Effect.andThen(Effect.fail(refused))),
+        onFailure: printRefusal,
         onSuccess: (decision) => Console.log(passLines(decision).join('\n')),
       }),
     )
   })).pipe(
     Command.withDescription(
-      'Check package-layers.json and every packages/**/package.json: each present package in exactly one category, no forbidden runtime or peer edge',
+      'Check package-layers.json and every packages/**/package.json: each present package in exactly one category, ' +
+        `no forbidden runtime or peer edge. ${CHECK_EXIT}`,
     ),
   )
 
@@ -135,11 +150,19 @@ const list = Command.make('list', {
   ),
 }, (input) =>
   Effect.gen(function*() {
-    const rows = assignments(yield* readMap(yield* resolveRoot(input.root)))
+    const map = yield* readMap(yield* resolveRoot(input.root)).pipe(Effect.catch(printRefusal))
+    const rows = assignments(map)
     yield* Console.log(input.json ? listJson(rows) : listLines(rows).join('\n'))
-  })).pipe(Command.withDescription('Print each package in package-layers.json with its category'))
+  })).pipe(Command.withDescription(`Print each package in package-layers.json with its category. ${LIST_EXIT}`))
 
 export const cli = Command.make('package-layers').pipe(
   Command.withDescription('The package layer map and its checks'),
   Command.withSubcommands([check, list]),
 )
+
+const usageExit = (help: CliError.ShowHelp) =>
+  Effect.fail(
+    help.errors.length === 0 ? help : new UsageRefused({ commandPath: help.commandPath, errors: help.errors }),
+  )
+
+export const main = Command.run(cli, { version: '0.0.0' }).pipe(Effect.catchTag('ShowHelp', usageExit))
