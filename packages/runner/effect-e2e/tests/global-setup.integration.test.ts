@@ -495,6 +495,37 @@ Feature("Setting up a run's shared files and merging the partials its workers wr
     )
 
     scenario(
+      'A run without ai-trace sets up when a file that is not a result directory sits among the results',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose previous run left an ai-trace file and a stray file beside the result directories')(
+          'root',
+          () =>
+            Effect.gen(function*() {
+              const root = yield* freshRoot
+              yield* staleRunLeftIn(root)
+              yield* fileWritten(root, 'results/.DS_Store', 'finder metadata')
+              return root
+            }),
+        ),
+        When('the run sets up without the ai-trace override')('state', ({ root }) =>
+          Effect.gen(function*() {
+            const host = vitestHostAt(root)
+            const started = yield* Effect.exit(setUp(CONFIG, host))
+            return {
+              started: Exit.isSuccess(started),
+              runIdProvided: RUN_ID_KEY in host.provided,
+              staleAiTrace: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`),
+              strayFile: yield* present(root, 'results/.DS_Store'),
+            }
+          })),
+        Then('the run starts, the stale ai-trace file is gone and the stray file is untouched')((s, expect) =>
+          expect(s.state).toEqual({ started: true, runIdProvided: true, staleAiTrace: false, strayFile: true })
+        ),
+      ),
+    )
+
+    scenario(
       'A run with ai-trace on leaves the files a previous run wrote in place',
       { scenarioLayer: NodeServices.layer },
       Gherkin.Do.pipe(

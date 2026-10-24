@@ -3,8 +3,9 @@ import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Predicate from 'effect/Predicate'
+import * as Schema from 'effect/Schema'
 
-import { fileNameOf } from './artifact.schema.js'
+import { fileNameOf, ResultDirectory } from './artifact.schema.js'
 import type { FileArtifactStoreOptions } from './file-artifact-store.js'
 
 const isNotFound = (error: PlatformError): boolean => Predicate.isTagged(error.reason, 'NotFound')
@@ -20,7 +21,7 @@ export const removeAiTraces = (
       Effect.catchIf(isNotFound, () => Effect.succeed<ReadonlyArray<string>>([])),
     )
     yield* Effect.forEach(
-      directories,
+      directories.filter(Schema.is(ResultDirectory)),
       (directory) => fs.remove(path.join(results, directory, fileNameOf('ai-trace')), { force: true }),
       { discard: true },
     )
