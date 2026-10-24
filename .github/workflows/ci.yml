@@ -83,6 +83,33 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
+  bun-parity:
+    name: bun parity · ubuntu-latest reports the .bun-version pin
+    needs: conflicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - uses: cachix/install-nix-action@v31
+      - name: The flake dev shell's Bun reports the .bun-version pin
+        run: |
+          pin="$(cat .bun-version)"
+          shown="${pin//$'\r'/}"
+          shown="${shown//$'\n'/ }"
+          shown="${shown//%/%%}"
+          drv="$(nix eval --raw ".#devShells.$(nix config show system).default" \
+            --apply 'shell: (let buns = builtins.filter (p: (p.pname or "") == "bun") shell.nativeBuildInputs;
+              in if buns == [] then throw "the dev shell has no bun package" else (builtins.head buns).drvPath)')"
+          bun="$(nix build --no-link --print-out-paths "$drv^out")/bin/bun"
+          observed="$("$bun" --version)"
+          echo "dev shell bun --version: $observed ($bun)"
+          if [ "$observed" != "$pin" ]; then
+            echo "::error title=bun-version-mismatch::runner $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH) dev shell reports bun $observed; .bun-version pins $shown"
+            exit 1
+          fi
   smoke:
     name: smoke · effect-microsandbox journeys (real microVM)
     needs: [conflicts, scope]

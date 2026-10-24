@@ -1,0 +1,48 @@
+name: systemfsoftware Bun
+description: >-
+  Install the Bun that `.bun-version` pins, through oven-sh/setup-bun pinned by commit, and fail unless `bun --version`
+  reports exactly that version
+inputs:
+  version-file:
+    description: The pin file, relative to the workspace; one line holding one exact version (`1.4.2`), never a range
+    required: false
+    default: .bun-version
+outputs:
+  version:
+    description: The pinned version `bun --version` reported
+    value: ${{ steps.pin.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Read the Bun pin
+      id: pin
+      shell: bash
+      run: |
+        if [ ! -f "$VERSION_FILE" ]; then
+          echo "::error title=bun-pin-missing::$VERSION_FILE does not exist; it pins the one Bun version CI runs"
+          exit 1
+        fi
+        pin="$(cat "$VERSION_FILE")"
+        if ! [[ "$pin" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          shown="${pin//$'\r'/}"
+          shown="${shown//$'\n'/ }"
+          shown="${shown//%/%%}"
+          echo "::error title=bun-pin-invalid::$VERSION_FILE must hold one exact version such as 1.4.2 on one line, got '$shown'"
+          exit 1
+        fi
+        echo "version=$pin" >> "$GITHUB_OUTPUT"
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: ${{ steps.pin.outputs.version }}
+    - name: bun --version reports the pin
+      shell: bash
+      env:
+        PIN: ${{ steps.pin.outputs.version }}
+        VERSION_FILE: ${{ inputs.version-file }}
+      run: |
+        observed="$(bun --version)"
+        echo "bun --version: $observed ($(command -v bun))"
+        if [ "$observed" != "$PIN" ]; then
+          echo "::error title=bun-version-mismatch::runner $RUNNER_NAME ($RUNNER_OS $RUNNER_ARCH) reports bun $observed; $VERSION_FILE pins $PIN"
+          exit 1
+        fi
