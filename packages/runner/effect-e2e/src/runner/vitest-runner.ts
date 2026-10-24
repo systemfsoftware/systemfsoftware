@@ -1,6 +1,7 @@
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import { TestRunner } from 'vitest'
 import type { RunnerTask, RunnerTestCase, RunnerTestFile, SerializedConfig, TestContext, TestTryOptions } from 'vitest'
@@ -82,6 +83,17 @@ const skipWithReason = async (wiring: Wiring, test: RunnerTask, reason: string):
   test.result = Object.assign({ state: 'skip' as const }, { note: reason })
 }
 
+const reasonedSkipOf = (test: RunnerTask): Option.Option<string> =>
+  Option.liftPredicate(test.meta.skipReason, Predicate.isString)
+
+const childrenOf = (task: RunnerTask): ReadonlyArray<RunnerTask> => {
+  const suite = task.suite
+  return suite === undefined ? [] : suite.tasks
+}
+
+const tasksUnder = (tasks: ReadonlyArray<RunnerTask>): ReadonlyArray<RunnerTask> =>
+  tasks.flatMap((task) => [task, ...tasksUnder(childrenOf(task))])
+
 const errorsOf = (test: RunnerTask): ReadonlyArray<BodyError> =>
   Option.getOrElse(Option.fromNullishOr(test.result?.errors), (): ReadonlyArray<BodyError> => [])
 
@@ -103,6 +115,7 @@ const endingOf = (test: RunnerTask, errorsBefore: number): TryEnding => ({
 export class E2EVitestRunner extends HookedTestRunner {
   private readonly wiring: Result.Result<Wiring, ConfigInvalid>
   private readonly tries = new WeakMap<RunnerTask, RunningTry>()
+  private readonly reasonedSkips = new WeakSet<RunnerTask>()
 
   constructor(config: SerializedConfig, wiring: Result.Result<Wiring, ConfigInvalid>) {
     super(config)
@@ -156,6 +169,7 @@ export class E2EVitestRunner extends HookedTestRunner {
 
   override async onAfterRunFiles(files: ReadonlyArray<RunnerTestFile>): Promise<void> {
     await super.onAfterRunFiles(files)
+    await this.recordUndispatchedSkips(files)
     await this.snapshot('finished')
   }
 
@@ -167,9 +181,35 @@ export class E2EVitestRunner extends HookedTestRunner {
   }
 
   private async admit(wiring: Wiring, test: RunnerTask): Promise<void> {
-    await Option.match(Option.fromNullishOr(test.meta.skipReason), {
+    await Option.match(reasonedSkipOf(test), {
       onNone: () => admitPlatforms(wiring, test),
-      onSome: (reason) => skipWithReason(wiring, test, reason),
+      onSome: (reason) => this.recordSkipOnce(wiring, test, reason),
+    })
+  }
+
+  private async recordSkipOnce(wiring: Wiring, test: RunnerTask, reason: string): Promise<void> {
+    if (this.reasonedSkips.has(test)) return
+    this.reasonedSkips.add(test)
+    await skipWithReason(wiring, test, reason)
+  }
+
+  /**
+   * A file whose every test is skipped never dispatches a task: Vitest marks the file itself skipped, so no
+   * `onBeforeRunTask` ever sees those tests. Their skipped attempts are recorded here, before the final snapshot,
+   * so the merged report carries the reason.
+   */
+  private async recordUndispatchedSkips(files: ReadonlyArray<RunnerTestFile>): Promise<void> {
+    await Result.match(this.wiring, {
+      onFailure: () => Promise.resolve(),
+      onSuccess: (wiring) =>
+        Promise.all(
+          tasksUnder(files.flatMap((file) => file.tasks)).map((test) =>
+            Option.match(reasonedSkipOf(test), {
+              onNone: () => Promise.resolve(),
+              onSome: (reason) => this.recordSkipOnce(wiring, test, reason),
+            })
+          ),
+        ).then(() => undefined),
     })
   }
 
