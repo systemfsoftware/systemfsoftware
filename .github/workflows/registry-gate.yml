@@ -2,10 +2,12 @@ name: Registry gate
 
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   gate:
@@ -17,6 +19,12 @@ jobs:
     env:
       HUSKY: "0"
     steps:
+      - name: Refuse fork pull requests
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "The registry gate runs on same-repository pull requests and on workflow_dispatch only."
+          echo "Fork pull requests get no OIDC token and no credential."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -28,5 +36,5 @@ jobs:
         name: Publish, mint, install, record, delete
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_IDENTITY_ID: ${{ vars.DOPPLER_IDENTITY_ID }}
         run: bun --conditions=@systemfsoftware/source tooling/registry-gate/bin/registry-gate.ts
