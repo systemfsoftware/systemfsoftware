@@ -25,8 +25,9 @@ jobs:
       - name: Nix's effective access-tokens is the dummy token alone
         run: |
           effective=$(nix config show access-tokens)
+          effective=${effective# }
           if [ "$effective" != "github.com=dummy-not-a-secret" ]; then
-            echo "::error::effective access-tokens is not the sfs-fetch-token line"
+            echo "::error::effective access-tokens is not the sfs-fetch-token line: $(sed 's/=[^ ]*/=<redacted>/g' <<< "$effective")"
             exit 1
           fi
           echo "effective access-tokens: github.com=<the sfs-fetch-token>"
@@ -38,6 +39,7 @@ jobs:
         run: |
           test ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/nix/nix.conf"
           effective=$(nix config show access-tokens)
+          effective=${effective# }
           case "$effective" in
             github.com=dummy-not-a-secret) echo "::error::the dummy token is still in effect"; exit 1 ;;
             github.com=*) echo "effective access-tokens: github.com=<the job's GITHUB_TOKEN>" ;;
