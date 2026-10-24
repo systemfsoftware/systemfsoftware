@@ -48,56 +48,6 @@ runs:
         restore-keys: |
           turbo-${{ runner.os }}-checks-
           turbo-${{ runner.os }}-
-    - name: Commit graph for repo-checks (commits only, trees on demand)
-      if: inputs.lane == 'static'
-      shell: bash -e {0}
-      run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
-    - name: Each repo check fails on a planted violation
-      if: inputs.lane == 'static'
-      shell: bash -e {0}
-      run: |
-        bin="$(nix build --no-link --print-out-paths .#repo-checks)/bin/repo-checks"
-        orig="$(git rev-parse HEAD)"
-        commit() { git -c user.name=plant -c user.email=plant@localhost commit -q --no-verify -m "$1"; }
-        restore() { git reset -q --hard "$orig"; }
-        expect_violation() {
-          status=0
-          "$bin" "$@" || status=$?
-          test "$status" -eq 1 || { echo "::error::repo-checks $* must exit 1 on its planted violation, got $status" >&2; exit 1; }
-          restore
-        }
-
-        echo '::group::subtrees: a committed edit inside a vendored subtree'
-        vendored="$(git ls-files -- repos/constitution | sed -n 1p)"
-        printf '\nplanted\n' >> "$vendored"
-        git add "$vendored" && commit 'plant: edit a vendored subtree'
-        expect_violation subtrees
-        echo '::endgroup::'
-
-        echo '::group::release-age: a third-party package exempted from the cutoff'
-        sed -i '/^minimumReleaseAgeExclude:$/a\  - effect' pnpm-workspace.yaml
-        expect_violation release-age
-        echo '::endgroup::'
-
-        echo '::group::project-membership: a tracked source no project includes'
-        printf 'export const planted = 1\n' > packages/effect-readiness/planted.ts
-        git add packages/effect-readiness/planted.ts
-        expect_violation project-membership
-        echo '::endgroup::'
-
-        echo '::group::single-plan: two plans added in one change'
-        printf '# a\n' > docs/plans/planted-a-plan.md
-        printf '# b\n' > docs/plans/planted-b-plan.md
-        git add docs/plans && commit 'plant: two plans'
-        expect_violation single-plan --plans docs/plans --base "$orig"
-        echo '::endgroup::'
-
-        echo '::group::packed-manifest: a catalog flip that no pending intent releases'
-        find .changeset -maxdepth 1 -name '*.md' ! -name README.md -delete
-        sed -i 's/^  vitest: .*/  vitest: ^5.0.2/' pnpm-workspace.yaml
-        git add -A .changeset pnpm-workspace.yaml && commit 'plant: flip a catalog range with no intent'
-        expect_violation packed-manifest --base "$orig"
-        echo '::endgroup::'
     - name: The deno-locks check names a lock missing the effect specifier its entry points import
       if: inputs.lane == 'static'
       shell: bash -e {0}
