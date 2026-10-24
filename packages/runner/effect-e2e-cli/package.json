@@ -1,0 +1,91 @@
+{
+  "name": "@systemfsoftware/effect-e2e-cli",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/runner/effect-e2e-cli"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/effect-e2e-cli#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "The effect-e2e command line: `effect-e2e init` scaffolds a runnable @systemfsoftware/effect-e2e suite.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "e2e",
+    "end-to-end",
+    "testing",
+    "cli",
+    "scaffold"
+  ],
+  "type": "module",
+  "bin": {
+    "effect-e2e": "./dist/bin.mjs"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-e2e": "workspace:^",
+    "effect": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-e2e-web": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "playwright": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@systemfsoftware/effect-e2e-web": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "playwright": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@systemfsoftware/effect-e2e-web": {
+      "optional": true
+    },
+    "@systemfsoftware/vitest-config": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}
