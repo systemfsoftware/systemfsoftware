@@ -11,6 +11,7 @@ import {
   STALE_REPORT,
   staleReportIn,
   statusesOf,
+  vitestConfigRemovedFrom,
 } from './__fixtures__/cli-run.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -95,6 +96,60 @@ Feature('Running a suite with effect-e2e run')
             stdout: s.run.stdout,
             left: Option.getOrNull(s.run.reportText),
           }).toEqual({ exitCode: 2, namesTheKey: true, stdout: '', left: STALE_REPORT })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run started inside the suite without --dir finds the suite root',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite with its valid config')('suite', () => copiedRunnerSuite('valid')),
+        When('the run starts in the suite tests directory and selects the test that uses every fixture')(
+          'run',
+          ({ suite }) => runCli({ suite, withoutDirFrom: 'tests', args: ['tests/fixtures.e2e.ts'] }),
+        ),
+        Then('the run exits 0 and the report at the suite root holds the test as passed')((s, expect) =>
+          expect({ exitCode: s.run.exitCode, report: statusesOf(s.run.report) }).toEqual({
+            exitCode: 0,
+            report: { [FIXTURES_TEST]: 'passed' },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run started outside any suite without --dir exits 2 and runs nothing',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite with its valid config')('suite', () => copiedRunnerSuite('valid')),
+        When('the run starts in the directory holding the suite, where no suite config lies at or above')(
+          'run',
+          ({ suite }) => runCli({ suite, withoutDirFrom: '..', args: [] }),
+        ),
+        Then('the run exits 2, says no suite config was found, and the suite holds no report')((s, expect) =>
+          expect({
+            exitCode: s.run.exitCode,
+            saysNoSuite: s.run.stderr.includes('no e2e.config.ts at or above'),
+            report: Option.getOrNull(s.run.reportText),
+          }).toEqual({ exitCode: 2, saysNoSuite: true, report: null })
+        ),
+      ),
+    )
+
+    scenario(
+      'A --dir naming a directory without vitest.config.ts exits 2 naming the missing file',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite with its valid config')('suite', () => copiedRunnerSuite('valid')),
+        Given('the copy has lost its vitest.config.ts')('removed', ({ suite }) => vitestConfigRemovedFrom(suite)),
+        When('the run names the copy with --dir')('run', ({ suite }) => runCli({ suite, args: [] })),
+        Then('the run exits 2, names vitest.config.ts, and the suite holds no report')((s, expect) =>
+          expect({
+            exitCode: s.run.exitCode,
+            namesTheFile: s.run.stderr.includes('holds no vitest.config.ts'),
+            report: Option.getOrNull(s.run.reportText),
+          }).toEqual({ exitCode: 2, namesTheFile: true, report: null })
         ),
       ),
     )

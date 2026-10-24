@@ -57,6 +57,7 @@ export interface CliRequest {
   readonly args: ReadonlyArray<string>
   readonly env?: Readonly<Record<string, string>>
   readonly output?: string
+  readonly withoutDirFrom?: string
 }
 
 const textOf = (stream: Stream.Stream<Uint8Array, PlatformError>) => stream.pipe(Stream.decodeText, Stream.mkString)
@@ -75,15 +76,18 @@ const partialCountIn = (fs: FileSystem.FileSystem, directory: string) =>
     Effect.map((names) => names.filter((name) => name.endsWith('.json') && !name.startsWith('.')).length),
   )
 
-const spawnedBin = ({ suite, args, env }: CliRequest) =>
+const locatedArgs = ({ suite, args, withoutDirFrom }: CliRequest): ReadonlyArray<string> =>
+  withoutDirFrom === undefined ? ['run', '--dir', suite, ...args] : ['run', ...args]
+
+const spawnedBin = (request: CliRequest) =>
   Effect.scoped(
     Effect.gen(function*() {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const inherited = { PATH: yield* Config.String('PATH'), HOME: yield* Config.String('HOME') }
       const handle = yield* spawner.spawn(
-        ChildProcess.make(BIN, ['run', '--dir', suite, ...args], {
-          cwd: PACKAGE_ROOT,
-          env: { ...inherited, ...env },
+        ChildProcess.make(BIN, locatedArgs(request), {
+          cwd: request.withoutDirFrom === undefined ? PACKAGE_ROOT : `${request.suite}/${request.withoutDirFrom}`,
+          env: { ...inherited, ...request.env },
           extendEnv: false,
         }),
       )
@@ -153,3 +157,6 @@ export const staleReportIn = (suite: string) =>
       fs.makeDirectory(`${suite}/.e2e`, { recursive: true }),
       fs.writeFileString(`${suite}/.e2e/report.json`, STALE_REPORT),
     ))
+
+export const vitestConfigRemovedFrom = (suite: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.remove(`${suite}/vitest.config.ts`))
