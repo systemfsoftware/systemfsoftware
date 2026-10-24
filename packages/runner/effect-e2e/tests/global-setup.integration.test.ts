@@ -49,7 +49,6 @@ const OPTIONS: RunnerOptions = {
   version: '0.0.0-test',
 }
 
-/** Vitest's side of a global setup: the suite root it runs in, and every value it hands the workers. */
 interface VitestHost {
   readonly project: E2EGlobalSetupProject
   readonly provided: ReadonlyArray<string>
@@ -82,33 +81,45 @@ const savesFailed = Effect.gen(function*() {
   return yield* entriesOf(world)
 })
 
-const inOutput = (root: string, file: string) => Effect.map(Path.Path, (path) => path.join(root, OUTPUT, file))
+const inDirectory = (root: string, directory: string, file: string) =>
+  Effect.map(Path.Path, (path) => path.join(root, directory, file))
 
-const fileWritten = (root: string, file: string, text: string) =>
+const inOutput = (root: string, file: string) => inDirectory(root, OUTPUT, file)
+
+const fileWrittenIn = (directory: string) => (root: string, file: string, text: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const target = yield* inOutput(root, file)
+    const target = yield* inDirectory(root, directory, file)
     yield* fs.makeDirectory(path.dirname(target), { recursive: true })
     yield* fs.writeFileString(target, text)
   })
 
+const fileWritten = fileWrittenIn(OUTPUT)
+
 const CONFIG_PROJECT = Report1.fields.run.fields.project.make(PROJECT)
 
-/** A worker's partial as the runner writes it: a `report-1` document of its attempts, stamped with a run id. */
-const partialWritten = (root: string, worker: string, runId: string, entries: ReadonlyArray<AttemptEntry>) =>
+const partialWrittenIn =
+  (directory: string) => (root: string, worker: string, runId: string, entries: ReadonlyArray<AttemptEntry>) =>
+    Effect.flatMap(
+      renderJson(
+        buildReport({
+          run: { id: RunId.make(runId), project: CONFIG_PROJECT, startedAt: STARTED, finishedAt: FINISHED, errors: [] },
+          entries,
+        }),
+      ),
+      (text) => fileWrittenIn(directory)(root, `partials/${worker}.json`, text),
+    )
+
+const partialWritten = partialWrittenIn(OUTPUT)
+
+const presentIn = (directory: string) => (root: string, file: string) =>
   Effect.flatMap(
-    renderJson(
-      buildReport({
-        run: { id: RunId.make(runId), project: CONFIG_PROJECT, startedAt: STARTED, finishedAt: FINISHED, errors: [] },
-        entries,
-      }),
-    ),
-    (text) => fileWritten(root, `partials/${worker}.json`, text),
+    inDirectory(root, directory, file),
+    (target) => Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(target)),
   )
 
-const present = (root: string, file: string) =>
-  Effect.flatMap(inOutput(root, file), (target) => Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(target)))
+const present = presentIn(OUTPUT)
 
 const partialFilesOf = (root: string) =>
   Effect.flatMap(
@@ -136,6 +147,9 @@ const freshRoot = Effect.flatMap(
 
 const setUp = (config: typeof CONFIG, host: VitestHost) =>
   Effect.promise(() => makeGlobalSetup(config, OPTIONS)(host.project))
+
+const setUpWith = (env: Record<string, string>) => (config: typeof CONFIG, host: VitestHost) =>
+  Effect.promise(() => makeGlobalSetup(config, { ...OPTIONS, env })(host.project))
 
 Feature("Merging the report partials a run's workers wrote into one run report")
   .withLayer(Layer.empty)
@@ -242,6 +256,144 @@ Feature("Merging the report partials a run's workers wrote into one run report")
             Effect.gen(function*() {
               const host = vitestHostAt(root)
               const teardown = yield* setUp(REFUSED, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return { provided: host.provided.length, failed: Exit.isFailure(torn) }
+            }),
+        ),
+        Then('nothing is provided and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ provided: 0, failed: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment moves the output directory merges there and leaves the old report untouched',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose previous run left a report at the default location')('root', () =>
+          Effect.gen(function*() {
+            const root = yield* freshRoot
+            yield* fileWritten(root, 'report.json', '{}')
+            return root
+          })),
+        When(
+          'a run whose environment overrides the output directory sets up, one worker passes greets, and it tears down',
+        )(
+          'run',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_OUTPUT: 'evidence' })(CONFIG, host)
+              yield* partialWrittenIn('evidence')(root, 'worker-a', host.provided[0] ?? '', yield* greetsPassed)
+              yield* Effect.promise(teardown)
+              return {
+                provided: host.provided.length,
+                overridden: yield* presentIn('evidence')(root, 'report.json'),
+                oldReport: yield* present(root, 'report.json'),
+              }
+            }),
+        ),
+        Then('the merged report lives under the overridden directory and the old report still exists')(
+          (s, expect) => expect(s.run).toEqual({ provided: 1, overridden: true, oldReport: true }),
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment names the target the suite carries sets up as usual',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment overrides the target to the suite web target sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_TARGET: 'web' })(CONFIG, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return { provided: host.provided.length, failed: Exit.isFailure(torn) }
+            }),
+        ),
+        Then('one run id is provided and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ provided: 1, failed: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment names a target the suite does not carry provides no run id',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment overrides the target to one the config does not name sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_TARGET: 'ghost' })(CONFIG, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return { provided: host.provided.length, failed: Exit.isFailure(torn) }
+            }),
+        ),
+        Then('nothing is provided and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ provided: 0, failed: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment names an agent the suite does not carry provides no run id',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment overrides the agent to one the config does not name sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_AGENT: 'ghost' })(CONFIG, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return { provided: host.provided.length, failed: Exit.isFailure(torn) }
+            }),
+        ),
+        Then('nothing is provided and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ provided: 0, failed: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment overrides the timeout with a value that is not a number provides no run id',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment overrides the timeout to a non-number sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_TIMEOUT: 'soon' })(CONFIG, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return { provided: host.provided.length, failed: Exit.isFailure(torn) }
+            }),
+        ),
+        Then('nothing is provided and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual({ provided: 0, failed: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment overrides the cache mode to a value outside its choices provides no run id',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment overrides the cache mode to a value it does not offer sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_CACHE: 'sometimes' })(CONFIG, host)
               const torn = yield* Effect.exit(Effect.tryPromise(teardown))
               return { provided: host.provided.length, failed: Exit.isFailure(torn) }
             }),

@@ -22,7 +22,7 @@ const teardownFor = (location: PartialsLocation, options: RunnerOptions): E2EGlo
   mergePartials(location).pipe(Effect.asVoid, Effect.provide(options.platform), Effect.runPromise)
 
 const setUp = (config: E2EConfigInput, options: RunnerOptions): E2EGlobalSetup => (project) =>
-  Result.match(decodedConfigOf({ config, defaults: options.defaults }), {
+  Result.match(decodedConfigOf({ config, defaults: options.defaults, env: options.env }), {
     onFailure: () => Promise.resolve(nothingToMerge),
     onSuccess: (decoded) => {
       const location: PartialsLocation = { root: project.config.root, output: decoded.output }
