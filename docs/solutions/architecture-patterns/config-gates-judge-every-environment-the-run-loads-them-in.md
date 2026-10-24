@@ -2,7 +2,7 @@
 title: A Gate That Executes a Config Must Judge It in Each Environment Class the Run Uses, and Name the Rest
 date: "2026-10-12"
 category: architecture-patterns
-module: scripts/tools test-timings mutation plan
+module: scripts/tools mutation-admit
 problem_type: architecture_pattern
 component: testing_framework
 severity: high
@@ -28,7 +28,7 @@ tags:
 
 ## Problem
 
-The Mutation plan (`test-timings plan --task mutation`) admits a package only if its `stryker.config.*` inherits `sharedConfig.mutate` from `@systemfsoftware/stryker-config` untouched. A Node probe (`mutation-probe.mjs`) imports the config and admits it only if `mutate` is the same array as `sharedConfig.mutate`, its patterns still equal the frozen `workflowMutate` glob, and it sets no `extends`; a config that cannot be imported is refused too. The pattern check catches a push onto the shared array, which keeps the array's identity. Importing is the right choice, because it sees what Stryker sees: spreads, pushes, and `stryker.conf.*` shadowing `stryker.config.*`. It also makes the verdict a function of the environment the probe runs in. Review of #747 found three wrong environments in a row, each admitting a config that widened in the real Mutation job.
+The Mutation plan's admission step (`mutation-admit`) admits a package only if its `stryker.config.*` inherits `sharedConfig.mutate` from `@systemfsoftware/stryker-config` untouched. A Node probe (`mutation-probe.mjs`) imports the config and admits it only if `mutate` is the same array as `sharedConfig.mutate`, its patterns still equal the frozen `workflowMutate` glob, and it sets no `extends`; a config that cannot be imported is refused too. The pattern check catches a push onto the shared array, which keeps the array's identity. Importing is the right choice, because it sees what Stryker sees: spreads, pushes, and `stryker.conf.*` shadowing `stryker.config.*`. It also makes the verdict a function of the environment the probe runs in. Review of #747 found three wrong environments in a row, each admitting a config that widened in the real Mutation job.
 
 ## Failure Modes
 
@@ -42,10 +42,10 @@ $$\text{verdict}(c, E_\text{gate}) = \text{admit} \;\not\Rightarrow\; \forall E 
 
 ## Architectural Invariants
 
-- **Run-shape coverage.** The gate evaluates the subject once per environment class it can name before the run assigns one, and admits it only if every evaluation admits it. Here those classes are `JOB_SHAPES`: `''` (a package run whole) and `'1/1'`, the single shard whose slice is every file, so its inherited `mutate` equals the whole-package one. The probe facts are a `Record<AdmissionShape, ProbeFacts>`, so the type checker rejects a producer that skips a shape. Once sizing has split a package into `count` shards, the gate knows the exact classes that run will use, so it probes the config again under every `<index>/<count>` and refuses it if any shard's facts refuse it, or if the files each shard is left do not split the shared set between them (`shard-partition`, checked for a whole-package run too, as a run of one shard): a config that pushes a negation onto, or pops one off, the shared array keeps its identity, so only the partition shows it. The partition counts only negations that name a shared file verbatim; Stryker reads every negation as a glob, so the probe treats any other one as the config's own set and refuses it.
-- **Inherit, then override where the gate must.** The child gets the plan job's own environment (`CI` included). `pnpmEnv` then overrides or adds what the gate must: `STRYKER_SHARD` is set to the shape being judged; the file-command paths (`GITHUB_OUTPUT` and the rest) point at the child's own existing files, so a config that writes to them cannot replace the plan's `jobs` output; `JOB` is a planned job of the shape being judged (a one-package group job, or the shard job with its `shard`), and `npm_lifecycle_event` and `npm_lifecycle_script` are what pnpm sets when the job runs the package's `mutation` script, the only script an admitted package can run, with the `--incrementalFile` the job appends (pnpm adds the arguments to the script text); and pnpm is told not to manage its own version. Everything else is the plan job's, which is not the Mutation job's (see the declared limit).
-- **Attribute every refusal to the shapes that gave it.** `refusalsOf` reports each shape's refusals, merges identical ones, and names exactly the shapes that gave each one (`when STRYKER_SHARD is ''`, or `'' or '1/1'` when both did). Labelling a two-shape refusal with one shape reads as if the other shape escaped it; labelling a one-shape refusal with both hides which shape failed.
-- **Declared limit.** The gate covers the environment classes it enumerates and no others. Here it does not cover: the plan step's own variables, which the job does not have (the workflow unsets the ones it defines, but Actions' per-step names such as `GITHUB_ACTION` remain); `JOB`'s `id`, `name` and `predicted`, which differ per job, and the counts under its `mutants` (the probe's `JOB` carries the key, with counts of 0, since the counts come after admission), and for a whole package its `packages`, `dirs`, `filters` and `mutants` keys, since the plan may pack it with other packages; pnpm's other script variables (`npm_package_name` and the rest). (A plan capped by `--max-jobs` can give a package a count-1 shard, whose `STRYKER_SHARD` is exactly the probed `1/1`.) A config that branches on any uncovered value can still read one branch at the gate and another in the job, and code written to detect the probe can pass any finite set of environments. State what is covered, as `pnpmEnv`'s comment does, rather than claiming the gate stops environment branching in general.
+- **Run-shape coverage.** The gate evaluates the subject once per environment class the run can give it, and admits it only if every evaluation admits it. While shards sliced `mutate` through `STRYKER_SHARD`, those classes were `''` and `'1/1'`, and a split package was probed again under every `<index>/<count>`. Since #733 split runs with `stryker run --shard` and `sharedConfig.mutate` became the frozen `workflowMutate` copy, no Stryker step sets a variable that changes `mutate`, so one class remains: the plan job's own environment, which carries the workflow-level variables (`CI`, `STRYKER_CONCURRENCY`) every Stryker step inherits. A new variable the run varies brings the per-class probe back.
+- **Inherit, then override where the gate must.** The child gets the plan job's own environment (`CI` included). `mutation-admit` then overrides what the gate must: the file-command paths (`GITHUB_OUTPUT` and the rest) point at the child's own existing files, so a config that writes to them cannot replace the plan's outputs, and pnpm is told not to manage its own version.
+- **Attribute every refusal to the environment that gave it.** With one class there is one verdict per package; while there were two, each refusal named the shapes that gave it, since a refusal labelled with one shape reads as if the other escaped it.
+- **Declared limit.** The gate covers the environment classes it enumerates and no others. Here it does not cover a Stryker step's own variables (`SLUG`, `LABEL`, `PROJECTS` and Actions' per-step names), nor the working directory the CLI loads the config from. A config that branches on any uncovered value can still read one branch at the gate and another in the job, and code written to detect the probe can pass any finite set of environments. State what is covered rather than claiming the gate stops environment branching in general.
 
 ```ts
 // before (abridged): one environment, a hand-picked allowlist
@@ -58,15 +58,12 @@ const pnpmEnv = () => ({
   npm_config_manage_package_manager_versions: 'false',
 })
 
-// after: the plan job's environment, once per job shape
-const pnpmEnv = (scratch: string, runStep: Record<string, string>) => ({
+// after: the plan job's environment, with file-command paths of the child's own
+const env = {
   ...Deno.env.toObject(),
   ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
-  STRYKER_SHARD: '',
-  ...runStep, // runStepOf(pkg, shape): STRYKER_SHARD, JOB, npm_lifecycle_event, npm_lifecycle_script
   npm_config_manage_package_manager_versions: 'false',
-})
-const probes: Record<JobShape, ProbeFacts> = { '': await probed(pkg, ''), '1/1': await probed(pkg, '1/1') }
+}
 ```
 
 ## Why This Works
@@ -75,9 +72,8 @@ A config that reads the environment is ordinary code, not an attack: `process.en
 
 ## Verification and Prevention
 
-- Plant one fixture per covered environment class, and observe it admitted before the fix and refused after. The refusal journey in `test-timings.test.ts` plants configs gated on `CI`, on `STRYKER_SHARD` being set, on it being empty, on `GITHUB_OUTPUT`, on `JOB`, its `shard` and its `mutants` key, on `npm_lifecycle_event`, and on `npm_lifecycle_script` carrying the job's `--incrementalFile`, and asserts the exact list of refusal titles. The classes under the declared limit have no fixture, because the gate does not claim them.
+- Plant one fixture per covered environment class, and observe it admitted before the fix and refused after. The refusal journey in `mutation-admission.test.ts` plants configs gated on `CI` and on `GITHUB_OUTPUT`, and asserts the exact list of refusal titles. The classes under the declared limit have no fixture, because the gate does not claim them.
 - Run the journey with the job's variables set (`CI=true`) rather than an empty environment, so the gate is tested the way it runs.
-- A pure test on `admitMutation` checks that a package refused differently under each shape reports both refusals, and that one refused identically under both reports once, naming both shapes.
 - Code smell: an admission check that runs the subject under `clearEnv` or a hand-picked allowlist, or that sets one fixed value for a variable the run varies.
 
 ## Related

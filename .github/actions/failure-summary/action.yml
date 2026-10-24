@@ -17,6 +17,10 @@ inputs:
   reproduce:
     description: The local command that reproduces this job, run from the workspace root
     required: true
+  reproduce-label:
+    description: How the summary names the reproduce command, e.g. `reproduce through a dispatch on main` for a step that only CI may run
+    required: false
+    default: reproduce locally
   working-directory:
     description: The pnpm workspace root, relative to the repository root
     required: false
@@ -32,6 +36,7 @@ runs:
         STEPS: ${{ inputs.steps }}
         JOB: ${{ inputs.job }}
         REPRODUCE: ${{ inputs.reproduce }}
+        REPRODUCE_LABEL: ${{ inputs.reproduce-label }}
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
         ARTIFACT: failure-log-${{ inputs.job }}-${{ github.run_attempt }}
       run: |
@@ -65,9 +70,23 @@ runs:
           nix-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation.' ;;
           compare-artifact-missing) next='Open the build job of each named system; its compare step or upload did not produce `nix-compare-<system>`.' ;;
           outputs-differ-across-systems) next='Diff the named tarball between systems and remove the system-dependent input.' ;;
-          mutation-on-pull-request) next='Run mutation on a push to the default branch or a manual dispatch, never on a pull request.' ;;
+          mutation-on-pull-request) next='Mutation runs on the nightly schedule or a manual dispatch on the default branch, never on a pull request.' ;;
+          mutation-off-main) next='Dispatch Mutation on the default branch; to test another commit, pass it as the `sha` input.' ;;
+          mutation-sha-off-main) next='Pass a `sha` the default branch already holds; a branch commit is tested by its pull request, never by Mutation.' ;;
+          mutation-packages-invalid) next='Pass `packages` as a non-empty JSON array of package names that have a mutation script, or leave it unset to plan every package.' ;;
+          mutation-night-failed) next="Re-run the night job: the night's record or its fix task was not written, so the next night's range starts from the night before." ;;
+          mutation-night-unrouted) next="Read this run's step summary: the red night's fix task found no candidate merge with a pull request to comment on." ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
+          mutation-shard-failed) next="A shard named in the error did not conclude success in its last attempt (fix what its log names, then re-run the failed jobs), or succeeded without uploading its artifact (re-run the whole run; re-running failed jobs skips a successful one). Its project was not merged." ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
+          mutation-coverage-failed) next="Open the named project's coverage job: its dry run failed, so none of its shards ran. Fix what that job's failure log names." ;;
+          mutation-artifact-missing) next='Re-run the job named in the error so it uploads its artifact in the attempt it ran in, then re-run this job.' ;;
+          mutation-api-failed) next='The GitHub API refused a read of this run (endpoint and status in the error). Re-run the failed jobs.' ;;
+          mutation-tool-misused) next='A workflow step called job-attempt or run-reuse without readable inputs; fix the step named in the error.' ;;
+          mutation-matrix-too-large) next='The plans need more shard jobs than one GitHub matrix may create (256). Fix the project whose shard count the plan step summary shows as unexpectedly large.' ;;
+          mutation-shard-job-missing) next='A shard job named in the error never ran; open the plan job, since a matrix GitHub refused to create leaves its jobs out of the run.' ;;
+          mutation-prior-unread) next="The run did not read the prior incremental record it was handed (counts in the error). Make the project's stryker config read that file through its incremental file or an \`incrementalSources\` pattern such as \`reports/stryker-incremental-*.json\`; a record that is not JSON means deleting the restored stryker-incremental cache entry and re-running." ;;
+          mutation-coverage-unreused) next="The shard ran its own dry run instead of reusing the coverage job's: a file one of the two jobs wrote under the project entered Stryker's digest (digests in the error), and it re-runs the project's unchanged mutants on every run. List the project's untracked files with \`git status --short --ignored <project>\` and keep them out: the project's stryker config must set no \`ignorePatterns\` of its own." ;;
           sfs-deps-lockfile-invalid) next='Read the sfs-deps key log: pnpm-lock.yaml is unreadable, or names one `.sfs-deps/` tarball with two integrities; run `pnpm install` and commit pnpm-lock.yaml.' ;;
           sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
           sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;
@@ -79,7 +98,7 @@ runs:
         [ "$WORKING_DIRECTORY" = . ] || REPRODUCE="cd $WORKING_DIRECTORY && $REPRODUCE"
         {
           echo "### Failure: \`$reason\`"
-          echo "- reproduce locally: \`$REPRODUCE\`"
+          echo "- $REPRODUCE_LABEL: \`$REPRODUCE\`"
           echo "- next action: $next"
           echo "- full log: artifact \`$ARTIFACT\`"
         } >> "$GITHUB_STEP_SUMMARY"

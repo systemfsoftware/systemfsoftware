@@ -1,12 +1,10 @@
-// mutation-probe.contract.test.ts - what the planner copies or assumes from Stryker, checked against the Stryker the
-// workspace lockfile resolves: which config file it reads, and the plan file `stryker plan --out` writes.
+// mutation-probe.contract.test.ts - what mutation admission copies from Stryker, checked against the Stryker the
+// workspace lockfile resolves: which config file it reads.
 import { assertEquals } from '@std/assert'
 import { dirname, fromFileUrl, join } from '@std/path'
 import { parse } from '@std/yaml'
 import contract from '@systemfsoftware/stryker-js-cli-contract/package.json' with { type: 'json' }
 import stryker from '@systemfsoftware/stryker-js/package.json' with { type: 'json' }
-import { Result } from 'effect'
-import { mutantCountOf } from './mutation-plan.ts'
 
 const here = dirname(fromFileUrl(import.meta.url))
 const repo = join(here, '..', '..')
@@ -157,39 +155,4 @@ Deno.test('the probe reads the config files Stryker reads, in the order Stryker 
   } finally {
     for (const dir of [real, probed]) await Deno.remove(dir, { recursive: true })
   }
-})
-
-/**
- * The plan `stryker plan --full --target-seconds 900 --out plan.json` wrote with @systemfsoftware/stryker-js 17.0.2,
- * recorded from a project holding `src/decide.workflow.ts`
- * (`export const decide = (n: number): number => (n > 0 ? n + 1 : n - 1)`) and a `stryker.config.mjs` of
- * `{ mutate: ['src/**\/*.workflow.ts'], testRunner: 'command', commandRunner: { command: 'true' } }`. The CLI printed
- * `Found 1 of 3 file(s) to be mutated.` and planned 8 mutants. Re-record it when the lockfile test above fails.
- */
-const RECORDED_PLAN = {
-  version: 1,
-  targetSeconds: 900,
-  shards: [{
-    index: 1,
-    count: 1,
-    predictedSeconds: 8,
-    projects: [{
-      project: '.',
-      mutants: [
-        '1ebecf5697ce0e45',
-        '3682a93ed9264f8a',
-        '43a71f44b2f1b221',
-        '5227fc4afef5175a',
-        'b3ffc15420108d73',
-        'c09126a73680cdd3',
-        'c121e048f514e740',
-        'e31a4f63530cec52',
-      ],
-    }],
-  }],
-  matrix: { include: [{ shard: '1/1', predictedSeconds: 8 }] },
-}
-
-Deno.test('the planner counts the mutants in a plan the installed Stryker CLI wrote', () => {
-  assertEquals(mutantCountOf(JSON.stringify(RECORDED_PLAN, null, 2)), Result.succeed(8))
 })

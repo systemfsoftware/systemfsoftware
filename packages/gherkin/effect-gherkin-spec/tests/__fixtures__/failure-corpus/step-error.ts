@@ -1,10 +1,11 @@
 import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Effect } from 'effect'
 import { StepDefect } from './corpus-defect.js'
 import { Ledger } from './ledger.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/gherkin/effect-gherkin-spec/tests/__fixtures__/failure-corpus/step-error.ts'
+const defectFile = workspaceRelativePathOf(import.meta.url)
 
 export const stepErrorFixture: CorpusFixture = {
   name: 'a message-less error raised in a step',

@@ -8,40 +8,18 @@ on:
         type: string
         default: .
       target-seconds:
-        description: Seconds of mutation the planner packs into one job; a job starts no package after four times this
+        description: Wall seconds each planned shard or batch is sized to; the plan reports a shard predicted over it and never stops one
         required: false
         type: number
-        default: 900
-      max-jobs:
-        description: Most mutation jobs the planner may plan
-        required: false
-        type: number
-        default: 20
-      max-seconds:
-        description: Most seconds of mutation the planner may plan across all jobs
-        required: false
-        type: number
-        default: 4500
-      unknown-mutant-seconds:
-        description: Seconds per mutant the planner assumes when the timing record measures no package's mutants; the default is main's slowest measured rate
-        required: false
-        type: number
-        default: 21
-      timeout-minutes:
-        description: Timeout of each mutation job
-        required: false
-        type: number
-        default: 75
-      report-timeout-minutes:
-        description: Timeout of the job that merges the parts into one report
-        required: false
-        type: number
-        default: 25
-      record:
-        description: Name of the timing record artifact the plan reads from the default branch and the timings job writes
+        default: 600
+      seed-costs:
+        description: >-
+          Path, relative to the workspace root, of measured costs ({projects: {<dir>: {seconds, mutants}}}) that price a project
+          with no incremental record; a project it does not name is priced at its slowest rate, and a missing file at one
+          second per mutant
         required: false
         type: string
-        default: mutation-timings
+        default: .github/mutation-seed-costs.json
       runs-on:
         description: JSON label list for every job
         required: false
@@ -52,28 +30,79 @@ on:
         required: false
         type: string
         default: .#sfs-deps
+      sha:
+        description: A commit on the default branch to test instead of the run's own; the guard refuses any other
+        required: false
+        type: string
+        default: ""
+      packages:
+        description: JSON array of package names to plan instead of every package; the plan refuses any but a non-empty array of packages with a mutation task
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
+
+env:
+  TARGET_SECONDS: ${{ inputs.target-seconds }}
+  SHARD_OVERHEAD_SECONDS: 120
+  TEST_RUNNERS: 2
+  STRYKER_CONCURRENCY: 4
+  # A schedule event carries no repository payload; it always runs on the default branch.
+  DEFAULT_BRANCH: ${{ github.event_name == 'schedule' && github.ref_name || github.event.repository.default_branch }}
+  MUTATION_SHA: ${{ inputs.sha || github.sha }}
 
 jobs:
   guard:
     name: mutation · event guard
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 2
+    timeout-minutes: 60
     steps:
+      - &start
+        id: start
+        working-directory: ${{ runner.temp }}
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: guard
         uses: $/.github/actions/mutation-event-guard
-      - if: failure()
+      - id: history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          sparse-checkout: /.github/
+          sparse-checkout-cone-mode: false
+      - &tools
+        id: tools
+        uses: $/.github/actions/sfs-tools
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: main
+        name: Refuse a run off the default branch, or a sha its tip does not hold
+        env:
+          SHA: ${{ inputs.sha }}
+        run: mutation-night guard --ref "$GITHUB_REF_NAME" --default "$DEFAULT_BRANCH" "--sha=$SHA"
+      - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: guard
-          reasons: guard mutation-on-pull-request
+          reasons: |
+            guard mutation-on-pull-request
+            tools tools-ref-missing
           steps: ${{ toJSON(steps) }}
-          reproduce: gh workflow run "${{ github.workflow }}" --ref ${{ github.head_ref || github.ref_name }}
+          reproduce: "git fetch origin && deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git scripts/tools/mutation-night.ts guard --ref ${{ github.ref_name }} --default ${{ env.DEFAULT_BRANCH }} --sha=${{ inputs.sha }}"
+      - &wall
+        if: always()
+        working-directory: ${{ runner.temp }}
+        env:
+          STARTED: ${{ steps.start.outputs.at }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          echo "wall time: $(( $(date +%s) - ${STARTED:-$(date +%s)} )) s (job $JOB_STATUS)" >> "$GITHUB_STEP_SUMMARY"
 
   plan:
-    name: plan · mutation jobs from planned mutants
+    name: plan · one stryker plan per project turbo selects
     needs: [guard, sfs-deps]
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
@@ -84,86 +113,171 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     outputs:
-      jobs: ${{ steps.plan.outputs.jobs }}
+      shards: ${{ steps.shape.outputs.shards }}
+      merges: ${{ steps.shape.outputs.merges }}
+      batches: ${{ steps.shape.outputs.batches }}
+      planned: ${{ steps.shape.outputs.planned }}
     steps:
-      - id: start
-        working-directory: ${{ runner.temp }}
-        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
-      - &checkout
+      - *start
+      - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.MUTATION_SHA }}
           persist-credentials: false
+          fetch-depth: 0
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
-      - id: sfs-deps
+      - *tools
+      - &sfsdeps
+        id: sfs-deps
         uses: $/.github/actions/sfs-deps-restore
         with:
           key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-      - id: install
+      - &install
+        id: install
         uses: $/.github/actions/install-deps
         with:
           working-directory: ${{ inputs.working-directory }}
-      - &tools
-        uses: $/.github/actions/sfs-tools
+      # Closed-list exemption (turbo-task-graph, Stryker's own incremental record): turbo selects the projects, and
+      # Stryker's record decides which of a selected project's mutants re-run; no turbo task reads or writes it.
+      - &restore
+        id: restore
+        uses: actions/cache/restore@v6
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-      - run: corepack enable
-      - name: Latest timing record from the default branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RECORD: ${{ inputs.record }}
-          BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          mkdir -p .timings/previous
-          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" \
-            --jq "[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == \"$BRANCH\")][0].id // empty") || id=
-          if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
-            unzip -o -q .timings/previous.zip -d .timings/previous || true
-          fi
-          ls .timings/previous
-      - id: plan
-        env:
-          TARGET: ${{ inputs.target-seconds }}
-          MAX_JOBS: ${{ inputs.max-jobs }}
-          MAX_SECONDS: ${{ inputs.max-seconds }}
-          UNKNOWN_MUTANT_SECONDS: ${{ inputs.unknown-mutant-seconds }}
+          path: ${{ inputs.working-directory }}/.stryker-incremental
+          key: stryker-incremental-${{ inputs.working-directory }}-${{ github.run_id }}
+          restore-keys: |
+            stryker-incremental-${{ inputs.working-directory }}-
+      - &place
+        id: place
+        name: Place incremental files
+        run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
+      - id: admit
+        name: Refuse every package that would mutate more than its workflow files
         run: |
           mkdir -p "$RUNNER_TEMP/sfs-logs"
           set -o pipefail
-          # The planner runs each package's config; it must not see variables the Mutation run step lacks.
-          max_jobs=$MAX_JOBS max_seconds=$MAX_SECONDS rate=$UNKNOWN_MUTANT_SECONDS
-          unset MAX_JOBS MAX_SECONDS UNKNOWN_MUTANT_SECONDS
-          test-timings plan --task mutation --target "$TARGET" --max-jobs "$max_jobs" --max-seconds "$max_seconds" \
-            --unknown-seconds "$TARGET" --unknown-mutant-seconds "$rate" \
-            --record .timings/previous/mutation-timings.json 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          mutation-admit 2>&1 | tee "$RUNNER_TEMP/sfs-logs/admit.log"
+
+      # turbo decides which projects this run covers: on a schedule, the `mutation` tasks affected since the last
+      # green night, whose `mutation` inputs include the lane's own workflows, tools and seed costs, so a change to
+      # the lane selects every project; on a dispatch, the packages its `packages` input names, else every package.
+      - id: select
+        name: Select the projects turbo marks affected
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          set -o pipefail
+          export LC_ALL=C
+          turbo() { corepack pnpm exec turbo query "$1" < /dev/null; }
+          turbo 'query { packages { items { name path tasks { items { name } } } } }' \
+            | jq -r '.data.packages.items[] | select(any(.tasks.items[]; .name == "mutation")) | [.path, .name] | @tsv' \
+            | sort > mutation-enrolled.tsv
+          base=
+          if [ -n "$PACKAGES" ]; then
+            mutation-night packages --enrolled mutation-enrolled.tsv "--packages=$PACKAGES" > mutation-selected.tsv
+            echo "the dispatch's packages: $(wc -l < mutation-selected.tsv) of $(wc -l < mutation-enrolled.tsv) projects" | tee -a "$GITHUB_STEP_SUMMARY"
+            cut -f1 mutation-selected.tsv
+            exit 0
+          fi
+          if [ "$EVENT" = schedule ]; then
+            # Closed-list exemption (turbo-task-graph, finding the base commit): turbo compares two commits but does
+            # not know which one last passed, so the base is the commit of the newest scheduled night whose record
+            # says green.
+            file=${WORKFLOW_REF%@*}
+            file=${file##*/}
+            base=$(mutation-night base --repo "$GITHUB_REPOSITORY" --workflow "$file" --branch "$DEFAULT_BRANCH" --before "$GITHUB_RUN_ID")
+            if [ -n "$base" ] && ! git merge-base --is-ancestor -- "$base" HEAD 2> /dev/null; then
+              echo "::warning::the last green night's commit $base is not in this run's history, so every project is selected."
+              base=
+            fi
+          fi
+          if [ -n "$base" ]; then
+            query="query { affectedTasks(base: \"$base\", head: \"$MUTATION_SHA\", tasks: [\"mutation\"]) { items { name package { name path } reason { __typename } } } }"
+            turbo "$query" | tee "$RUNNER_TEMP/turbo-affected.json" \
+              | jq -r '.data.affectedTasks.items[] | select(.name == "mutation") | [.package.path, .package.name] | @tsv' \
+              | sort -u | join -t $'\t' - mutation-enrolled.tsv -o 1.1,1.2 > mutation-selected.tsv
+            echo "turbo affectedTasks for mutation, $base..$MUTATION_SHA: $(wc -l < mutation-selected.tsv) of $(wc -l < mutation-enrolled.tsv) projects" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            cp mutation-enrolled.tsv mutation-selected.tsv
+            echo "every project with a mutation task: $(wc -l < mutation-selected.tsv) (event $EVENT, no green night found)" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          cut -f1 mutation-selected.tsv
+
+      # Closed-list exemption (turbo-task-graph, sharding by measured duration): turbo picked the projects;
+      # `mutation-shard-plan` (scripts/tools/mutation-shard-plan.ts, tested) prices each one's shards from measured
+      # seconds per mutant (seed costs or its incremental record), runs the `stryker plan` passes that pricing
+      # decision needs, and re-plans at a corrected target when a CLI pricing change would over-pack a shard.
+      - id: plan
+        name: Plan every selected project
+        env:
+          SEED: ${{ inputs.seed-costs }}
+        run: |
+          set -o pipefail
+          touch mutation-projects.jsonl
+          while IFS=$'\t' read -r label name; do
+              slug=$(printf '%s' "${label#packages/}" | tr '/' '-')
+              mutation-shard-plan project --label "$label" --name "$name" --slug "$slug" \
+                --seed "$SEED" --target "$TARGET_SECONDS" --overhead "$SHARD_OVERHEAD_SECONDS" \
+                --runners "$TEST_RUNNERS" --rows mutation-projects.jsonl
+          done < mutation-selected.tsv
+          {
+            echo "Shards are sized to ${TARGET_SECONDS} s each; a shard predicted over it is reported here and runs anyway."
+            echo
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Shards | Costliest shard (s) | Priced by |'
+            echo '| --- | --- | --- | --- | --- | --- | --- | --- |'
+            jq -r '"| \(.label) | \(.mutants) | \(.fresh) | \(.remembered) | \(.predicted) | \(.n) | \(.estimate) | \(.source) |"' mutation-projects.jsonl
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Closed-list exemption (turbo-task-graph, packing by measured duration): one-shard projects are packed
+      # first-fit into batch jobs by their measured cost; which projects run was decided by turbo above.
+      - name: Shape jobs from the plans
+        id: shape
+        run: mutation-shard-plan shape --rows mutation-projects.jsonl --target "$TARGET_SECONDS"
+      - id: matrix
+        name: Refuse a shard matrix GitHub cannot create
+        env:
+          SHARD_COUNT: ${{ steps.shape.outputs.shard-count }}
+          # https://docs.github.com/en/actions/reference/limits: a job matrix generates at most 256 jobs per run.
+          MATRIX_LIMIT: 256
+        run: |
+          if [ "$SHARD_COUNT" -gt "$MATRIX_LIMIT" ]; then
+            echo "::error::the plans need $SHARD_COUNT shard jobs, over the $MATRIX_LIMIT jobs one GitHub matrix may create, so the shard job would never be created. Next: open this job's plan summary and fix the project whose shard count is out of line with its mutants."
+            exit 1
+          fi
+      - id: upload-plans
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mutation-timings-previous
-          path: ${{ inputs.working-directory }}/.timings/previous/
+          name: mutation-plans
+          path: |
+            ${{ inputs.working-directory }}/mutation-plan-*.json
+            ${{ inputs.working-directory }}/mutation-coverage-*.json
           if-no-files-found: ignore
           retention-days: 1
-      - if: failure()
+          overwrite: true
+      - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: plan
           reasons: |
             sfs-deps sfs-deps-missing
             install install-failed
+            admit plan-failed
+            select plan-failed
             plan plan-failed
+            shape plan-failed
+            matrix mutation-matrix-too-large
           steps: ${{ toJSON(steps) }}
-          reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- plan --task mutation --target ${{ inputs.target-seconds }} --unknown-mutant-seconds ${{ inputs.unknown-mutant-seconds }}
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }}${{ inputs.packages && format(' -f packages=''{0}''', inputs.packages) || '' }}"
+          reproduce-label: reproduce through a dispatch on main
           working-directory: ${{ inputs.working-directory }}
-      - id: wall-time
-        if: always()
-        working-directory: ${{ runner.temp }}
-        env:
-          STARTED: ${{ steps.start.outputs.at }}
-        run: |
-          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
+      - *wall
 
   sfs-deps:
     name: sfs-deps · tarballs the lockfile names
@@ -176,7 +290,15 @@ jobs:
     outputs:
       key: ${{ steps.produce.outputs.key }}
     steps:
-      - *checkout
+      - *start
+      - &checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.MUTATION_SHA }}
+          persist-credentials: false
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
       - id: produce
         uses: $/.github/actions/sfs-deps
         with:
@@ -184,7 +306,7 @@ jobs:
           installable: ${{ inputs.sfs-deps-installable }}
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-      - if: failure()
+      - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: sfs-deps
@@ -192,227 +314,539 @@ jobs:
           steps: ${{ toJSON(steps) }}
           reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
           working-directory: ${{ inputs.working-directory }}
+      - *wall
 
-  mutation:
-    name: mutation · ${{ matrix.job.name }}
-    needs: [plan, sfs-deps]
-    if: ${{ needs.plan.outputs.jobs != '[]' }}
+  coverage:
+    name: coverage · ${{ matrix.project.label }}
+    needs: [guard, plan, sfs-deps]
+    if: ${{ needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     strategy:
       fail-fast: false
       matrix:
-        job: ${{ fromJSON(needs.plan.outputs.jobs) }}
+        project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
+      - *start
       - *checkout
-      - id: sfs-deps
-        uses: $/.github/actions/sfs-deps-restore
-        with:
-          key: ${{ needs.sfs-deps.outputs.key }}
-          working-directory: ${{ inputs.working-directory }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-      - id: install
-        uses: $/.github/actions/install-deps
-        with:
-          working-directory: ${{ inputs.working-directory }}
-      - *tools
+      - *sfsdeps
+      - *install
       - id: build
         name: Build
         env:
-          FILTERS: ${{ matrix.job.filters }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/sfs-logs"
-          set -o pipefail
-          read -ra filters <<< "$FILTERS"
-          corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream "${filters[@]}" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/build.log"
-
-      - uses: actions/cache/restore@v6
+          NAME: ${{ matrix.project.name }}
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter="$NAME"
+      - *restore
+      - *place
+      - &plans
+        id: plans
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: ${{ inputs.working-directory }}/.stryker-incremental
-          key: stryker-incremental-${{ inputs.working-directory }}-${{ github.run_id }}
-          restore-keys: |
-            stryker-incremental-${{ inputs.working-directory }}-
-      - name: Place incremental files
-        run: if [ -d .stryker-incremental ]; then cp -a .stryker-incremental/. .; fi
-
+          name: mutation-plans
+          path: ${{ inputs.working-directory }}
       - id: mutation
-        name: Mutation
+        name: Dry run once for every shard
         env:
-          JOB: ${{ toJSON(matrix.job) }}
-          TARGET: ${{ inputs.target-seconds }}
+          SLUG: ${{ matrix.project.slug }}
         run: |
           set -o pipefail
-          mutation-job run --budget-seconds "$((TARGET * 4))" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/mutation.log"
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+          # The CLI prints a bounded tail of a failed child; the full output and the
+          # child's progress stream go to the failure log instead of the step summary.
+          log="$RUNNER_TEMP/stryker-$SLUG.log"
+          status=0
+          corepack pnpm exec stryker run --plan "mutation-coverage-$SLUG.json" --shard 1/1 --out "mutation-coverage/$SLUG" < /dev/null 2>&1 | tee "$log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            mkdir -p "$RUNNER_TEMP/sfs-logs/$SLUG"
+            mv "$log" "$RUNNER_TEMP/sfs-logs/$SLUG/stryker-run.log"
+            [ ! -d "mutation-coverage/$SLUG" ] || find "mutation-coverage/$SLUG" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$SLUG/" \; || true
+          fi
+          exit "$status"
+      - id: upload-coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mutation-timings-part-${{ matrix.job.id }}
-          path: ${{ inputs.working-directory }}/.timings/${{ matrix.job.id }}.json
-          if-no-files-found: ignore
+          name: mutation-coverage-${{ matrix.project.slug }}-a${{ github.run_attempt }}
+          path: ${{ inputs.working-directory }}/mutation-coverage/${{ matrix.project.slug }}/${{ matrix.project.label }}/stryker-incremental.json
+          if-no-files-found: error
           retention-days: 1
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: mutation-incremental-${{ matrix.job.id }}
-          path: ${{ inputs.working-directory }}/incremental/
-          if-no-files-found: ignore
-          retention-days: 1
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: mutation-part-${{ matrix.job.id }}
-          path: ${{ inputs.working-directory }}/mutation-parts/
-          if-no-files-found: ignore
-          retention-days: 1
-      - if: failure() || cancelled()
+          overwrite: true
+      - &summary
+        if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
-          job: mutation-${{ matrix.job.id }}
+          job: ${{ github.job }}-${{ matrix.project.slug || matrix.shard.slug || format('batch-{0}', matrix.batch.id) }}${{ matrix.shard && format('-{0}of{1}', matrix.shard.k, matrix.shard.n) || '' }}
           reasons: |
+            coverage mutation-coverage-failed
             sfs-deps sfs-deps-missing
             install install-failed
             build build-failed
             mutation mutation-failed
+            merge mutation-merge-failed
+            reuse mutation-prior-unread
+            download mutation-merge-failed
+            gate mutation-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: corepack pnpm ${{ matrix.job.filters }} mutation
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }} -f packages='${{ matrix.batch && format('[\"{0}\"]', join(matrix.batch.projects.*.name, '\",\"')) || format('[\"{0}\"]', matrix.project.name || matrix.shard.name) }}' (cost: about ${{ matrix.batch.minutes || matrix.project.minutes || matrix.shard.minutes }} job-min the plan predicts for these packages)"
+          reproduce-label: reproduce through a dispatch on main
           working-directory: ${{ inputs.working-directory }}
+      - *wall
 
-  timings:
-    name: record mutation timings
-    needs: [plan, mutation]
-    if: ${{ always() && needs.plan.result == 'success' }}
+  shard:
+    name: shard · ${{ matrix.shard.label }} ${{ matrix.shard.k }}/${{ matrix.shard.n }}
+    needs: [guard, plan, sfs-deps, coverage]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shards != '[]' }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
-      - id: start
-        working-directory: ${{ runner.temp }}
-        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - *start
       - *checkout
       - *tools
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: mutation-timings-part-*
-          path: ${{ inputs.working-directory }}/.timings/parts
-          merge-multiple: true
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        continue-on-error: true
-        with:
-          name: mutation-timings-previous
-          path: ${{ inputs.working-directory }}/.timings/previous
-      - id: merge
-        name: Merge this run into the record
+      - &coverage
+        id: coverage
+        name: Require this project's coverage dry run
+        working-directory: .
         env:
-          TARGET: ${{ inputs.target-seconds }}
-          JOBS: ${{ needs.plan.outputs.jobs }}
+          GH_TOKEN: ${{ github.token }}
+          LABEL: ${{ matrix.shard.label || matrix.project.label }}
+          SLUG: ${{ matrix.shard.slug || matrix.project.slug }}
         run: |
-          mkdir -p "$RUNNER_TEMP/sfs-logs" .timings/parts
-          printf '%s' "$JOBS" > .timings/plan.json
+          api() {
+            if gh api --paginate "$1" --jq "$2" > "$3" 2> "$RUNNER_TEMP/api.err"; then return 0; fi
+            status=$(grep -oE 'HTTP [0-9]{3}' "$RUNNER_TEMP/api.err" | tail -n 1 || true)
+            echo mutation-api-failed > "$RUNNER_TEMP/sfs-reason"
+            echo "::error::$LABEL: GET $1 failed (${status:-no HTTP status}), so this job cannot read the run. Next: re-run the failed jobs."
+            exit 1
+          }
+          api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+            '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' "$RUNNER_TEMP/run-jobs.tsv"
+          api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            '.artifacts[] | [.name, .expired] | @tsv' "$RUNNER_TEMP/run-artifacts.txt"
+          ran=$(job-attempt --job "coverage · $LABEL" < "$RUNNER_TEMP/run-jobs.tsv") || ran=$'0\tmissing'
+          conclusion=$(cut -f2 <<< "$ran")
+          if [ "$conclusion" != success ]; then
+            echo mutation-coverage-failed > "$RUNNER_TEMP/sfs-reason"
+            echo "::error::$LABEL: the newest run of its coverage dry run concluded '$conclusion', so no shard of it can run. Next: open the job 'coverage · $LABEL' and fix what its failure log names."
+            exit 1
+          fi
+          job-attempt --job "coverage · $LABEL" --artifact "mutation-coverage-$SLUG" \
+            --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
+            < "$RUNNER_TEMP/run-jobs.tsv" > /dev/null
+          echo "attempt=$(cut -f1 <<< "$ran")" >> "$GITHUB_OUTPUT"
+      - *sfsdeps
+      - *install
+      - id: build
+        name: Build
+        env:
+          NAME: ${{ matrix.shard.name }}
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream --filter="$NAME"
+      - *restore
+      - *place
+      - id: aside
+        name: Move the prior record aside for this run's coverage record
+        env:
+          LABEL: ${{ matrix.shard.label }}
+        run: |
+          prior="$LABEL/reports/stryker-incremental.json"
+          if [ -f "$prior" ]; then mv "$prior" "$LABEL/reports/stryker-incremental-prior.json"; fi
+      - *plans
+      - id: coverage-record
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mutation-coverage-${{ matrix.shard.slug }}-a${{ steps.coverage.outputs.attempt }}
+          path: ${{ inputs.working-directory }}/${{ matrix.shard.label }}/reports
+      - id: mutation
+        name: Run shard
+        env:
+          SLUG: ${{ matrix.shard.slug }}
+          K: ${{ matrix.shard.k }}
+          N: ${{ matrix.shard.n }}
+        run: |
           set -o pipefail
-          test-timings merge --task mutation --target "$TARGET" --unknown-seconds "$TARGET" \
-            --previous .timings/previous/mutation-timings.json --parts .timings/parts --plan .timings/plan.json \
-            --out .timings/mutation-timings.json --sha "$GITHUB_SHA" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/timings.log"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: ${{ inputs.record }}
-          path: ${{ inputs.working-directory }}/.timings/mutation-timings.json
-          retention-days: 30
-      - if: failure()
-        uses: $/.github/actions/failure-summary
-        with:
-          job: timings
-          reasons: merge timings-failed
-          steps: ${{ toJSON(steps) }}
-          reproduce: nix run github:${{ job.workflow_repository }}/${{ job.workflow_sha }}#test-timings -- merge --task mutation --previous mutation-timings.json --parts parts/ --out mutation-timings.json
-          working-directory: ${{ inputs.working-directory }}
-      - id: wall-time
-        if: always()
-        working-directory: ${{ runner.temp }}
+          log="$RUNNER_TEMP/stryker-$SLUG.log"
+          status=0
+          corepack pnpm exec stryker run --plan "mutation-plan-$SLUG.json" --shard "$K/$N" --out "mutation-shards/$SLUG/$K" < /dev/null 2>&1 | tee "$log" || status=$?
+          if [ "$status" -ne 0 ]; then
+            mkdir -p "$RUNNER_TEMP/sfs-logs/$SLUG"
+            mv "$log" "$RUNNER_TEMP/sfs-logs/$SLUG/stryker-run.log"
+            [ ! -d "mutation-shards/$SLUG/$K" ] || find "mutation-shards/$SLUG/$K" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$SLUG/" \; || true
+          fi
+          exit "$status"
+      - id: reuse
+        name: Prove the shard reused the prior record and the coverage dry run
         env:
-          STARTED: ${{ steps.start.outputs.at }}
+          SLUG: ${{ matrix.shard.slug }}
+          LABEL: ${{ matrix.shard.label }}
+          K: ${{ matrix.shard.k }}
+          N: ${{ matrix.shard.n }}
         run: |
-          echo "wall time: $(( $(date +%s) - STARTED )) s" >> "$GITHUB_STEP_SUMMARY"
+          reuse=$(run-reuse --plan "mutation-plan-$SLUG.json" --shard "$K" \
+            --prior "$LABEL/reports/stryker-incremental-prior.json" \
+            --stream "mutation-shards/$SLUG/$K/$LABEL/mutation-stream.jsonl" \
+            --record "mutation-shards/$SLUG/$K/$LABEL/stryker-incremental.json" \
+            --coverage "$LABEL/reports/stryker-incremental.json" \
+            --label "$LABEL $K/$N" --details "$RUNNER_TEMP/run-reuse.md" --reason-file "$RUNNER_TEMP/sfs-reason")
+          echo "$LABEL $K/$N: $reuse" >> "$GITHUB_STEP_SUMMARY"
+          [ ! -f "$RUNNER_TEMP/run-reuse.md" ] || cat "$RUNNER_TEMP/run-reuse.md" >> "$GITHUB_STEP_SUMMARY"
+      - id: upload-shard
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutation-shard-${{ matrix.shard.slug }}-${{ matrix.shard.k }}of${{ matrix.shard.n }}-a${{ github.run_attempt }}
+          path: ${{ inputs.working-directory }}/mutation-shards/${{ matrix.shard.slug }}/${{ matrix.shard.k }}/
+          if-no-files-found: ignore
+          retention-days: 1
+          overwrite: true
+      - *summary
+      - *wall
 
-  report:
-    name: Mutation report
-    needs: [plan, sfs-deps, mutation]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.sfs-deps.result == 'success' && needs.plan.outputs.jobs != '[]' }}
+  merge:
+    name: merge · gate · ${{ matrix.project.label }}
+    needs: [guard, plan, sfs-deps, shard]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.report-timeout-minutes }}
+    timeout-minutes: 60
     permissions:
       contents: read
-      actions: write
+      actions: read
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.plan.outputs.merges) }}
     steps:
+      - *start
       - *checkout
       - *tools
+      - *coverage
+      - *sfsdeps
+      - *install
+      - *plans
+      - id: download
+        name: Download each planned shard from the attempt it last ran in
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ matrix.project.slug }}
+          LABEL: ${{ matrix.project.label }}
+          N: ${{ matrix.project.n }}
+        run: |
+          set -o pipefail
+          jq -r '.shards[].index' "mutation-plan-$SLUG.json" | while read -r k; do
+            row=$(job-attempt --job "shard · $LABEL $k/$N" --artifact "mutation-shard-$SLUG-${k}of$N" \
+              --artifacts "$RUNNER_TEMP/run-artifacts.txt" --reason-file "$RUNNER_TEMP/sfs-reason" \
+              < "$RUNNER_TEMP/run-jobs.tsv")
+            attempt=$(cut -f1 <<< "$row") conclusion=$(cut -f2 <<< "$row") artifact=$(cut -f3 <<< "$row")
+            if [ "$conclusion" != success ] || [ "$artifact" != "mutation-shard-$SLUG-${k}of$N-a$attempt" ]; then
+              echo mutation-shard-failed > "$RUNNER_TEMP/sfs-reason"
+              if [ "$conclusion" = success ]; then
+                next="that attempt uploaded no shard artifact and gh run rerun --failed will not re-run a successful job, so re-run the whole run: gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY (every job again, up to its 60-minute timeout)"
+              else
+                next="open that shard job, then gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY --failed"
+              fi
+              echo "::error title=mutation-shard-failed::$LABEL: shard $k/$N concluded $conclusion in attempt $attempt, whose artifact is ${artifact:-missing}, so no partial verdicts are merged or gated. Next: $next"
+              exit 1
+            fi
+            gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$artifact" -D "mutation-shards/$SLUG/$k"
+          done
+      - id: merge
+        name: Merge
+        env:
+          SLUG: ${{ matrix.project.slug }}
+        run: |
+          corepack pnpm exec stryker merge --plan "mutation-plan-$SLUG.json" \
+            $(jq -r --arg slug "$SLUG" '.shards[].index | "mutation-shards/\($slug)/\(.)"' "mutation-plan-$SLUG.json") \
+            --out reports/mutation
+      - id: stage
+        name: Stage the merged incremental
+        env:
+          LABEL: ${{ matrix.project.label }}
+        run: |
+          mkdir -p "merged/$LABEL/reports"
+          cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
+      - id: upload-merged
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-merged-${{ matrix.project.slug }}
+          path: ${{ inputs.working-directory }}/merged/
+          retention-days: 1
+          overwrite: true
+      - id: upload-report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-report-${{ matrix.project.slug }}
+          path: ${{ inputs.working-directory }}/reports/mutation/mutation.json
+          retention-days: 14
+          overwrite: true
+      - id: gate
+        name: Gate
+        env:
+          LABEL: ${{ matrix.project.label }}
+        run: |
+          echo '{"schemaVersion":1,"survivors":[]}' > "$RUNNER_TEMP/accepted-none.json"
+          corepack pnpm exec stryker gate --baseline "$RUNNER_TEMP/accepted-none.json" < /dev/null
+      - *summary
+      - *wall
 
-      - uses: actions/cache/restore@v6
+  batch:
+    name: batch ${{ matrix.batch.id }} · ${{ join(matrix.batch.projects.*.label, ', ') }}
+    needs: [guard, plan, sfs-deps]
+    if: ${{ needs.plan.outputs.batches != '[]' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJSON(needs.plan.outputs.batches) }}
+    steps:
+      - *start
+      - *checkout
+      - *tools
+      - *sfsdeps
+      - *install
+      - id: build
+        name: Build
+        env:
+          PROJECTS: ${{ toJSON(matrix.batch.projects) }}
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream $(echo "$PROJECTS" | jq -r '.[] | "--filter=\(.name)"')
+      - *restore
+      - *place
+      - *plans
+      - id: mutation
+        name: Run, merge and gate each project in turn
+        env:
+          PROJECTS: ${{ toJSON(matrix.batch.projects) }}
+        run: |
+          set -o pipefail
+          echo '{"schemaVersion":1,"survivors":[]}' > "$RUNNER_TEMP/accepted-none.json"
+          failed=
+          unreused=
+          unreused_reason=
+          {
+            echo '| Project | Mutants | New | Ids the record holds | Planned test seconds | Reuse | Outcome |'
+            echo '| --- | --- | --- | --- | --- | --- | --- |'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r slug LABEL counts; do
+            before="$failed$unreused"
+            reuse=-
+            echo "::group::$LABEL"
+            log="$RUNNER_TEMP/stryker-$slug.log"
+            if corepack pnpm exec stryker run --plan "mutation-plan-$slug.json" --shard 1/1 --out "mutation-shards/$slug/1" < /dev/null 2>&1 | tee "$log" \
+              && corepack pnpm exec stryker merge --plan "mutation-plan-$slug.json" "mutation-shards/$slug/1" --out reports/mutation < /dev/null 2>&1 | tee -a "$log"; then
+              mkdir -p "merged/$LABEL/reports" "mutation-reports/$slug"
+              cp "reports/mutation/$LABEL/stryker-incremental.json" "merged/$LABEL/reports/stryker-incremental.json"
+              cp reports/mutation/mutation.json "mutation-reports/$slug/mutation.json"
+              reuse=$(run-reuse --plan "mutation-plan-$slug.json" --shard 1 --prior "$LABEL/reports/stryker-incremental.json" \
+                --stream "mutation-shards/$slug/1/$LABEL/mutation-stream.jsonl" \
+                --record "mutation-shards/$slug/1/$LABEL/stryker-incremental.json" \
+                --label "$LABEL" --details "$RUNNER_TEMP/run-reuse.md" --reason-file "$RUNNER_TEMP/run-reuse-reason") || {
+                reuse=$(head -n 1 "$RUNNER_TEMP/run-reuse-reason")
+                unreused="$unreused $LABEL"
+                unreused_reason=${unreused_reason:-$reuse}
+              }
+              corepack pnpm exec stryker gate --baseline "$RUNNER_TEMP/accepted-none.json" < /dev/null || failed="$failed $LABEL"
+            else
+              failed="$failed $LABEL"
+              # The CLI prints a bounded tail of a failed child; keep its full output and progress stream.
+              mkdir -p "$RUNNER_TEMP/sfs-logs/$slug"
+              mv "$log" "$RUNNER_TEMP/sfs-logs/$slug/stryker-run.log"
+              [ ! -d "mutation-shards/$slug/1" ] || find "mutation-shards/$slug/1" -name mutation-stream.jsonl -exec cp --parents {} "$RUNNER_TEMP/sfs-logs/$slug/" \; || true
+            fi
+            echo "::endgroup::"
+            outcome=gated; [ "$failed$unreused" = "$before" ] || outcome=failed
+            echo "| $LABEL | $counts | $reuse | $outcome |" >> "$GITHUB_STEP_SUMMARY"
+          done < <(echo "$PROJECTS" | jq -r '.[] | [.slug, .label, "\(.mutants) | \(.fresh) | \(.remembered) | \(.predicted)"] | @tsv')
+          [ ! -f "$RUNNER_TEMP/run-reuse.md" ] || cat "$RUNNER_TEMP/run-reuse.md" >> "$GITHUB_STEP_SUMMARY"
+          # The reuse code names the job only when no gate failed.
+          if [ -z "$failed" ] && [ -n "$unreused" ]; then
+            echo "$unreused_reason" > "$RUNNER_TEMP/sfs-reason"
+          fi
+          if [ -n "$failed$unreused" ]; then
+            echo "::error::mutation failed for:$failed$unreused"
+            exit 1
+          fi
+      - id: upload-merged
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
-          path: ${{ inputs.working-directory }}/.stryker-incremental
-          key: stryker-incremental-${{ inputs.working-directory }}-${{ github.run_id }}
-          restore-keys: |
-            stryker-incremental-${{ inputs.working-directory }}-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        continue-on-error: true
+          name: mutation-merged-batch-${{ matrix.batch.id }}
+          path: ${{ inputs.working-directory }}/merged/
+          if-no-files-found: ignore
+          retention-days: 1
+          overwrite: true
+      - id: upload-report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
-          pattern: mutation-incremental-*
+          name: mutation-report-batch-${{ matrix.batch.id }}
+          path: ${{ inputs.working-directory }}/mutation-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
+      - *summary
+      - *wall
+
+  report:
+    name: Mutation report
+    needs: [guard, plan, merge, batch]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - *start
+      - *tools
+      - *restore
+      - name: Lay this run's merged incrementals over the restored ones
+        id: lay
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-merged-*
           path: ${{ inputs.working-directory }}/.stryker-incremental
           merge-multiple: true
       - uses: actions/cache/save@v6
+        id: save
         if: ${{ hashFiles(format('{0}/.stryker-incremental/**', inputs.working-directory)) != '' }}
         with:
           path: ${{ inputs.working-directory }}/.stryker-incremental
           key: stryker-incremental-${{ inputs.working-directory }}-${{ github.run_id }}
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        continue-on-error: true
-        with:
-          path: ${{ inputs.working-directory }}/mutation-parts
-          pattern: mutation-part-*
-      - id: report
-        name: Merge every package's parts into one report
+      # A job killed at its 60-minute timeout concludes `cancelled` and its own steps may never report, so this job
+      # names every job of the run that concluded cancelled or timed out.
+      - id: jobs
+        name: Name the jobs that were cancelled or timed out
         env:
-          JOBS: ${{ needs.plan.outputs.jobs }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/sfs-logs"
-          set -o pipefail
-          mutation-job report --parts mutation-parts --out mutation-merged 2>&1 | tee "$RUNNER_TEMP/sfs-logs/report.log"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: mutation-report-${{ github.run_number }}
-          path: ${{ inputs.working-directory }}/mutation-merged/*
-          retention-days: 14
+          jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100"
+          if ! gh api --paginate "$jobs" --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' \
+            > "$RUNNER_TEMP/run-jobs.tsv" 2> "$RUNNER_TEMP/api.err"; then
+            status=$(grep -oE 'HTTP [0-9]{3}' "$RUNNER_TEMP/api.err" | tail -n 1 || true)
+            echo "::error title=mutation-api-failed::GET $jobs failed (${status:-no HTTP status}), so the jobs that did not succeed are not named."
+            exit 1
+          fi
+          awk -F'\t' '$4 == "cancelled" || $4 == "timed_out" {print $1 "\t" $4}' "$RUNNER_TEMP/run-jobs.tsv" \
+            | while IFS=$'\t' read -r name conclusion; do
+              echo "::error title=mutation-job-${conclusion}::$name concluded $conclusion; a cancelled job either hit its 60-minute timeout or was cancelled by hand. Next: open it, then gh run rerun $GITHUB_RUN_ID -R $GITHUB_REPOSITORY --failed"
+              echo "- \`$name\`: $conclusion" >> "$GITHUB_STEP_SUMMARY"
+            done
 
-      - name: Delete per-job artifacts
-        if: success()
+      # Artifacts go only when every job of the run (plan, coverage, shard, merge, batch) concluded success in the
+      # attempt it last ran in; any failure keeps them all for a re-run of its failed jobs, and they expire after a
+      # day either way.
+      - id: cleanup
+        name: Delete per-shard artifacts (advisory, a failure only warns)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
+          # Cleanup fails closed: any doubt keeps every artifact, and a failure warns instead of failing the run.
+          trap 'echo "::warning title=mutation-api-failed::deleting this run'"'"'s per-shard artifacts failed; the rest expire after a day."' ERR
+          jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100"
+          if ! gh api --paginate "$jobs" --jq '.jobs[] | [.name, .run_attempt, .started_at, .conclusion] | @tsv' \
+            > "$RUNNER_TEMP/run-jobs-all.tsv" 2> "$RUNNER_TEMP/api.err"; then
+            status=$(grep -oE 'HTTP [0-9]{3}' "$RUNNER_TEMP/api.err" | tail -n 1 || true)
+            echo "::warning title=mutation-api-failed::GET $jobs failed (${status:-no HTTP status}); keeping every artifact."
+            exit 0
+          fi
+          if ! job-attempt --all-succeeded < "$RUNNER_TEMP/run-jobs-all.tsv"; then
+            echo "Keeping every artifact: the run lists no jobs, or one did not conclude success in the attempt it last ran in."
+            exit 0
+          fi
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-            --jq '.artifacts[] | select(.name | startswith("mutation-part-") or startswith("mutation-incremental-")) | .id' \
+            --jq '.artifacts[] | select(.name | startswith("mutation-shard-") or startswith("mutation-merged-") or startswith("mutation-coverage-")) | .id' \
           | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
-      - if: failure()
+      - if: failure() || cancelled()
         uses: $/.github/actions/failure-summary
         with:
           job: report
           reasons: |
-            report mutation-merge-failed
+            lay mutation-merge-failed
+            save mutation-merge-failed
+            jobs mutation-api-failed
           steps: ${{ toJSON(steps) }}
-          reproduce: >-
-            gh run download ${{ github.run_id }} -R ${{ github.repository }} -p 'mutation-part-*' -D mutation-parts
-            && t=$(mktemp -d) && git clone -q --filter=blob:none --no-checkout https://github.com/${{ job.workflow_repository }} "$t"
-            && git -C "$t" sparse-checkout set scripts && git -C "$t" checkout -q ${{ job.workflow_sha }}
-            && JOBS='${{ needs.plan.outputs.jobs }}' deno run --config="$t/scripts/deno.jsonc" --lock="$t/scripts/deno.lock" --frozen
-            --allow-read --allow-write --allow-env "$t/scripts/tools/mutation-job.ts" report --parts mutation-parts --out mutation-merged
-          working-directory: ${{ inputs.working-directory }}
+          reproduce: "gh workflow run Mutation -R ${{ github.repository }} --ref ${{ env.DEFAULT_BRANCH }} -f sha=${{ env.MUTATION_SHA }} (cost: the whole lane; the report job only reports the jobs before it)"
+          reproduce-label: reproduce through a dispatch on main
+      - *wall
+
+  # The lane has no triage, so it writes each scheduled night's record itself and routes a red night
+  # (compound-packs/ci-wall-clock/mutation-runs-nightly-on-main.md, Triggers, Routing and Green). A dispatch, a
+  # reproduce included, writes no record and routes nothing.
+  night:
+    name: night · record and route
+    needs: [guard, sfs-deps, plan, coverage, shard, merge, batch, report]
+    if: ${{ always() && github.event_name == 'schedule' && needs.guard.result == 'success' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      - *start
+      - id: history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          sparse-checkout: /.github/
+          sparse-checkout-cone-mode: false
+      - *tools
+      - id: reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-report-*
+          path: ${{ runner.temp }}/mutation-reports
+      - id: night
+        name: Write the night's record, then route a red night or print the green line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          NEEDS: ${{ toJSON(needs) }}
+          PLANNED: ${{ needs.plan.outputs.planned }}
+        run: |
+          file=${WORKFLOW_REF%@*}
+          file=${file##*/}
+          mkdir -p "$RUNNER_TEMP/mutation-night" "$RUNNER_TEMP/mutation-reports"
+          mutation-night night --repo "$GITHUB_REPOSITORY" --workflow "$file" --branch "$DEFAULT_BRANCH" \
+            --run "$GITHUB_RUN_ID" --sha "$MUTATION_SHA" --needs "$NEEDS" --planned "${PLANNED:-[]}" \
+            --reports "$RUNNER_TEMP/mutation-reports" --out "$RUNNER_TEMP/mutation-night/night.json"
+      - id: upload-night
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-night-${{ github.run_id }}
+          path: ${{ runner.temp }}/mutation-night/night.json
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: true
+      - if: failure() || cancelled()
+        uses: $/.github/actions/failure-summary
+        with:
+          job: night
+          reasons: |
+            tools tools-ref-missing
+            reports mutation-artifact-missing
+            night mutation-night-failed
+            upload-night mutation-night-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: "deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,gh scripts/tools/mutation-night.ts night --repo ${{ github.repository }} --workflow mutation.yml --branch ${{ env.DEFAULT_BRANCH }} --run ${{ github.run_id }} --sha ${{ env.MUTATION_SHA }} --needs '<the run jobs results as JSON>' --planned '<the plan job planned output>' --reports <dir of the run's mutation-report-* artifacts> --out night.json (cost: seconds; it reads the run through gh and comments once on the newest candidate merge's pull request)"
+      - *wall

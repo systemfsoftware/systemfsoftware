@@ -1,11 +1,12 @@
 import { Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 import { Deferred, Effect, Fiber, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { CorpusDefect } from './defect-error.js'
 import { Absent, Connected, EvaluateProbe, evaluateProbe } from './evidence.js'
 import type { CorpusFixture } from './record.js'
 
-const defectFile = 'packages/effect-cell-types/tests/__fixtures__/failure-corpus/upstream-deadlock.ts'
+const defectFile = workspaceRelativePathOf(import.meta.url)
 
 const PlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/failure-corpus/ProbePlan')
 type PlanTypeId = typeof PlanTypeId

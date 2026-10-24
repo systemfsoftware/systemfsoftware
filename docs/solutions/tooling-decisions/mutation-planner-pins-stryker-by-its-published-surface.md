@@ -9,16 +9,15 @@ severity: medium
 applies_when:
   - Bumping @systemfsoftware/stryker-js or @systemfsoftware/stryker-js-cli-contract in pnpm-lock.yaml
   - Changing how the mutation probe finds a package's Stryker config
-  - Changing how the mutation planner reads a `stryker plan --out` file
   - Replacing a hand-written stand-in for a vendor tool in a scripts test
 root_cause: copied_vendor_behaviour_without_oracle
 resolution_type: contract_test_against_installed_vendor
 related_components:
   - scripts/tools/mutation-probe.mjs
-  - scripts/tools/mutation-plan.ts
+  - scripts/tools/mutation-admission.ts
   - scripts/tools/mutation-probe.contract.test.ts
   - scripts/tools/stryker-reads.ts
-  - scripts/tools/test-timings.test.ts
+  - scripts/tools/mutation-admission.test.ts
   - scripts/deno.jsonc
 tags:
   - stryker
@@ -32,7 +31,7 @@ tags:
 
 ## Problem
 
-The Mutation plan (`test-timings plan --task mutation`) judges each package by what Stryker would do there, so it
+The Mutation plan (`test-timings plan --task mutation` when this was written, `mutation-admit` now) judges each package by what Stryker would do there, so it
 carries two pieces of Stryker's behaviour: the config file names Stryker discovers, in its order (the probe's
 `DISCOVERED` list in `mutation-probe.mjs`), and the shape of the plan file `stryker plan --full --out` writes
 (`mutantCountOf` in `mutation-plan.ts`). Both were copies: the names rebuilt from the 17.0.2 source, the plan a
@@ -55,9 +54,6 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
   contract test drives that entry and the copy over the same inputs and compares the outputs.
 - **The oracle is the version the workspace runs.** The contract test reads the lockfile and fails when it resolves a
   version other than the one the oracle imports.
-- **A stand-in writes through the vendor's contract.** The fake `stryker` encodes its plan with `ShardPlan`, so it
-  cannot write a document the CLI's schema refuses. It does not reproduce the CLI's shard split, which the planner
-  does not read; a planner that starts reading it needs a fake that splits the way the CLI does.
 
 ```text
 order(dir, reader) = []                         -- read, remove what was read, repeat
@@ -67,22 +63,22 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 
 ## Decision
 
-- The planner decodes the plan file with the contract's `ShardPlan`; the hand copy is deleted, and the fake `stryker`
-  encodes its plan with the same schema.
 - The probe contract test runs `Configuration.readConfig` (through the `stryker-reads.ts` helper, in its own process,
   because loading Stryker needs `--allow-sys`) and the probe over two copies of a directory holding 216 candidate
   config file names: Stryker's prefixes, stems, suffixes and extensions, and neighbours of each (legacy JSON and
   CommonJS, other module extensions, case and separator spellings). The two read orders must be equal, so a name
   Stryker reads that the probe does not, or reads earlier, fails it.
-- The same test file decodes a plan recorded from the real `stryker plan --full`, and fails when `pnpm-lock.yaml`
-  resolves a Stryker or contract version other than the scripts import map pins.
+- The same test file fails when `pnpm-lock.yaml` resolves a Stryker or contract version other than the scripts import
+  map pins.
+- Since #733 the plan sizes shards with the installed `stryker plan` per project and no longer counts mutants with
+  `stryker plan --full`, so the planner decodes no plan file of its own and has no fake `stryker` or recorded plan.
 
 ## Alternatives considered
 
-1. **Run the real `stryker plan` CLI in the suite and compare its plan with the fake's.** Not done here. The CLI needs
-   Node and an installed workspace (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the
-   scripts suite runs in the checks plan lane, which installs nothing. It needs a new or changed CI lane, which is a
-   new gate for the operator to approve (GATE1). The recorded real plan is the substitute.
+1. **Run the real `stryker plan` CLI in the suite.** Not done here. The CLI needs Node and an installed workspace
+   (under Deno it stops at `nodeModule.enableCompileCache is not a function`), and the scripts suite runs in the checks
+   plan lane, which installs nothing. It needs a new or changed CI lane, which is a new gate for the operator to approve
+   (GATE1).
 2. **Assert the probe's list equals Stryker's exported list.** Not possible: the list is not exported.
 3. **Read the list out of the bundle's text.** Rejected: it parses a build artifact with no contract behind it, so a
    rename in the bundle breaks the test while Stryker's behaviour stays the same.
@@ -100,6 +96,5 @@ assert order(candidates, probe) == order(candidates, Configuration.readConfig)
 
 - The order test runs Stryker's reader under Deno's Node compatibility, not under Node. Discovery is a sequence of
   existence checks, so the runtime is not expected to change the result.
-- The recorded plan is one project and one shard. Whether the CLI accepts the flags the planner passes
-  (`plan --full --target-seconds <n> --out`) is still checked only by the fake; the first Mutation dispatch on `main` is
-  the first real run.
+- Whether the CLI accepts the flags the plan job passes (`plan --projects <dir> --target-seconds <n> --out`) is checked
+  only by a Mutation run in CI.

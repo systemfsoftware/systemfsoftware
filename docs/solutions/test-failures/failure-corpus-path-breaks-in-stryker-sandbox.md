@@ -40,22 +40,13 @@ The `giveUp` fixture in `effect-daemon-spec` was the first to fail (Mutation run
 
 ## Solution
 
-The fixture derives the path the way the renderer prints it. The renderer's `relativize` strips `` `${root}/` `` from every path, and `root` is the value `providedWorkspaceRoot()` reads from vitest's `inject`. The fixture applies the same rule to its own module URL:
+The fixture derives the path the way the renderer prints it. The renderer's `relativize` strips `` `${root}/` `` from every path, and `root` is the value `providedWorkspaceRoot()` reads from vitest's `inject`. `workspaceRelativePathOf`, exported from `@systemfsoftware/vitest/failure`, applies the same rule to a module URL, falling back to the absolute path when no root is provided:
 
 ```ts
-import { providedWorkspaceRoot } from '@systemfsoftware/vitest/failure'
-import { Option } from 'effect'
-import { fileURLToPath } from 'node:url'
+import { workspaceRelativePathOf } from '@systemfsoftware/vitest/failure'
 
-const thisFile = fileURLToPath(import.meta.url)
-
-const defectFileAsRecordPrints = Option.match(Option.fromNullishOr(providedWorkspaceRoot()), {
-  onNone: () => thisFile,
-  onSome: (workspaceRoot) => thisFile.replace(`${workspaceRoot}/`, ''),
-})
+const defectFileAsRecordPrints = workspaceRelativePathOf(import.meta.url)
 ```
-
-The `giveUp` fixture carries this change on branch `fix/daemon-spec-corpus-sandbox-path` (pending merge).
 
 ## Why This Works
 
@@ -69,9 +60,9 @@ A spelled literal is correct only for the one checkout layout it was copied from
 
 ## Prevention
 
-- Rule, gated by `review`: a corpus fixture in any package that has a Stryker config derives its defect path from `import.meta.url` and `providedWorkspaceRoot()`.
+- Rule, gated by `review`: a corpus fixture in any package that has a Stryker config derives its defect path with `workspaceRelativePathOf(import.meta.url)`.
   - wrong: `const defectFile = 'packages/<pkg>/tests/__fixtures__/failure-corpus/<file>.ts'`
-  - right: the `defectFileAsRecordPrints` derivation above
+  - right: `const defectFile = workspaceRelativePathOf(import.meta.url)`
 - Check it without starting a mutation run. REPO-D3 refuses agent-started mutation runs, so reproduce the sandbox layout instead: copy the package, without `node_modules`, to a nested directory inside itself, symlink `node_modules` into the copy, and run the corpus test with the copy's `./node_modules/.bin/vitest run`. A spelled path fails there exactly as it does in Stryker's dry run.
 
 ## Related Issues

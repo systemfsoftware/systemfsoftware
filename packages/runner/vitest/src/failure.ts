@@ -19,10 +19,15 @@
  * - `callFrameOutside(library)`, `callSite()` and `withRaisingFrame(error, frame)` — the author's call site,
  *   captured while it is on the stack, the site form `effect-gherkin-spec` writes as `code.site`, and the error
  *   that leads with the frame, for a library whose failure is raised after its caller's frame is gone (R2, KTD6);
+ * - `frameOwner(path)` — the `FrameOwner` of a frame's path (`vendored`, `library` or `user`), decided by the
+ *   path's position in the workspace, so a relocated copy such as a Stryker sandbox still resolves;
  * - `summaryOf(value)` — the one cause summary: the headline and chain text a failure renders, so a library that
  *   derives its own message (a `StepError`) builds it from the same formatter the record uses;
  * - `witnessOf(value)` — a value's rendered text beside a JSON-safe projection of the same traversal, for a
  *   counterexample that crosses Vitest's worker-to-reporter transport (R3, KD7);
+ * - `workspaceRelativePathOf(moduleUrl)` — the path a failure record prints for the module a corpus fixture
+ *   lives in: the workspace root the run provided stripped from the front of its path, or the absolute path when
+ *   the run provided none, so a fixture's own defect path is the path the record names;
  * - the replay the rerun line carries: `Replay` and `ReplayFromText` (its codec) with `replayOfText(text)`, this
  *   package's one replay grammar, which the spec runtime reads a `CONFORMANCE_REPLAY` text through (KTD10);
  * - the types `FailureRecord`, `FailureRecordInput`, `TestIdentity`, `ReplayValue`, `AttributeValue`, `Breach`
@@ -30,7 +35,7 @@
  *
  * @since 4.0.0
  */
-export { callFrameOutside, callSite, withRaisingFrame } from './internal/call-site.js'
+export { callFrameOutside, callSite, type FrameOwner, frameOwner, withRaisingFrame } from './internal/call-site.js'
 export type { Breach } from './internal/errors.schema.js'
 export {
   type AttributeValue,
@@ -56,4 +61,5 @@ export {
   recordOfRun,
 } from './internal/recorded-run.js'
 export { createSpanRecorder, type SpanRecorder } from './internal/span-recorder.js'
+export { workspaceRelativePathOf } from './internal/workspace-relative-path.js'
 export { Replay, ReplayFromText, replayOfText } from './replay.schema.js'

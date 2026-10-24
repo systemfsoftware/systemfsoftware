@@ -1,15 +1,10 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
-// test-timings.ts - route a CI lane's per-package work by measured duration.
-// `--task` names the package script the lane runs: `test` (the gate, default)
-// or `mutation` (the Mutation workflow). For `mutation`, plan first refuses
-// any package that would mutate more than its workflow files, then sizes each
-// package from the mutants `stryker plan` counts (mutation-plan.ts).
+// test-timings.ts — route the CI test lane's per-package work by measured duration.
 //
 //   plan   read main's timing record and the workspace, pack every package
-//          that has the --task script into jobs of at most --target seconds of
-//          predicted work, and split a package over the target into shards
-//          (vitest `--shard` for test, `STRYKER_SHARD` for mutation). Writes
-//          `jobs` (JSON) to $GITHUB_OUTPUT.
+//          that has a `test` script into jobs of at most --target seconds of
+//          predicted work, and split a package over the target into vitest
+//          `--shard`s. Writes `jobs` (JSON) to $GITHUB_OUTPUT.
 //   part   write one job's measured durations: from the newest turbo run
 //          summary in .turbo/runs, or from --package/--shard/--seconds for a
 //          package the job ran directly.
@@ -22,43 +17,14 @@
 // measures a duration; a failed or capped run stopped early, so it can raise a
 // package's duration but never lower it.
 
-import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { expandGlob } from '@std/fs/expand-glob'
-import { dirname, fromFileUrl, join, relative } from '@std/path'
-import { Result } from 'effect'
-import {
-  type AdmissionShape,
-  admitMutation,
-  annotationOf,
-  incrementalFileOf,
-  type JobShape,
-  keptIgnoresOf,
-  mutantCountOf,
-  MUTATION_SCRIPT,
-  type MutationFacts,
-  type ProbeFacts,
-  probeFactsOf,
-  type Refusal,
-  secondsPerMutant,
-  sharedSetOf,
-  splitRefusalsOf,
-  type Swept,
-  sweptFilesOf,
-} from './mutation-plan.ts'
+import { join, relative } from '@std/path'
 
 export type Shard = { readonly index: number; readonly count: number }
 
-/**
- * `passedHash`: the dry-run turbo hash the plan gave the package's task when the whole of it last passed.
- * `mutants`: the mutants the plan counted for the package, so `seconds / mutants` is its rate.
- */
-export type Measured = {
-  readonly seconds: number
-  readonly sha: string
-  readonly passedHash?: string
-  readonly mutants?: number
-}
+/** `passedHash`: the dry-run turbo hash the plan gave the package's task when the whole of it last passed. */
+export type Measured = { readonly seconds: number; readonly sha: string; readonly passedHash?: string }
 
 type ArtifactPage = {
   readonly artifacts: readonly {
@@ -131,8 +97,6 @@ export type Job = {
   readonly shard?: Shard & { readonly package: string; readonly dir: string; readonly slug: string }
   /** Each package's task hash in the plan's turbo dry run, which a pass of the job is recorded against. */
   readonly hashes?: Readonly<Record<string, string>>
-  /** Mutation only: each package's whole mutant count, on every shard job of it, never the shard's slice. */
-  readonly mutants?: Readonly<Record<string, number>>
 }
 
 export type Plan = { readonly jobs: readonly Job[]; readonly warnings: readonly string[] }
@@ -142,8 +106,6 @@ export type PlanOptions = {
   readonly maxJobs: number
   readonly maxSeconds: number
   readonly unknownSeconds: number
-  /** Seconds that replace a package's recorded duration, as mutation's mutant count times its rate. */
-  readonly predicted?: ReadonlyMap<string, number>
 }
 
 export const emptyRecord: TimingRecord = { version: 2, packages: {} }
@@ -167,7 +129,7 @@ const idSlugsOf = (packages: readonly TestPackage[]): ReadonlyMap<string, string
 }
 
 const predictedOf = (record: TimingRecord, options: PlanOptions) => (pkg: TestPackage): number =>
-  options.predicted?.get(pkg.name) ?? record.packages[pkg.name]?.seconds ?? options.unknownSeconds
+  record.packages[pkg.name]?.seconds ?? options.unknownSeconds
 
 type Bin = { packages: TestPackage[]; seconds: number }
 
@@ -315,11 +277,10 @@ export const skippedOf = (
   packages: readonly TestPackage[],
   record: TimingRecord,
   dry: readonly DryTask[],
-  taskName = 'test',
   passes: ReadonlySet<string> = new Set(),
 ): Skipped[] =>
   packages.flatMap((pkg): Skipped[] => {
-    const task = dry.find((entry) => entry.task === taskName && entry.package === pkg.name)
+    const task = dry.find((entry) => entry.task === 'test' && entry.package === pkg.name)
     if (task?.hash === undefined) return []
     if (task.cache?.remote === true && task.cache.status === 'HIT') {
       return [{ name: pkg.name, hash: task.hash, reason: 'remote cache hit' as const }]
@@ -342,15 +303,12 @@ const readDry = async (path: string | undefined): Promise<readonly DryTask[] | u
   return undefined
 }
 
-/** One entry per `taskName` task turbo executed; cache hits measured nothing. */
-export const entriesFromTurboSummary = (
-  summary: { readonly tasks?: readonly TurboTask[] },
-  taskName = 'test',
-): Entry[] =>
+/** One entry per `test` task turbo executed; cache hits measured nothing. */
+export const entriesFromTurboSummary = (summary: { readonly tasks?: readonly TurboTask[] }): Entry[] =>
   (summary.tasks ?? []).flatMap((task) => {
     const start = task.execution?.startTime
     const end = task.execution?.endTime
-    if (task.task !== taskName || task.package === undefined || task.cache?.status === 'HIT') return []
+    if (task.task !== 'test' || task.package === undefined || task.cache?.status === 'HIT') return []
     if (start === undefined || end === undefined) return []
     return [{
       package: task.package,
@@ -365,9 +323,7 @@ export const entriesFromTurboSummary = (
  * duration stands. A package any entry of which did not pass is a lower bound:
  * it replaces the previous duration, or `unknownSeconds` for an unrecorded
  * package, only when it is longer. A package that passed whole records the
- * hash `planned` gives it as `passedHash`; any other measurement drops it. A
- * new measurement records the mutant count `mutants` gives the package, and a
- * kept one keeps its count, so `seconds / mutants` stays one run's rate.
+ * hash `planned` gives it as `passedHash`; any other measurement drops it.
  */
 export const mergeRecord = (
   previous: TimingRecord,
@@ -375,7 +331,6 @@ export const mergeRecord = (
   sha: string,
   unknownSeconds: number,
   planned: ReadonlyMap<string, string> = new Map(),
-  mutants: ReadonlyMap<string, number> = new Map(),
 ): TimingRecord => {
   const packages: Record<string, Measured> = { ...previous.packages }
   const byPackage = new Map<string, Entry[]>()
@@ -393,22 +348,10 @@ export const mergeRecord = (
       : entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const passed = entries.every((entry) => entry.exitCode === 0)
     const passedHash = passed ? planned.get(name) : undefined
-    const counted = mutants.get(name)
     const before = previous.packages[name]
     if (passed || seconds > (before?.seconds ?? unknownSeconds)) {
-      packages[name] = {
-        seconds,
-        sha,
-        ...(passedHash === undefined ? {} : { passedHash }),
-        ...(counted === undefined ? {} : { mutants: counted }),
-      }
-    } else if (before !== undefined) {
-      packages[name] = {
-        seconds: before.seconds,
-        sha: before.sha,
-        ...(before.mutants === undefined ? {} : { mutants: before.mutants }),
-      }
-    }
+      packages[name] = { seconds, sha, ...(passedHash === undefined ? {} : { passedHash }) }
+    } else if (before !== undefined) packages[name] = { seconds: before.seconds, sha: before.sha }
   }
   return { version: 2, packages }
 }
@@ -416,7 +359,7 @@ export const mergeRecord = (
 const minutes = (seconds: number): string => `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
 
 /** A Markdown table of every measured entry, flagging any job over target. */
-export const summaryTable = (parts: readonly Part[], target: number, taskName = 'test'): string => {
+export const summaryTable = (parts: readonly Part[], target: number): string => {
   const rows = parts.flatMap((part) => {
     const total = part.entries.reduce((sum, entry) => sum + entry.seconds, 0)
     const flag = total > target ? ' ⚠ over target' : ''
@@ -427,7 +370,7 @@ export const summaryTable = (parts: readonly Part[], target: number, taskName = 
     })
   })
   return [
-    `### ${taskName} timings (target ${minutes(target)} per job)`,
+    `### test timings (target ${minutes(target)} per job)`,
     '',
     '| Job | Package | Time | Result |',
     '|---|---|---|---|',
@@ -462,82 +405,6 @@ const readRecords = async (dir: string | undefined): Promise<TimingRecord[]> => 
   return records
 }
 
-/**
- * The file-command paths every Actions step has. A child gets its own, so a config writing to them by name does not
- * touch the plan's outputs. This is not a sandbox: the child is the same user, as Stryker is in the Mutation job.
- */
-const FILE_COMMANDS = ['GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STATE', 'GITHUB_STEP_SUMMARY']
-
-/**
- * The variables the Mutation run step gives `pkg`'s config when the job runs it under `shape`: `STRYKER_SHARD`, `JOB`
- * as a planned job of that shape (a one-package group job, or shard job `<index>` of `<count>` with its `shard`), with
- * the `mutants` key every mutation job carries (its counts are not known yet, so they are 0 here), and what pnpm gives
- * the package's `mutation` script, the only one an admitted package can run, with the `--incrementalFile` the job
- * appends.
- */
-const runStepOf = (pkg: TestPackage, shape: JobShape): Record<string, string> => {
-  const shard = shardOf(shape)
-  const job = shard === undefined
-    ? groupJobOf([pkg], 0, 'group-1')
-    : shardJobsOf(pkg, 0, shard.count, slugOf(pkg.name))[shard.index - 1]!
-  return {
-    STRYKER_SHARD: shape,
-    JOB: JSON.stringify({ ...job, mutants: { [pkg.name]: 0 } }),
-    npm_lifecycle_event: 'mutation',
-    npm_lifecycle_script: `${MUTATION_SCRIPT} --incrementalFile ${incrementalFileOf(shard)}`,
-  }
-}
-
-/**
- * The environment every planner pnpm call gets: the plan job's own (`CI` included), file-command paths that exist, and
- * `runStep`, which the config probe and `stryker plan` set to what the Mutation run step gives the package. Not
- * covered: the plan step's own variables are present; `JOB`'s `id`, `name`, `predicted` and `mutants` counts differ, and for a whole
- * package so do `packages`, `dirs`, `filters` and the `mutants` keys, since the plan may pack it with others; pnpm's other `npm_*` names
- * differ. A config that reads those can still differ.
- */
-const pnpmEnv = (scratch: string, runStep: Readonly<Record<string, string>>): Record<string, string> => ({
-  ...Deno.env.toObject(),
-  ...Object.fromEntries(FILE_COMMANDS.map((name) => [name, join(scratch, name)])),
-  STRYKER_SHARD: '',
-  ...runStep,
-  npm_config_manage_package_manager_versions: 'false',
-})
-
-/**
- * Runs pnpm in `cwd`, writing `what` to stderr as it starts and again with its wall time as it ends, so a plan job
- * its timeout stops names the call it was waiting on, and a finished one records how long each call took.
- */
-const pnpm = async (
-  cwd: string,
-  args: readonly string[],
-  what: string,
-  runStep: Readonly<Record<string, string>> = {},
-): Promise<Deno.CommandOutput> => {
-  const scratch = await Deno.makeTempDir({ prefix: 'pnpm-env-' })
-  try {
-    for (const name of FILE_COMMANDS) await Deno.writeTextFile(join(scratch, name), '')
-    const started = performance.now()
-    console.error(`${what}: started`)
-    const out = await new Deno.Command('pnpm', {
-      args: [...args],
-      cwd,
-      clearEnv: true,
-      env: pnpmEnv(scratch, runStep),
-      stdout: 'piped',
-      stderr: 'piped',
-    }).output()
-    console.error(`${what}: exited ${out.code} after ${((performance.now() - started) / 1000).toFixed(1)} s`)
-    return out
-  } finally {
-    await Deno.remove(scratch, { recursive: true }).catch((error) => {
-      if (!(error instanceof Deno.errors.NotFound)) throw error
-    })
-  }
-}
-
-const text = new TextDecoder()
-
-/** The workspace members, listed by a pnpm that gets only what it needs to run: no CI variable or token reaches it. */
 const workspaceDirs = async (root: string): Promise<string[]> => {
   const passed = ['PATH', 'HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'COREPACK_HOME']
     .flatMap((name) => Deno.env.get(name) === undefined ? [] : [[name, Deno.env.get(name)!] as const])
@@ -549,6 +416,7 @@ const workspaceDirs = async (root: string): Promise<string[]> => {
     stdout: 'piped',
     stderr: 'piped',
   }).output()
+  const text = new TextDecoder()
   if (!out.success) throw new Error(`pnpm ls failed in ${root}: ${text.decode(out.stderr)}`)
   const members = JSON.parse(text.decode(out.stdout)) as { path: string }[]
   const own = await Deno.realPath(root)
@@ -563,7 +431,7 @@ export const honoursShard = (script: string): boolean => {
     /^vitest run(?: --?\w[\w.-]*(?:[= ][^\s-]\S*)?)*$/.test(commands.at(-1)!)
 }
 
-const workspacePackagesWith = async (root: string, script: string): Promise<TestPackage[]> => {
+const workspacePackagesWith = async (root: string): Promise<TestPackage[]> => {
   const found: TestPackage[] = []
   for (const dir of await workspaceDirs(root)) {
     const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as {
@@ -571,20 +439,17 @@ const workspacePackagesWith = async (root: string, script: string): Promise<Test
       scripts?: Record<string, string>
       devDependencies?: Record<string, string>
     }
-    const command = json.scripts?.[script]
-    // `mutation:full` alone still enrolls a package, so the mutation plan judges its script.
-    const carried = command !== undefined ||
-      (script === 'mutation' && Object.keys(json.scripts ?? {}).some((name) => name.startsWith('mutation:')))
-    if (json.name === undefined || !carried) continue
+    const command = json.scripts?.['test']
+    if (json.name === undefined || command === undefined) continue
     found.push({
       name: json.name,
       dir,
-      browser: script === 'test' && json.devDependencies?.['playwright'] !== undefined,
-      shardable: script !== 'test' || (command !== undefined && honoursShard(command)),
+      browser: json.devDependencies?.['playwright'] !== undefined,
+      shardable: honoursShard(command),
     })
   }
   if (found.length === 0) {
-    throw new Error(`no workspace package in ${root} has a \`${script}\` script; an empty plan is never a passing gate`)
+    throw new Error(`no workspace package in ${root} has a \`test\` script; an empty plan is never a passing gate`)
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -641,221 +506,6 @@ const positive = (flag: string, text: string, integer: boolean): number => numbe
 
 const atLeastZero = (flag: string, text: string, integer: boolean): number => numberFlag(flag, text, integer, 0)
 
-const MUTATION_PROBE = join(dirname(fromFileUrl(import.meta.url)), 'mutation-probe.mjs')
-
-/** Packages probed or counted at a time: each is a node process loading a config, or a Stryker discovery pass. */
-const MUTATION_POOL = 4
-
-const lastLines = (bytes: Uint8Array): string => text.decode(bytes).trim().split('\n').slice(-5).join(' ')
-
-/** The probe's facts for `pkg` with `STRYKER_SHARD` set to `shard`. */
-const probedOf = async (root: string, probe: string, pkg: TestPackage, shard: JobShape): Promise<ProbeFacts> => {
-  const out = await pnpm(
-    join(root, pkg.dir),
-    ['exec', 'node', '--input-type=module', '-e', probe],
-    `${pkg.name}: the config probe (STRYKER_SHARD '${shard}')`,
-    runStepOf(pkg, shard),
-  )
-  return probeFactsOf(text.decode(out.stdout), lastLines(out.stderr))
-}
-
-/** Every package's scripts, and its config judged by the probe once per admission shape. */
-const mutationFactsOf = async (root: string, packages: readonly TestPackage[]): Promise<MutationFacts[]> => {
-  const probe = await Deno.readTextFile(MUTATION_PROBE)
-  const facts = await Array.fromAsync(pooledMap(MUTATION_POOL, packages, async (pkg): Promise<MutationFacts> => {
-    const json = JSON.parse(await Deno.readTextFile(join(root, pkg.dir, 'package.json'))) as {
-      scripts?: Record<string, string>
-    }
-    const probes: Record<AdmissionShape, ProbeFacts> = {
-      '': await probedOf(root, probe, pkg, ''),
-      '1/1': await probedOf(root, probe, pkg, '1/1'),
-    }
-    return { name: pkg.name, dir: pkg.dir, scripts: json.scripts ?? {}, probes }
-  }))
-  return facts.sort((a, b) => a.name.localeCompare(b.name))
-}
-
-/**
- * The refusals of every package the plan splits, its config judged under each `<index>/<count>` its shard jobs give
- * `STRYKER_SHARD`, since `shardMutate` hands each of them a different `mutate` array.
- */
-const splitMutationRefusalsOf = async (
-  root: string,
-  packages: readonly TestPackage[],
-  jobs: readonly Job[],
-): Promise<Refusal[]> => {
-  const probe = await Deno.readTextFile(MUTATION_PROBE)
-  const split = [
-    ...new Map(jobs.flatMap((job) => job.shard === undefined ? [] : [[job.shard.package, job.shard.count]])),
-  ]
-    .filter(([, count]) => count > 1)
-    .sort(([a], [b]) => a.localeCompare(b))
-  const judged = await Array.fromAsync(pooledMap(MUTATION_POOL, split, async ([name, count]) => {
-    const pkg = packages.find((candidate) => candidate.name === name)!
-    const [first, ...rest] = await Array.fromAsync(
-      Array.from({ length: count }, (_unused, i) => `${i + 1}/${count}` as const),
-      async (shard) => [shard, await probedOf(root, probe, pkg, shard)] as const,
-    )
-    return splitRefusalsOf(name, [first!, ...rest])
-  }))
-  return judged.flat()
-}
-
-/**
- * For each directory: the shared set expanded exactly as `mutation-probe.mjs`'s `expand` does (Node's `globSync`, run
- * from the package directory: it follows symlinks and skips hidden paths), and every file under a hidden path that
- * Stryker's crawl of that package reaches (not a directory, and under no directory the crawl drops: an always-ignored
- * name, the default temp directory, or a bare name the package's own ignore patterns keep, in any case, or a
- * `*.tsbuildinfo` name) and that the shared include patterns match once each hidden segment is made visible with a
- * leading `_`, which keeps its own characters.
- */
-const EXPAND = [
-  "import { globSync, readdirSync, statSync } from 'node:fs'",
-  "import { matchesGlob } from 'node:path'",
-  'const { dirs, patterns } = JSON.parse(process.argv[1])',
-  "const include = patterns.filter((pattern) => !pattern.startsWith('!'))",
-  "const exclude = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))",
-  "const ALWAYS = ['node_modules', '.git', '.next', '.nuxt', '.svelte-kit', '.turbo', '.stryker-tmp']",
-  'const droppedBy = (ignorePatterns) => {',
-  '  const ignored = new Set([...ALWAYS, ...ignorePatterns].map((name) => name.toLowerCase()))',
-  "  return (segment) => ignored.has(segment.toLowerCase()) || segment.toLowerCase().endsWith('.tsbuildinfo')",
-  '}',
-  "const tops = [...new Set(include.map((pattern) => pattern.split('/')[0]))]",
-  "const walked = tops.some((top) => /[*?{[]/.test(top)) ? ['.'] : tops",
-  'const isFile = (path) => {',
-  '  try {',
-  '    return statSync(path).isFile()',
-  '  } catch {',
-  '    return false',
-  '  }',
-  '}',
-  'const listed = (top) => {',
-  '  try {',
-  "    return readdirSync(top, { recursive: true }).map((file) => (top === '.' ? file : `${top}/${file}`))",
-  '  } catch {',
-  '    return []',
-  '  }',
-  '}',
-  'const hiddenOf = (dropped) =>',
-  '  walked.flatMap(listed).filter((file) => {',
-  "    const segments = file.split('/')",
-  "    if (!segments.some((segment) => segment.startsWith('.'))) return false",
-  '    if (segments.slice(0, -1).some(dropped) || !isFile(file)) return false',
-  "    const visible = segments.map((segment) => (segment.startsWith('.') ? `_${segment}` : segment)).join('/')",
-  '    return include.some((pattern) => matchesGlob(visible, pattern))',
-  '  }).sort()',
-  'const root = process.cwd()',
-  'const facts = Object.fromEntries(dirs.map(({ dir, ignorePatterns }) => {',
-  '  process.chdir(`${root}/${dir}`)',
-  '  return [dir, { files: globSync(include, { exclude }).sort(), hidden: hiddenOf(droppedBy(ignorePatterns)) }]',
-  '}))',
-  'console.log(JSON.stringify(facts))',
-].join('\n')
-
-/**
- * Every workspace package, whether the plan enrols it, and what `EXPAND` finds in it for the shared mutated set
- * (`patterns`, as the installed `@systemfsoftware/stryker-config` declares them). Stryker's crawl of a package drops
- * what that package's own config ignores, so each enrolled package is swept with the ignore patterns its config keeps
- * under every admission shape (`ignoredBy`). Any other member is swept with none: no Mutation job runs it, so its config
- * is never loaded, and once it enrols, a config the plan admits may clear the shared ignore patterns but cannot move the
- * temp directory, so only the always-dropped names are sure to be dropped. The workspace root is not a package the plan
- * can enrol, so it is not judged; a member with no name can never be enrolled, so it is named by its directory.
- */
-const sweptOf = async (
-  root: string,
-  enrolled: readonly TestPackage[],
-  patterns: readonly string[],
-  ignoredBy: ReadonlyMap<string, readonly string[]>,
-): Promise<Swept[]> => {
-  const names = new Set(enrolled.map((pkg) => pkg.name))
-  const members: { name: string; dir: string; enrolled: boolean }[] = []
-  for (const dir of await workspaceDirs(root)) {
-    const json = JSON.parse(await Deno.readTextFile(join(root, dir, 'package.json'))) as { name?: string }
-    members.push({ name: json.name ?? dir, dir, enrolled: json.name !== undefined && names.has(json.name) })
-  }
-  if (members.length === 0) return []
-  const dirs = members.map((pkg) => ({ dir: pkg.dir, ignorePatterns: ignoredBy.get(pkg.dir) ?? [] }))
-  const out = await pnpm(
-    root,
-    ['exec', 'node', '--input-type=module', '-e', EXPAND, JSON.stringify({ dirs, patterns })],
-    `${dirs.length} workspace packages: the shared mutated set and hidden workflow files`,
-  )
-  if (!out.success) throw new Error(`expanding the shared mutated set failed: ${lastLines(out.stderr)}`)
-  const facts = Result.getOrThrowWith(
-    sweptFilesOf(text.decode(out.stdout), members.map((pkg) => pkg.dir)),
-    (reason) => new Error(`expanding the shared mutated set failed: ${reason}: ${lastLines(out.stderr)}`),
-  )
-  return members.map((pkg) => ({ name: pkg.name, enrolled: pkg.enrolled, ...facts.get(pkg.dir)! }))
-}
-
-/** Every mutant `stryker plan --full` discovers in the package, ignoring the incremental report. */
-const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promise<number> => {
-  const dir = await Deno.makeTempDir({ prefix: 'stryker-plan-' })
-  try {
-    const out = await pnpm(
-      join(root, pkg.dir),
-      [
-        'exec',
-        'stryker',
-        'plan',
-        '--full',
-        '--target-seconds',
-        String(target),
-        '--out',
-        join(dir, 'plan.json'),
-      ],
-      `${pkg.name}: stryker plan`,
-      runStepOf(pkg, ''),
-    )
-    if (!out.success) throw new Error(`${pkg.name}: stryker plan exited ${out.code}: ${lastLines(out.stderr)}`)
-    return Result.getOrThrowWith(
-      mutantCountOf(await Deno.readTextFile(join(dir, 'plan.json'))),
-      (reason) => new Error(`${pkg.name}: stryker plan wrote no version 1 shard plan: ${reason}`),
-    )
-  } finally {
-    await Deno.remove(dir, { recursive: true })
-  }
-}
-
-type MutationSizing = {
-  readonly mutants: ReadonlyMap<string, number>
-  readonly predicted: ReadonlyMap<string, number>
-  readonly table: string
-}
-
-/** Each package's predicted seconds: the mutants Stryker plans for it times its seconds per mutant. */
-const mutationSizingOf = async (
-  root: string,
-  packages: readonly TestPackage[],
-  record: TimingRecord,
-  target: number,
-  unknownMutantSeconds: number,
-): Promise<MutationSizing> => {
-  const counted = await Array.fromAsync(
-    pooledMap(MUTATION_POOL, packages, async (pkg) => [pkg.name, await mutantsOf(root, pkg, target)] as const),
-  )
-  const rows = counted.sort(([a], [b]) => a.localeCompare(b)).map(([name, mutants]) => {
-    const rate = secondsPerMutant(record, name, unknownMutantSeconds)
-    return { name, mutants, rate, predicted: mutants * rate.seconds }
-  })
-  return {
-    mutants: new Map(rows.map((row) => [row.name, row.mutants])),
-    predicted: new Map(rows.map((row) => [row.name, row.predicted])),
-    table: [
-      '### mutation sizing: mutants Stryker plans, times seconds per mutant',
-      '',
-      '| package | mutants | s/mutant | rate from | predicted |',
-      '|---|---|---|---|---|',
-      ...rows.map((row) =>
-        `| ${row.name} | ${row.mutants} | ${row.rate.seconds.toFixed(2)} | ${row.rate.source} | ${
-          minutes(Math.round(row.predicted))
-        } |`
-      ),
-      '',
-    ].join('\n'),
-  }
-}
-
 const main = async (): Promise<void> => {
   const [command, ...rest] = Deno.args
   const args = parseArgs(rest, {
@@ -872,11 +522,9 @@ const main = async (): Promise<void> => {
       'sha',
       'turbo-runs',
       'listing',
-      'task',
       'target',
       'max-jobs',
       'unknown-seconds',
-      'unknown-mutant-seconds',
       'max-seconds',
       'dry',
       'raw',
@@ -885,15 +533,8 @@ const main = async (): Promise<void> => {
       'passes',
       'count',
     ],
-    default: {
-      target: '300',
-      'max-jobs': '12',
-      'max-seconds': '1800',
-      'unknown-seconds': '60',
-      task: 'test',
-    },
+    default: { target: '300', 'max-jobs': '12', 'max-seconds': '1800', 'unknown-seconds': '60' },
   })
-  const task = String(args.task)
   if (command === 'plan') {
     const options = {
       target: positive('target', args.target, false),
@@ -904,61 +545,30 @@ const main = async (): Promise<void> => {
     if (options.maxSeconds < options.target) {
       throw new Error(`--max-seconds ${options.maxSeconds} is below --target ${options.target}; no job could fit both`)
     }
-    // The caller states the fallback rate (reusable-mutation.yml's `unknown-mutant-seconds` input); there is no default.
-    const unknownMutantSeconds = task === 'mutation'
-      ? positive('unknown-mutant-seconds', args['unknown-mutant-seconds'] ?? '', false)
-      : undefined
     const record = await readRecord(args.record)
-    const root = Deno.cwd()
-    const packages = await workspacePackagesWith(root, task)
-    if (packages.length === 0) throw new Error('the plan has no jobs though packages carry the task script')
-    if (task === 'mutation') {
-      const facts = await mutationFactsOf(root, packages)
-      const shared = facts.map((pkg) => sharedSetOf(pkg.probes[''])).find((set) => set !== null)
-      const swept = shared === undefined ? [] : await sweptOf(root, packages, shared.patterns, keptIgnoresOf(facts))
-      const refusals = admitMutation(facts, swept)
-      for (const refusal of refusals) console.error(annotationOf(refusal))
-      if (refusals.length > 0) {
-        const refused = new Set(refusals.map((refusal) => refusal.package))
-        throw new Error(`${refused.size} packages refused for mutation; no Stryker run is planned`)
-      }
-    }
+    const packages = await workspacePackagesWith(Deno.cwd())
+    if (packages.length === 0) throw new Error('the plan has no jobs though packages carry a test script')
     const dry = await readDry(args.dry) ?? []
     const records = await readRecords(args.passes)
     const passes = passesOf([record, ...records])
     if (args.passes !== undefined) console.log(`pass records read: ${records.length}, pass set: ${passes.size}`)
-    const skipped = skippedOf(packages, record, dry, task, passes)
-    const planned = packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name))
-    const sizing = unknownMutantSeconds === undefined
-      ? undefined
-      : await mutationSizingOf(root, planned, record, options.target, unknownMutantSeconds)
-    const plan = planJobs(planned, record, sizing === undefined ? options : { ...options, predicted: sizing.predicted })
-    if (sizing !== undefined) {
-      const refusals = await splitMutationRefusalsOf(root, planned, plan.jobs)
-      for (const refusal of refusals) console.error(annotationOf(refusal))
-      if (refusals.length > 0) {
-        const refused = new Set(refusals.map((refusal) => refusal.package))
-        throw new Error(`${refused.size} split packages refused for mutation; no Stryker run is planned`)
-      }
-    }
+    const skipped = skippedOf(packages, record, dry, passes)
+    const plan = planJobs(packages.filter((pkg) => !skipped.some((skip) => skip.name === pkg.name)), record, options)
     const hashes = new Map(
       dry.flatMap((entry) =>
-        entry.task === task && entry.package !== undefined && entry.hash !== undefined
+        entry.task === 'test' && entry.package !== undefined && entry.hash !== undefined
           ? [[entry.package, entry.hash] as const]
           : []
       ),
     )
-    const jobs = plan.jobs.map((job): Job => {
+    const jobs = plan.jobs.map((job) => {
       const known = job.packages.flatMap((name) => hashes.has(name) ? [[name, hashes.get(name)!] as const] : [])
-      const counted = sizing === undefined
-        ? {}
-        : { mutants: Object.fromEntries(job.packages.map((name) => [name, sizing.mutants.get(name) ?? 0])) }
-      return { ...job, ...(known.length === 0 ? {} : { hashes: Object.fromEntries(known) }), ...counted }
+      return known.length === 0 ? job : { ...job, hashes: Object.fromEntries(known) }
     })
     for (const warning of plan.warnings) console.error(`warning: ${warning}`)
     for (const job of jobs) console.log(`${job.id.padEnd(28)} ~${minutes(job.predicted)}  ${job.name}`)
     const table = skipped.length === 0 ? '' : [
-      `### ${skipped.length} packages skipped: their ${task} already passed on these inputs`,
+      `### ${skipped.length} packages skipped: their tests already passed on these inputs`,
       '',
       '| package | turbo hash | why |',
       '|---|---|---|',
@@ -966,8 +576,7 @@ const main = async (): Promise<void> => {
       '',
     ].join('\n')
     if (table !== '') console.log(table)
-    if (sizing !== undefined) console.log(sizing.table)
-    await appendEnvFile('GITHUB_STEP_SUMMARY', table + (sizing?.table ?? ''))
+    await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     await appendEnvFile('GITHUB_OUTPUT', `jobs=${JSON.stringify(jobs)}\n`)
     return
   }
@@ -981,7 +590,7 @@ const main = async (): Promise<void> => {
     }
     const shard = shardOf(args.shard)
     const entries: Entry[] = raw?.tasks !== undefined
-      ? entriesFromTurboSummary(raw, task)
+      ? entriesFromTurboSummary(raw)
       : args.package !== undefined
       ? [{
         package: args.package,
@@ -989,7 +598,7 @@ const main = async (): Promise<void> => {
         exitCode: args.exit === undefined ? null : atLeastZero('exit', args.exit, true),
         ...(shard === undefined ? {} : { shard }),
       }]
-      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'), task)
+      : entriesFromTurboSummary(await newestTurboSummary(args['turbo-runs'] ?? '.turbo/runs'))
     await Deno.writeTextFile(args.out, JSON.stringify({ job: args.job, entries } satisfies Part))
     return
   }
@@ -1000,11 +609,9 @@ const main = async (): Promise<void> => {
     const unknownSeconds = positive('unknown-seconds', args['unknown-seconds'], false)
     const plan = args.plan === undefined ? [] : JSON.parse(await Deno.readTextFile(args.plan)) as readonly Job[]
     const planned = new Map(plan.flatMap((job) => Object.entries(job.hashes ?? {})))
-    const mutants = new Map(plan.flatMap((job) => Object.entries(job.mutants ?? {})))
-    const previous = await readRecord(args.previous)
-    const record = mergeRecord(previous, parts, args.sha ?? '', unknownSeconds, planned, mutants)
+    const record = mergeRecord(await readRecord(args.previous), parts, args.sha ?? '', unknownSeconds, planned)
     await Deno.writeTextFile(args.out, JSON.stringify(record, null, 2))
-    const table = summaryTable(parts, target, task)
+    const table = summaryTable(parts, target)
     console.log(table)
     await appendEnvFile('GITHUB_STEP_SUMMARY', table)
     return

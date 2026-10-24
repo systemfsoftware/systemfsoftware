@@ -1,19 +1,36 @@
-# Cost: 0 runner-min/day today: this lane starts only on workflow_dispatch, the stopgap #700 set. #733
-# adds a nightly schedule on main and keeps workflow_dispatch; Mutation never runs on a push or a pull
-# request. Each run mutates the full corpus. Before the workflow-only change a full run took 422 job-min,
-# measured on run 37962737026 (2026-10-09, 244 files in 26 packages). After it, a run mutates 54 files in
-# 14 packages and is not yet measured; that run's per-package mutant counts model it at about 179 job-min.
-# At #733's one nightly run a day that is about 179 runner-min/day after the change against 422 before,
-# plus the same again for each manual dispatch. Main's 76 first-parent commits from 2026-10-06T00:00Z to
-# 2026-10-13T00:00Z (10.9 a day) start no run: the price is per night, not per commit.
+# Cost: at most about 180 runner-min/day for the one scheduled run, plus about as much again for each
+# manual dispatch (7 from 2026-09-28 to 2026-10-11). Mutation never runs on a push or a pull request.
+# A full run mutates the 54 workflow files of 14 packages; #747 modelled it at about 179 job-min from
+# the per-package mutant counts of run 37962737026, where the 26-package corpus took 422 job-min. It is
+# not yet measured at the 600 s shard target. A night plans only the projects turbo marks affected
+# since the last green night, and every project when none is found or the lane itself changed. No
+# night is green until the survivors on main are killed, so until then every night is a full run of
+# about 180 job-min. Main's 76 first-parent commits in the week to 2026-10-13 (10.9 a day) start no
+# run: the price is per night, not per commit. A dispatch scoped by `packages` costs only its packages.
 name: Mutation
+run-name: Mutation ${{ inputs.sha || github.sha }}${{ inputs.night && format(' for {0}', inputs.night) || '' }}
 
 on:
+  schedule:
+    - cron: "17 14 * * *"
   workflow_dispatch:
+    inputs:
+      sha:
+        description: A commit on main to test instead of main's tip
+        required: false
+        type: string
+      packages:
+        description: JSON array of package names to plan instead of every package
+        required: false
+        type: string
+      night:
+        description: The night's run id a re-test belongs to; it only titles the run
+        required: false
+        type: string
 
 concurrency:
-  group: mutation-${{ github.ref }}
-  cancel-in-progress: true
+  group: mutation-${{ github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -22,6 +39,10 @@ jobs:
   mutation:
     name: mutation
     uses: ./.github/workflows/reusable-mutation.yml
+    with:
+      sha: ${{ inputs.sha }}
+      packages: ${{ inputs.packages }}
     permissions:
       contents: read
       actions: write
+      pull-requests: write
