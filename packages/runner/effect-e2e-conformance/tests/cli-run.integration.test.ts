@@ -1,9 +1,13 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 
 import {
+  AiTraceFile,
+  aiTracesIn,
   attemptsOf,
   copiedRunnerSuite,
   runCli,
@@ -14,12 +18,28 @@ import {
   statusesOf,
   vitestConfigRemovedFrom,
 } from './__fixtures__/cli-run.fixture.js'
+import { PLANTED_SECRET } from './__fixtures__/runner-suite/site.js'
 
 const Feature = makeFeature({ it })
 
 const FIXTURES_TEST = 'Should_ReceiveAppAgentScreenAndPlatform_When_TheE2eRunnerIsSelected'
 const LOCATOR_TEST = 'Should_Fail_When_TheStatusNeverReadsPro'
 const VALUE_TEST = 'Should_FailThroughVitest_When_TwoValuesDiffer'
+const MODEL_CALL_FILE = 'tests/model-call.e2e.ts'
+const MODEL_CALL_TEST = 'Should_FailOnTheModel_When_TheAgentActsWithThePlantedSecret'
+const ESCAPED_SECRET = JSON.stringify(PLANTED_SECRET).slice(1, -1)
+
+const tracedRun = (suite: string, args: ReadonlyArray<string>) =>
+  Effect.gen(function*() {
+    const cli = yield* runCli({ suite, args })
+    const traces = yield* aiTracesIn(suite)
+    const firstCall = yield* Option.match(Option.fromNullishOr(traces[0]), {
+      onNone: () => Effect.succeed(null),
+      onSome: ({ text }) =>
+        Effect.map(Effect.orDie(Schema.decodeEffect(AiTraceFile)(text)), ({ calls }) => calls[0] ?? null),
+    })
+    return { cli, traces, firstCall }
+  })
 
 const WORKER_FILES = ['tests/worker-a.e2e.ts', 'tests/worker-b.e2e.ts']
 const A_READS_FREE = 'Should_ReadTheFreePlan_When_WorkerAOpensBilling'
@@ -285,6 +305,69 @@ Feature('Running a suite with effect-e2e run')
             stdout: s.rerun.stdout,
             sameReport: runIdOf(s.rerun.report) === runIdOf(s.green.report),
           }).toEqual({ green: 0, exitCode: 0, saysNothingFailed: true, stdout: '', sameReport: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'An agent test blocked on the model under --ai-trace leaves its model calls with the planted secret masked',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite whose config declares the planted secret')(
+          'suite',
+          () => copiedRunnerSuite('valid'),
+        ),
+        When('the run selects the test whose act sends the planted secret to a model that cannot be reached')(
+          'run',
+          ({ suite }) => tracedRun(suite, ['--ai-trace', MODEL_CALL_FILE]),
+        ),
+        Then('the run exits 3, one trace names the failed call, and its bytes hold the mask but not the secret')((
+          s,
+          expect,
+        ) =>
+          expect({
+            exitCode: s.run.cli.exitCode,
+            report: statusesOf(s.run.cli.report),
+            traces: s.run.traces.length,
+            firstCall: s.run.firstCall,
+            secretBytes: s.run.traces.some(({ text }) =>
+              text.includes(PLANTED_SECRET) || text.includes(ESCAPED_SECRET)
+            ),
+            masked: s.run.traces.every(({ text }) => text.includes('[secret:planted]')),
+          }).toEqual({
+            exitCode: 3,
+            report: { [MODEL_CALL_TEST]: 'blocked' },
+            traces: 1,
+            firstCall: {
+              step: 'step-2',
+              request: { model: 'never-called' },
+              outcome: { _tag: 'Failed', code: 'MODEL_PROVIDER_FAILED' },
+            },
+            secretBytes: false,
+            masked: true,
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'The same blocked agent test without --ai-trace leaves no ai-trace.json',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a copy of the suite whose config declares the planted secret')(
+          'suite',
+          () => copiedRunnerSuite('valid'),
+        ),
+        When('the run selects the same test without --ai-trace')(
+          'run',
+          ({ suite }) => tracedRun(suite, [MODEL_CALL_FILE]),
+        ),
+        Then('the run exits 3 with the test blocked and no ai-trace.json under the results')((s, expect) =>
+          expect({
+            exitCode: s.run.cli.exitCode,
+            report: statusesOf(s.run.cli.report),
+            traces: s.run.traces.length,
+          }).toEqual({ exitCode: 3, report: { [MODEL_CALL_TEST]: 'blocked' }, traces: 0 })
         ),
       ),
     )

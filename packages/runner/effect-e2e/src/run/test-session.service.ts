@@ -32,10 +32,19 @@ import type { ArtifactRef, Attempt, RanAttempt } from '../report/report.schema.j
 import { failureClassOf } from '../verdict/failure-class.schema.js'
 import type { AppUnreachable, EnvironmentUnavailable, FailureRecord } from '../verdict/failure.schema.js'
 import { StepId, type StepRecord } from '../verdict/step-record.schema.js'
+import { AdmitAiTrace, admitAiTrace, type AiTraceAdmission } from './admit-ai-trace.workflow.js'
 import { AdmitEvidence, admitEvidence, type EvidenceAdmission } from './admit-evidence.workflow.js'
+import type { ModelCall } from './ai-trace.schema.js'
 import { ArtifactStore, type ArtifactStoreShape } from './artifact-store.service.js'
 import { type AttemptLog, type AttemptTest, settleAttempt, withEvidenceFailures } from './attempt.js'
-import { captureScreen, writeEvidence } from './capture-evidence.js'
+import {
+  captureScreen,
+  type EvidenceOwner,
+  NOTHING_WRITTEN,
+  writeAiTrace,
+  writeEvidence,
+  type WrittenEvidence,
+} from './capture-evidence.js'
 import {
   ConcludeAttempt,
   concludeAttempt,
@@ -44,6 +53,7 @@ import {
   type SessionRecord,
   type TryEnding,
 } from './conclude-attempt.workflow.js'
+import { recordModelCalls } from './record-model-calls.js'
 
 /** How the composition root opens the target's engine; the session calls `acquire` at most once per try. */
 export interface EngineSource {
@@ -100,8 +110,9 @@ export interface TestSessionShape {
   ) => Effect.Effect<StepHandle<ExtractResult<O>, ExtractFailure | EnvironmentUnavailable>>
   /**
    * Ends the try: interrupts steps still running, settles and writes the cache, captures the screen when the
-   * `trace` setting admits evidence for the try's status, closes the engine, writes the evidence, and appends the
-   * attempt with its artifacts to the log. Runs uninterruptibly, so every ending reaches the cache decision.
+   * `trace` setting admits evidence for the try's status, closes the engine, writes `ai-trace.json` when ai-trace is
+   * on and the try did not pass, writes the evidence, and appends the attempt with its artifacts to the log. Runs
+   * uninterruptibly, so every ending reaches the cache decision.
    */
   readonly endAttempt: (ending: TryEnding) => Effect.Effect<Attempt>
 }
@@ -122,6 +133,8 @@ interface Books {
   readonly records: Ref.Ref<ReadonlyArray<SessionRecord>>
   readonly errors: Ref.Ref<ReadonlyArray<FailureRecord>>
   readonly counter: Ref.Ref<number>
+  /** Every model call the try's steps made; filled only when the config turns ai-trace on. */
+  readonly calls: Ref.Ref<ReadonlyArray<ModelCall>>
   readonly steps: Scope.Closeable
 }
 
@@ -206,14 +219,17 @@ const contextOf = (books: Books, index: number) => ({
   timeout: books.input.config.timeout,
 })
 
-const withServices = (books: Books) =>
+const gatewayOf = (books: Books, index: number): ModelGatewayShape =>
+  books.input.config.aiTrace ? recordModelCalls(books.calls, stepIdOf(index))(books.gateway) : books.gateway
+
+const withServices = (books: Books, index: number) =>
 <A, E>(
   step: Effect.Effect<A, E, Engine | ModelGateway | CacheStore | SecretLedger>,
 ): Effect.Effect<A, E | EnvironmentUnavailable> =>
   Effect.flatMap(engineOf(books), (engine) =>
     step.pipe(
       Effect.provideService(Engine, engine),
-      Effect.provideService(ModelGateway, books.gateway),
+      Effect.provideService(ModelGateway, gatewayOf(books, index)),
       Effect.provideService(CacheStore, books.store),
       Effect.provideService(SecretLedger, books.ledger),
     ))
@@ -279,27 +295,53 @@ const admissionOf = (books: Books, attempt: RanAttempt): EvidenceAdmission =>
     onSuccess: (admission) => admission,
   })
 
+const aiTraceAdmissionOf = (books: Books, attempt: RanAttempt): AiTraceAdmission =>
+  Result.match(admitAiTrace(new AdmitAiTrace({ aiTrace: books.input.config.aiTrace, status: attempt.status })), {
+    onFailure: (missing: never) => missing,
+    onSuccess: (admission) => admission,
+  })
+
+const ownerOf = (books: Books): EvidenceOwner => ({
+  store: books.artifacts,
+  ledger: books.ledger,
+  test: books.input.test,
+  target: books.input.target.name,
+  agent: books.input.agent.name,
+})
+
+const aiTraced = (books: Books, attempt: RanAttempt): Effect.Effect<WrittenEvidence> =>
+  Match.valueTags(aiTraceAdmissionOf(books, attempt), {
+    AiTraceAdmitted: () =>
+      Effect.flatMap(
+        Ref.get(books.calls),
+        (calls) => writeAiTrace({ ...ownerOf(books), retry: books.input.retry, calls }),
+      ),
+    AiTraceDeclined: () => Effect.succeed(NOTHING_WRITTEN),
+  })
+
+const evidencedWith = (attempt: RanAttempt, written: WrittenEvidence): Evidenced => ({
+  attempt: withEvidenceFailures({ attempt, failures: written.failures }),
+  artifacts: written.artifacts,
+})
+
 const captured = (books: Books, attempt: RanAttempt): Effect.Effect<Evidenced> =>
   Effect.gen(function*() {
     const screen = yield* captureScreen({ engine: yield* SynchronizedRef.get(books.cell), ledger: books.ledger })
     yield* closeEngine(books)
-    const written = yield* writeEvidence({
-      store: books.artifacts,
-      ledger: books.ledger,
-      test: books.input.test,
-      target: books.input.target.name,
-      agent: books.input.agent.name,
-      attempt,
-      screen,
-    })
-    return { attempt: withEvidenceFailures({ attempt, failures: written.failures }), artifacts: written.artifacts }
+    const written = yield* aiTraced(books, attempt)
+    return evidencedWith(attempt, yield* writeEvidence({ ...ownerOf(books), attempt, screen, written }))
   })
 
 // The screen is read before the engine closes and after the cache settles, so the trace shows the settled writes.
+// The ai-trace is admitted apart from the rest of the evidence and written before `trace.md`, which links it.
 const evidenced = (books: Books) => (attempt: RanAttempt): Effect.Effect<Evidenced> =>
   Match.valueTags(admissionOf(books, attempt), {
     EvidenceAdmitted: () => captured(books, attempt),
-    EvidenceDeclined: () => Effect.as(closeEngine(books), { attempt, artifacts: [] }),
+    EvidenceDeclined: () =>
+      Effect.andThen(
+        closeEngine(books),
+        Effect.map(aiTraced(books, attempt), (written) => evidencedWith(attempt, written)),
+      ),
   })
 
 const endedWith = (books: Books) => (ending: TryEnding): Effect.Effect<Attempt> =>
@@ -340,23 +382,23 @@ const shapeOf = (books: Books): TestSessionShape => ({
       'act',
       request.instruction,
       (index) =>
-        withServices(books)(
+        withServices(books, index)(
           act({ ...request, context: { ...contextOf(books, index), record: actRecorder(books, index) } }),
         ),
     ),
   assert: (request) =>
     launched(books, 'assert', request.statement, (index) =>
-      withServices(books)(
+      withServices(books, index)(
         assert({ ...request, context: { ...contextOf(books, index), record: assertRecorder(books, index) } }),
       )),
   waitFor: (request) =>
     launched(books, 'waitFor', request.condition, (index) =>
-      withServices(books)(
+      withServices(books, index)(
         waitFor({ ...request, context: { ...contextOf(books, index), record: waitForRecorder(books, index) } }),
       )),
   extract: (request) =>
     launched(books, 'extract', request.instruction, (index) =>
-      withServices(books)(
+      withServices(books, index)(
         extract({ ...request, context: { ...contextOf(books, index), record: extractRecorder(books, index) } }),
       )),
   endAttempt: endedWith(books),
@@ -378,6 +420,7 @@ const make = (
       records: yield* Ref.make<ReadonlyArray<SessionRecord>>([]),
       errors: yield* Ref.make<ReadonlyArray<FailureRecord>>([]),
       counter: yield* Ref.make(0),
+      calls: yield* Ref.make<ReadonlyArray<ModelCall>>([]),
       steps: yield* Effect.andThen(
         Scope.addFinalizer(scope, Effect.suspend(() => closeEngine(books))),
         Scope.fork(scope),

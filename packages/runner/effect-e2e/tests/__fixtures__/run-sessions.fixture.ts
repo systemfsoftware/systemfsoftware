@@ -46,7 +46,7 @@ const IDENTITY: EngineSource['identity'] = { adapter: 'memory', kind: 'web' }
 
 type TraceSetting = E2EConfig['trace']
 
-const decodedConfig = (mode: StoreMode, trace: TraceSetting): Effect.Effect<E2EConfig> =>
+const decodedConfig = (mode: StoreMode, trace: TraceSetting, aiTrace: boolean): Effect.Effect<E2EConfig> =>
   Effect.orDie(decodeConfig(
     defineConfig({
       projectId: 'run-engine',
@@ -63,6 +63,7 @@ const decodedConfig = (mode: StoreMode, trace: TraceSetting): Effect.Effect<E2EC
       },
       cache: { mode },
       trace,
+      aiTrace,
     }),
     { ci: false, projectId: 'run-engine', cores: 1 },
   ))
@@ -280,6 +281,7 @@ export const worldOf = (input: {
   readonly seed?: ReadonlyArray<readonly [KeyDigest, TraceEntry]> | undefined
   readonly failingStore?: boolean
   readonly trace?: TraceSetting
+  readonly aiTrace?: boolean
   readonly refusingArtifacts?: boolean
 }): Effect.Effect<World> =>
   Effect.gen(function*() {
@@ -289,7 +291,7 @@ export const worldOf = (input: {
     const signalled = Effect.flatMap(scripted.requests, (seen) =>
       Effect.when(Deferred.succeed(drained, undefined), Effect.succeed(seen.length === input.answers.length)))
     return {
-      config: yield* decodedConfig(input.mode, input.trace ?? 'retain-on-failure'),
+      config: yield* decodedConfig(input.mode, input.trace ?? 'retain-on-failure', input.aiTrace ?? false),
       log: yield* makeAttemptLog,
       gateway: Layer.succeed(
         ModelGateway,

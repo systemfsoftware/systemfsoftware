@@ -187,6 +187,7 @@ export const e2eConfigSchema: (defaults: ConfigDefaults) => Schema.Struct<{
     readonly reporters: Schema.withDecodingDefaultKey<Schema.NonEmptyArray<Schema.Literals<readonly ["list", "json", "junit", "markdown"]>>, never>;
     readonly output: Schema.withDecodingDefaultKey<Schema.String, never>;
     readonly trace: Schema.withDecodingDefaultKey<Schema.Literals<readonly ["off", "on", "retain-on-failure"]>, never>;
+    readonly aiTrace: Schema.withDecodingDefaultKey<Schema.Boolean, never>;
 }>;
 
 // @public
@@ -230,6 +231,7 @@ export const RUN_OVERRIDE_ENV: {
     readonly timeout: 'E2E_TIMEOUT';
     readonly output: 'E2E_OUTPUT';
     readonly trace: 'E2E_TRACE';
+    readonly aiTrace: 'E2E_AI_TRACE';
 };
 
 // @public

@@ -29,6 +29,7 @@ export interface RunFlagValues {
   readonly timeout: Option.Option<number>
   readonly output: Option.Option<string>
   readonly trace: Option.Option<TraceMode>
+  readonly aiTrace: boolean
   readonly lastFailed: boolean
   readonly files: ReadonlyArray<string>
 }
@@ -65,6 +66,7 @@ const envOf = (flags: RunFlagValues): Readonly<Record<string, string>> =>
     ...entryOf(RUN_OVERRIDE_ENV.timeout)(Option.map(flags.timeout, String)),
     ...entryOf(RUN_OVERRIDE_ENV.output)(flags.output),
     ...entryOf(RUN_OVERRIDE_ENV.trace)(flags.trace),
+    ...entryOf(RUN_OVERRIDE_ENV.aiTrace)(whenTrue(flags.aiTrace, 'true')),
   ])
 
 const keyed = <K extends keyof VitestChannels>(key: K) => (value: Option.Option<VitestChannels[K]>): VitestChannels =>
@@ -131,6 +133,7 @@ if (import.meta.vitest !== void 0) {
     timeout: none(),
     output: none(),
     trace: none(),
+    aiTrace: false,
     lastFailed: false,
     files: [],
   })
@@ -183,6 +186,15 @@ if (import.meta.vitest !== void 0) {
     (channels, [noCache]) => {
       const decided = succeeded(channels({ ...unset('list'), noCache }))
       return decided.env[RUN_OVERRIDE_ENV.cache] === (noCache ? 'off' : undefined)
+    },
+  )
+
+  it.prop(
+    '∀r_AiTraceFlag_≡TrueEnvEntry',
+    { of: [Schema.Boolean], subject: channelsOf },
+    (channels, [aiTrace]) => {
+      const decided = succeeded(channels({ ...unset('list'), aiTrace }))
+      return decided.env[RUN_OVERRIDE_ENV.aiTrace] === (aiTrace ? 'true' : undefined)
     },
   )
 
