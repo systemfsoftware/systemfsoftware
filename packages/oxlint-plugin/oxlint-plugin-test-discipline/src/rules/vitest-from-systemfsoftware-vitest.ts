@@ -2,12 +2,17 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { isRunnerPackage, isTypeOnly, lanesOf } from './lane.js'
 import { FOREIGN_RUNNERS, FOREIGN_VITEST_SOURCES, RUNNER_NAMES } from './path.config.js'
+import { basenameOf, directoriesOf } from './path.js'
 import {
   CALL_LANES,
   type HarnessLane,
   meta,
   PRESCRIPTIONS,
   RUNNER_LANES,
+  STORYBOOK_SETUP_BASENAME,
+  STORYBOOK_SETUP_DIRECTORY,
+  STORYBOOK_SETUP_HOOKS,
+  STORYBOOK_SETUP_SOURCE,
   VIOLATION_ACTUAL,
   VIOLATION_EXPECTED,
   VIOLATION_FIX,
@@ -40,10 +45,23 @@ const memberObjectName = (callee: ESTree.CallExpression['callee']): string | und
 const calleeName = (callee: ESTree.CallExpression['callee']): string | undefined =>
   callee.type === 'Identifier' ? callee.name : memberObjectName(callee)
 
+const isStorybookVitestSetup = (filename: string): boolean =>
+  basenameOf(filename) === STORYBOOK_SETUP_BASENAME && directoriesOf(filename).at(-1) === STORYBOOK_SETUP_DIRECTORY
+
+const isSetupHookOrType = (specifier: ESTree.ImportDeclaration['specifiers'][number]): boolean =>
+  specifier.type === 'ImportSpecifier' &&
+  (specifier.importKind === 'type' ||
+    (specifier.imported.type === 'Identifier' && STORYBOOK_SETUP_HOOKS[specifier.imported.name] === true))
+
+const importsOnlySetupHooks = (node: ESTree.ImportDeclaration): boolean =>
+  node.source.value === STORYBOOK_SETUP_SOURCE && node.specifiers.length > 0 &&
+  node.specifiers.every(isSetupHookOrType)
+
 export const vitestFromSystemfsoftwareVitest = defineRule({
   meta,
   create(context: Context) {
     const runnerPackage = isRunnerPackage(context)
+    const storybookSetup = isStorybookVitestSetup(context.filename)
     const importedRunners = new Set<string>()
     let lane: HarnessLane | undefined
 
@@ -95,6 +113,7 @@ export const vitestFromSystemfsoftwareVitest = defineRule({
         if (harness !== undefined) reportRunnerImports(node, harness)
         if (FOREIGN_VITEST_SOURCES[source] !== true) return
         if (harness !== undefined && !bindsANonRunnerValue(node)) return
+        if (storybookSetup && importsOnlySetupHooks(node)) return
         report(node)
       },
       CallExpression(node: ESTree.CallExpression) {
