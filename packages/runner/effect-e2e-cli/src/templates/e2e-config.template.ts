@@ -40,6 +40,8 @@ export const agentSkip: string | false = (process.env[API_KEY_ENV] ?? '') === ''
 
 export const baseUrl: string = process.env['BASE_URL'] ?? 'http://localhost:3000'
 
+export const output: string = process.env['E2E_OUTPUT'] ?? '.e2e'
+
 export const engine = web({ browser: 'chromium', headless: true })
 
 export default defineConfig({
@@ -54,5 +56,6 @@ export default defineConfig({
       model: ${modelSpecOf(answers.gateway, modelOf(answers))},
     },
   },
+  output,
 })
 `
