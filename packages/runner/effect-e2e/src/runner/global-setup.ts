@@ -5,6 +5,7 @@ import type { TestProject } from 'vitest/node'
 
 import type { E2EConfigInput } from '../Config/config.schema.js'
 import { clearPartials, mergePartials, type PartialsLocation } from '../report/partials.js'
+import { removeAiTraces } from '../run/stale-ai-traces.js'
 import { mintRunId, RUN_ID_KEY, RUN_OUTPUT_KEY, RUN_REFUSAL_KEY } from './run-identity.js'
 import { decodedConfigOf, type RunnerOptions } from './wiring.js'
 
@@ -30,6 +31,7 @@ const setUp = (config: E2EConfigInput, options: RunnerOptions): E2EGlobalSetup =
     onSuccess: (decoded) => {
       const location: PartialsLocation = { root: project.config.root, output: decoded.output }
       return clearPartials(location).pipe(
+        Effect.andThen(decoded.aiTrace ? Effect.void : removeAiTraces(location)),
         Effect.andThen(Effect.sync(() => {
           project.provide(RUN_ID_KEY, mintRunId(decoded.projectId))
           project.provide(RUN_OUTPUT_KEY, decoded.output)

@@ -6,7 +6,7 @@ import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
 import { ConfigInvalid, type PathSegment } from './config-invalid.schema.js'
-import { CacheMode, type E2EConfigInput, Trace } from './config.schema.js'
+import { BooleanFlag, CacheMode, type E2EConfigInput, Trace } from './config.schema.js'
 
 /**
  * The environment variables `effect-e2e run` maps its flags to (design §15.2). The CLI writes them into its own
@@ -20,6 +20,7 @@ export const RUN_OVERRIDE_ENV = {
   timeout: 'E2E_TIMEOUT',
   output: 'E2E_OUTPUT',
   trace: 'E2E_TRACE',
+  aiTrace: 'E2E_AI_TRACE',
 } as const
 
 /** What an override reads: the suite's environment, as the composition root hands the runner. */
@@ -86,6 +87,16 @@ const traceOf = (env: RunOverrideEnvironment): Effect.Effect<Partial<E2EConfigIn
       ),
   })
 
+const aiTraceOf = (env: RunOverrideEnvironment): Effect.Effect<Partial<E2EConfigInput>, ConfigInvalid> =>
+  Option.match(overrideOf(env, RUN_OVERRIDE_ENV.aiTrace), {
+    onNone: () => UNSET,
+    onSome: (value) =>
+      Schema.decodeUnknownEffect(BooleanFlag)(value).pipe(
+        Effect.mapError(() => refused(['aiTrace'], 'one of "true", "false"')),
+        Effect.map((flag) => ({ aiTrace: flag === 'true' })),
+      ),
+  })
+
 const timeoutOf = (env: RunOverrideEnvironment): Effect.Effect<Partial<E2EConfigInput>, ConfigInvalid> =>
   Option.match(overrideOf(env, RUN_OVERRIDE_ENV.timeout), {
     onNone: () => UNSET,
@@ -109,16 +120,17 @@ const withRunOverridesWith = (
     const timeout = yield* timeoutOf(env)
     const output = yield* outputOf(env)
     const trace = yield* traceOf(env)
-    return { ...config, ...target, ...agents, ...cache, ...timeout, ...output, ...trace }
+    const aiTrace = yield* aiTraceOf(env)
+    return { ...config, ...target, ...agents, ...cache, ...timeout, ...output, ...trace, ...aiTrace }
   }).pipe(Effect.result, Effect.runSync)
 
 /**
  * Applies the run overrides the suite's environment carries to its config, ahead of the one decode
  * (design §15.2): `E2E_TARGET` narrows the targets to the one it names, `E2E_AGENT` rekeys the named agent as
- * the `default` agent the runner reads, and the rest overwrite their single config fields. An override that
- * names nothing the config carries, or a cache or trace value outside its literals, is refused with its key
- * path; a malformed timeout or output passes through, and `decodeConfig` refuses it with the path it would
- * name were the value written in the config file.
+ * the `default` agent the runner reads, `E2E_AI_TRACE` turns ai-trace on or off, and the rest overwrite their
+ * single config fields. An override that names nothing the config carries, or a cache, trace or ai-trace value
+ * outside its literals, is refused with its key path; a malformed timeout or output passes through, and
+ * `decodeConfig` refuses it with the path it would name were the value written in the config file.
  */
 export const withRunOverrides: {
   (env: RunOverrideEnvironment): (config: E2EConfigInput) => Result.Result<E2EConfigInput, ConfigInvalid>

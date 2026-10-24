@@ -42,6 +42,8 @@ const CONFIG = defineConfig({
 
 const REFUSED = defineConfig({ ...CONFIG, projectId: '' })
 
+const AI_TRACE_ON = defineConfig({ ...CONFIG, aiTrace: true })
+
 const OPTIONS: RunnerOptions = {
   platform: Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici),
   engines: {
@@ -81,6 +83,12 @@ const refusalOf = (host: VitestHost, keyPath: string, failed: boolean) => ({
 })
 
 const REFUSED_OUTCOME = { provided: [RUN_REFUSAL_KEY], namesKeyPath: true, failed: false }
+
+const STALE_TITLE_DIRECTORY = 'checks-the-title-1a2b3c4d'
+const STALE_PROFILE_DIRECTORY = 'saves-the-profile-0a1b2c3d'
+const STALE_AI_TRACE = '{"schema":"ai-trace-1"}'
+const TRACE_PAGE = '# trace page\n\n- screen.txt\n'
+const TRACE_PAGE_BYTES = Array.from(new TextEncoder().encode(TRACE_PAGE))
 
 const entriesOf = (world: World): Effect.Effect<ReadonlyArray<AttemptEntry>> => world.log.entries
 
@@ -136,6 +144,19 @@ const presentIn = (directory: string) => (root: string, file: string) =>
 
 const present = presentIn(OUTPUT)
 
+const bytesIn = (directory: string) => (root: string, file: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    return Array.from(yield* fs.readFile(yield* inDirectory(root, directory, file)))
+  })
+
+const staleRunLeftIn = (root: string) =>
+  Effect.gen(function*() {
+    yield* fileWritten(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`, STALE_AI_TRACE)
+    yield* fileWritten(root, `results/${STALE_TITLE_DIRECTORY}/trace.md`, TRACE_PAGE)
+    yield* fileWritten(root, `results/${STALE_PROFILE_DIRECTORY}/ai-trace.json`, STALE_AI_TRACE)
+  })
+
 const partialFilesOf = (root: string) =>
   Effect.flatMap(
     inOutput(root, 'partials'),
@@ -166,7 +187,7 @@ const setUp = (config: typeof CONFIG, host: VitestHost) =>
 const setUpWith = (env: Record<string, string>) => (config: typeof CONFIG, host: VitestHost) =>
   Effect.promise(() => makeGlobalSetup(config, { ...OPTIONS, env })(host.project))
 
-Feature("Merging the report partials a run's workers wrote into one run report")
+Feature("Setting up a run's shared files and merging the partials its workers wrote")
   .withLayer(Layer.empty)
   .live('the global setup clears, provides and merges real files under a temporary suite root')
   .body(({ scenario }) => {
@@ -420,6 +441,139 @@ Feature("Merging the report partials a run's workers wrote into one run report")
         ),
         Then('only the refusal naming the cache mode is provided, and the teardown succeeds')((s, expect) =>
           expect(s.outcome).toEqual(REFUSED_OUTCOME)
+        ),
+      ),
+    )
+
+    scenario(
+      'A run whose environment overrides ai-trace with a value outside its choices provides its refusal and no run id',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite root')('root', () => freshRoot),
+        When('a run whose environment sets the ai-trace override to a value it does not offer sets up and tears down')(
+          'outcome',
+          ({ root }) =>
+            Effect.gen(function*() {
+              const host = vitestHostAt(root)
+              const teardown = yield* setUpWith({ E2E_AI_TRACE: 'yes' })(CONFIG, host)
+              const torn = yield* Effect.exit(Effect.tryPromise(teardown))
+              return refusalOf(host, 'aiTrace', Exit.isFailure(torn))
+            }),
+        ),
+        Then('only the refusal naming ai-trace is provided, and the teardown succeeds')((s, expect) =>
+          expect(s.outcome).toEqual(REFUSED_OUTCOME)
+        ),
+      ),
+    )
+
+    scenario(
+      'A run without ai-trace removes the ai-trace files a previous run left and keeps the other results',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose previous run left two ai-trace files beside a trace page')(
+          'root',
+          () =>
+            Effect.gen(function*() {
+              const root = yield* freshRoot
+              yield* staleRunLeftIn(root)
+              return root
+            }),
+        ),
+        When('the run sets up without the ai-trace override')('cleared', ({ root }) =>
+          Effect.gen(function*() {
+            yield* setUp(CONFIG, vitestHostAt(root))
+            return {
+              titleAiTrace: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`),
+              profileAiTrace: yield* present(root, `results/${STALE_PROFILE_DIRECTORY}/ai-trace.json`),
+              tracePage: yield* bytesIn(OUTPUT)(root, `results/${STALE_TITLE_DIRECTORY}/trace.md`),
+            }
+          })),
+        Then('both ai-trace files are gone and the trace page is byte-identical')((s, expect) =>
+          expect(s.cleared).toEqual({ titleAiTrace: false, profileAiTrace: false, tracePage: TRACE_PAGE_BYTES })
+        ),
+      ),
+    )
+
+    scenario(
+      'A run with ai-trace on leaves the files a previous run wrote in place',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose previous run left two ai-trace files beside a trace page')(
+          'root',
+          () =>
+            Effect.gen(function*() {
+              const root = yield* freshRoot
+              yield* staleRunLeftIn(root)
+              return root
+            }),
+        ),
+        When('the run sets up with the ai-trace override on')('kept', ({ root }) =>
+          Effect.gen(function*() {
+            yield* setUpWith({ E2E_AI_TRACE: 'true' })(CONFIG, vitestHostAt(root))
+            return {
+              titleAiTrace: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`),
+              profileAiTrace: yield* present(root, `results/${STALE_PROFILE_DIRECTORY}/ai-trace.json`),
+              tracePage: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/trace.md`),
+            }
+          })),
+        Then('every file the previous run left is still there')((s, expect) =>
+          expect(s.kept).toEqual({ titleAiTrace: true, profileAiTrace: true, tracePage: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'An ai-trace override of false turns a config that asks for ai-trace off and clears the stale file',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose config turns ai-trace on and whose previous run left an ai-trace file')(
+          'root',
+          () =>
+            Effect.gen(function*() {
+              const root = yield* freshRoot
+              yield* fileWritten(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`, STALE_AI_TRACE)
+              return root
+            }),
+        ),
+        When('the run sets up with the ai-trace override off')('state', ({ root }) =>
+          Effect.gen(function*() {
+            const host = vitestHostAt(root)
+            yield* setUpWith({ E2E_AI_TRACE: 'false' })(AI_TRACE_ON, host)
+            return {
+              runIdProvided: RUN_ID_KEY in host.provided,
+              staleAiTrace: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`),
+            }
+          })),
+        Then('the run starts and the stale ai-trace file is gone')((s, expect) =>
+          expect(s.state).toEqual({ runIdProvided: true, staleAiTrace: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A blank ai-trace override leaves a config that asks for ai-trace on',
+      { scenarioLayer: NodeServices.layer },
+      Gherkin.Do.pipe(
+        Given('a suite whose config turns ai-trace on and whose previous run left an ai-trace file')(
+          'root',
+          () =>
+            Effect.gen(function*() {
+              const root = yield* freshRoot
+              yield* fileWritten(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`, STALE_AI_TRACE)
+              return root
+            }),
+        ),
+        When('the run sets up with a blank ai-trace override')('state', ({ root }) =>
+          Effect.gen(function*() {
+            const host = vitestHostAt(root)
+            yield* setUpWith({ E2E_AI_TRACE: '' })(AI_TRACE_ON, host)
+            return {
+              runIdProvided: RUN_ID_KEY in host.provided,
+              staleAiTrace: yield* present(root, `results/${STALE_TITLE_DIRECTORY}/ai-trace.json`),
+            }
+          })),
+        Then('the run starts and the stale ai-trace file is still there')((s, expect) =>
+          expect(s.state).toEqual({ runIdProvided: true, staleAiTrace: true })
         ),
       ),
     )

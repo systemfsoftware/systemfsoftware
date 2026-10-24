@@ -61,6 +61,7 @@ const filledFields = (config: E2EConfig) => ({
   reporters: config.reporters,
   output: config.output,
   trace: config.trace,
+  aiTrace: config.aiTrace,
 })
 
 /** Decodes on a local machine and keeps only where a refusal points: the first `depth` key-path segments. */
@@ -135,6 +136,7 @@ Feature('Decoding a suite config at the edge')
             reporters: ['list'],
             output: '.e2e',
             trace: 'retain-on-failure',
+            aiTrace: false,
           })
         ),
       ),
