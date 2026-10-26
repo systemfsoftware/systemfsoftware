@@ -29,17 +29,17 @@ Five reusable workflows become callable from any pnpm workspace in the org, each
 
 ### Problem Frame
 
-`reusable-checks.yml` is shared in name only. Every job calls `./.github/actions/checks-lane` (`.github/workflows/reusable-checks.yml:155`, `:226`, `:252`, `:304`, `:324`, `:392`), and per the GitHub docs a `./` path in a called workflow resolves against the caller's checked-out workspace, not the repository that holds the workflow. So a caller must write a composite action implementing every phase before the workflow runs at all. Stead did this, with a 200-line composite. api-extractor-effect, the first consumer of the PR 1 tarballs, has a single hand-written `ci.yml` and calls no reusable.
+`reusable-checks.yml` is shared in name only. Every job calls `./.github/actions/checks-lane` (`.github/workflows/reusable-checks.yml:155`, `:226`, `:252`, `:304`, `:324`, `:392`), and per the GitHub docs a `./` path in a called workflow resolves against the caller's checked-out workspace, not the repository that holds the workflow. So a caller must write a composite action implementing every phase before the workflow runs at all. Younna did this, with a 200-line composite. api-extractor-effect, the first consumer of the PR 1 tarballs, has a single hand-written `ci.yml` and calls no reusable.
 
 Mutation, commitlint and nix have no reusable form. `mutation.yml` runs `scripts/tools/mutation-job.ts` and `scripts/tools/test-timings.ts` from the caller's checkout (`.github/workflows/mutation.yml:14-15`). `commitlint.yml` and `nix.yml` are local jobs. stryker-js-effect repeats commitlint and nix by hand, and api-extractor-effect has neither, so each new repository either copies YAML or goes without.
 
-The brief said stryker-js-effect and api-extractor-effect call `reusable-checks` today. They don't. Neither calls any workflow from this repository. Across the 32 org repositories that have workflows, the one cross-repo caller of `reusable-checks.yml` is Stead, pinned at `ea2037df`.
+The brief said stryker-js-effect and api-extractor-effect call `reusable-checks` today. They don't. Neither calls any workflow from this repository. Across the 32 org repositories that have workflows, the one cross-repo caller of `reusable-checks.yml` is Younna, pinned at `ea2037df`.
 
 ### Key Decisions
 
 - **Reusables reach their own actions through the self-repository reference `$/`, and their own tools through `job.workflow_repository` and `job.workflow_sha`.** A fully qualified `systemfsoftware/systemfsoftware/.github/actions/x@<ref>` would need a second pin that drifts from the caller's pin, and inlining would copy Node setup into every job. With `$/`, a caller pinning commit X runs X's actions, so PR 4 only pins the callers' `uses:` lines. Governs R2.
 - **Tools come from a sparse checkout of `scripts/` at `job.workflow_sha` and run under Deno, not from `nix build github:systemfsoftware/systemfsoftware/<sha>#test-timings`.** Fetching the flake source pulls the whole tree, including the 176 MB `repos/` subtree, and it would make every consumer install Nix for a planner. The tools still run at the workflow's own revision, the principle pnpm-release-management's `changeset-check.yml` already follows. Governs R2.
-- **The checks workflow detects the hook by the file being present, not by an input.** Callers with a hook keep working after a pin bump without editing anything. An opt-in input that defaults to off would silently skip Stead's steps the day it bumps. Governs R3, R4.
+- **The checks workflow detects the hook by the file being present, not by an input.** Callers with a hook keep working after a pin bump without editing anything. An opt-in input that defaults to off would silently skip Younna's steps the day it bumps. Governs R3, R4.
 - **This repository's mutation caller stays `workflow_dispatch`-only.** #700 dropped the push trigger because main's mutation run is red (the last five runs failed or were cancelled). Turning push back on is a separate decision. The reusable itself refuses every pull request event. Governs R5, R13.
 - **The proof is a consumer fixture inside this repository, not a new consumer repository.** A workflow in another repository has to pin a static ref, so it can't follow a pull request's head. The fixture can, and it is reviewed in the same diff. Governs R12.
 - **Commitlint config stays with the caller.** The reusable owns the job, and the caller keeps its own `commitlint.config.*` and dependencies, as stryker-js-effect already does. A shared config package is deferred. Governs R1.
@@ -52,7 +52,7 @@ The brief said stryker-js-effect and api-extractor-effect call `reusable-checks`
 - R1. A consumer repository calls each of `checks`, `mutation`, `commitlint`, `nix` and `conflict-check` with only documented `with:` inputs. Every input is optional unless the conflict check needs it to know the pull request, and the consumer adds no composite action.
 - R2. A reusable reaches its composites and tools at the commit the caller pinned, never through the caller's checkout.
 - R3. The checks workflow runs the caller's `.github/actions/checks-lane` phases when the caller has that action and its built-in pnpm lanes (install, build, planned tests, timings, gate) when it does not, and its step summary names which one ran. A non-root `working-directory` always runs the built-in lanes, and the summary says so with reason `hook-not-visible-working-directory` and the next action.
-- R4. Every input and secret a pinned caller passes today keeps its meaning, so Stead's `ci.yml` and this repository's callers pass unchanged after their pin moves to the PR 2 merge commit.
+- R4. Every input and secret a pinned caller passes today keeps its meaning, so Younna's `ci.yml` and this repository's callers pass unchanged after their pin moves to the PR 2 merge commit.
 
 **Event policy**
 
@@ -82,12 +82,12 @@ The brief said stryker-js-effect and api-extractor-effect call `reusable-checks`
 
 ### Acceptance Examples
 
-- AE1. **Covers R3.** **Given** Stead, which has `.github/actions/checks-lane`, **when** checks runs, **then** every phase calls that hook and the summary reads "lane hook". **Given** the fixture, which has no hook, **when** checks runs, **then** the built-in install, build and test steps run and the summary reads "built-in lanes".
+- AE1. **Covers R3.** **Given** Younna, which has `.github/actions/checks-lane`, **when** checks runs, **then** every phase calls that hook and the summary reads "lane hook". **Given** the fixture, which has no hook, **when** checks runs, **then** the built-in install, build and test steps run and the summary reads "built-in lanes".
 - AE2. **Covers R5.** **Given** a `pull_request` event, **when** a caller invokes mutation, **then** the job fails within one minute with reason `mutation-on-pull-request` and no install step runs. **Given** a push to main, **then** it plans and runs.
 - AE3. **Covers R7, R15.** **Given** a diff that changes only `docs/plans/x.md`, **then** build, test and nix jobs are skipped, a lane with a docs command runs only that command, the gate passes and the summary records "docs-only". **Given** a diff that also changes `packages/foo/README.md`, **then** everything runs, because the README ships in the tarball.
 - AE4. **Covers R6.** **Given** a pull request that changes one package, **then** the plan runs that package and its dependents and skips any package whose test hash last passed. **Given** a push to main, **then** every package runs.
 - AE5. **Covers R9.** **Given** a failing test, **then** the summary shows a test-failure reason code, `pnpm --filter <pkg> test`, and an annotation that names the job's log artifact.
-- AE6. **Covers R4.** **Given** Stead changes nothing except its pin, moved to the PR 2 merge commit, **then** its run takes the same lanes and passes.
+- AE6. **Covers R4.** **Given** Younna changes nothing except its pin, moved to the PR 2 merge commit, **then** its run takes the same lanes and passes.
 
 ### Success Criteria
 
@@ -110,7 +110,7 @@ The measurements come from this repository's runs on 2026-10-10: runs 3803415287
 - The `nix flake init` template (PR 3).
 - The shared step that installs the flake tarballs into a consumer (PR 5).
 - A shared commitlint config package.
-- Adoption pull requests in api-extractor-effect and stryker-js-effect, and Stead's pin bump that proves AE6. Those are separate pull requests in those repositories.
+- Adoption pull requests in api-extractor-effect and stryker-js-effect, and Younna's pin bump that proves AE6. Those are separate pull requests in those repositories.
 - Turning the push trigger back on for this repository's mutation run, which waits on main's mutation going green (#700).
 - Narrowing the workspace tarball derivations' source. Today every tarball's derivation changes on any tracked-file change (Planning Contract, Research), which limits what KTD7 can skip in this repository.
 
@@ -133,11 +133,11 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 
 ### Dependencies / Assumptions
 
-- `$/` resolves to the repository of the file it appears in, at the running commit, also when a reusable is called from another repository, and in composite steps (`runs.steps[*].uses`). A `$/` reference takes no `@ref`. It needs runner 2.336.0 or newer ([GitHub changelog, 2026-07-30](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/)); the self-hosted fleet Stead runs on reported 2.337.0 on 2026-10-10 (Stead job logs, runner group `self-hosted-fleet`). U2's fixture records the hosted runner version it ran on.
+- `$/` resolves to the repository of the file it appears in, at the running commit, also when a reusable is called from another repository, and in composite steps (`runs.steps[*].uses`). A `$/` reference takes no `@ref`. It needs runner 2.336.0 or newer ([GitHub changelog, 2026-07-30](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/)); the self-hosted fleet Younna runs on reported 2.337.0 on 2026-10-10 (Younna job logs, runner group `self-hosted-fleet`). U2's fixture records the hosted runner version it ran on.
 - `job.workflow_repository` and `job.workflow_sha` are populated in a called workflow. pnpm-release-management's `changeset-check.yml` builds from them, and it passed on #707. Composites never read them; the workflow passes them in (KTD2).
 - A skipped job reports Success to required checks (GitHub docs, "Control jobs with conditions"). R7 therefore relies on the classifier failing closed.
 - A step that `uses:` a local action and is skipped by its `if:` does not need the action to exist. [INFERENCE] The first U2 fixture run proves it.
-- Stead is the only cross-repo caller of `reusable-checks.yml`. Basis: a REST scan of every unarchived org repository's `.github/workflows` on 2026-10-10.
+- Younna is the only cross-repo caller of `reusable-checks.yml`. Basis: a REST scan of every unarchived org repository's `.github/workflows` on 2026-10-10.
 - The pnpm-release-management pin in `.github/workflows/changeset-check.yml:14` and `release.yml:18` (`8cd6e83009531de040cd9c03e1370b4966fd2a12`) resolves. An inventory scout reported it as unresolvable, but the SHA it checked was a 39-character mistranscription.
 
 ### Outstanding Questions
@@ -150,7 +150,7 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 
 - GitHub docs, workflow syntax: [`$/` self-repository reference and `./` resolution](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-using-an-action-in-the-same-repository-as-the-workflow-at-the-running-commit-recommended); [metadata syntax, `runs.steps[*].uses`](https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax); [`job.workflow_*` context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#job-context); [skipped jobs report Success](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions).
 - `.github/workflows/reusable-checks.yml` (inputs `:9-126`), `.github/actions/checks-lane/action.yml`, `.github/workflows/mutation.yml`, `.github/workflows/nix.yml`, `.github/workflows/commitlint.yml`, `.github/AGENTS.md:19-21`.
-- Stead `.github/workflows/ci.yml` (the pinned caller R4 protects): it passes `record`, `runs-on`, `test-runs-on`, `target`, `max-jobs`, `max-seconds`, `timeout-minutes`, `plan-timeout-minutes`, `gate-name`, `gate-lane`, `gate-timeout-minutes`, `test-flags`, `shard-flags`, `pnpm`, `persist-credentials`, `fetch-tags`, `turbo-team`, `dry-run`, `lanes` and two secrets, and leaves `timings` at its default.
+- Younna `.github/workflows/ci.yml` (the pinned caller R4 protects): it passes `record`, `runs-on`, `test-runs-on`, `target`, `max-jobs`, `max-seconds`, `timeout-minutes`, `plan-timeout-minutes`, `gate-name`, `gate-lane`, `gate-timeout-minutes`, `test-flags`, `shard-flags`, `pnpm`, `persist-credentials`, `fetch-tags`, `turbo-team`, `dry-run`, `lanes` and two secrets, and leaves `timings` at its default.
 - pnpm-release-management @ `b9b4a1d4`: `changeset-check.yml` builds its tools from `job.workflow_repository`/`job.workflow_sha`, and the repository has no composite actions.
 - api-extractor-effect PR #1 (`feat/foundation` @ `9c9fb009`) `ci.yml`, and stryker-js-effect @ `cfdf3cdc` `commitlint.yml`, `nix.yml` and `.github/actions/released-tarballs`.
 
@@ -162,7 +162,7 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 
 - KTD1. **Every `uses:` inside a reusable or a shared composite that targets this repository's actions is `$/.github/actions/<name>`.** That includes `install-deps`'s own call to `setup-node-runtime` (`.github/actions/install-deps/action.yml:13`), because a `./` inside a composite also resolves against the workspace. The caller's hook, `.github/actions/checks-lane`, and its own internal `uses: ./` lines are the caller's surface and out of scope; in this repository that hook keeps calling `./.github/actions/install-deps` and `./.github/actions/grant-kvm`. Implements R2.
 - KTD2. **One composite, `$/.github/actions/sfs-tools`, takes `repository` and `ref` inputs, which every caller job fills from `job.workflow_repository` and `job.workflow_sha`, sparse-checks out `scripts/` from them into `.sfs-tools/`, sets up Deno, and exports `TIMINGS`, `MUTATION_JOB` and `CLASSIFY` as `deno run --config=… --lock=… --frozen` commands.** An empty input fails the step with reason `tools-ref-missing` before any checkout. The `scripts/` tree is 60 KB compressed against 67 MB for the whole tree (`git archive` on 2026-10-10). Implements R2.
-- KTD3. **Hook mode and built-in mode are two steps per phase, gated by `hashFiles('.github/actions/checks-lane/action.yml')`.** The hook step stays `uses: ./.github/actions/checks-lane` with the inputs it gets today (`lane`, `job`, `profile`); the built-in step is `uses: $/.github/actions/builtin-lane` with the same inputs. The `timings` default stays `test-timings`, which is what Stead relies on. In built-in mode a `timings` value equal to `test-timings` resolves to the `TIMINGS` command from KTD2, and any other value is used verbatim. A `lane-source` workflow output carries `hook` or `built-in`. Implements R3, R4.
+- KTD3. **Hook mode and built-in mode are two steps per phase, gated by `hashFiles('.github/actions/checks-lane/action.yml')`.** The hook step stays `uses: ./.github/actions/checks-lane` with the inputs it gets today (`lane`, `job`, `profile`); the built-in step is `uses: $/.github/actions/builtin-lane` with the same inputs. The `timings` default stays `test-timings`, which is what Younna relies on. In built-in mode a `timings` value equal to `test-timings` resolves to the `TIMINGS` command from KTD2, and any other value is used verbatim. A `lane-source` workflow output carries `hook` or `built-in`. Implements R3, R4.
 - KTD4. **Built-in lanes require the consumer workspace to have `turbo` and a `test` script per tested package, and nothing else.** `plan` provisions KTD2's tools, `static` installs dependencies and runs the lane's `run` command, `test` installs, builds through `turbo run build` and runs `turbo run test` as today (`.github/workflows/reusable-checks.yml:257-263`), and `timings` and `gate` need no setup. Implements R3, R14.
 - KTD5. **A new optional input `working-directory` (default `.`) roots every reusable at a subdirectory, and a non-root value checks out only that subdirectory (non-cone sparse checkout).** The fixture uses it, so this repository's `.github/actions/` is absent from the fixture's workspace and any stray `./` fails instead of resolving against this repository. A non-root value therefore always runs the built-in lanes, with reason `hook-not-visible-working-directory` in the summary (R3). The sparse set never includes `checks-lane`, because that would load this repository's own hook into the fixture and break R12. Implements R12, R2, R3.
 - KTD6. **R6's checks half reuses the planner's existing dry-run hash skip, not turbo's `--affected`.** `test-timings.ts` already skips a package whose turbo hash is a remote cache hit or last passed (`scripts/tools/test-timings.ts:276-306`), and an unreadable dry run plans every package, which is the fail-closed direction. Built-in mode defaults `dry-run` to `pnpm exec turbo run test --dry=json` on pull requests and leaves it empty on the default branch. `--affected` would need a full-history fetch and was not measured. Implements R6.
@@ -172,7 +172,7 @@ This plan covers PR 2. The breakdown below is the current understanding of the s
 - KTD10. **The reason codes are a closed set owned by `$/.github/actions/failure-summary`:** `merge-conflict`, `install-failed`, `tools-ref-missing`, `plan-failed`, `hook-failed`, `lane-failed`, `build-failed`, `test-failed`, `timings-failed`, `gate-failed`, `commit-message-invalid`, `nix-eval-failed`, `nix-build-failed`, `outputs-differ-across-systems`, `mutation-on-pull-request`, `mutation-failed`, `mutation-merge-failed`, plus `unclassified` for a failure no table entry names. The notice `hook-not-visible-working-directory` (KTD5) uses the same summary format without failing. Each failing step tees its output to `$RUNNER_TEMP/sfs-logs/`, and an `if: failure()` step picks the first failed step's code from a per-job table, writes the summary, uploads `failure-log-<job>-<attempt>` and annotates with that name. `unclassified` still writes the job's own reproduce command and a next action naming the failed step and the table entry to add. Implements R9.
 - KTD11. **The mutation refusal is a `guard` job in `reusable-mutation.yml` that every other mutation job needs; its one step is the composite `$/.github/actions/mutation-event-guard`.** The needs-chain makes "refused before anything installs" a property of the job graph, not of step order. A permanent proof calls the composite on a real `pull_request` event with `continue-on-error` and asserts its outcome. A job that calls a reusable workflow can't set `continue-on-error` (GitHub's reusing-workflow-configurations keyword list), so calling the whole reusable on a pull request would leave a red check on every such PR. No static YAML check is added (OST-PR2-PLAN-R1). Implements R5, R12.
 - KTD12. **The nix reusable always sweeps every attribute of `packages.{system}` and `checks.{system}`, drv-gated by KTD7, and takes an additive `extra-steps` input: a JSON list of `{name, installable, run}` run after the sweep in the same job, where `{system}` in either string is replaced per matrix system.** An entry with an `installable` runs only when that output's derivation changed; one without always runs. An optional `compare-across-systems` installable reproduces today's `tarballs-match` job, because a separate job would rebuild the tarballs with no shared store. Runners default to `x86_64-linux` on `ubuntu-latest` and `aarch64-linux` on `ubuntu-24.04-arm`, as today. Implements R1, R10.
-- KTD13. **New reusables keep the `reusable-` file prefix: `reusable-mutation.yml`, `reusable-commitlint.yml`, `reusable-nix.yml`.** Renaming `reusable-checks.yml` would make Stead edit more than its pin. Implements R4.
+- KTD13. **New reusables keep the `reusable-` file prefix: `reusable-mutation.yml`, `reusable-commitlint.yml`, `reusable-nix.yml`.** Renaming `reusable-checks.yml` would make Younna edit more than its pin. Implements R4.
 
 ### High-Level Technical Design
 
@@ -182,7 +182,7 @@ Components and references after PR 2:
 
 ```mermaid
 flowchart LR
-  subgraph Caller["Caller repository (Stead, fixture, this repo)"]
+  subgraph Caller["Caller repository (Younna, fixture, this repo)"]
     CW[".github/workflows/*.yml"]
     HOOK[".github/actions/checks-lane (optional)"]
   end
@@ -217,12 +217,12 @@ flowchart TD
 
 Mode combinations the fixture and this repository cover:
 
-| Caller                     | Hook | Event              | Expected                                                  |
-| -------------------------- | ---- | ------------------ | --------------------------------------------------------- |
-| this repo `ci.yml`         | yes  | pull_request, push | hook lanes, summary "lane hook"                           |
-| fixture                    | no   | pull_request       | built-in lanes, classifier active, mutation guard refuses |
-| fixture                    | no   | push to main       | built-in lanes, full run, mutation runs                   |
-| Stead (after its pin bump) | yes  | its own events     | unchanged lanes (AE6)                                     |
+| Caller                      | Hook | Event              | Expected                                                  |
+| --------------------------- | ---- | ------------------ | --------------------------------------------------------- |
+| this repo `ci.yml`          | yes  | pull_request, push | hook lanes, summary "lane hook"                           |
+| fixture                     | no   | pull_request       | built-in lanes, classifier active, mutation guard refuses |
+| fixture                     | no   | push to main       | built-in lanes, full run, mutation runs                   |
+| Younna (after its pin bump) | yes  | its own events     | unchanged lanes (AE6)                                     |
 
 ### Implementation Constraints
 
@@ -233,7 +233,7 @@ Mode combinations the fixture and this repository cover:
 
 ### Risks
 
-- **`$/` on self-hosted runners.** Stead runs on self-hosted runners (`self-hosted-fleet`), which reported runner 2.337.0 on 2026-10-10, above the 2.336.0 minimum. No `$/` run on that fleet exists until Stead bumps its pin, so AE6 is proven only by that bump, outside this PR. If it fails there, the answer is an operator decision, never an automatic `owner/repo@ref` double pin.
+- **`$/` on self-hosted runners.** Younna runs on self-hosted runners (`self-hosted-fleet`), which reported runner 2.337.0 on 2026-10-10, above the 2.336.0 minimum. No `$/` run on that fleet exists until Younna bumps its pin, so AE6 is proven only by that bump, outside this PR. If it fails there, the answer is an operator decision, never an automatic `owner/repo@ref` double pin.
 - **`$/` download cost.** [INFERENCE] If the runner fetches the whole repository tarball for a `$/` action as it does for `owner/repo@ref`, each job pays for 67 MB, 63 MB of it `repos/`. U2 records the "Set up job" time; if it exceeds 30 s, that is a finding for the operator, not a silent regression.
 - **Turbo cache keys.** The fixture and this repository share one Actions cache namespace. Cache keys gain a hash of `working-directory` so the two never restore each other's entries.
 - **KTD7 against a red base.** An output whose `drvPath` equals a red base is skipped on the pull request. The default branch still builds everything on push, so the red stays visible there.
@@ -381,6 +381,6 @@ Mode combinations the fixture and this repository cover:
 - U1 to U9 landed as separate commits in the evaluator order of Implementation Constraints, each with its verification observed.
 - Every `uses:` inside the four reusables and the shared composites is `$/…`, a third-party action, or the KTD3 hook step. The caller's own hook internals are exempt.
 - The R4 input comparison shows only added inputs.
-- The PR is open against `main`, green on its head, and its body carries the measured cold and warm lane times, the runner versions, the one-off evidence, the `reusable-smoke.yml` caller scan, the statement that the fixture is not a required check, and the known follow-ups: Stead's pin bump (AE6), consumer adoption PRs, narrowing the tarball derivations' source, and PR 5 switching the fixture to the flake tarballs.
+- The PR is open against `main`, green on its head, and its body carries the measured cold and warm lane times, the runner versions, the one-off evidence, the `reusable-smoke.yml` caller scan, the statement that the fixture is not a required check, and the known follow-ups: Younna's pin bump (AE6), consumer adoption PRs, narrowing the tarball derivations' source, and PR 5 switching the fixture to the flake tarballs.
 - No planted change, scratch branch or throwaway script remains in the diff; the scratch PR is closed.
 - After merge, R13's workflows are green on main.
