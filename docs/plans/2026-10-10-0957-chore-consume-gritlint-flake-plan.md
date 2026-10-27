@@ -13,11 +13,11 @@ supersedes: docs/plans/2026-10-10-0857-chore-consume-gritlint-flake-plan.md
 
 ## Goal Capsule
 
-- **Objective:** every repository that runs gritlint (systemfsoftware, stryker-js-effect, github-selfhosted-runner, Stead) runs the binary built by `systemfsoftware/gritlint` at a pinned commit that carries every rule change made so far, and a systemfsoftware pull request no longer pays to compile or gate Rust.
+- **Objective:** every repository that runs gritlint (systemfsoftware, stryker-js-effect, github-selfhosted-runner, the product) runs the binary built by `systemfsoftware/gritlint` at a pinned commit that carries every rule change made so far, and a systemfsoftware pull request no longer pays to compile or gate Rust.
 - **Means:** port the #704 pack delta into the gritlint repository, swap systemfsoftware's in-tree build for a pinned `gritlint` flake input and delete the Rust workspace, then switch each consumer to its own pinned `gritlint` input (KTD1, KTD2, KTD5).
 - **Product authority:** the caller's unit contract (Done 1–5 and its "does not count" list), then the supervisor rulings recorded as `session-settled` entries below, then this plan, then planner judgment.
 - **Stop conditions:** stop and report before pinning a gritlint commit that is not a descendant of U0's merge; before pushing U1 while the overlap check fails (OQ1); before copying anything from the gritlint repository into systemfsoftware; before editing any consumer's `.github/` tree; before any force-push, merge, local mutation run or `--no-verify`.
-- **Execution profile:** five pull requests in five repositories (gritlint, systemfsoftware, stryker-js-effect, github-selfhosted-runner, Stead), each cut from that repository's `main`, each one `gh stack` layer on trunk `main`. U0 must merge before U1's final lock; U2–U4 pin the same commit as U1 and can merge in any order after U0. The agent opens and watches PRs to green and reports head SHAs; the root merges.
+- **Execution profile:** five pull requests in five repositories (gritlint, systemfsoftware, stryker-js-effect, github-selfhosted-runner, the product), each cut from that repository's `main`, each one `gh stack` layer on trunk `main`. U0 must merge before U1's final lock; U2–U4 pin the same commit as U1 and can merge in any order after U0. The agent opens and watches PRs to green and reports head SHAs; the root merges.
 
 ---
 
@@ -25,7 +25,7 @@ supersedes: docs/plans/2026-10-10-0857-chore-consume-gritlint-flake-plan.md
 
 ### Summary
 
-systemfsoftware takes `gritlint` from a `gritlint` flake input locked to a `systemfsoftware/gritlint` commit at or after the merge of a pack-port PR, the way it takes `comment-checker`, and deletes its Rust workspace, rule packs, release surface and Rust CI lane. stryker-js-effect, github-selfhosted-runner and Stead each take gritlint straight from that repository at the same pinned commit.
+systemfsoftware takes `gritlint` from a `gritlint` flake input locked to a `systemfsoftware/gritlint` commit at or after the merge of a pack-port PR, the way it takes `comment-checker`, and deletes its Rust workspace, rule packs, release surface and Rust CI lane. stryker-js-effect, github-selfhosted-runner and the product each take gritlint straight from that repository at the same pinned commit.
 
 ### Problem Frame
 
@@ -33,7 +33,7 @@ gritlint has two homes. `systemfsoftware/gritlint` was imported byte-for-byte fr
 
 The copies have drifted. #704 (`ba6664c`) changed `packs/cell-architecture` here after the import, so gritlint `main` (`0c90938`) lacks that rule change. Two open PRs here (#705, #708) widen the gap further (OQ2, ruled: KTD10).
 
-Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and github-selfhosted-runner reads `gritlint` from this repository's flake, so their gritlint version moves only when they bump an input that also carries unrelated tools. Stead installs `@systemfsoftware/gritlint@0.1.0` from npm, published 2026-09-26 before registry publishing was dropped (#655); that release can never be updated.
+Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and github-selfhosted-runner reads `gritlint` from this repository's flake, so their gritlint version moves only when they bump an input that also carries unrelated tools. The product installs `@systemfsoftware/gritlint@0.1.0` from npm, published 2026-09-26 before registry publishing was dropped (#655); that release can never be updated.
 
 ### Key Decisions
 
@@ -41,7 +41,7 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 - **The rule packs have one home, the gritlint repository, and #704 lands there first.** (session-settled: user-directed — chosen over pinning `0c90938` and recording the gap: a pin without #704 ships a rule this repository already superseded.) The binary embeds `packs/` at compile time (gritlint `apps/gritlint/src/main.rs:11`), so a copy here does nothing once the binary comes from the input. Porting into gritlint is the allowed direction; nothing is copied back. Governs R1, R3, R15.
 - **Both `packages.<system>.gritlint` and `gritlint-unwrapped` stay exported here as plain aliases of the input.** (session-settled: user-directed — chosen over exporting `gritlint` alone: the contract names both, the alias costs nothing, and it protects any consumer not yet found.) Governs R7.
 - **The sandboxed journey stays in CI; `checks.gritlint` and the Nix workflow's per-system build go.** (session-settled: user-directed — chosen over keeping both: rebuilding another repository's artifact is that repository's CI job; the `gritlint` lane that runs `./bin/gritlint check` plus the planted violation is this repository's proof.) Governs R10, R11.
-- **Stead takes gritlint as a flake package.** (session-settled: user-directed — chosen over a tarball built here or waiting for gritlint's PR6 tarball: no tarball exists, and a Nix-linked binary does not run outside Nix.) Research found Stead's lint lane enters no dev shell (`.github/actions/checks-lane/action.yml:157-165` in Stead runs plain `bash`), so CI reaches the package through a `bin/gritlint` wrapper, the pattern Stead's own `bin/dprint` documents for every tool. Governs R14.
+- **The product takes gritlint as a flake package.** (session-settled: user-directed — chosen over a tarball built here or waiting for gritlint's PR6 tarball: no tarball exists, and a Nix-linked binary does not run outside Nix.) Research found the product's lint lane enters no dev shell (`.github/actions/checks-lane/action.yml:157-165` in the product runs plain `bash`), so CI reaches the package through a `bin/gritlint` wrapper, the pattern the product's own `bin/dprint` documents for every tool. Governs R14.
 - **Historical plans in `docs/plans/` are records and stay unedited.** Live doctrine (`AGENTS.md`, `docs/solutions/`, `compound-packs/`, `.changeset/README.md`) is updated. Governs R6.
 - **Build gritlint from the input's source for now.** A fixed-output fetch of a release binary would cost consumers no compile, but gritlint publishes no release binaries until its own PR6 ships. Governs R1.
 
@@ -75,7 +75,7 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 
 - R12. stryker-js-effect takes `gritlint` from a `gritlint` input pinned in its `flake.lock` to R1's commit. It keeps the unsandboxed binary its read-only workflows need, and its `systemfsoftware` input stays for `repo-checks`.
 - R13. github-selfhosted-runner takes `gritlint` from a `gritlint` input pinned to R1's commit. Its `systemfsoftware` input stays for `comment-checker` and the `agent-guards` source.
-- R14. Stead stops installing `@systemfsoftware/gritlint` from the registry and gets gritlint from a `gritlint` flake input pinned to R1's commit. The PR touches only that dependency: its flake and lock, a `bin/gritlint` wrapper, `lint:conventions`, the catalog entry and its stale comment, `gritlint.json`'s `$schema`, and `pnpm-lock.yaml` regenerated by pnpm.
+- R14. The product stops installing `@systemfsoftware/gritlint` from the registry and gets gritlint from a `gritlint` flake input pinned to R1's commit. The PR touches only that dependency: its flake and lock, a `bin/gritlint` wrapper, `lint:conventions`, the catalog entry and its stale comment, `gritlint.json`'s `$schema`, and `pnpm-lock.yaml` regenerated by pnpm.
 
 ### Acceptance Examples
 
@@ -109,7 +109,7 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 - gritlint `main` is `0c90938` (checked with `git ls-remote` on 2026-10-10). Open gritlint PR #4 (single-pass engine) touches no `packs/` file and not `nix/gritlint-checks.nix`, so U0 does not overlap it.
 - gritlint's `nixpkgs` lock (`aa48d347`) equals this repository's today. That is a fact about two locks, not a dependency (session-settled: user-directed — chosen over `inputs.nixpkgs.follows`: gritlint's own lock is what its CI proved).
 - None of the four repositories enables `cell-architecture` in its `gritlint.json`, so the #704 port changes no current verdict.
-- [INFERENCE] Stead's lint lane runs on `[self-hosted, systemfsoftware-runner, medium]`, the NixOS image from github-selfhosted-runner (`nix/runner/runner.nix:195` installs bubblewrap, and NixOS has no AppArmor userns restriction by default), so the sandboxed binary should run there. U4's CI is the check.
+- [INFERENCE] the product's lint lane runs on `[self-hosted, systemfsoftware-runner, medium]`, the NixOS image from github-selfhosted-runner (`nix/runner/runner.nix:195` installs bubblewrap, and NixOS has no AppArmor userns restriction by default), so the sandboxed binary should run there. U4's CI is the check.
 
 ### Outstanding Questions
 
@@ -117,11 +117,11 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 
 - OQ1. **The OP13b overlap check fails for U1 as written** (open PRs #705, #708, #561, #310, #703, #550 and #325 share files with U1). Ruling: each branch is cut from `main` and merges `main` up as those PRs land; no stacking on them.
 - OQ2. **#705 and #708 change gritlint here.** Ruling: unmerged work is not ported (KTD10). U0 ports #704 only; #705 does not hold U1.
-- OQ3. **Stead lists `aarch64-darwin` in its flake systems** (`flake.nix:24`); gritlint builds only Linux. Ruling: Stead stays Linux-only; U4 exposes the package on `x86_64-linux` and `aarch64-linux`, and `bin/gritlint` errors elsewhere.
+- OQ3. **The product lists `aarch64-darwin` in its flake systems** (`flake.nix:24`); gritlint builds only Linux. Ruling: the product stays Linux-only; U4 exposes the package on `x86_64-linux` and `aarch64-linux`, and `bin/gritlint` errors elsewhere.
 
 **Deferred to Implementation**
 
-- Whether the sandboxed `gritlint` runs on Stead's runners. If U4's lint lane fails inside bubblewrap, Stead's package switches to `gritlint-unwrapped`, with stryker-js-effect's comment as the record (KTD6).
+- Whether the sandboxed `gritlint` runs on the product's runners. If U4's lint lane fails inside bubblewrap, the product's package switches to `gritlint-unwrapped`, with stryker-js-effect's comment as the record (KTD6).
 - Whether `pnpm version -r --dry-run` accepts a ledger entry for a package that left the workspace (KTD7).
 
 ### Sources / Research
@@ -130,7 +130,7 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 - Pack parity: `diff -rq` of `git archive` output at gritlint `0c90938` and here at `732f66a`; only `packs/cell-architecture` differs (README, one rule, 12 fixture directories), all from `ba6664c` (#704).
 - Engine parity: `apps/` and `crates/` identical except a behaviour-neutral let-chain refactor in `crates/gritlint_core/src/decode.rs`.
 - gritlint flake at `0c90938` (`nix eval`): packages `gritlint`, `gritlint-unwrapped`; eleven checks including `gritlint-packs`; a Rust-only dev shell; no `lib`, default package or tarball.
-- Org sweep: 81 repositories under `systemfsoftware` and `ryanleecode` shallow-cloned and scanned. Consumers: stryker-js-effect, github-selfhosted-runner, Stead. Incidental mentions only: pnpm-release-management (test fixtures named `@e2e/gritlint`), systemf-review-agent (a replay transcript), workstation (a solutions corpus). 74 repositories have no match.
+- Org sweep: 81 repositories under `systemfsoftware` and `ryanleecode` shallow-cloned and scanned. Consumers: stryker-js-effect, github-selfhosted-runner, the product. Incidental mentions only: pnpm-release-management (test fixtures named `@e2e/gritlint`), systemf-review-agent (a replay transcript), workstation (a solutions corpus). 74 repositories have no match.
 - npm: `@systemfsoftware/gritlint` lists `0.1.0`, published 2026-09-26.
 
 ---
@@ -139,14 +139,14 @@ Consumers are split three ways. stryker-js-effect reads `gritlint-unwrapped` and
 
 ### Key Technical Decisions
 
-- **KTD1. Pin by exact rev with a ref-less URL.** The input URL is `github:systemfsoftware/gritlint`, as comment-checker's is; the rev lives only in `flake.lock`. Locking with `--override-input gritlint github:systemfsoftware/gritlint/<sha>` records `locked.rev = <sha>` while `original` stays ref-less (probed against `0c90938` on 2026-10-10). In stryker-js-effect and github-selfhosted-runner, Dependabot's `nix` ecosystem bumps it later. Stead has no Dependabot (removed in #344), so its gritlint pin is bumped with `nix flake lock --update-input gritlint` in a normal PR. All four repositories lock the same rev.
+- **KTD1. Pin by exact rev with a ref-less URL.** The input URL is `github:systemfsoftware/gritlint`, as comment-checker's is; the rev lives only in `flake.lock`. Locking with `--override-input gritlint github:systemfsoftware/gritlint/<sha>` records `locked.rev = <sha>` while `original` stays ref-less (probed against `0c90938` on 2026-10-10). In stryker-js-effect and github-selfhosted-runner, Dependabot's `nix` ecosystem bumps it later. The product has no Dependabot (removed in #344), so its gritlint pin is bumped with `nix flake lock --update-input gritlint` in a normal PR. All four repositories lock the same rev.
 - **KTD2. Aliases, not callPackage.** `packages.<system>.gritlint` and `gritlint-unwrapped` are the input's attributes. No overrides, so the out paths equal the gritlint flake's own (AE1) and its CI-proven build is the one consumers run. Mind the name clash in Nix: the input and the package are both called `gritlint`; reach the input through the function argument or an `inputs@` binding, never from inside a recursive set or a `let` that also defines `gritlint`.
 - **KTD3. The `x86_64-windows` refusal evaluates `packages.x86_64-windows.dprint`.** The refusal is thrown by `forEachSystem` (`flake.nix:27-31`) before any attribute is touched, so any attribute this flake defines yields the same message. `dprint` is the flake's default package and is built here.
 - **KTD4. Evaluator files change in their own commit.** `.github/workflows/ci.yml`, `.github/workflows/nix.yml` and `.github/actions/checks-lane/action.yml` change in one commit that holds nothing else (root `AGENTS.md`, Surface Classes). Removing the Rust lane does not weaken a grader of remaining work: the Rust code leaves with it, and gritlint's own CI runs fmt, clippy, nextest, MSRV, schema, packs and the sandbox checks.
 - **KTD5. One PR per repository, each cut from its own `main`, each a `gh stack` layer on trunk `main`.** U2–U4 depend on U0 only for the rev they pin.
-- **KTD6. Each consumer keeps the variant it uses today.** stryker-js-effect binds `gritlint-unwrapped` (its read-only workflows cannot add the AppArmor step, `flake.nix:84-86`); github-selfhosted-runner binds the sandboxed `gritlint` (its CI lifts the AppArmor restriction, `.github/workflows/ci.yml:62-67`); Stead binds the sandboxed `gritlint` (its runners are NixOS).
+- **KTD6. Each consumer keeps the variant it uses today.** stryker-js-effect binds `gritlint-unwrapped` (its read-only workflows cannot add the AppArmor step, `flake.nix:84-86`); github-selfhosted-runner binds the sandboxed `gritlint` (its CI lifts the AppArmor restriction, `.github/workflows/ci.yml:62-67`); the product binds the sandboxed `gritlint` (its runners are NixOS).
 - **KTD7. `.changeset/ledger.yaml` stays untouched.** pnpm writes it (`pnpm version -r`, `docs/solutions/tooling-decisions/pnpm-owns-the-changeset-ledger.md:36`); no tool path removes an entry, and consumed entries are history (`docs/plans/2026-09-11-1155-feat-schema-recursion-budget-plan.md:148`). The gritlint entry (`ledger.yaml:1346-1349`) is a consumed `0.1.0` record. Pending intents are authored files and are edited: `gritlint-cell-architecture-pack.md` and `gritlint-layer-reexport.md` are deleted (their only subject leaves); the `"@systemfsoftware/gritlint": none` lines in `effect-4-0-1-rebuild.md:3` and `thick-snails-do.md:24` are dropped. A pending intent naming a non-member fails both the Changeset Check (`GateUnknownPackage`) and `pnpm version -r` (`docs/solutions/runtime-errors/pnpm-versioning-unknown-package-deleted-intent.md`). A deleted package needs no intent of its own.
-- **KTD8. `gritlint.json`'s `$schema` is a raw URL at the locked commit,** `https://raw.githubusercontent.com/systemfsoftware/gritlint/<sha>/npm/gritlint/configuration_schema.json`, here and in Stead (session-settled: user-directed — chosen over a relative path into a deleted tree or `@main`). stryker-js-effect and github-selfhosted-runner have no `$schema` today and get none: adding one would be scope beyond R12 and R13.
+- **KTD8. `gritlint.json`'s `$schema` is a raw URL at the locked commit,** `https://raw.githubusercontent.com/systemfsoftware/gritlint/<sha>/npm/gritlint/configuration_schema.json`, here and in the product (session-settled: user-directed — chosen over a relative path into a deleted tree or `@main`). stryker-js-effect and github-selfhosted-runner have no `$schema` today and get none: adding one would be scope beyond R12 and R13.
 - **KTD9. Both gritlint solution docs are deleted here; neither moves.** (session-settled: user-directed - chosen over moving the Windows MAX_PATH doc into gritlint, whose own standalone plan left it out on purpose: gritlint:`docs/plans/2026-10-10-0452-feat-gritlint-standalone-plan.md:43`.) gritlint already carries `gritlint-conventions-platform.md`; the two copies differ only in `module`, one `related_components` entry and the Related link. `cargo-git-dependency-submodules-exceed-windows-max-path.md` documents only code that leaves (the gritql git dependency's Windows path, a `win32-x64` publish target); git history is its record.
 - **KTD10. #708 joins only if it merges first.** (session-settled: user-directed - chosen over porting unmerged work or holding U1 for it.) Before U1's PR merges, the supervisor checks #708. If it has merged, a U0b PR in gritlint ports #708's pack delta byte-for-byte from its merge commit, the same way as U0, and U1 (and U2-U4) lock U0b's merge commit. If it has not, U1 proceeds on U0's merge commit without it. #705 does not hold U1.
 
@@ -157,7 +157,7 @@ flowchart LR
   U0["U0 gritlint: port #704 packs"] -->|merge commit = pin| U1["U1 systemfsoftware cutover"]
   U0 --> U2["U2 stryker-js-effect"]
   U0 --> U3["U3 github-selfhosted-runner"]
-  U0 --> U4["U4 Stead"]
+  U0 --> U4["U4 the product"]
   OQ1(["OQ1 ruled: cut from main, merge main up"]) -.-> U1
   U0 -.-> U0b(["U0b #708 packs, only if #708 merged (KTD10)"])
   U0b -.->|then its merge commit is the pin| U1
@@ -167,7 +167,7 @@ U1 may be developed against `0c90938` while U0 is open; its final lock must be a
 
 ### Assumptions research broke
 
-- "Stead's CI enters a dev shell": its lint lane runs plain `bash` with only `nix build` PATH injections, hence KTD6's wrapper route in U4.
+- "The product's CI enters a dev shell": its lint lane runs plain `bash` with only `nix build` PATH injections, hence KTD6's wrapper route in U4.
 - "gritlint `main` is at pack parity": #704 is missing, and open PRs #705 and #708 change gritlint here (KTD10).
 - "The ledger has a tool path to drop an entry": pnpm only appends; consumed entries are history (KTD7).
 - "A flake.lock edit in a consumer is free": in github-selfhosted-runner it triggers two AMI builds (U3).
@@ -295,7 +295,7 @@ No permanent test is added in any repository. U0's 12 fixture cases are pack dat
 
 ### U3. github-selfhosted-runner: take gritlint from its own input
 
-**Target repo:** `systemfsoftware/github-selfhosted-runner`, cut from its `main`.
+**Target repo:** a private repository, cut from its `main`.
 
 **Goal:** the runner repository's conventions leg runs the sandboxed `gritlint` from `systemfsoftware/gritlint` at R1's rev.
 
@@ -322,15 +322,15 @@ No permanent test is added in any repository. U0's 12 fixture cases are pack dat
 
 **Verification:** github-selfhosted-runner CI green on the PR head, including `conventions` and the AMI builds.
 
-### U4. Stead: replace the registry gritlint with the flake package
+### U4. The product: replace the registry gritlint with the flake package
 
-**Target repo:** `systemfsoftware/Stead`, cut from its `main`.
+**Target repo:** a private repository, cut from its `main`.
 
-**Goal:** Stead's `lint:conventions` runs gritlint from `systemfsoftware/gritlint` at R1's rev, and no `@systemfsoftware/gritlint` remains in its manifests or lockfile.
+**Goal:** the product's `lint:conventions` runs gritlint from `systemfsoftware/gritlint` at R1's rev, and no `@systemfsoftware/gritlint` remains in its manifests or lockfile.
 
 **Requirements:** R14; AE4.
 
-**Dependencies:** U0 merged; Stead stays Linux-only (OQ3 ruling).
+**Dependencies:** U0 merged; the product stays Linux-only (OQ3 ruling).
 
 **Files:**
 
@@ -342,22 +342,22 @@ No permanent test is added in any repository. U0's 12 fixture cases are pack dat
 **Approach:**
 
 1. Add a `gritlint` input without `follows`, locked to R1's rev. Export `packages.<system>.gritlint` from the input's sandboxed package on the systems the input builds (`x86_64-linux`, `aarch64-linux`), and add it to the dev shell's `base` on those systems only (OQ3 default). Correct the `systemfsoftware` input comment (`:12`), which names gritlint as one of its tools.
-2. Add `bin/gritlint`: Stead's `bin/dprint` with `TOOL="gritlint"`, as its header instructs ("Copy to bin/<tool> and set TOOL below"). On the CI lint lane, which enters no dev shell, the wrapper falls through to `nix run --no-write-lock-file .#gritlint`; the runners have nix (`checks-lane/action.yml` "Stead's CI environment" runs `nix --version`).
+2. Add `bin/gritlint`: the product's `bin/dprint` with `TOOL="gritlint"`, as its header instructs ("Copy to bin/<tool> and set TOOL below"). On the CI lint lane, which enters no dev shell, the wrapper falls through to `nix run --no-write-lock-file .#gritlint`; the runners have nix (`checks-lane/action.yml` "the product's CI environment" runs `nix --version`).
 3. `package.json`: `lint:conventions` becomes `./bin/gritlint check` (`:14`); drop the `@systemfsoftware/gritlint` devDependency (`:26`).
 4. `pnpm-workspace.yaml`: drop the catalog entry (`:188`) and correct the Lake 1 comment (`:196`), whose "gritlint … stay[s] on the registry" is no longer true.
-5. Regenerate `pnpm-lock.yaml` with `pnpm install` inside `nix develop`, as Stead's toolchain section requires. The registry entries (importers `:355-358`, `:657-660`; packages `:8950-8990`; snapshots `:18638-18655`) disappear.
-6. `gritlint.json`: `$schema` becomes the raw URL at R1's rev (KTD8). `gritlint.json` is an Evaluator file in Stead (`AGENTS.md:9`); flag the change and the supervisor's ruling in the PR body, as Stead's slice rules require.
-7. No `.github/` edit, no changeset (Stead has none), commit types per Stead's `commitlint.config.ts` (`deps` for the lockfile-only shape, `chore` otherwise).
+5. Regenerate `pnpm-lock.yaml` with `pnpm install` inside `nix develop`, as the product's toolchain section requires. The registry entries (importers `:355-358`, `:657-660`; packages `:8950-8990`; snapshots `:18638-18655`) disappear.
+6. `gritlint.json`: `$schema` becomes the raw URL at R1's rev (KTD8). `gritlint.json` is an Evaluator file in the product (`AGENTS.md:9`); flag the change and the supervisor's ruling in the PR body, as the product's slice rules require.
+7. No `.github/` edit, no changeset (the product has none), commit types per the product's `commitlint.config.ts` (`deps` for the lockfile-only shape, `chore` otherwise).
 
 **Test scenarios:**
 
 - `nix eval .#packages.x86_64-linux.gritlint.outPath` equals the gritlint flake's sandboxed `gritlint` at R1's rev.
 - `nix eval .#devShells.aarch64-darwin.default.drvPath` still evaluates (no missing attribute on macOS).
 - From a bare shell with no gritlint on PATH, `./bin/gritlint check` builds through `nix run` and exits 0 on the tree.
-- A planted violation (a workspace package without `private`, the `npm-provenance` case from Stead's adoption record) makes `pnpm lint:conventions` exit 1; removing it returns 0.
+- A planted violation (a workspace package without `private`, the `npm-provenance` case from the product's adoption record) makes `pnpm lint:conventions` exit 1; removing it returns 0.
 - `pnpm install --frozen-lockfile` passes, and `pnpm-lock.yaml` contains no `@systemfsoftware/gritlint`.
 
-**Verification:** Stead CI green on the PR head; the `lint-typecheck` lane log shows `gritlint check` running from a `/nix/store` path. If bubblewrap is refused there, switch to `gritlint-unwrapped` (Deferred to Implementation) and re-run.
+**Verification:** the product CI green on the PR head; the `lint-typecheck` lane log shows `gritlint check` running from a `/nix/store` path. If bubblewrap is refused there, switch to `gritlint-unwrapped` (Deferred to Implementation) and re-run.
 
 ---
 

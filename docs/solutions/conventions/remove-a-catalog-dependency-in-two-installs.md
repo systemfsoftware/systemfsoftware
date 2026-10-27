@@ -25,7 +25,7 @@ tags:
 
 ## Context
 
-Stead dropped `@systemfsoftware/gritlint` (systemfsoftware/Stead#469). The package was a root devDependency with the specifier `catalog:`, and its entry `"@systemfsoftware/gritlint": ^0.1.0` sat in the `catalog:` block of `pnpm-workspace.yaml`. Removing both lines and running one install produced a lockfile diff of 409 insertions and 825 deletions. Every catalog entry had been resolved again: the catalog pins `effect: "^4.0.0"`, the lockfile had held `effect` at 4.0.0, and the new lockfile moved it to 4.0.2 in 126 places. A change meant to delete one package had upgraded the runtime for the whole workspace, and nothing in the diff's file list said so.
+The product dropped `@systemfsoftware/gritlint` (a private repository). The package was a root devDependency with the specifier `catalog:`, and its entry `"@systemfsoftware/gritlint": ^0.1.0` sat in the `catalog:` block of `pnpm-workspace.yaml`. Removing both lines and running one install produced a lockfile diff of 409 insertions and 825 deletions. Every catalog entry had been resolved again: the catalog pins `effect: "^4.0.0"`, the lockfile had held `effect` at 4.0.0, and the new lockfile moved it to 4.0.2 in 126 places. A change meant to delete one package had upgraded the runtime for the whole workspace, and nothing in the diff's file list said so.
 
 ## Guidance
 
@@ -60,7 +60,7 @@ Both lockfiles pass a later `pnpm install --frozen-lockfile`, so no gate tells t
 
 ## Examples
 
-Observed on pnpm 12.6.0 (Stead's `packageManager`) under `CI=true`, where a plain `pnpm install` is frozen and fails with the mismatch error before `--no-frozen-lockfile` is passed. Each procedure ran on a fresh worktree at Stead `8eff55ee` with `--ignore-scripts`. This repository pins pnpm 12.9.0, where the one-step behaviour has not been checked; run the `grep -c` check above after any catalog removal.
+Observed on pnpm 12.6.0 (the product's `packageManager`) under `CI=true`, where a plain `pnpm install` is frozen and fails with the mismatch error before `--no-frozen-lockfile` is passed. Each procedure ran on a fresh worktree at the product `8eff55ee` with `--ignore-scripts`. This repository pins pnpm 12.9.0, where the one-step behaviour has not been checked; run the `grep -c` check above after any catalog removal.
 
 ## Related
 
