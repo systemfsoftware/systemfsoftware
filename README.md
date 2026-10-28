@@ -197,6 +197,7 @@ The principles and design laws governing code in this repository live in standal
 
 - [Cell Architecture](compound-packs/cell-architecture): File kinds, services and layers, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
 - [Schema Modelling](compound-packs/schema-modelling): How Effect Schema declares invariants, states and foreign wire shapes, how refined values generate, and how failing generated laws and refusal properties are handled.
+- [Configuration](compound-packs/configuration): How an application's settings reach its code through a `<Feature>Config` in context, and how each environment variable is declared as one described Config in src/config.ts.
 - [Package Surface](compound-packs/package-surface): What a workspace package exposes through its exports map, under how many names, and how a change to that surface is versioned.
 - [Testing](compound-packs/testing): What a behaviour test proves and is named for, what a test imports, where test doubles live, how fakes and adapters are proven, and how a failing test or a surviving mutant is resolved.
 - [UI State](compound-packs/ui-state): How React component and hook code in an effect-atom application reads data, runs Effects and derives display values.
