@@ -12,7 +12,7 @@ on:
     outputs:
       lane-source:
         description: "`hook` when the caller's checks-lane action ran each phase, `built-in` otherwise"
-        value: ${{ jobs.plan.outputs.lane-source }}
+        value: ${{ jobs.plan.outputs.lane-source || jobs.check.outputs.lane-source }}
       test-jobs:
         description: JSON list of the test jobs the plan scheduled, each with its `packages`; `[]` when every package was skipped
         value: ${{ jobs.plan.outputs.jobs }}
@@ -147,6 +147,17 @@ on:
         required: false
         type: string
         default: ""
+      single-job:
+        description: >-
+          One job for a run with one lint lane and no planned tests. The job that carries `gate-name` checks out once and
+          runs, as steps, the diff classifier, the `.sfs-deps` producer and restore, the lane and the 'Every lane passed'
+          result; classify, sfs-deps, plan, lanes, test and timings are skipped, so a pull request boots one runner
+          instead of five. `lanes` must name exactly one lane (a lane's `runs-on` sizes the job); the planner, the test
+          jobs and the timing record are not used, and `gate-lane` is ignored. A caller sets it per event (true on a pull request,
+          say) and keeps the full fan-out for runs that plan tests
+        required: false
+        type: boolean
+        default: false
     secrets:
       turbo-api:
         description: Remote Turbo cache API URL
@@ -168,6 +179,9 @@ env:
 jobs:
   classify:
     name: classify · docs-only or full
+    # single-job: the `check` job classifies in its own steps. plan, sfs-deps, lanes, test and timings all need
+    # classify, so each of them skips with it.
+    if: ${{ !inputs.single-job }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     outputs:
@@ -677,12 +691,144 @@ jobs:
     name: ${{ inputs.gate-name }}
     needs: [classify, sfs-deps, plan, lanes, test]
     if: ${{ always() }}
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: ${{ inputs.gate-timeout-minutes }}
+    # single-job: this job is the lane's box (its `runs-on`, else the test jobs' labels) and gets its timeout.
+    runs-on: ${{ inputs.single-job && (fromJSON(inputs.lanes)[0].runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on)) || fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.single-job && fromJSON(inputs.lanes)[0].timeout-minutes || inputs.gate-timeout-minutes }}
+    outputs:
+      lane-source: ${{ steps.single-mode.outputs.source }}
     steps:
+      # Single-job mode. The steps run in the order the five jobs ran, on one checkout. They stay in this job so there
+      # is one job id and one check run named `gate-name`, which a ruleset or Mergify may require.
+      - name: One lane
+        if: inputs.single-job
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ fromJSON(inputs.lanes)[0].fetch-depth || 1 }}
+          persist-credentials: ${{ inputs.persist-credentials }}
+          fetch-tags: ${{ inputs.fetch-tags }}
+          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
+          sparse-checkout-cone-mode: false
+      - id: single-diff
+        if: inputs.single-job
+        uses: $/.github/actions/classify-diff
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          docs-globs: ${{ inputs.docs-globs }}
+      - id: single-lane
+        name: The lane this diff runs
+        if: inputs.single-job
+        env:
+          SCOPE: ${{ steps.single-diff.outputs.scope }}
+          LANES: ${{ inputs.lanes }}
+        run: |
+          if ! jq -e 'type == "array" and length == 1' <<< "$LANES" > /dev/null; then
+            mkdir -p "$RUNNER_TEMP/sfs-logs"
+            echo classify-failed > "$RUNNER_TEMP/sfs-reason"
+            echo "::error title=single-job-needs-one-lane::single-job runs exactly one lane; lanes names $(jq 'length' <<< "$LANES" 2> /dev/null || echo an unreadable list)"
+            exit 1
+          fi
+          if [ "$SCOPE" = docs-only ]; then
+            filter='[.[] | select(.["docs-run"]) | . + {phase: "docs", run: .["docs-run"]}]'
+          else
+            filter='[.[] | . + {phase: .id}]'
+          fi
+          echo "lane=$(jq -c "$filter | .[0] // empty" <<< "$LANES")" >> "$GITHUB_OUTPUT"
+      - name: Remote Turbo cache
+        if: inputs.single-job && steps.single-lane.outputs.lane != '' && inputs.turbo-team != ''
+        env:
+          TEAM: ${{ inputs.turbo-team }}
+          API: ${{ secrets.turbo-api }}
+          TOKEN: ${{ secrets.turbo-token }}
+        run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
+      # The producer builds the tarballs on a cold key (on this job's box) and the restore puts them in place, as the
+      # sfs-deps job and the restore step of every other job do; on a warm key it is a probe and a restore.
+      - if: inputs.single-job && steps.single-lane.outputs.lane != ''
+        uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
+      - id: single-produce
+        if: inputs.single-job && steps.single-lane.outputs.lane != ''
+        uses: $/.github/actions/sfs-deps
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          installable: ${{ inputs.sfs-deps-installable }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: single-restore
+        if: inputs.single-job && steps.single-lane.outputs.lane != ''
+        uses: $/.github/actions/sfs-deps-restore
+        with:
+          key: ${{ steps.single-produce.outputs.key }}
+          working-directory: ${{ inputs.working-directory }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+      - id: single-mode
+        name: Lane hook or built-in lanes
+        if: inputs.single-job && steps.single-lane.outputs.lane != ''
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+          HOOK: ${{ hashFiles('.github/actions/checks-lane/action.yml') != '' }}
+        run: |
+          if [ "$WORKING_DIRECTORY" != . ]; then source=built-in
+          elif [ "$HOOK" = true ]; then source=hook
+          else source=built-in; fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+      - id: single-hook
+        if: inputs.single-job && steps.single-lane.outputs.lane != '' && steps.single-mode.outputs.source == 'hook'
+        uses: ./.github/actions/checks-lane
+        with:
+          lane: ${{ fromJSON(steps.single-lane.outputs.lane).phase }}
+          job: ${{ steps.single-lane.outputs.lane }}
+          profile: ${{ inputs.profile }}
+      - id: single-builtin
+        if: inputs.single-job && steps.single-lane.outputs.lane != '' && steps.single-mode.outputs.source == 'built-in'
+        uses: $/.github/actions/builtin-lane
+        with:
+          lane: ${{ fromJSON(steps.single-lane.outputs.lane).phase }}
+          working-directory: ${{ inputs.working-directory }}
+      - id: single-run
+        name: ${{ fromJSON(inputs.lanes)[0].name }}
+        if: inputs.single-job && fromJSON(steps.single-lane.outputs.lane || '{}').run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          RUN: ${{ fromJSON(steps.single-lane.outputs.lane || '{}').run }}
+          LOG: ${{ fromJSON(inputs.lanes)[0].id }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          set +e
+          bash -e -c "$RUN" 2>&1 | tee "$RUNNER_TEMP/sfs-logs/$LOG.log"
+          exit "${PIPESTATUS[0]}"
+      # Reached only when every step above passed, so the job's own result is the verdict. A lane the classifier
+      # dropped (a docs-only diff with no `docs-run`) has nothing to run and passes.
+      - name: Every lane passed
+        if: inputs.single-job
+        env:
+          SCOPE: ${{ steps.single-diff.outputs.scope }}
+          LANE: ${{ steps.single-lane.outputs.lane }}
+        run: echo "scope=$SCOPE lane-ran=$([ -n "$LANE" ] && echo true || echo false)"
+      - if: failure() && inputs.single-job
+        uses: $/.github/actions/failure-summary
+        with:
+          job: lane-${{ fromJSON(inputs.lanes)[0].id }}
+          reasons: |
+            single-diff classify-failed
+            single-lane classify-failed
+            single-hook hook-failed
+            single-builtin lane-failed
+            single-run lane-failed
+          steps: ${{ toJSON(steps) }}
+          reproduce: ${{ fromJSON(steps.single-lane.outputs.lane || '{}').run || format('the {0} phase of .github/actions/checks-lane', fromJSON(inputs.lanes)[0].id) }}
+          working-directory: ${{ inputs.working-directory }}
+      - if: always() && inputs.single-job && steps.single-lane.outputs.lane != ''
+        uses: $/.github/actions/sfs-fetch-auth
+        with:
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
+          remove: true
       # A skipped job passes only when the classifier or the plan said there was nothing for it to run.
       - id: every
         name: Every lane passed
+        if: inputs.single-job != true
         env:
           CLASSIFY: ${{ needs.classify.result }}
           SCOPE: ${{ needs.classify.outputs.scope }}
@@ -703,7 +849,7 @@ jobs:
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }
       # With no test job planned there is nothing for the gate lane to merge: the results above are the whole gate.
-      - if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
+      - if: inputs.single-job != true && inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: ${{ inputs.persist-credentials }}
@@ -712,12 +858,12 @@ jobs:
           sparse-checkout-cone-mode: false
       - id: hook
         uses: ./.github/actions/checks-lane
-        if: inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
+        if: inputs.single-job != true && inputs.gate-lane && needs.plan.outputs.jobs != '[]' && needs.plan.outputs.lane-source == 'hook' && needs.classify.outputs.scope != 'docs-only'
         with:
           lane: gate
           job: ${{ needs.plan.outputs.jobs }}
           profile: ${{ inputs.profile }}
-      - if: failure()
+      - if: failure() && inputs.single-job != true
         uses: $/.github/actions/failure-summary
         with:
           job: gate
