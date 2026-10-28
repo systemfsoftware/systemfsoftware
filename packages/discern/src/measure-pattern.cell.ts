@@ -13,11 +13,12 @@ import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
 import {
   DecisionIdCollisionError,
+  InvalidRangeError,
   InvalidThresholdError,
   MeasureCommandRejected,
   MeasureInputRefused,
 } from './DiscernError.schema.js'
-import { measureCaseOf, measureOf } from './eval-measure.js'
+import { measureCaseOf, measureOf, refusalGate } from './eval-measure.js'
 import { EvalReport, metricsOf } from './EvalReport.schema.js'
 import type { Pattern } from './pattern.blueprint.js'
 
@@ -38,6 +39,7 @@ export interface SweepResult<Value> {
 export type MeasureError =
   | AiError.AiError
   | DecisionIdCollisionError
+  | InvalidRangeError
   | InvalidThresholdError
   | MeasureCommandRejected
   | MeasureInputRefused
@@ -74,8 +76,11 @@ export const run: {
     pattern: Pattern<S['Type']>,
     examples: ReadonlyArray<EvalExample<S['Type']>>,
   ): Effect.Effect<EvalReport, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
-    Effect.map(
-      Effect.forEach(examples, (example) => measureOf(measureCaseOf({ schema, pattern, example }))),
-      (records) => EvalReport.make({ metrics: metricsOf(records), records }),
+    Effect.andThen(
+      refusalGate(pattern.refusals),
+      Effect.map(
+        Effect.forEach(examples, (example) => measureOf(measureCaseOf({ schema, pattern, example }))),
+        (records) => EvalReport.make({ metrics: metricsOf(records), records }),
+      ),
     ),
 )

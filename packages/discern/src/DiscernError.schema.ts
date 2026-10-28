@@ -38,6 +38,20 @@ export class InvalidThresholdError extends Schema.TaggedError<InvalidThresholdEr
 ) {}
 
 /**
+ * A span names its ends in the wrong order. `low` and `high` carry the ends as
+ * numbers or level names, so the refusal names both ends the caller wrote.
+ */
+export class InvalidRangeError extends Schema.TaggedError<InvalidRangeError>()(
+  'InvalidRangeError',
+  {
+    range: Schema.String,
+    low: Schema.Union([Schema.Finite, Schema.String]),
+    high: Schema.Union([Schema.Finite, Schema.String]),
+    message: Schema.String,
+  },
+) {}
+
+/**
  * The policy run's command was rejected before any case could be answered.
  * Carries the cases the read had evaluated, so the refusal names the run it
  * belonged to, and the rejection itself as `cause` (C2, mirrored from

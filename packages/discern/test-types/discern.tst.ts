@@ -237,6 +237,7 @@ describe('the immediate value match', () => {
         string,
         | AiError.AiError
         | Discern.DecisionIdCollisionError
+        | Discern.InvalidRangeError
         | Discern.InvalidThresholdError
         | Discern.PolicyCommandRejected
         | Discern.UncertainMatchError,
@@ -328,6 +329,7 @@ describe('the DecisionModel middleware', () => {
         string | number | boolean,
         | AiError.AiError
         | Discern.DecisionIdCollisionError
+        | Discern.InvalidRangeError
         | Discern.InvalidThresholdError
         | Discern.PolicyCommandRejected
         | Discern.UncertainMatchError,

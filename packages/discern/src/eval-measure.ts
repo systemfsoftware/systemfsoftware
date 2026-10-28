@@ -5,7 +5,8 @@ import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,
-  InvalidThresholdError,
+  type InvalidRangeError,
+  type InvalidThresholdError,
   MeasureCommandRejected,
   MeasureInputRefused,
 } from './DiscernError.schema.js'
@@ -13,6 +14,7 @@ import { EvalRecord, EvalReport, metricsOf } from './EvalReport.schema.js'
 import type { CalibrateOptions, EvalExample, MeasureError, SweepOptions, SweepResult } from './measure-pattern.cell.js'
 import type { Answers, Pattern, PatternRefusal, Preview } from './pattern.blueprint.js'
 import { evaluate, preview } from './pattern.blueprint.js'
+import { refusalErrorOf } from './refusal-error.js'
 import { ScoreEvalRecord, scoreEvalRecord } from './score-eval-record.workflow.js'
 import type { EvalScore } from './score-eval-record.workflow.js'
 import { statusOf } from './Verdict.schema.js'
@@ -50,12 +52,20 @@ type MeasureRead = (typeof ScoreEvalRecord)['Encoded'] & {
  * the read with the refusal it names, and the first one written is the one
  * reported.
  */
-const refusalGate = (refusals: ReadonlyArray<PatternRefusal>): Effect.Effect<void, InvalidThresholdError> =>
-  Arr.reduce<PatternRefusal, Effect.Effect<void, InvalidThresholdError>>(
+export const refusalGate = (
+  refusals: ReadonlyArray<PatternRefusal>,
+): Effect.Effect<void, InvalidThresholdError | InvalidRangeError> =>
+  Arr.reduce<PatternRefusal, Effect.Effect<void, InvalidThresholdError | InvalidRangeError>>(
     refusals,
     Effect.void,
-    (gate, refusal) => Effect.andThen(gate, Effect.fail(new InvalidThresholdError(refusal))),
+    (gate, refusal) => Effect.andThen(gate, Effect.fail(refusalErrorOf(refusal))),
   )
+
+/** Every candidate pattern's refusals gate the run before any example is observed, the first candidate refused being the one reported. */
+const candidatesGate = <S extends Schema.Constraint, V>(
+  candidates: ReadonlyArray<{ readonly value: V; readonly pattern: Pattern<S['Type']> }>,
+): Effect.Effect<void, InvalidThresholdError | InvalidRangeError> =>
+  Effect.forEach(candidates, (candidate) => refusalGate(candidate.pattern.refusals), { discard: true })
 
 /** The example's encoded input, or the refusal naming what could not be encoded. */
 const encodedInputOf = <S extends Schema.Constraint>(
@@ -197,6 +207,7 @@ export const sweep = <S extends Schema.Constraint, V>(
 ): Effect.Effect<ReadonlyArray<SweepResult<V>>, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
   Effect.gen(function*() {
     const candidates = candidatesOf(options)
+    yield* candidatesGate<S, V>(candidates)
     const answeredExamples = yield* answeredExamplesOf(options, candidates)
     return yield* Effect.forEach(candidates, scoreCandidate(answeredExamples))
   })
@@ -229,6 +240,7 @@ export const calibrate = <S extends Schema.Constraint, V>(
 > =>
   Effect.gen(function*() {
     const candidates = candidatesOf(options)
+    yield* candidatesGate<S, V>(candidates)
     const answeredExamples = yield* answeredExamplesOf(options, candidates)
     const score = scoreCandidate(answeredExamples)
     const [firstValue, ...restValues] = options.values

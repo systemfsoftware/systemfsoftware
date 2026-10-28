@@ -15,7 +15,8 @@ import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,
-  InvalidThresholdError,
+  type InvalidRangeError,
+  type InvalidThresholdError,
   PolicyCommandRejected,
   UncertainMatchError,
 } from './DiscernError.schema.js'
@@ -23,6 +24,7 @@ import { SelectedCase, SelectedFallback, SelectedUncertain, Trace } from './Insp
 import type { CaseTrace, CompiledPlan, TraceSelection } from './Inspection.schema.js'
 import type { Answers, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.blueprint.js'
 import { distinctNodes, evaluate, preview } from './pattern.blueprint.js'
+import { refusalErrorOf } from './refusal-error.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import { CaseVerdict } from './select-case.workflow.js'
 import { PatternResult, statusIs, statusOf } from './Verdict.schema.js'
@@ -74,7 +76,6 @@ const prefixCasesOf = <Input, Out, Err, Req>(
     { onSome: (index) => Arr.take(cases, index + 1), onNone: () => cases },
   )
 
-/** The first crossed threshold a case in the prefix carries, if any. */
 const refusalOfCases = <Input, Out, Err, Req>(
   cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>,
 ): Option.Option<PatternRefusal> => Arr.head(Arr.flatMap(cases, (item) => item.pattern.refusals))
@@ -192,11 +193,11 @@ const readOf = <Input, S extends Schema.Constraint, Out, Err, Req>(spec: PolicyS
   input: Input,
 ): Effect.Effect<
   PolicyRead<Input, Out, Err, Req>,
-  AiError.AiError | DecisionIdCollisionError | InvalidThresholdError,
+  AiError.AiError | DecisionIdCollisionError | InvalidRangeError | InvalidThresholdError,
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
-  Option.match(refusalOfCases(prefixCasesOf(spec.cases, input)), {
-    onSome: (refusal) => Effect.fail(new InvalidThresholdError(refusal)),
+  Option.match(refusalOfCases(spec.cases), {
+    onSome: (refusal) => Effect.fail(refusalErrorOf(refusal)),
     onNone: () =>
       Effect.flatMap(observe(spec.schema, neededNodesOf(spec.cases, input), input), (answers) => {
         const evaluated = evaluatedPrefixOf(spec.cases, input, answers)
@@ -273,6 +274,7 @@ export interface Policy<
     | Err
     | AiError.AiError
     | DecisionIdCollisionError
+    | InvalidRangeError
     | InvalidThresholdError
     | PolicyCommandRejected
     | UncertainMatchError,
@@ -288,6 +290,7 @@ export type PolicyTraced<Out, Err, Req, S extends Schema.Constraint> = Effect.Ef
   | Err
   | AiError.AiError
   | DecisionIdCollisionError
+  | InvalidRangeError
   | InvalidThresholdError
   | PolicyCommandRejected
   | UncertainMatchError,

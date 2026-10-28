@@ -51,13 +51,23 @@ export interface Preview {
   readonly decisions: ReadonlyArray<NodeCore>
 }
 
-/** The bounds a caller crossed when naming thresholds, carried to the run that evaluates the leaf. */
-export interface PatternRefusal {
+export interface ThresholdRefusal {
+  readonly kind: 'threshold'
   readonly threshold: string
   readonly value: number
   readonly limit: number
   readonly message: string
 }
+
+export interface RangeRefusal {
+  readonly kind: 'range'
+  readonly range: string
+  readonly low: number | string
+  readonly high: number | string
+  readonly message: string
+}
+
+export type PatternRefusal = ThresholdRefusal | RangeRefusal
 
 /** The blueprint identity of every pattern. `Symbol.for` identity is preserved. */
 export const TypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern')

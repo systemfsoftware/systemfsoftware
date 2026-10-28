@@ -17,6 +17,7 @@ import { decisionDefinition } from './DecisionDefinition.schema.js'
 import {
   type DecisionIdCollisionError,
   ExhaustiveMatchError,
+  type InvalidRangeError,
   type InvalidThresholdError,
   type PolicyCommandRejected,
   type UncertainMatchError,
@@ -139,6 +140,7 @@ export type FinishedMatcher<I, S extends Schema.Constraint, Out, Err, Req, Flavo
       | Err
       | AiError.AiError
       | DecisionIdCollisionError
+      | InvalidRangeError
       | InvalidThresholdError
       | PolicyCommandRejected
       | UncertainMatchError,

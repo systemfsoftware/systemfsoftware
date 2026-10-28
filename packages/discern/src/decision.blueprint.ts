@@ -359,6 +359,7 @@ const missAtOf = (limits: ClassifyThresholds): number => limits.miss ?? matchAtO
 const thresholdRefusalOf = (limits: ClassifyThresholds): Option.Option<PatternRefusal> =>
   missAtOf(limits) > matchAtOf(limits)
     ? Option.some({
+      kind: 'threshold',
       threshold: 'miss',
       value: missAtOf(limits),
       limit: matchAtOf(limits),
@@ -426,11 +427,7 @@ const classifyVerdictOf = <L extends string>(
   )
 }
 
-const refusedLeaf = <Input, Label extends string, S extends Schema.Constraint | undefined>(
-  node: DecisionNode<Input, Decision.Classify<Label>, S>,
-  description: string,
-  refusal: PatternRefusal,
-): Pattern<Input> =>
+const refusedLeaf = <Input>(node: NodeCore, description: string, refusal: PatternRefusal): Pattern<Input> =>
   semanticLeaf<Input>({
     node,
     id: `p_${hash({ node: node.id, description })}`,
@@ -438,6 +435,14 @@ const refusedLeaf = <Input, Label extends string, S extends Schema.Constraint | 
     resolve: () => uncertain(refusal.message),
     refusals: [refusal],
   })
+
+const refusedOr = <Input>(
+  node: NodeCore,
+  description: string,
+  refusal: Option.Option<PatternRefusal>,
+  accepted: () => Pattern<Input>,
+): Pattern<Input> =>
+  Option.match(refusal, { onNone: accepted, onSome: (refused) => refusedLeaf<Input>(node, description, refused) })
 
 const thresholdLeaf = <Input, Label extends string, S extends Schema.Constraint | undefined>(
   node: DecisionNode<Input, Decision.Classify<Label>, S>,
@@ -450,7 +455,7 @@ const thresholdLeaf = <Input, Label extends string, S extends Schema.Constraint 
       whereResult(node, (answer) => classifyVerdictOf(answer, labels, label, limits), {
         description: `${node.id} is ${label} with confidence thresholds`,
       }),
-    onSome: (refusal) => refusedLeaf(node, `${node.id} is ${label} with confidence thresholds`, refusal),
+    onSome: (refusal) => refusedLeaf<Input>(node, `${node.id} is ${label} with confidence thresholds`, refusal),
   })
 
 const classifyIs = <Input, Label extends string, S extends Schema.Constraint | undefined>(
@@ -547,27 +552,68 @@ const belowVerdictOf = (probability: number, threshold: number, inclusive: boole
   )
 }
 
+const bothFinite = (first: number, second: number): boolean => Number.isFinite(first) && Number.isFinite(second)
+
+const finitelyAfter = (later: number, earlier: number): boolean => bothFinite(later, earlier) && later > earlier
+
+const invertedMissRefusalOf = (
+  bound: {
+    readonly subject: string
+    readonly name: 'missBelow' | 'missAbove'
+    readonly relation: '<=' | '>='
+    readonly threshold: number
+    readonly miss: number
+  },
+  inverted: boolean,
+): Option.Option<PatternRefusal> =>
+  inverted
+    ? Option.some({
+      kind: 'threshold',
+      threshold: bound.name,
+      value: bound.miss,
+      limit: bound.threshold,
+      message:
+        `Probability pattern \`${bound.subject}\`: \`${bound.name}\` (${bound.miss}) must be ${bound.relation} the threshold (${bound.threshold})`,
+    })
+    : Option.none()
+
 const aboveLeaf = <Input, S extends Schema.Constraint | undefined>(
   node: DecisionNode<Input, Decision.Probability, S>,
   threshold: number,
   inclusive: boolean,
   missAt: number,
-): Pattern<Input> =>
-  node.whereResult(
-    (answer) => aboveVerdictOf(answer.probability, threshold, inclusive, missAt),
-    { description: `${node.id} ${inclusive ? '>=' : '>'} ${threshold}` },
+): Pattern<Input> => {
+  const description = `${node.id} ${inclusive ? '>=' : '>'} ${threshold}`
+  return refusedOr(
+    node,
+    `${description} with missBelow ${missAt}`,
+    invertedMissRefusalOf(
+      { subject: description, name: 'missBelow', relation: '<=', threshold, miss: missAt },
+      finitelyAfter(missAt, threshold),
+    ),
+    () =>
+      node.whereResult((answer) => aboveVerdictOf(answer.probability, threshold, inclusive, missAt), { description }),
   )
+}
 
 const belowLeaf = <Input, S extends Schema.Constraint | undefined>(
   node: DecisionNode<Input, Decision.Probability, S>,
   threshold: number,
   inclusive: boolean,
   missAt: number,
-): Pattern<Input> =>
-  node.whereResult(
-    (answer) => belowVerdictOf(answer.probability, threshold, inclusive, missAt),
-    { description: `${node.id} ${inclusive ? '<=' : '<'} ${threshold}` },
+): Pattern<Input> => {
+  const description = `${node.id} ${inclusive ? '<=' : '<'} ${threshold}`
+  return refusedOr(
+    node,
+    `${description} with missAbove ${missAt}`,
+    invertedMissRefusalOf(
+      { subject: description, name: 'missAbove', relation: '>=', threshold, miss: missAt },
+      finitelyAfter(threshold, missAt),
+    ),
+    () =>
+      node.whereResult((answer) => belowVerdictOf(answer.probability, threshold, inclusive, missAt), { description }),
   )
+}
 
 const probabilityFor = <Input, S extends Schema.Constraint | undefined>(
   options: ProbabilityOptions,
@@ -584,6 +630,7 @@ const probabilityFor = <Input, S extends Schema.Constraint | undefined>(
 const bandRefusalOf = (limits: ProbabilityBand): Option.Option<PatternRefusal> =>
   limits.miss > limits.match
     ? Option.some({
+      kind: 'threshold',
       threshold: 'miss',
       value: limits.miss,
       limit: limits.match,
@@ -1168,6 +1215,15 @@ export const between: {
 
 const probabilityBoundOf = (bound: number | string): number => (typeof bound === 'number' ? bound : Number.NaN)
 
+const reversedRangeRefusalOf = (
+  range: { readonly description: string; readonly low: number | string; readonly high: number | string },
+  reversed: boolean,
+  message: string,
+): Option.Option<PatternRefusal> =>
+  reversed
+    ? Option.some({ kind: 'range', range: range.description, low: range.low, high: range.high, message })
+    : Option.none()
+
 const betweenOfProbability = (
   self: ProbabilityDecision<never, Schema.Constraint | undefined>,
   low: number | string,
@@ -1175,19 +1231,50 @@ const betweenOfProbability = (
 ): Pattern<never> => {
   const lower = probabilityBoundOf(low)
   const upper = probabilityBoundOf(high)
-  return where(self, (answer) => answer.probability >= lower && answer.probability <= upper, {
-    description: `${self.id} between ${low} and ${high}`,
-  })
+  const description = `${self.id} between ${low} and ${high}`
+  return refusedOr(
+    self,
+    description,
+    reversedRangeRefusalOf(
+      { description, low: lower, high: upper },
+      finitelyAfter(lower, upper),
+      `Probability range \`${description}\`: \`low\` (${lower}) must be <= \`high\` (${upper})`,
+    ),
+    () => where(self, (answer) => answer.probability >= lower && answer.probability <= upper, { description }),
+  )
 }
+
+const declaredRatingPositionOf = (levels: ReadonlyArray<string>, bound: number | string): Option.Option<number> =>
+  typeof bound === 'number'
+    ? Option.some(bound)
+    : Option.filter(Option.some(ratePositionOf(levels, bound)), (position) => position >= 0)
+
+const knownRatingPositionOf = (levels: ReadonlyArray<string>, bound: number | string): Option.Option<number> =>
+  Option.filter(declaredRatingPositionOf(levels, bound), Number.isFinite)
+
+const rateRangeReversedOf = (levels: ReadonlyArray<string>, low: number | string, high: number | string): boolean =>
+  Option.getOrElse(
+    Option.zipWith(knownRatingPositionOf(levels, low), knownRatingPositionOf(levels, high), (from, to) => from > to),
+    () => false,
+  )
 
 const betweenOfRate = (
   self: RateDecision<never, string, Schema.Constraint | undefined>,
   low: number | string,
   high: number | string,
-): Pattern<never> =>
-  where(self, (answer) => betweenRatings(answer, self.levels, low, high), {
-    description: `${self.id} between ${low} and ${high}`,
-  })
+): Pattern<never> => {
+  const description = `${self.id} between ${low} and ${high}`
+  return refusedOr(
+    self,
+    description,
+    reversedRangeRefusalOf(
+      { description, low, high },
+      rateRangeReversedOf(self.levels, low, high),
+      `Rating range \`${description}\`: \`${low}\` must not come after \`${high}\``,
+    ),
+    () => where(self, (answer) => betweenRatings(answer, self.levels, low, high), { description }),
+  )
+}
 
 const ratingBoundOf = (levels: ReadonlyArray<string>, bound: number | string): number =>
   typeof bound === 'number' ? bound : ratePositionOf(levels, bound)
