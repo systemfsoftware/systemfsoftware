@@ -3,7 +3,7 @@ import * as AiError from 'effect/ai/AiError'
 import type * as Decision from 'effect/ai/Decision'
 import type * as DecisionModel from 'effect/ai/DecisionModel'
 import * as Effect from 'effect/Effect'
-import type { ObservationSplit, Provider } from './decision-model.blueprint.js'
+import type { ObservationSplit, Provider, StoredHitCheck } from './decision-model.blueprint.js'
 import type { ProviderAnswer } from './Observation.schema.js'
 import { SelectObservationSource, selectObservationSource } from './select-observation-source.workflow.js'
 
@@ -12,6 +12,7 @@ export interface ReplayRequest {
   readonly inner: Provider
   readonly split: ObservationSplit
   readonly onMissing: 'fail' | 'ask'
+  readonly validate: StoredHitCheck
 }
 
 export type ReplayRead = (typeof SelectObservationSource)['Encoded'] & {
@@ -19,6 +20,7 @@ export type ReplayRead = (typeof SelectObservationSource)['Encoded'] & {
   readonly missingDecisions: Readonly<Record<string, Decision.Any>>
   readonly state: DecisionModel.ProviderOptions['state']
   readonly inner: Provider
+  readonly validate: StoredHitCheck
 }
 
 const readReplay = (request: ReplayRequest): Effect.Effect<ReplayRead> =>
@@ -31,18 +33,26 @@ const readReplay = (request: ReplayRequest): Effect.Effect<ReplayRead> =>
     missingDecisions: request.split.missingDecisions,
     state: request.options.state,
     inner: request.inner,
+    validate: request.validate,
   })
 
 export const replayObservations = Sandwich.named('discern.model.replay')(readReplay)
   .decide(selectObservationSource)
   .write({
     AllRecorded: (_recorded, read) =>
-      Effect.succeed({ answers: read.hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
+      Effect.as(read.validate(read.hits), {
+        answers: read.hits,
+        usage: { inputTokens: undefined, outputTokens: undefined },
+      }),
     AskForMissing: (_asked, read) =>
-      Effect.map(read.inner.decide({ state: read.state, decisions: read.missingDecisions }), (response) => ({
-        answers: { ...read.hits, ...response.answers },
-        usage: response.usage,
-      })),
+      Effect.flatMap(
+        read.validate(read.hits),
+        () =>
+          Effect.map(read.inner.decide({ state: read.state, decisions: read.missingDecisions }), (response) => ({
+            answers: { ...read.hits, ...response.answers },
+            usage: response.usage,
+          })),
+      ),
     RecordingMissing: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>
       Effect.fail(

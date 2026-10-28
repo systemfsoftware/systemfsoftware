@@ -3,7 +3,7 @@ import * as AiError from 'effect/ai/AiError'
 import type * as Decision from 'effect/ai/Decision'
 import type * as DecisionModel from 'effect/ai/DecisionModel'
 import * as Effect from 'effect/Effect'
-import type { ObservationSplit, Provider } from './decision-model.blueprint.js'
+import type { ObservationSplit, Provider, StoredHitCheck } from './decision-model.blueprint.js'
 import type { ProviderAnswer } from './Observation.schema.js'
 import { CurrentRegion } from './region.service.js'
 import { SelectObservationSource, selectObservationSource } from './select-observation-source.workflow.js'
@@ -12,6 +12,7 @@ export interface CacheRequest {
   readonly options: DecisionModel.ProviderOptions
   readonly inner: Provider
   readonly split: ObservationSplit
+  readonly validate: StoredHitCheck
   readonly record: (
     answers: Readonly<Record<string, DecisionModel.ProviderAnswer>>,
     regionPath: ReadonlyArray<string>,
@@ -23,6 +24,7 @@ export type CacheRead = (typeof SelectObservationSource)['Encoded'] & {
   readonly missingDecisions: Readonly<Record<string, Decision.Any>>
   readonly state: DecisionModel.ProviderOptions['state']
   readonly inner: Provider
+  readonly validate: StoredHitCheck
   readonly record: (
     answers: Readonly<Record<string, DecisionModel.ProviderAnswer>>,
     regionPath: ReadonlyArray<string>,
@@ -39,20 +41,25 @@ const readCache = (request: CacheRequest): Effect.Effect<CacheRead> =>
     missingDecisions: request.split.missingDecisions,
     state: request.options.state,
     inner: request.inner,
+    validate: request.validate,
     record: request.record,
   })
 
 const askAndRecord = (read: CacheRead): Effect.Effect<DecisionModel.ProviderResponse, AiError.AiError> =>
   Effect.flatMap(
-    CurrentRegion.useSync((path) => path),
-    (regionPath) =>
+    read.validate(read.hits),
+    () =>
       Effect.flatMap(
-        read.inner.decide({ state: read.state, decisions: read.missingDecisions }),
-        (response) =>
-          Effect.map(read.record(response.answers, regionPath), () => ({
-            answers: { ...read.hits, ...response.answers },
-            usage: response.usage,
-          })),
+        CurrentRegion.useSync((path) => path),
+        (regionPath) =>
+          Effect.flatMap(
+            read.inner.decide({ state: read.state, decisions: read.missingDecisions }),
+            (response) =>
+              Effect.map(read.record(response.answers, regionPath), () => ({
+                answers: { ...read.hits, ...response.answers },
+                usage: response.usage,
+              })),
+          ),
       ),
   )
 
@@ -60,7 +67,10 @@ export const cacheObservations = Sandwich.named('discern.model.cache')(readCache
   .decide(selectObservationSource)
   .write({
     AllRecorded: (_recorded, read) =>
-      Effect.succeed({ answers: read.hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
+      Effect.as(read.validate(read.hits), {
+        answers: read.hits,
+        usage: { inputTokens: undefined, outputTokens: undefined },
+      }),
     AskForMissing: (_asked, read) => askAndRecord(read),
     RecordingMissing: (refusal, _read) => Effect.succeed(refusal),
     CommandRejected: (rejected, read) =>

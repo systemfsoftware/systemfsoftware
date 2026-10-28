@@ -7,6 +7,7 @@ export {
   fromProvider,
   intercept,
   isBudgetExceeded,
+  isInvalidObservation,
   isReplayMiss,
   layer,
   provider,

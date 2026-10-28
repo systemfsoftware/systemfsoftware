@@ -28,6 +28,7 @@ export const DiscernMethod = {
   caching: 'caching',
   budgeted: 'budgeted',
   refusing: 'refusing',
+  observation: 'observation',
 } as const
 const DISCERN_MODULE = 'Discern'
 
@@ -44,6 +45,10 @@ export const isBudgetExceeded = (error: unknown): error is AiError.AiError =>
 /** True for the failure raised when replay has no recorded answer for a decision. */
 export const isReplayMiss = (error: unknown): error is AiError.AiError =>
   AiError.isAiError(error) && isDiscernMethodOf(error, DiscernMethod.replaying)
+
+/** True for the failure raised when an answer read back from a store fails validation. */
+export const isInvalidObservation = (error: unknown): error is AiError.AiError =>
+  AiError.isAiError(error) && isDiscernMethodOf(error, DiscernMethod.observation)
 
 const replayMissFailure = (refusal: (typeof RecordingMissing)['Encoded']): AiError.AiError =>
   discernFailure(DiscernMethod.replaying, new AiError.InvalidRequestError({ description: refusal.detail }))
@@ -164,6 +169,49 @@ const recordAnswers = (
     { discard: true },
   )
 
+export type StoredHitCheck = (hits: Readonly<Record<string, ProviderAnswer>>) => Effect.Effect<void, AiError.AiError>
+
+const invalidObservationFailure = (error: AiError.AiError): AiError.AiError =>
+  discernFailure(
+    DiscernMethod.observation,
+    new AiError.InvalidOutputError({
+      description: Match.value(error.reason).pipe(
+        Match.tag('InvalidOutputError', (reason) => reason.description),
+        Match.orElse((reason) => reason.message),
+      ),
+    }),
+  )
+
+const hitDecisionsOf = (
+  decisions: Readonly<Record<string, Decision.Any>>,
+  hits: Readonly<Record<string, ProviderAnswer>>,
+): Readonly<Record<string, Decision.Any>> =>
+  Object.fromEntries(Object.entries(decisions).filter(([id]) => Object.hasOwn(hits, id)))
+
+/**
+ * Holds stored answers to the rules a provider's answers are held to, by running
+ * them through a throwaway `DecisionModel` whose provider returns them. A gate
+ * only: the stored hits pass on unchanged, because the validator's output drops
+ * the `_tag` the stored form carries.
+ */
+const storedHitCheckOf = (request: DecisionModel.ProviderOptions): StoredHitCheck => (hits) => {
+  const decisions = hitDecisionsOf(request.decisions, hits)
+  return Object.keys(decisions).length === 0
+    ? Effect.void
+    : Effect.flatMap(
+      DecisionModel.make({
+        decide: () => Effect.succeed({ answers: hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
+      }),
+      (checker) =>
+        Effect.asVoid(
+          Effect.mapError(
+            checker.decide(Decision.make({ input: Schema.Json, decisions }), { input: request.state }),
+            invalidObservationFailure,
+          ),
+        ),
+    )
+}
+
 /**
  * A `DecisionModel` decorator. Interceptors are listed outermost-first, so in
  * `[recording, caching, budgeted]` the recorder observes every answer, the cache
@@ -230,7 +278,13 @@ export const replaying: {
           splitObservations(request.decisions, request.state, lookup),
           (split) =>
             Effect.flatMap(
-              replayObservations.run({ options: request, inner, split, onMissing }),
+              replayObservations.run({
+                options: request,
+                inner,
+                split,
+                onMissing,
+                validate: storedHitCheckOf(request),
+              }),
               (answer) =>
                 Match.value(answer).pipe(
                   Match.tag('RecordingMissing', (refusal) => Effect.fail(replayMissFailure(refusal))),
@@ -257,6 +311,7 @@ export const caching = (into: ObservationStore): Interceptor => (inner) =>
             options: request,
             inner,
             split,
+            validate: storedHitCheckOf(request),
             record: (answers, regionPath) => recordAnswers(into, request.decisions, request.state, answers, regionPath),
           }),
           (answer) =>
