@@ -23,6 +23,7 @@ Failure isolation alone is not a reason. A separate named step already reports w
 A check that is folded into an existing job has its tool arrive with that job's frozen install or the job's one pinned tool fetch. Otherwise it breaks ci-workflows, pull-request-jobs-check-after-a-frozen-install.md (see README, Known overlaps).
 
 Worked examples:
+
 - A commit-message lint job has no machine, trust or time reason, so it is a step in the fast-checks job. Its trigger differs in event type only: it listens for `edited` (PR title edits) and the main workflow's default pull_request types do not (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows). An event-type difference is resolved with `if:` inside the shared workflow, not with a new job (see jev/ci-check-verdict.md, Worked example).
 - A suite that runs only on merge-queue drafts gets its own job (reason 3).
 - A deploy that holds cloud credentials gets its own job (reason 2).

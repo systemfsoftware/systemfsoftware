@@ -2,12 +2,12 @@ Rules for CI that earns its runners: when a check gets its own job, how a run av
 
 ## What it covers
 
-| Rule file | Decides |
-|---|---|
+| Rule file                                                | Decides                                          |
+| -------------------------------------------------------- | ------------------------------------------------ |
 | `a-check-gets-its-own-runner-only-for-a-named-reason.md` | separate job/runner vs a step in an existing job |
-| `superseded-runs-are-cancelled.md` | concurrency and cancel-in-progress |
-| `skipped-work-still-reports-its-required-check.md` | path skips, required checks, merge queues |
-| `every-check-names-the-defect-it-catches.md` | whether a check is worth having |
+| `superseded-runs-are-cancelled.md`                       | concurrency and cancel-in-progress               |
+| `skipped-work-still-reports-its-required-check.md`       | path skips, required checks, merge queues        |
+| `every-check-names-the-defect-it-catches.md`             | whether a check is worth having                  |
 
 `jev/ci-check-verdict.md` is storage, not a rule. It holds a Jev checklist that classifies one existing check as keep, merge or drop, for audits. It is not calibrated yet and is not ready to hand verdicts to reviewers.
 
