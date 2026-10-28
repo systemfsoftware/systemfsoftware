@@ -1,1 +1,1 @@
-How an application's settings reach its code through a `<Feature>Config` in context, and how each environment variable is declared as one described Config in src/config.ts.
+How an application declares each environment variable as one described Config in src/config.ts, keeps secrets redacted, hands a feature's settings to its code through a `<Feature>Config` in context, models a feature that can be switched off, and how tests supply settings without touching the environment or mirroring src/config.ts.

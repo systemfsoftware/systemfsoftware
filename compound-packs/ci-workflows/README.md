@@ -1,1 +1,1 @@
-What each CI lane runs, how a pull-request job is set up and fails, who writes the cache, how long a job may run, and what CI never grades.
+Which event runs which suite, how a pull-request job is set up, how actions and tools are pinned, who writes the cache, how long a job may run, how a failure is reported and reproduced, what the pre-push command runs, and which checks CI never runs.
