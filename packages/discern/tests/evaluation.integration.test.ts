@@ -1,6 +1,7 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Array as Arr, Effect, Schema } from 'effect'
+import { Array as Arr, Effect, Predicate, Schema } from 'effect'
+import type * as DecisionModel from 'effect/ai/DecisionModel'
 import {
   type AnswerFor,
   answering,
@@ -8,6 +9,7 @@ import {
   CountingModel,
   probabilityAnswer,
   probabilityEverywhere,
+  tally,
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
 
@@ -34,6 +36,46 @@ const guardableExamples = [
   { input: 'b.md', expected: false },
   { input: 'c.md', expected: false },
 ]
+
+// The untyped-caller boundary. Calibrate's type refuses an empty tuple — that compile-time
+// refusal is the typed caller's contract, already pinned in test-types. This boundary reads
+// the entry dynamically, so the runtime refusal an untyped caller must meet can be
+// exercised. No check is silenced: the scenarios through this shim fail today and pass
+// only when the runtime guard exists.
+type CalibrateArgs = {
+  readonly schema: typeof Schema.String
+  readonly values: ReadonlyArray<number>
+  readonly pattern: (threshold: number) => Discern.Pattern<string>
+  readonly examples: ReadonlyArray<{ readonly input: string; readonly expected: boolean }>
+}
+type CalibrateOutcome = Effect.Effect<
+  { readonly best: Discern.SweepResult<number>; readonly results: ReadonlyArray<Discern.SweepResult<number>> },
+  Discern.MeasureError,
+  DecisionModel.DecisionModel
+>
+
+const isCalibrateEntry = (
+  candidate: unknown,
+): candidate is (this: undefined, args_0: CalibrateArgs) => CalibrateOutcome => Predicate.isFunction(candidate)
+
+const calibrateUntyped = (
+  values: ReadonlyArray<number>,
+  pattern: (threshold: number) => Discern.Pattern<string>,
+  examples: ReadonlyArray<{ readonly input: string; readonly expected: boolean }>,
+): CalibrateOutcome => {
+  const surface: object = Discern.Eval
+  if (!Predicate.hasProperty(surface, 'calibrate')) {
+    return Effect.die(new Error('Discern.Eval.calibrate is missing from the public surface'))
+  }
+  if (!isCalibrateEntry(surface.calibrate)) {
+    return Effect.die(new Error('Discern.Eval.calibrate is not the entry the boundary expects'))
+  }
+  return Reflect.apply<undefined, [CalibrateArgs], CalibrateOutcome>(
+    surface.calibrate,
+    undefined,
+    [{ schema: Schema.String, values, pattern, examples }],
+  )
+}
 
 const answersWithTheExampleProbability: AnswerFor = (request) =>
   answersFor({ request, answerOf: () => probabilityAnswer(Number(request.state)) })
@@ -186,6 +228,93 @@ Feature('Measuring a question against labelled examples')
           expect(outcome).toMatchObject({
             _tag: 'Failure',
             failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["coverage"\]/) },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Calibrating with no candidate values is refused before any pattern is built',
+      Gherkin.Do.pipe(
+        Given('labelled examples and a pattern builder that counts every value it is given')(
+          'setup',
+          () => Effect.succeed({ examples: labelledExamples, built: tally() }),
+        ),
+        When('an empty list of thresholds is calibrated')(
+          'outcome',
+          (s) =>
+            Effect.gen(function*() {
+              const model = yield* CountingModel
+              return yield* Effect.flip(
+                withProvider(
+                  calibrateUntyped(
+                    [],
+                    (threshold) => {
+                      s.setup.built.bump()
+                      return sweepRisk.atLeast(threshold)
+                    },
+                    s.setup.examples,
+                  ),
+                  model.model,
+                ),
+              )
+            }),
+        ),
+        Then('the calibration is refused as having no values and no pattern was built')((s, expect) =>
+          Effect.gen(function*() {
+            yield* expect(s.outcome).toMatchObject({ _tag: 'CalibrationValuesRefused' })
+            yield* expect(s.setup.built.count()).toBe(0)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Calibrating with no candidate values never asks the model',
+      Gherkin.Do.pipe(
+        Given('labelled examples')('examples', () => Effect.succeed(labelledExamples)),
+        When('an empty list of thresholds is calibrated')(
+          'asked',
+          (s) =>
+            Effect.gen(function*() {
+              const model = yield* CountingModel
+              yield* Effect.exit(
+                withProvider(
+                  calibrateUntyped([], (threshold) => sweepRisk.atLeast(threshold), s.examples),
+                  model.model,
+                ),
+              )
+              return model.calls()
+            }),
+        ),
+        Then('the model was asked nothing')(({ asked }, expect) => expect(asked).toBe(0)),
+      ),
+    )
+
+    scenario(
+      'Calibrating with one candidate value returns it as the best',
+      Gherkin.Do.pipe(
+        Given('labelled examples')('examples', () => Effect.succeed(labelledExamples)),
+        When('a single threshold is calibrated')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              const model = yield* CountingModel
+              return yield* withProvider(
+                Discern.Eval.calibrate({
+                  schema: Schema.String,
+                  values: [0.7],
+                  pattern: (threshold) => sweepRisk.atLeast(threshold),
+                  examples: s.examples,
+                }),
+                model.model,
+              )
+            }),
+        ),
+        Then('that threshold is the best and the only result')(({ result }, expect) =>
+          expect({ bestValue: result.best.value, resultCount: result.results.length }).toEqual({
+            bestValue: 0.7,
+            resultCount: 1,
           })
         ),
       ),
