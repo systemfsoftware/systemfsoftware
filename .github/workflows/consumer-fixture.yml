@@ -75,52 +75,73 @@ jobs:
           [ "$RESULT" = success ] && jq -e '
             any(.[]; .name == "checks · docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success") and
             any(.[]; .name == "checks · docs-only / docs · the tarball packages installed" and .conclusion == "success")' <<< "$jobs"
-  checks-single-job:
-    name: checks · single-job
+  # Both single-job calls run the real planner (the default `timings`); the fixture's `answer` package has a test script.
+  checks-single-job-docs-only:
+    name: checks · single-job docs-only
+    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/reusable-checks.yml
     with:
       working-directory: .github/consumer-fixture
       record: fixture-test-timings
       single-job: true
-      # The fixture's `answer` package has tests, so its real plan is not empty; a planner that plans nothing stands in.
-      timings: node no-tests.mjs
+      docs-globs: "**"
       lanes: >-
         [{"id": "lint", "name": "lint · the tarball packages installed", "timeout-minutes": 60,
-          "run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
-  checks-single-job-one-job:
-    name: checks · single-job ran as two jobs
-    needs: checks-single-job
-    if: ${{ !cancelled() }}
+          "docs-run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
+  checks-single-job-docs-only-passed:
+    name: checks · single-job docs-only plans [] and passes
+    needs: checks-single-job-docs-only
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
-      RESULT: ${{ needs.checks-single-job.result }}
-      SOURCE: ${{ needs.checks-single-job.outputs.lane-source }}
+      RESULT: ${{ needs.checks-single-job-docs-only.result }}
+      SOURCE: ${{ needs.checks-single-job-docs-only.outputs.lane-source }}
+      JOBS: ${{ needs.checks-single-job-docs-only.outputs.test-jobs }}
     steps:
-      - name: Read the single-job run's jobs
+      - name: Read the run's jobs
         run: |
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name | startswith("checks · single-job / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]' > "$RUNNER_TEMP/jobs.json"
-          echo "checks=$RESULT lane-source=$SOURCE jobs=$(jq -c '[.[] | {name, conclusion}]' "$RUNNER_TEMP/jobs.json")"
-      - name: The reusable workflow passed
-        run: '[ "$RESULT" = success ]'
-      - name: The built-in lanes ran
-        run: '[ "$SOURCE" = built-in ]'
-      - name: The producer job and the gate job both passed
+            --jq '[.jobs[] | select(.name | startswith("checks · single-job docs-only / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]' > "$RUNNER_TEMP/jobs.json"
+          echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS jobs=$(jq -c '[.[] | {name, conclusion}]' "$RUNNER_TEMP/jobs.json")"
+      - name: The workflow passed, built-in, with the plan []
+        run: '[ "$RESULT" = success ] && [ "$SOURCE" = built-in ] && [ "$JOBS" = "[]" ]'
+      - name: One producer job and one gate job passed; nothing else ran
         run: |
           jq -e '
-            ([.[] | select(.name == "checks · single-job / sfs-deps · tarballs the lockfile names" and .conclusion == "success")] | length == 1) and
-            ([.[] | select(.name == "checks · single-job / the gate" and .conclusion == "success")] | length == 1)' "$RUNNER_TEMP/jobs.json"
-      - name: Classify, plan, lanes, test and timings were skipped
-        run: |
-          jq -e '[.[] | select(.name != "checks · single-job / the gate" and (.name | startswith("checks · single-job / sfs-deps") | not) and .conclusion != "skipped")] | length == 0' "$RUNNER_TEMP/jobs.json"
-      - name: The lane and the verdict ran as steps of the gate job
+            ([.[] | select(.name == "checks · single-job docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.name == "checks · single-job docs-only / the gate" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.conclusion != "success" and .conclusion != "skipped")] | length == 0)' "$RUNNER_TEMP/jobs.json"
+      - name: The docs lane and the verdict ran as steps of the gate job
         run: |
           jq -e '
             any(.[].steps[]; .name == "lint · the tarball packages installed" and .conclusion == "success") and
             any(.[].steps[]; .name == "No test jobs are planned" and .conclusion == "success") and
             any(.[].steps[]; .name == "Every lane passed" and .conclusion == "success")' "$RUNNER_TEMP/jobs.json"
+  # What a diff outside the docs set plans: the real planner over the fixture, with no record and no cache. The `answer`
+  # package has a test script, so the plan is not [], and the single-job gate step fails on exactly that.
+  checks-single-job-plans-tests:
+    name: checks · single-job code diff plans tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/sfs-tools
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.sha }}
+      - name: The real planner plans the answer package, and the single-job gate rejects that plan
+        working-directory: .github/consumer-fixture
+        run: |
+          set -o pipefail
+          test-timings plan --target 300 --max-jobs 12 --max-seconds 1800 2>&1 | tee "$RUNNER_TEMP/plan.log"
+          planned=$(sed -n 's/^jobs=//p' "$GITHUB_OUTPUT" | tail -n 1)
+          echo "planned=$planned"
+          jq -e 'any(.[]; .packages | index("answer"))' <<< "$planned"
+          ! jq -e 'type == "array" and length == 0' <<< "$planned" > /dev/null
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'

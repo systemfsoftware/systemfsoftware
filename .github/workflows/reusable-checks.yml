@@ -15,7 +15,7 @@ on:
         value: ${{ jobs.plan.outputs.lane-source || jobs.check.outputs.lane-source }}
       test-jobs:
         description: JSON list of the test jobs the plan scheduled, each with its `packages`; `[]` when every package was skipped
-        value: ${{ jobs.plan.outputs.jobs }}
+        value: ${{ jobs.plan.outputs.jobs || jobs.check.outputs.test-jobs }}
     inputs:
       working-directory:
         description: The pnpm workspace root, relative to the repository root. A non-root value checks out only that directory and always runs the built-in lanes
@@ -156,8 +156,8 @@ on:
           sizes the job, its `node-options` apply to it) and `gate-lane` is ignored. The `.sfs-deps` producer stays its
           own job, since it alone holds the private-repo fetch token. The plan phase (the hook's, then the planner) runs
           in the job, and the job fails if it schedules any test job, so tests are never dropped; the timing record is
-          not fetched or written. A caller sets it per event (true on a pull request, say) and keeps the full fan-out
-          for runs that plan tests
+          read for the plan but not written, and a docs-only diff plans `[]` without running the planner. A caller sets it
+          per event (true on a pull request, say) and keeps the full fan-out for runs that plan tests
         required: false
         type: boolean
         default: false
@@ -700,6 +700,7 @@ jobs:
     timeout-minutes: ${{ inputs.single-job && fromJSON(inputs.lanes)[0].timeout-minutes || inputs.gate-timeout-minutes }}
     outputs:
       lane-source: ${{ steps.single-mode.outputs.source }}
+      test-jobs: ${{ steps.single-plan.outputs.jobs }}
     steps:
       # Single-job mode. The steps run in the order the jobs ran, on one checkout. They stay in this job so there is one
       # job id and one check run named `gate-name`, which a ruleset or Mergify may require. The sfs-deps producer is
@@ -789,9 +790,8 @@ jobs:
             DRY_RUN="$PNPM exec turbo run test --dry=json"
           fi
           printf 'source=%s\ndry-run=%s\n' "$source" "$DRY_RUN" >> "$GITHUB_OUTPUT"
-      # The plan phase, as the plan job runs it (the hook's plan steps, the built-in plan, then the planner), so checks a
-      # hook places in the plan phase still run. No timing record is fetched: whether any test job is planned depends
-      # on the packages with a test script and the dry run's cache hits, not on the record.
+      # The plan phase, as the plan job runs it (the hook's plan steps, the built-in plan, the record and recent passes,
+      # then the planner), so checks a hook places in the plan phase still run and the plan skips what the plan job skips.
       - if: inputs.single-job && steps.single-mode.outputs.source == 'built-in' && inputs.timings == 'test-timings'
         uses: $/.github/actions/sfs-tools
         with:
@@ -810,6 +810,42 @@ jobs:
           lane: plan
           working-directory: ${{ inputs.working-directory }}
           install: ${{ steps.single-mode.outputs.dry-run != '' }}
+      # A docs-only diff runs no test job (the test job's own `scope != 'docs-only'`), so its plan is not read: the
+      # record, the passes and the planner are skipped there and the plan is [].
+      - name: Latest timing record, main's first
+        if: inputs.single-job && steps.single-diff.outputs.scope != 'docs-only'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECORD: ${{ inputs.record }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          mkdir -p .timings/previous
+          if ! { gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" > .timings/listing.json &&
+            id=$($TIMINGS latest --listing .timings/listing.json --branch "$BRANCH"); }; then
+            echo "::warning::listing the $RECORD artifacts failed; planning with no previous record"
+            id=
+          fi
+          if [ -n "$id" ] && ! { gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip &&
+            unzip -o -q .timings/previous.zip -d .timings/previous; }; then
+            echo "::warning::fetching record artifact $id failed; planning with no previous record"
+            rm -rf .timings/previous && mkdir -p .timings/previous
+          fi
+          echo "record artifact: ${id:-none}"
+          ls .timings/previous
+      - name: Every ref's recent passes
+        if: inputs.single-job && steps.single-diff.outputs.scope != 'docs-only'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .timings/passes
+          [ -f .timings/listing.json ] && ids=$($TIMINGS recent --listing .timings/listing.json --count 30) || ids=
+          for id in $ids; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > ".timings/passes/$id.zip" &&
+              unzip -o -q ".timings/passes/$id.zip" -d ".timings/passes/$id" || echo "::warning::fetching record artifact $id failed"
+            rm -f ".timings/passes/$id.zip"
+          done
       - name: Which test tasks the cache already holds
         if: inputs.single-job && steps.single-mode.outputs.dry-run != ''
         working-directory: ${{ inputs.working-directory }}
@@ -825,13 +861,21 @@ jobs:
         name: Plan the test jobs
         if: inputs.single-job
         working-directory: ${{ inputs.working-directory }}
+        env:
+          SCOPE: ${{ steps.single-diff.outputs.scope }}
         run: |
           mkdir -p .timings/previous .timings/passes "$RUNNER_TEMP/sfs-logs"
+          if [ "$SCOPE" = docs-only ]; then
+            echo 'docs-only: no test job runs, so the plan is []'
+            echo 'jobs=[]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           set -o pipefail
           dry=()
           if [ -f .timings/dry.json ]; then dry=(--dry .timings/dry.json); fi
           $TIMINGS plan "${dry[@]}" --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
-      # The test and timings jobs are skipped in this mode, so a plan that schedules any test job must fail here.
+      # The test and timings jobs are skipped in this mode, so a plan that schedules any test job must fail here. A
+      # docs-only diff plans [] above, so it passes as the multi-job gate does.
       - id: single-planned
         name: No test jobs are planned
         if: inputs.single-job
