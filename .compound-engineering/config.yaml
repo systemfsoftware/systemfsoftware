@@ -9,4 +9,5 @@ packs:
   - source: compound-packs/design-system
   - source: compound-packs/screen-content
   - source: compound-packs/ci-workflows
+  - source: compound-packs/ci-compound-pack
   - source: compound-packs/public-repository
