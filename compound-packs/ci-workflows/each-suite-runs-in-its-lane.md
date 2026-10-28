@@ -1,5 +1,5 @@
 ---
-title: A pull request runs only lint and typecheck, a merge-queue batch runs the test suites, a push to main runs no checks, and the full matrix and mutation run nightly on main
+title: Pull requests run lint and typecheck, merge queues run tests, main runs no checks, and nightly runs matrix and mutation
 applies_when:
   - adding or changing a workflow trigger, or what a job runs
   - adding a test suite, a VM test or a machine-image build to CI, or moving one to another event
@@ -8,18 +8,26 @@ applies_when:
 tags: [ci, lanes, triggers, merge-queue, nightly, mutation]
 ---
 
-Each kind of run has one lane, and a job runs only its lane's work:
+Each CI run belongs to one lane. A job runs only its lane's work:
 
-- A pull request's own run (every push to its branch) runs lint, of code, commit messages, changesets and the pull-request title, and typecheck. Nothing else.
-- A merge-queue batch run (a `merge_group` event, or the batch pull request a queue tool opens) runs lint, typecheck and the test suites: unit, integration, browser, Storybook and property tests.
-- A push to main runs no check and no test suite. Its jobs write the cache and release or deploy.
-- The full test matrix and mutation testing run on a nightly schedule on main and on a manual dispatch on main.
-- A check that must run on a different event than the job it would join gets its own job; a difference only in event type, such as a pull request's `edited` activity, is resolved with an `if:` inside the shared job, not a new job (a-check-gets-its-own-runner-only-for-a-named-reason.md).
-- A VM test or a machine-image build never runs in a job that a pull request's own run or a merge-queue batch reaches, whether directly, through `needs:`, or through a called reusable workflow.
+- **Pull request**: lint code, commit messages, changesets, and the PR title; run typecheck. Nothing else.
+- **Merge queue** (`merge_group` or queue batch PR): lint, typecheck, and test suites (unit, integration, browser, Storybook, property tests).
+- **Push to main**: no checks and no tests. Write cache, release, or deploy only.
+- **Nightly schedule or manual dispatch on main**: full test matrix and mutation testing.
+- **VM tests and machine-image builds**: never reachable from a pull request or merge-queue run, whether directly, through `needs:`, or through a called workflow.
+- **Job splitting**: create a separate job only when a check runs on a different event. Use an in-job `if:` when only the event activity type differs, such as `pull_request` `edited` (see `a-check-gets-its-own-runner-only-for-a-named-reason.md`).
 
-Decision test: for each job the diff adds or changes, list every event that reaches it, directly, through `needs:` or through a called reusable workflow, and list what it runs. The diff fails when a check on a different event is folded into a job its event does not reach, or when a job is split out only because of an event type that an `if:` could select, or when a pull request's own run reaches anything but lint and typecheck, when a test suite runs on a pull request's own run or on a push to main, when the full matrix or mutation runs on any event but the nightly schedule or a dispatch on main, or when a VM test or image build is reachable from a pull request or a queue batch.
+Decision test: trace every trigger event that reaches the added or changed job directly, via `needs:`, or via called workflows. Fail the diff if:
 
-Defect prevented: every push to a pull request waits for, and pays for, suites that judge the merged result rather than the draft. A push to main repeats the checks the queue already ran on the exact tree that landed. A VM test or image build in the pull request's path turns a minutes-long answer into a much longer one.
+- A pull request run executes anything other than lint and typecheck.
+- A test suite runs on a pull request run or on a push to main.
+- A push to main executes any check or test suite.
+- Matrix or mutation tests run on any event other than a nightly schedule or a manual dispatch on main.
+- A VM test or machine-image build is reachable from a pull request or merge-queue run.
+- A job is split solely for an event activity type that an in-job `if:` can select.
+- A check is placed in a job whose event trigger does not reach it.
+
+Defect prevented: pull requests wait and pay for test suites that evaluate the merged result rather than the draft. Pushes to main duplicate checks already run by the merge queue. VM tests or image builds in the pull request path delay feedback.
 
 ```yaml
 # WRONG: the pull request's own run reaches the browser suite and a VM test

@@ -1,5 +1,5 @@
 ---
-title: A failing check fails its job under its own name, every other check still reports, and the job says how to rerun it
+title: A failing check fails its job under its own name, other checks still report, and the job prints a rerun command
 applies_when:
   - adding or changing a step or script that runs a check
   - adding continue-on-error, || true, or an if: to a step that runs a check
@@ -10,19 +10,22 @@ applies_when:
 tags: [ci, failures, continue-on-error, warnings, reproduce, flaky]
 ---
 
-A verdict step is a step whose outcome is a check's result: lint, typecheck, a test, a build, a guard.
+A check step (lint, typecheck, test, build, guard) must fail its job on failure. Do not use `continue-on-error: true`, `|| true`, an `if:` condition, or exit-code rewrites to mask failures. Do not add checks that only warn, annotate, or report. A check fails the job or stays out of CI. Fowler: "Once you start ignoring a regression test failure, then that test is useless" (https://martinfowler.com/articles/nonDeterminism.html).
 
-A verdict step's failure fails its job. No verdict step carries `continue-on-error: true`, `|| true`, an `if:` or an exit-code rewrite that lets its failure pass. A check that only warns, annotates or reports without ever failing a job is not added; a check fails the job or is not in CI. That includes a rule or tool set to warn by its own severity settings, a report-only mode, and output only as an annotation or comment. Fowler: "Once you start ignoring a regression test failure, then that test is useless" (https://martinfowler.com/articles/nonDeterminism.html).
+Run independent checks in separate named steps. Do not chain independent checks with `&&`. Use `&&` only between a producer and the consumer reading its output. In a script that runs multiple checks, execute every check and fail at the end if any failed.
 
-Independent checks are separate named steps or tasks, never joined with `&&`. A script that runs several checks runs every one and fails at the end if any failed. `&&` joins only a producer to the consumer that reads its output.
+Investigate a check that passes on rerun before calling it flaky. Runner faults (setup failures, spot reclaims, out-of-memory kills) do not count against the check. A seeded or property test failure is a finding until disproven by replay or shrinking: Fowler, nonDeterminism.html, footnote 3: "Tests seeded from a randomizer can help hunt out edge cases ... quite different from automated regression tests". Quarantine flaky regression tests out of the required presubmit set until fixed: Google requires "only fast, reliable ones" on presubmit (https://abseil.io/resources/swe-book/html/ch23.html); Fowler: "Place any non-deterministic test in a quarantined area. (But fix quarantined tests quickly.)". Osmani: flaky tests "become systemic blockers when forty agents hit the same flaky test simultaneously" (https://addyosmani.com/blog/code-agent-orchestra/).
 
-A failure that passes on rerun is read before it is called flaky. A failure in a setup step, a spot reclaim or an out-of-memory kill is a runner fault and does not count against the check. A seeded or property test that fails on one seed is a finding until its shrunk input or replay seed shows otherwise: Fowler, nonDeterminism.html, footnote 3: "Tests seeded from a randomizer can help hunt out edge cases ... quite different from automated regression tests". A regression test that is truly flaky leaves the required set until fixed: Google, "only fast, reliable ones" on presubmit (https://abseil.io/resources/swe-book/html/ch23.html); Fowler, "Place any non-deterministic test in a quarantined area. (But fix quarantined tests quickly.)". Osmani: flaky tests "become systemic blockers when forty agents hit the same flaky test simultaneously" (https://addyosmani.com/blog/code-agent-orchestra/).
+Every failing, timed-out, or cancelled job must print the name of the failing check and a command to rerun it from the repository root. A link to logs is not a rerun command. A suite that runs only on main reproduces as a workflow dispatch on main.
 
-A failing job, including one that times out or is cancelled, ends by writing which check failed and a command that reruns that check from the workspace root. A link to the log is never the reproduce command. A suite that runs only on main reproduces as a dispatch of its workflow on main.
+Decision test: trace the diff's check steps as if the first check failed. Reject the diff if:
 
-Decision test: in the diff, make the first check in each job it touches fail. The diff fails when the job still goes green, when a later independent check no longer runs or no longer reports under its own name, when the job's output does not name the failed check and a command that reruns it, or when the diff adds a check that cannot fail a job, sets a rule to warn, or leaves a truly flaky check in the required set.
+- A failed check leaves the job green, swallows its exit code, or runs in warning-only mode.
+- Independent checks are chained with `&&`, skipping later checks when an earlier check fails.
+- A failing job does not print the failing check's name and its root rerun command.
+- A flaky regression test remains in the required check set.
 
-Defect prevented: a swallowed failure reports health the lane does not have. A chain stops at the first failure, so later checks report nothing and the platform names the launcher instead of the check. A warning-only check is ignored, so it costs runner time and catches nothing. A red job without a rerun command sends the reader into the logs to guess.
+Defect prevented: swallowed failures report false health. `&&` chains abort early, hiding whether subsequent checks pass and obscuring which check broke. Warning-only checks waste CI minutes because developers ignore them. Red jobs without rerun commands force developers to dig through logs to reproduce failures locally.
 
 ```yaml
 # WRONG
@@ -45,9 +48,9 @@ Defect prevented: a swallowed failure reports health the lane does not have. A c
       | "\(.key) did not pass. Rerun from the repository root: pnpm \(.key)"' >> "$GITHUB_STEP_SUMMARY"
 ```
 
-```json
-// RIGHT: one script that runs every check and fails if any failed
-"check": "s=0; pnpm format:check || s=1; pnpm lint || s=1; pnpm typecheck || s=1; exit $s"
+```sh
+# RIGHT: one script that runs every check and fails if any failed
+s=0; pnpm format:check || s=1; pnpm lint || s=1; pnpm typecheck || s=1; exit $s
 ```
 
 Source: GitHub, "Workflow syntax", `jobs.<job_id>.steps[*].continue-on-error`: "Prevents a job from failing when a step fails. Set to `true` to allow a job to pass when this step fails" (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax). Sadowski et al., "Lessons from Building Static Analysis Tools at Google", Communications of the ACM 61(4), 2018: the Clang team enabled a new diagnostic "as a compiler error (not a warning, which the Clang team found Google developers ignored) to break the build", and "When possible, checks are enabled as compiler errors" (https://research.google/pubs/lessons-from-building-static-analysis-tools-at-google/).

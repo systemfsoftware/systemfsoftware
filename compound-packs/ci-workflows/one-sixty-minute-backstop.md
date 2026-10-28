@@ -1,5 +1,5 @@
 ---
-title: Every job carries the one 60-minute timeout, and nothing kills work sooner
+title: Every job carries timeout-minutes: 60 with no earlier kill
 applies_when:
   - adding a job or setting a job's or a step's timeout-minutes
   - wrapping a command in a wall-clock limit, or passing a tool a time cap
@@ -7,15 +7,15 @@ applies_when:
 tags: [ci, timeout, backstop]
 ---
 
-Every job with `runs-on` sets `timeout-minutes: 60` as a literal, never another value and never an input or expression.
+Decision test: Read every job, step, wrapper, tool flag, and `with:` block in the diff. The diff fails if:
 
-No step `timeout-minutes`, command wrapper (`timeout 600 …`), tool flag or tool setting kills work below 60 minutes of wall clock. A per-test timeout inside a test framework is not a wall-clock kill of the job and is out of scope.
+- A job with `runs-on` lacks literal `timeout-minutes: 60`, uses another value, or reads the value from an expression or input.
+- A step sets `timeout-minutes`, wraps a command in a wall-clock limit (`timeout 600 …`), or sets a tool timeout below 60 minutes.
+- A job calling a reusable workflow passes a timeout or time cap through `with:` (top-level or nested); called workflows set the backstop in their own jobs.
 
-A job that calls a reusable workflow passes no timeout or time cap through `with:`, at the top level or inside a structured input; the called workflow's jobs carry the backstop themselves.
+Per-test timeouts inside a test framework are out of scope.
 
-Decision test: for each job, step, wrapper, tool invocation and `with:` block the diff adds or changes, read every timeout and time cap. The diff fails when a job with `runs-on` has no `timeout-minutes`, has a value other than the literal 60, or takes it from an input, or when anything else sets a wall-clock kill below 60 minutes or passes one to a called workflow.
-
-Defect prevented: a job with no timeout holds a stuck runner for six hours. A cap below the job's real run time kills work that was progressing: the minutes already spent are lost, the commit gets no verdict, and the real cause hides behind "exceeded the maximum execution time". When jobs carry many different values, a timeout no longer tells a reader whether the job was stuck or slow; one value means a timeout always says "stuck".
+Defect prevented: A job without a timeout holds a stuck runner for six hours. Caps below 60 minutes kill progressing work, waste runner minutes, leave commits without verdicts, and hide causes behind "exceeded the maximum execution time". A single 60-minute backstop means any timeout indicates a stuck job, not a slow one.
 
 ```yaml
 # WRONG

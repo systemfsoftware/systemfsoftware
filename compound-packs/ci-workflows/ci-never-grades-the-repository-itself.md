@@ -1,5 +1,5 @@
 ---
-title: A CI check names the defect in what the repository ships that it catches, catches something no other check catches, and never grades the repository's own docs, plans, layout or changes
+title: CI checks catch unique defects in shipped artifacts and never grade the repository itself
 applies_when:
   - adding a CI job, task, script, hook or test, or changing what one checks
   - adding an LLM judge, calibration data or a recorded judge output
@@ -9,17 +9,23 @@ applies_when:
 tags: [ci, self-grading, judges, evidence, checks, check-value, duplicates]
 ---
 
-Every check CI runs fails on a defect that a user or consumer of something the repository ships would meet: a package, an app, a service, a tool the repository publishes. A job or step the change adds or moves carries a YAML comment naming that kind of defect; a tool name or "validate" is not a defect. Assuming a check is good because it exists is the failure this prevents. By analogy, Osmani on code modules: "You review that code ... If you can't explain what a module does, it doesn't go in." (https://addyosmani.com/blog/agentic-engineering/).
+Every CI check must catch a defect that a user or consumer of a shipped artifact would encounter: a package, app, service, or published tool. Each added or moved CI job or step must carry a YAML comment naming that defect; a tool name or "validate" is not a defect. As Addy Osmani writes: "You review that code ... If you can't explain what a module does, it doesn't go in." (https://addyosmani.com/blog/agentic-engineering/).
 
-No other check catches the same defect on the same files: "Reduce the tool set until each tool has one unambiguous purpose" (https://github.com/muratcankoylan/agent-skills-for-context-engineering, skills/tool-design/SKILL.md:31, written about agent tools and used here by analogy). A workflow that runs on every push or pull request but reports no verdict and ships no artifact is not a check: name what consumes its output, or remove the trigger.
+No check may duplicate another check catching the same defect on the same files: "Reduce the tool set until each tool has one unambiguous purpose" (https://github.com/muratcankoylan/agent-skills-for-context-engineering, skills/tool-design/SKILL.md:31). Workflows running on every push or pull request must report a verdict or ship an artifact; otherwise name what consumes their output or remove the trigger.
 
-No CI job, task, script, hook or test has the repository's own docs, plans, rule packs, file layout, CI timings or CI cost as its subject. A check of a tool the repository ships, run against a planted violation, tests that product and is allowed.
+CI checks must never grade the repository's own docs, plans, rule packs, file layout, CI timings, or CI cost. Testing a tool the repository ships against a planted violation tests that product and is permitted.
 
-No LLM judge, calibration set or recorded judge output is added to grade the repository's own code, layout or changes; that judgment belongs to review. No screenshot, run log or judge verdict is committed as proof that a change works; proof goes in the pull request.
+Do not commit LLM judges, calibration sets, or recorded judge outputs to grade the repository's own code, layout, or changes. That judgment belongs in review. Do not commit screenshots, run logs, or judge verdicts as proof that a change works; put proof in the pull request description.
 
-Decision test: for each check the diff adds or changes, name one defect a user or consumer of a shipped artifact would meet that makes this check fail. The diff fails when the check's job or step has no comment naming that defect, when another check already catches the same defect on the same files, when a workflow on every push or pull request has no verdict and no consumer, when no such defect can be named because the check's subject is the repository's own docs, plans, packs, layout, timings or changes, or when it commits a judge, a calibration set or a proof file.
+Decision test: Reject the diff if:
 
-Defect prevented: a check that duplicates another costs a runner on every run for nothing. A check that grades the repository itself spends runner time on every run and catches nothing a user would meet. When it fails, the failure is noise that teaches people to ignore red checks. Committed proof goes stale with the next change, yet it still reads as current.
+1. An added or changed CI job or step lacks a YAML comment naming the defect it catches in shipped artifacts.
+2. Another check already catches the same defect on the same files.
+3. A push or pull request workflow reports no verdict, produces no artifact, and names no consumer.
+4. The check targets the repository's own docs, plans, rule packs, layout, timings, or costs.
+5. The diff commits an LLM judge, calibration data, judge verdict, screenshot, or run log.
+
+Defect prevented: Duplicate checks waste runner time without expanding coverage. Checks that grade the repository itself consume runner minutes on issues end users never face, generating noisy failures that train developers to ignore red checks. Committed proof files go stale with the next change while misleading readers as current.
 
 ```yaml
 # WRONG: grades the repository's own documents
@@ -33,6 +39,6 @@ Defect prevented: a check that duplicates another costs a runner on every run fo
   run: pnpm --filter ./packages/lint-rules test
 ```
 
-Source: Sadowski et al., "Lessons from Building Static Analysis Tools at Google", Communications of the ACM 61(4), 2018: "If a tool wastes developer time with false positives and low-priority issues, developers will lose faith and ignore results" (https://research.google/pubs/lessons-from-building-static-analysis-tools-at-google/). Keeping judgment of the repository's own work in review, not in CI, is this pack's ruling. To audit a check that already exists, use jev/ci-check-verdict.md, which is storage, not a rule.
+Source: Sadowski et al., "Lessons from Building Static Analysis Tools at Google", Communications of the ACM 61(4), 2018: "If a tool wastes developer time with false positives and low-priority issues, developers will lose faith and ignore results" (https://research.google/pubs/lessons-from-building-static-analysis-tools-at-google/).
 
 Gate: judge

@@ -1,5 +1,5 @@
 ---
-title: The command run before pushing invokes a CI gate's own script and differs from it only in worker counts
+title: Pre-push commands invoke the CI gate script and differ only in worker count
 applies_when:
   - changing a root check script or the pre-push hook
   - changing the command contributor or agent instructions name to run before pushing
@@ -7,26 +7,30 @@ applies_when:
 tags: [ci, local-gate, pre-push, scripts]
 ---
 
-The command that contributor and agent instructions name to run before pushing, and every check the pre-push hook runs, invokes by name the script a CI gate job runs. It never re-lists that script's tasks in a second definition.
+Pre-push commands and hooks invoke the CI gate script directly by name. They never define a second list of tasks.
 
-It differs from the CI job only in worker count and task-runner concurrency, never in tasks, depth (property-test runs, seeds), filters or environment switches.
+A local gate run differs from a CI gate run only in worker count or task concurrency. Local runs never alter tasks, test depth (such as property-test runs or seeds), filters, or environment switches.
 
-Whether the CI variable is set never changes which checks or plugins run, their depth or their filters. Only host reporting (annotations, the step summary) is CI-only.
+The `CI` environment variable must never change which checks or plugins run, their depth, or their filters. Only host reporting (annotations and step summaries) may depend on `CI`.
 
-Decision test: read the pre-push command, the pre-push hook and the CI gate job the diff touches. The diff fails when the local command lists tasks instead of calling the gate's script, when it sets anything other than a worker or concurrency knob, or when any check, plugin, depth or filter reads the CI variable.
+Decision test: inspect the pre-push command, pre-push hook, and CI gate jobs touched in the diff. Fail the diff if:
 
-Defect prevented: two definitions of the gate drift apart. A change passes locally and fails in CI, and the author finds the difference one round trip later. The reverse also happens: a check that is lighter or skipped in CI lets a defect through that the local run would have caught.
+- A local command defines its own list of tasks instead of calling the CI gate script.
+- A local command changes anything other than concurrency or worker count.
+- Any check, plugin, test depth, or filter reads the `CI` environment variable.
 
-```json
-// WRONG: CI runs `pnpm check`; the pre-push command re-lists tasks, drops typecheck and lowers the property-test depth
-"check": "turbo run lint typecheck test",
-"prepush": "PROPERTY_RUNS=10 turbo run lint test"
+Defect prevented: gate drift. Discrepancies between local and CI gate definitions cause changes to pass locally but fail in CI, or cause lighter CI checks to let defects pass through.
+
+```yaml
+# WRONG: CI runs `pnpm check`; the pre-push command re-lists tasks, drops typecheck and lowers the property-test depth
+check: "turbo run lint typecheck test"
+prepush: "PROPERTY_RUNS=10 turbo run lint test"
 ```
 
-```json
-// RIGHT: CI runs `pnpm check`; the pre-push command calls the same script with fewer workers
-"check": "s=0; pnpm lint || s=1; pnpm typecheck || s=1; pnpm test || s=1; exit $s",
-"prepush": "TURBO_CONCURRENCY=50% pnpm check"
+```yaml
+# RIGHT: CI runs `pnpm check`; the pre-push command calls the same script with fewer workers
+check: "s=0; pnpm lint || s=1; pnpm typecheck || s=1; pnpm test || s=1; exit $s"
+prepush: "TURBO_CONCURRENCY=50% pnpm check"
 ```
 
 Source: Martin Fowler, "Continuous Integration" (2024): "anyone should be able to bring in a clean machine, check the sources out of the repository, issue a single command, and have a running system on their own environment", and on the local build before a push: "there is a reason that 'works on my machine' is a well-known phrase in programmer circles" (https://martinfowler.com/articles/continuousIntegration.html).

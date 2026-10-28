@@ -1,5 +1,5 @@
 ---
-title: Every action and reusable workflow from another repository is pinned to a full commit SHA, and every tool CI fetches is pinned to an exact version
+title: Pin external actions and workflows to full commit SHAs, and CI tools to exact versions
 applies_when:
   - adding or bumping a uses: reference to an action or a reusable workflow
   - adding a step that installs or fetches a tool (a setup action, dlx, npx, a download)
@@ -7,13 +7,18 @@ applies_when:
 tags: [ci, pinning, supply-chain, actions, versions]
 ---
 
-Every `uses:` reference to an action or reusable workflow outside this repository names a full 40-character commit SHA, with a comment beside it naming the release the SHA is. A repository that locks its workflow dependencies with GitHub's workflow dependency lockfile meets this through the lockfile. An action inside this repository (`./.github/actions/...`) needs no pin.
+Pin every `uses:` reference to an external action or reusable workflow to a full 40-character commit SHA, with a comment naming the release. Local actions (`./.github/actions/...`) need no pin. Repositories using GitHub's workflow dependency lockfile meet this through the lockfile.
 
-Every tool a job installs or fetches names an exact version: a setup action's version input is set to a full version, and a `dlx`, `npx` or download names one too.
+Pin every tool installed or fetched in CI (`setup-*` actions, `dlx`, `npx`, downloads) to an exact version.
 
-Decision test: for each `uses:` and each tool fetch the diff adds or changes, read the reference. The diff fails on a tag (`@v6`, `@v6.1.0`), a branch, `@latest`, a version range, or a setup action whose version input is missing or a range.
+Decision test: For each `uses:` reference and tool fetch added or modified in the diff, reject:
 
-Defect prevented: a moved tag or a new upstream release changes what CI runs with no change in this repository. An unrelated pull request turns red, or a compromised tag runs someone else's code with the job's token and secrets.
+- A tag (`@v6`, `@v6.1.0`), branch, or `@latest`.
+- A commit SHA missing a release comment.
+- A setup action missing a version input or using a version range.
+- A `dlx`, `npx`, or download command using `@latest` or a version range.
+
+Defect prevented: A moved tag or new upstream release changes what CI runs with no change in this repository. An unrelated pull request turns red, or a compromised tag runs someone else's code with the job's token and secrets.
 
 ```yaml
 # WRONG

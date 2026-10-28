@@ -1,5 +1,18 @@
-Which event runs which suite, when a check gets its own job, how a pull-request job is set up, how actions and tools are pinned, who writes the cache, how a run is cancelled or skipped without hiding a required check, how long a job may run, how a failure is reported and reproduced, what the pre-push command runs, and which checks CI never runs.
+# CI Workflows
 
-`jev/ci-check-verdict.md` is storage, not a rule; discovery does not read a subdirectory as a rule. It holds a Jev checklist that classifies one existing check as keep, merge or drop, for audits. It is not calibrated yet and is not ready to hand verdicts to reviewers.
+This pack covers:
 
-Where a rule names a queue tool's branch prefix, it is an example for a repository that queues through draft pull requests; a repository with a GitHub merge queue uses the `merge_group` event instead.
+- Which event runs which suite.
+- When a check gets its own job.
+- Pull request job setup.
+- Action and tool pinning.
+- Cache write permissions.
+- Run cancellation and skipping without hiding required checks.
+- Job timeouts.
+- Failure reporting and reproduction.
+- Pre-push command scope.
+- Checks CI never runs.
+
+`jev/ci-check-verdict.md` is storage, not a rule. Discovery ignores subdirectories. It holds an audit checklist to classify existing checks as keep, merge, or drop. It is not calibrated to supply review verdicts.
+
+Queue branch prefix examples apply to repositories that queue through draft pull requests. Repositories with a GitHub merge queue use the `merge_group` event instead.

@@ -1,5 +1,5 @@
 ---
-title: A workflow skips work its change cannot affect, and a required check still reports on every pull request and merge-queue run
+title: A required check reports on every pull request and merge-queue run even when work is skipped
 applies_when:
   - adding paths, paths-ignore or branches filters to a workflow trigger
   - adding an if condition that skips a job or step based on changed files
@@ -7,15 +7,22 @@ applies_when:
 tags: [ci, paths, required-checks, merge-queue, skip]
 ---
 
-A job may skip when the change touches none of the check's inputs: "If at least one path matches a pattern in the paths filter, the workflow runs." (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow). Skipping has a cost. The authors of the ICSE 2021 evaluation "recommend test-selection to incentivize skipping full builds to save higher cost in CI", found that "all our studied techniques were affected by that trade-off" of higher cost savings bringing more missed build failures, and that "a seemingly-safe technique [2] still missed a high ratio of failures" (https://arxiv.org/abs/2102.06666, sec. VI-D). So the skip list names every input that can change the result: the source, the check's config, the lockfile and the workflow file itself.
+Never filter workflow triggers with `paths`, `paths-ignore`, or `branches` when the workflow runs a required check. GitHub states that a workflow "skipped due to branch filtering, path filtering, or a commit message" leaves its checks "in a \"Pending\" state. A pull request that requires those checks to be successful will be blocked from merging." (https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions).
 
-A required check never skips through `on: paths`, `on: branches` or a `[skip ci]` commit message. GitHub: a workflow "skipped due to branch filtering, path filtering, or a commit message" leaves its checks "in a \"Pending\" state. A pull request that requires those checks to be successful will be blocked from merging." (https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions). A required check skips only through a step-level `if:` inside its own job, computed from a `git diff --name-only` step in that job. It never skips through a producer job and `needs:` (pull-request-jobs-check-after-a-frozen-install.md), and never through a third-party paths-filter action.
+To skip work safely, run the required job on every pull request and skip individual steps using a step-level `if:`. Determine changed files inside the job with `git diff --name-only`. Do not skip through an upstream producer job and `needs:`, and do not use third-party paths-filter actions.
 
-A check named in the queue's required conditions runs on the queue run and the pull-request condition never skips it there. With a queue tool that opens a draft pull request, the queue run is a `pull_request` whose `head_ref` starts with the tool's prefix (such as `mergify/merge-queue/`). With a GitHub merge queue, the check triggers on `merge_group`, or "The merge will fail as the required status check will not be reported." (https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue). Which suites run in which lane is each-suite-runs-in-its-lane.md.
+The skip list must include every file that can affect the result: the source code, the tool's configuration, the lockfile, and the workflow file itself. GitHub defines path filtering: "If at least one path matches a pattern in the paths filter, the workflow runs." (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow). In an ICSE 2021 evaluation, researchers "recommend test-selection to incentivize skipping full builds to save higher cost in CI", but found that "all our studied techniques were affected by that trade-off" and "a seemingly-safe technique [2] still missed a high ratio of failures" (https://arxiv.org/abs/2102.06666, sec. VI-D).
 
-Decision test: for each workflow trigger, job `if:` and required-check list the diff adds or changes, read the filters and the conditions. The diff fails on a `paths`, `paths-ignore` or `branches` filter on the `on:` of a workflow whose job is a required check; on a skip list that leaves out the workflow file, the lockfile or the check's config; on a skip implemented as a job-level `if:` behind `needs:`; and on a required-condition check that is skipped or never triggered on queue runs.
+Required checks must also report on merge-queue runs without skipping. For GitHub merge queues, include the `merge_group` trigger; otherwise, "The merge will fail as the required status check will not be reported." (https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue). For queue tools that open draft pull requests, run on `pull_request` when `head_ref` matches the queue branch prefix (such as `mergify/merge-queue/`).
 
-Defect prevented: a required check left Pending blocks every merge that skips it. An incomplete skip list lets a defect merge unchecked. A missing skip wastes runners.
+Decision test: Review workflow triggers, job conditions, and required-check lists in the diff. The diff fails if:
+
+- A workflow running a required check filters `on:` with `paths`, `paths-ignore`, or `branches`.
+- A skip condition omits the workflow file, the lockfile, or the check's configuration.
+- A required check skips through an upstream job and `needs:`, or through a third-party paths-filter action.
+- A check required by a merge queue omits `merge_group` (or the tool's queue branch prefix), or skips during a queue run.
+
+Defect prevented: A skipped required check stays in "Pending" and blocks merging. An incomplete skip list lets broken code merge untested. Missing skips waste runner capacity.
 
 ```yaml
 # WRONG: a required check behind a path filter reports nothing on a docs-only change

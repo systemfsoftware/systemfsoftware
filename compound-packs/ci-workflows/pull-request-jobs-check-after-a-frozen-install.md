@@ -1,5 +1,5 @@
 ---
-title: A pull-request job runs only checkout, one pinned tool fetch, a cache restore and a frozen install before its checks, and lint and typecheck share one job
+title: Pull-request jobs run only checkout, tool fetch, cache restore, and frozen install; lint and typecheck share one job
 applies_when:
   - adding or changing the steps or needs: of a job a pull request runs
   - adding a dev shell, a tool build or a producer job to a pull-request job
@@ -8,15 +8,21 @@ applies_when:
 tags: [ci, setup, dev-shell, pull-request, jobs]
 ---
 
-Before its first verdict step, a job a pull request runs performs only checkout, one pinned tool fetch, a cache restore and a frozen install. It never enters a dev shell (`nix develop`, a dev-shell action, a command wrapped in one), builds a tool from source, bootstraps the workspace, or waits on a producer job through `needs:`. A commit-message check runs as a step in the lint-and-typecheck job, its tool arriving with the frozen install or the one pinned tool fetch. A changeset or pull-request-title check, which runs on different events, runs its fetched tool in its own job with no workspace install, dev shell or `needs:`.
+A verdict step produces a check outcome: lint, typecheck, a test, or a guard.
 
-Code lint and typecheck run in one job with one checkout and one install, never a job or matrix leg each.
+Before its first verdict step, a pull-request job runs only checkout, one pinned tool fetch, a cache restore, and a frozen install. It never enters a dev shell (`nix develop`, a dev-shell action, or a wrapped command), builds a tool from source, bootstraps the workspace, or declares `needs:`.
 
-A verdict step is a step whose outcome is a check's result: lint, typecheck, a test, a guard.
+Lint and typecheck share one job with one checkout and install. A commit-message check runs as a step in this shared job. A changeset or pull-request-title check runs its fetched tool in its own job without a workspace install, dev shell, or `needs:`.
 
-Decision test: for each job a pull request runs that the diff adds or changes, read the steps above its first verdict step and the job's `needs:`. The diff fails when any of them is something other than checkout, one pinned tool fetch, a cache restore and a frozen install (a changeset or pull-request-title check: no install), when the job `needs:` another job, or when lint and typecheck land in two jobs or two matrix legs that each repeat checkout and install, or when a commit-message check has a job of its own.
+Decision test: for each pull-request job added or changed in the diff, inspect its `needs:` and the steps before its first verdict step. Fail the diff if:
 
-Defect prevented: a pull request waits on setup before the fastest answer it can get. Entering a dev shell can take minutes before a typecheck that runs for seconds. Each extra job repeats checkout and install, and each is billed separately, rounded up to the whole minute.
+- Any pre-verdict step is not checkout, one pinned tool fetch, a cache restore, or a frozen install (or if a changeset or pull-request-title check runs an install).
+- The job enters a dev shell, builds a tool from source, or bootstraps the workspace.
+- The job declares `needs:`.
+- Lint and typecheck run in separate jobs or matrix legs.
+- A commit-message check runs in its own job.
+
+Defect prevented: a pull request waits on setup before receiving the fastest available verdict. Entering a dev shell can take minutes before a typecheck that runs for seconds. Separate jobs duplicate checkout and install time, and runner minutes are billed rounded up to the nearest whole minute.
 
 ```yaml
 # WRONG: a producer job, a dev shell, and a job each for lint and typecheck
@@ -37,7 +43,7 @@ typecheck:
 lint-typecheck:
   steps:
     - uses: actions/checkout@<sha>
-    - uses: actions/setup-node@<sha>
+    - run: actions/setup-node@<sha>
       with:
         node-version: 24.11.0
     - uses: actions/cache/restore@<sha>

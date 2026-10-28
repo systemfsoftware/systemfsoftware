@@ -1,5 +1,5 @@
 ---
-title: Only a push to main writes a CI cache, and every other run restores read-only
+title: Only push to main writes CI cache; other runs restore read-only
 applies_when:
   - adding or changing an actions/cache step, a cache action input or cache-mode
   - adding a binary substituter push or a remote build-cache write
@@ -7,15 +7,13 @@ applies_when:
 tags: [ci, cache, main, substituter, read-only]
 ---
 
-Only a job that a push to main runs writes a cache that a later run restores: an actions cache, a binary substituter, a remote build cache.
+Only jobs triggered by a push to `main` write to a cache: an Actions cache, a binary substituter, or a remote build cache.
 
-Every other job (a pull request's own run, a merge-queue batch, a scheduled or dispatched run) restores read-only. It uses `actions/cache/restore` or runs under `cache-mode: read`, never `actions/cache` or `actions/cache/save`. It holds only a read credential for a remote build cache, and it never pushes to a substituter.
+All other runs (pull requests, merge-queue batches, scheduled, or dispatched runs) restore read-only. Use `actions/cache/restore` or `cache-mode: read`, never `actions/cache` or `actions/cache/save`. Never give an agent sandbox a cache write credential.
 
-An agent sandbox is never given a credential that writes a build cache.
+Decision test: Check every step or credential in the diff that can write to a cache (`actions/cache`, `actions/cache/save`, a substituter push, or a write-scoped remote cache token). Reject the diff if the enclosing job runs on any event other than a push to `main`, or if it grants cache write access to an agent sandbox.
 
-Decision test: for each step the diff adds or changes that can write a cache (`actions/cache`, `actions/cache/save`, a substituter push, a remote-cache token with write access), list the events that reach its job. The diff fails when any of them is not a push to main, or when it hands a cache write credential to an agent sandbox.
-
-Defect prevented: a cache a pull request saves is scoped to that pull request's merge ref, so no other run restores it. The save costs time and storage for nothing. A cache written from code main has not accepted can serve a later run a result main never produced.
+Defect prevented: A cache saved by a pull request is scoped to its merge ref (`refs/pull/.../merge`) and cannot be restored by `main` or other PRs, wasting time and storage. In addition, code unmerged to `main` can write a cache that serves subsequent runs a result `main` never produced.
 
 ```yaml
 # WRONG: in a job a pull request runs, saves on a miss

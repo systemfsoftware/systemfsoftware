@@ -1,5 +1,5 @@
 ---
-title: A check gets its own job, and so its own runner, only for a named machine, trust or time reason; otherwise it is a step in an existing job
+title: A check gets its own job only for a named machine, trust, or time reason; otherwise it is a step in an existing job
 applies_when:
   - adding a job or matrix leg to a workflow, or splitting a step out into its own job
   - adding a small check such as a commit-message lint, a format check, a link check or a script to CI
@@ -7,25 +7,27 @@ applies_when:
 tags: [ci, runners, jobs, spot, cost]
 ---
 
-Every job is a fresh runner. Where runners are ephemeral, each one "executes exactly one job, and terminates". So each job pays a launch, a boot, its own checkout and its own install. Steps on one runner share that setup: "Since each step is executed on the same runner, you can share data from one step to another" (https://docs.github.com/en/actions/get-started/understand-github-actions).
+Ephemeral runners execute "exactly one job, and terminates", repeating launch, boot, checkout, and install. Steps in one job share that setup: "Since each step is executed on the same runner, you can share data from one step to another" (https://docs.github.com/en/actions/get-started/understand-github-actions).
 
-A mechanical check that the diff adds or moves gets its own job only when one of these reasons holds, and the job carries the reason as a YAML comment:
+A check added or moved in a diff must run as a step in an existing job unless the new job carries a YAML comment naming one of three reasons:
 
-1. Machine. It needs `runs-on` labels the existing job's runner lacks: architecture, kvm or size. A missing tool is not a machine need; the step fetches the tool pinned, because no tools are baked into the runner image.
-2. Trust. It needs a secret, write permission or environment that the other job must not hold ("make sure that the GITHUB_TOKEN is granted the minimum required permissions", https://docs.github.com/en/actions/reference/security/secure-use).
-3. Time. Its steps take longer than a fresh runner's wait plus setup, or folding it in would push the job past ten minutes. Before a separate runner, the work runs as parallel steps in the existing job (`jobs.<job_id>.steps[*].parallel`: "Runs a group of steps concurrently, then waits for all of them to finish", https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax), once the runner image's actions/runner version is confirmed to support it. The comparison uses measured wait and setup times for the repository, not a guessed wait. Fowler: "the XP guideline of a ten minute build is perfectly within reason" (https://martinfowler.com/articles/continuousIntegration.html).
+1. **Machine**: It requires runner labels the existing job lacks, such as architecture, kvm, or size. A missing tool is not a machine need; the step fetches pinned tools.
+2. **Trust**: It requires secrets, write permissions, or environments the existing job must not hold ("make sure that the GITHUB_TOKEN is granted the minimum required permissions", https://docs.github.com/en/actions/reference/security/secure-use).
+3. **Time**: Its steps take longer than runner wait plus setup, or folding it in pushes the job over ten minutes (Fowler: "the XP guideline of a ten minute build is perfectly within reason", https://martinfowler.com/articles/continuousIntegration.html). Before creating a separate runner, run concurrent steps in the existing job (`jobs.<job_id>.steps[*].parallel`: "Runs a group of steps concurrently, then waits for all of them to finish", https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) once runner image support is confirmed. Time comparisons must use measured repository wait and setup times, not guesses.
 
-A different event is a reason too, and each-suite-runs-in-its-lane.md decides it.
+A different trigger event also justifies a separate job (`each-suite-runs-in-its-lane.md`). Failure isolation does not: a named step already reports which check failed. Tools for folded checks arrive via the existing job's frozen install or a pinned fetch (`pull-request-jobs-check-after-a-frozen-install.md`).
 
-Failure isolation alone is not a reason: a separate named step already reports which check failed.
+A diff that merges or renames jobs must update branch rulesets and merge-queue required checks in the same pull request. A skipped workflow leaves its checks "Pending" (https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions).
 
-A check folded into an existing job has its tool arrive with that job's frozen install or its one pinned tool fetch, as pull-request-jobs-check-after-a-frozen-install.md requires.
+Decision test: for each job or matrix leg added or split out in the diff, find the YAML comment naming its reason. Reject the diff if:
 
-Merging jobs renames their checks. A diff that merges or renames a job changes the merge-queue required conditions and the branch ruleset in the same pull request, or every queue run waits on a check that never reports: a skipped workflow leaves its checks "Pending" (https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions).
+- The job lacks a reason comment.
+- Machine is cited for a missing tool rather than runner labels.
+- Trust is cited without secrets or permissions the existing job lacks.
+- Time is cited without measured repository wait and setup times.
+- Jobs are merged or renamed without updating required checks and branch rulesets in the same pull request.
 
-Decision test: for each job or matrix leg the diff adds or splits out, find the YAML comment naming its reason and check the reason against the three above or against its event. The diff fails when a job has no reason comment, when the named reason does not hold (the "machine" is a missing tool, the "trust" holds no secret the other job lacks, the "time" is unmeasured), or when a merge or rename of jobs leaves the required-check list unchanged.
-
-Defect prevented: every unneeded job adds a runner to every run of its workflow and draws on runner-registration capacity, which is rate limited. It repeats checkout and install and is billed separately.
+Defect prevented: every unneeded job adds a runner to every workflow run, draws on rate-limited runner-registration capacity, repeats checkout and install, and increases CI billing.
 
 ```yaml
 # WRONG: a commit-message lint in its own job, with no reason
