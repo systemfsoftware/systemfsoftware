@@ -21,18 +21,16 @@ jobs:
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       head_sha: ${{ github.event.pull_request.head.sha }}
-  abort-on-conflict:
-    name: abort on mid-run merge conflict
-    needs: conflicts
+  plan-only:
+    # A plan ships in the same PR as the code it plans (owner, 2026-10-28). Required at queue time in .mergify.yml.
+    name: not a plan-only pull request
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 46
+    timeout-minutes: 5
     permissions:
-      contents: read
-      actions: write
+      pull-requests: read
     steps:
-      # A plan ships in the same PR as the code it plans. This job is already a required check.
       - name: Not a plan-only pull request
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/')
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -42,6 +40,15 @@ jobs:
             printf '::error title=plan-only PR::This PR changes only plan documents. A plan ships in the same PR as the code it plans (owner, 2026-10-28).\n'
             exit 1
           fi
+  abort-on-conflict:
+    name: abort on mid-run merge conflict
+    needs: conflicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 46
+    permissions:
+      contents: read
+      actions: write
+    steps:
       - name: Watch for the PR turning dirty
         if: github.event.pull_request.head.sha != ''
         env:
