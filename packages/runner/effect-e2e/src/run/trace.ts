@@ -137,6 +137,9 @@ const isSelected = (entry: LogEntry): boolean =>
     PageError: () => true,
     Network: ({ status }) => status >= 400,
     RequestFailed: () => true,
+    Navigation: () => false,
+    Reveal: () => false,
+    LayoutShift: ({ value, hadRecentInput }) => !hadRecentInput && value > 0,
   })
 
 const logSectionOf = (logs: ScreenSnapshot['logs']): ReadonlyArray<string> =>

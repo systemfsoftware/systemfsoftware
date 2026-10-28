@@ -151,6 +151,17 @@ const isReadyText = (entry: LogEntry): boolean =>
 const networkEvidence = (engine: EngineShape, logs: ReadonlyArray<LogEntry>): boolean | string =>
   declares(engine, 'network') ? logs.some(isMissingAsset) : 'not declared'
 
+const isNavigationOf = (url: string) => (entry: LogEntry): boolean =>
+  LogEntry.guards.Navigation(entry) && entry.url === url
+
+const isRevealOf = (url: string) => (entry: LogEntry): boolean => LogEntry.guards.Reveal(entry) && entry.url === url
+
+const recordedFor = (logs: ReadonlyArray<LogEntry>, url: string): boolean =>
+  logs.some(isNavigationOf(url)) && logs.some(isRevealOf(url))
+
+const navigationEvidence = (engine: EngineShape, logs: ReadonlyArray<LogEntry>, url: string): boolean | string =>
+  declares(engine, 'navigation-timing') ? recordedFor(logs, url) : 'not declared'
+
 const screenshotOutcome = (engine: EngineShape): Effect.Effect<ReadonlyArray<number> | string> =>
   declares(engine, 'screenshot')
     ? Effect.match(engine.screenshot({ mask: [email, missing] }), {
@@ -310,6 +321,18 @@ const laws: ReadonlyArray<Law> = [
         return compared(
           { console: true, notFound: declares(engine, 'network') || 'not declared' },
           { console: logs.some(isReadyText), notFound: networkEvidence(engine, logs) },
+        )
+      }),
+  },
+  {
+    name: 'navigation-records',
+    check: (origin) =>
+      Effect.gen(function*() {
+        const engine = yield* opened(origin, LawSite.form)
+        const logs = yield* engine.logs
+        return compared(
+          { navigation: declares(engine, 'navigation-timing') || 'not declared' },
+          { navigation: navigationEvidence(engine, logs, at(origin, LawSite.form)) },
         )
       }),
   },

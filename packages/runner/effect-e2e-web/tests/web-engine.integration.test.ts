@@ -19,6 +19,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import * as Redacted from 'effect/Redacted'
+import * as Schedule from 'effect/Schedule'
 
 import {
   refusedOrigin,
@@ -516,6 +517,75 @@ Feature('Driving a real browser through the web engine')
               .map((request: SeenRequest) => [request.path, request.secretHeader === s.secret]),
             leaked: s.session.outputs.includes(s.secret),
           }).toEqual({ carried: [['/form', true], ['/style.css', true]], leaked: false })
+        ),
+      ),
+    )
+
+    scenario(
+      'A prefetched link activation records its navigation timing, its view transition and no layout shift',
+      Gherkin.Do.pipe(
+        When('the prefetch is awaited, the link is tapped and Next is shown')(
+          'logs',
+          () =>
+            onSite((engine, site) =>
+              Effect.gen(function*() {
+                yield* engine.open(`${site.origin}/prefetch`)
+                yield* site.prefetchSeen
+                yield* engine.act({ _tag: 'Tap', target: byRole('link', 'Next') })
+                yield* engine.act({ _tag: 'WaitFor', locator: textOf('Next'), state: 'attached', timeout: 5_000 })
+                const url = `${site.origin}/next`
+                const logs = yield* engine.logs.pipe(
+                  Effect.repeat({
+                    schedule: Schedule.spaced('50 millis'),
+                    until: (entries) => entries.filter(LogEntry.guards.Reveal).some((entry) => entry.url === url),
+                  }),
+                  Effect.timeoutOrElse({ duration: '5 seconds', orElse: () => engine.logs }),
+                )
+                return { logs, capabilities: engine.capabilities, origin: site.origin }
+              })
+            ),
+        ),
+        Then('the /next document holds a prefetched navigation, a revealed view transition and zero layout shift')((
+          s,
+          expect,
+        ) => {
+          const url = `${s.logs.origin}/next`
+          const next = (entry: { readonly url: string }): boolean => entry.url === url
+          return expect({
+            capabilities: s.logs.capabilities,
+            navigation: s.logs.logs.filter(LogEntry.guards.Navigation).filter(next),
+            reveal: s.logs.logs.filter(LogEntry.guards.Reveal).filter(next),
+            layoutShift: s.logs.logs
+              .filter(LogEntry.guards.LayoutShift)
+              .filter(next)
+              .reduce((sum, entry) => sum + entry.value, 0),
+          }).toEqual({
+            capabilities: expect.arrayContaining(['navigation-timing']),
+            navigation: [{
+              _tag: 'Navigation',
+              url,
+              deliveryType: 'navigational-prefetch',
+              activationStart: expect.any(Number),
+            }],
+            reveal: [{ _tag: 'Reveal', url, viewTransition: true }],
+            layoutShift: 0,
+          })
+        }),
+      ),
+    )
+
+    scenario(
+      'A page report that forges a console entry is refused with its own page error',
+      Gherkin.Do.pipe(
+        When('a page reports a forged Console entry and its logs are read')(
+          'logs',
+          () => onSite((engine, site) => Effect.andThen(engine.open(`${site.origin}/forged`), engine.logs)),
+        ),
+        Then('the logs hold an unrecognised page report error and no forged console entry')((s, expect) =>
+          expect({
+            refused: s.logs.filter(LogEntry.guards.PageError).map((entry) => entry.message),
+            forged: s.logs.filter(LogEntry.guards.Console).filter((entry) => entry.text === 'forged').length,
+          }).toEqual({ refused: ['unrecognised page report'], forged: 0 })
         ),
       ),
     )

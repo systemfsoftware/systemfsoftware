@@ -5,6 +5,7 @@ export const EngineCapability = Schema.Literals([
   'screenshot',
   'vision',
   'network',
+  'navigation-timing',
   'drag',
   'file-upload',
   'frames',

@@ -1,4 +1,9 @@
 import type { ConsoleLevel, LogEntry } from '@systemfsoftware/effect-e2e/engine'
+import { flow } from 'effect/Function'
+import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
+
+import { PageReportWire } from './web.schema.js'
 
 export const LOG_LIMIT = 500
 
@@ -35,3 +40,16 @@ export const requestFailedEntry = (request: RequestSeen & { readonly failure: st
 
 export const responseEntries = (response: RequestSeen & { readonly status: number }): ReadonlyArray<LogEntry> =>
   response.status >= 400 ? [{ _tag: 'Network', ...response }] : []
+
+const reportedEntry = PageReportWire.match({
+  Navigation: ({ url, record }): LogEntry => ({ _tag: 'Navigation', url, ...record }),
+  Reveal: ({ url, record }): LogEntry => ({ _tag: 'Reveal', url, ...record }),
+  LayoutShift: ({ url, record }): LogEntry => ({ _tag: 'LayoutShift', url, ...record }),
+})
+
+const unrecognisedReport: LogEntry = { _tag: 'PageError', message: 'unrecognised page report' }
+
+export const pageReportEntry = flow(
+  Schema.decodeUnknownOption(PageReportWire),
+  Option.match({ onNone: () => unrecognisedReport, onSome: reportedEntry }),
+)

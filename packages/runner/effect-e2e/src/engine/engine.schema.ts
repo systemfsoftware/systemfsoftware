@@ -28,11 +28,17 @@ export type ReadResult = typeof ReadResult.Type
 export const ConsoleLevel = Schema.Literals(['debug', 'log', 'info', 'warning', 'error'])
 export type ConsoleLevel = typeof ConsoleLevel.Type
 
+export const DeliveryType = Schema.Literals(['', 'cache', 'navigational-prefetch'])
+export type DeliveryType = typeof DeliveryType.Type
+
 export const LogEntry = Schema.Union([
   Schema.TaggedStruct('Console', { level: ConsoleLevel, text: Schema.String }),
   Schema.TaggedStruct('PageError', { message: Schema.String }),
   Schema.TaggedStruct('Network', { method: Schema.String, url: Schema.String, status: Schema.Int }),
   Schema.TaggedStruct('RequestFailed', { method: Schema.String, url: Schema.String, failure: Schema.String }),
+  Schema.TaggedStruct('Navigation', { url: Schema.String, deliveryType: DeliveryType, activationStart: Schema.Finite }),
+  Schema.TaggedStruct('Reveal', { url: Schema.String, viewTransition: Schema.Boolean }),
+  Schema.TaggedStruct('LayoutShift', { url: Schema.String, value: Schema.Finite, hadRecentInput: Schema.Boolean }),
 ]).pipe(Schema.toTaggedUnion('_tag'))
 export type LogEntry = typeof LogEntry.Type
 

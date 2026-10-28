@@ -175,8 +175,20 @@ const pageAt = (site: MemorySite, url: string): Option.Option<{ readonly route: 
 
 const isNetworkEvidence = LogEntry.isAnyOf(['Network', 'RequestFailed'])
 
+const isPageReport = LogEntry.isAnyOf(['Navigation', 'Reveal', 'LayoutShift'])
+
+const withoutUndeclaredPageReports = (site: MemorySite) =>
+(
+  logs: ReadonlyArray<LogEntry>,
+): ReadonlyArray<LogEntry> => declares(site)('navigation-timing') ? logs : logs.filter(Predicate.not(isPageReport))
+
+const withoutUndeclaredNetwork = (site: MemorySite) =>
+(
+  logs: ReadonlyArray<LogEntry>,
+): ReadonlyArray<LogEntry> => declares(site)('network') ? logs : logs.filter(Predicate.not(isNetworkEvidence))
+
 const declaredLogs = (site: MemorySite, logs: ReadonlyArray<LogEntry>): ReadonlyArray<LogEntry> =>
-  declares(site)('network') ? logs : logs.filter(Predicate.not(isNetworkEvidence))
+  withoutUndeclaredNetwork(site)(withoutUndeclaredPageReports(site)(logs))
 
 const loadPage = (site: MemorySite, history: History) => (url: string): Result.Result<OpenSession, AppUnreachable> =>
   Option.match(pageAt(site, url), {

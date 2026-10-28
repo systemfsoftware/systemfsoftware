@@ -4,6 +4,7 @@ import {
   Engine,
   type EngineShape,
   type Locator,
+  LogEntry,
   type Observation,
   ReadRequest,
   type SemanticNode,
@@ -49,6 +50,12 @@ const breakages = {
     route: Effect.map(good.route, (route) => ({ ...route, path: '/' })),
   }),
   logs: (good: EngineShape): Partial<EngineShape> => ({ logs: Effect.as(good.logs, []) }),
+  navigation: (good: EngineShape): Partial<EngineShape> => ({
+    logs: Effect.map(
+      good.logs,
+      (entries) => entries.filter((entry) => !LogEntry.guards.Navigation(entry) && !LogEntry.guards.Reveal(entry)),
+    ),
+  }),
   observe: (good: EngineShape): Partial<EngineShape> => ({
     observe: Effect.map(good.observe, (observation): Observation => ({
       ...observation,

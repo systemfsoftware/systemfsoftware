@@ -17,7 +17,7 @@ import { NextAct, nextAct, type NextActDecision } from '../next-act.workflow.js'
 
 const HOME: Route = { origin: 'https://app.example.test', path: '/home', query: [] }
 
-const ALL_CAPABILITIES: ReadonlyArray<EngineCapability> = ['web', 'screenshot', 'drag']
+const ALL_CAPABILITIES: ReadonlyArray<EngineCapability> = ['web', 'screenshot', 'navigation-timing', 'drag']
 
 const observationOf = (tree: ReadonlyArray<SemanticNode>): Observation => ({ route: HOME, revision: 'rev', tree })
 

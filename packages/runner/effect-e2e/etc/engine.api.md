@@ -210,6 +210,12 @@ export const decodeAction: (input: typeof Action.Encoded) => Effect.Effect<Actio
 // @public (undocumented)
 export const decodeObservation: (input: typeof Observation.Encoded) => Effect.Effect<Observation, Schema.SchemaError | TreeDepthExceeded>;
 
+// @public (undocumented)
+export const DeliveryType: Schema.Literals<readonly ["", "cache", "navigational-prefetch"]>;
+
+// @public (undocumented)
+export type DeliveryType = typeof DeliveryType.Type;
+
 // Warning: (ae-forgotten-export) The symbol "Engine_base" needs to be exported by the entry point engine.d.ts
 //
 // @public (undocumented)
@@ -219,7 +225,7 @@ export class Engine extends Engine_base {
 }
 
 // @public (undocumented)
-export const EngineCapability: Schema.Literals<readonly ["web", "screenshot", "vision", "network", "drag", "file-upload", "frames"]>;
+export const EngineCapability: Schema.Literals<readonly ["web", "screenshot", "vision", "network", "navigation-timing", "drag", "file-upload", "frames"]>;
 
 // @public (undocumented)
 export type EngineCapability = typeof EngineCapability.Type;
@@ -342,6 +348,17 @@ export const LogEntry: Schema.toTaggedUnion<"_tag", readonly [Schema.TaggedStruc
     readonly method: Schema.String;
     readonly url: Schema.String;
     readonly failure: Schema.String;
+}>, Schema.TaggedStruct<"Navigation", {
+    readonly url: Schema.String;
+    readonly deliveryType: Schema.Literals<readonly ["", "cache", "navigational-prefetch"]>;
+    readonly activationStart: Schema.Finite;
+}>, Schema.TaggedStruct<"Reveal", {
+    readonly url: Schema.String;
+    readonly viewTransition: Schema.Boolean;
+}>, Schema.TaggedStruct<"LayoutShift", {
+    readonly url: Schema.String;
+    readonly value: Schema.Finite;
+    readonly hadRecentInput: Schema.Boolean;
 }>]>;
 
 // @public (undocumented)
@@ -364,6 +381,17 @@ export const MemoryPage: Schema.Struct<{
         readonly method: Schema.String;
         readonly url: Schema.String;
         readonly failure: Schema.String;
+    }>, Schema.TaggedStruct<"Navigation", {
+        readonly url: Schema.String;
+        readonly deliveryType: Schema.Literals<readonly ["", "cache", "navigational-prefetch"]>;
+        readonly activationStart: Schema.Finite;
+    }>, Schema.TaggedStruct<"Reveal", {
+        readonly url: Schema.String;
+        readonly viewTransition: Schema.Boolean;
+    }>, Schema.TaggedStruct<"LayoutShift", {
+        readonly url: Schema.String;
+        readonly value: Schema.Finite;
+        readonly hadRecentInput: Schema.Boolean;
     }>]>>;
 }>;
 
@@ -373,7 +401,7 @@ export type MemoryPage = typeof MemoryPage.Type;
 // @public (undocumented)
 export const MemorySite: Schema.Struct<{
     readonly origin: Schema.String;
-    readonly capabilities: Schema.$Array<Schema.Literals<readonly ["web", "screenshot", "vision", "network", "drag", "file-upload", "frames"]>>;
+    readonly capabilities: Schema.$Array<Schema.Literals<readonly ["web", "screenshot", "vision", "network", "navigation-timing", "drag", "file-upload", "frames"]>>;
     readonly pages: Schema.$Record<Schema.String, Schema.Struct<{
         readonly tree: Schema.$Array<Schema.Codec<SemanticNode, SemanticNode, never, never>>;
         readonly links: Schema.$Record<Schema.String, Schema.String>;
@@ -390,6 +418,17 @@ export const MemorySite: Schema.Struct<{
             readonly method: Schema.String;
             readonly url: Schema.String;
             readonly failure: Schema.String;
+        }>, Schema.TaggedStruct<"Navigation", {
+            readonly url: Schema.String;
+            readonly deliveryType: Schema.Literals<readonly ["", "cache", "navigational-prefetch"]>;
+            readonly activationStart: Schema.Finite;
+        }>, Schema.TaggedStruct<"Reveal", {
+            readonly url: Schema.String;
+            readonly viewTransition: Schema.Boolean;
+        }>, Schema.TaggedStruct<"LayoutShift", {
+            readonly url: Schema.String;
+            readonly value: Schema.Finite;
+            readonly hadRecentInput: Schema.Boolean;
         }>]>>;
     }>>;
 }>;

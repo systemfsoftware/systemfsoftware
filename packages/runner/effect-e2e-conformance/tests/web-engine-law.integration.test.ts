@@ -48,6 +48,7 @@ Feature('Proving the web engine against the engine laws')
             'screenshot-masks-without-requiring-a-match: held',
             'drag-capability: skipped',
             'logs-hold-load-evidence-once-open-returns: held',
+            'navigation-records: held',
             'ambiguous-locator: held',
             'missing-locator: held',
             'close-ends-session-and-open-starts-fresh: held',

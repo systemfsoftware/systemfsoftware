@@ -20,7 +20,7 @@ export {
 } from './action.schema.js'
 export { EngineCapability } from './capability.schema.js'
 export { decodeAction, decodeObservation } from './decode.js'
-export { ConsoleLevel, LogEntry, ReadRequest, ReadResult, ScreenshotRequest } from './engine.schema.js'
+export { ConsoleLevel, DeliveryType, LogEntry, ReadRequest, ReadResult, ScreenshotRequest } from './engine.schema.js'
 export type { EngineError, EngineShape } from './engine.service.js'
 export { Engine } from './engine.service.js'
 export {

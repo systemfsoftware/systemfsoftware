@@ -56,6 +56,7 @@ Feature('Proving the jsdom port fake against the engine laws')
             'screenshot-masks-without-requiring-a-match: held',
             'drag-capability: held',
             'logs-hold-load-evidence-once-open-returns: held',
+            'navigation-records: held',
             'ambiguous-locator: held',
             'missing-locator: held',
             'close-ends-session-and-open-starts-fresh: held',

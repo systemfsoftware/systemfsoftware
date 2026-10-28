@@ -1,6 +1,12 @@
 import { LawSite } from '@systemfsoftware/effect-e2e-conformance'
 import type { EngineSubject } from '@systemfsoftware/effect-e2e-conformance'
-import { Engine, type EngineCapability, type MemorySite, type SemanticNode } from '@systemfsoftware/effect-e2e/engine'
+import {
+  Engine,
+  type EngineCapability,
+  type LogEntry,
+  type MemorySite,
+  type SemanticNode,
+} from '@systemfsoftware/effect-e2e/engine'
 
 export const LAW_ORIGIN = 'http://law-site.test'
 
@@ -9,6 +15,7 @@ export const everyCapability: ReadonlyArray<EngineCapability> = [
   'screenshot',
   'vision',
   'network',
+  'navigation-timing',
   'drag',
   'file-upload',
   'frames',
@@ -50,11 +57,16 @@ const form: ReadonlyArray<SemanticNode> = [
   }),
 ]
 
+const pageReportLogs = (path: string): ReadonlyArray<LogEntry> => [
+  { _tag: 'Navigation', url: `${LAW_ORIGIN}${path}`, deliveryType: '', activationStart: 0 },
+  { _tag: 'Reveal', url: `${LAW_ORIGIN}${path}`, viewTransition: false },
+]
+
 export const lawSite = (capabilities: ReadonlyArray<EngineCapability>): MemorySite => ({
   origin: LAW_ORIGIN,
   capabilities,
   pages: {
-    [LawSite.home]: { tree: home, links: { 'form-link': LawSite.form }, logs: [] },
+    [LawSite.home]: { tree: home, links: { 'form-link': LawSite.form }, logs: pageReportLogs(LawSite.home) },
     [LawSite.form]: {
       tree: form,
       links: {},
@@ -66,6 +78,7 @@ export const lawSite = (capabilities: ReadonlyArray<EngineCapability>): MemorySi
           url: `${LAW_ORIGIN}${LawSite.assetAnsweringNotFoundOnFormOpen}`,
           status: 404,
         },
+        ...pageReportLogs(LawSite.form),
       ],
     },
   },

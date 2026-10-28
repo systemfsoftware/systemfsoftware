@@ -69,6 +69,10 @@ export const logLineOf = (entry: LogEntry): string =>
     PageError: ({ message }) => `[pageerror] ${message}`,
     Network: ({ method, url, status }) => `[network] ${method} ${url} answered ${status}`,
     RequestFailed: ({ method, url, failure }) => `[request-failed] ${method} ${url}: ${failure}`,
+    Navigation: ({ url, deliveryType, activationStart }) =>
+      `[navigation] ${url} delivery "${deliveryType}" activation ${activationStart}`,
+    Reveal: ({ url, viewTransition }) => `[reveal] ${url} view transition ${viewTransition ? 'shown' : 'none'}`,
+    LayoutShift: ({ url, value }) => `[layout-shift] ${url} value ${value}`,
   })
 
 const logLinesOf = (entries: ReadonlyArray<LogEntry>, ledger: SecretLedgerShape): ReadonlyArray<string> =>

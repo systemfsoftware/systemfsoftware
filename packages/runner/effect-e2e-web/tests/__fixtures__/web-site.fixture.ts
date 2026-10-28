@@ -1,3 +1,4 @@
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import type * as Scope from 'effect/Scope'
 import { createServer, type Server, type ServerResponse } from 'node:http'
@@ -29,7 +30,36 @@ export const FORM_PAGE = `<!doctype html>
   </body>
 </html>`
 
-const NEXT_PAGE = '<!doctype html><html><head><title>Next</title></head><body><h1>Next</h1></body></html>'
+const NEXT_PAGE = `<!doctype html>
+<html>
+  <head>
+    <title>Next</title>
+    <style>@view-transition{navigation:auto}</style>
+  </head>
+  <body><h1>Next</h1></body>
+</html>`
+
+export const PREFETCH_PAGE = `<!doctype html>
+<html>
+  <head>
+    <title>Prefetch</title>
+    <style>@view-transition{navigation:auto}</style>
+    <script type="speculationrules">
+      {"prefetch":[{"source":"document","where":{"href_matches":"/next"},"eagerness":"immediate"}]}
+    </script>
+  </head>
+  <body><a href="/next">Next</a></body>
+</html>`
+
+export const FORGED_PAGE = `<!doctype html>
+<html>
+  <head><title>Forged</title></head>
+  <body>
+    <script type="module">
+      await window.__e2eReportPage({ _tag: 'Console', level: 'error', text: 'forged' })
+    </script>
+  </body>
+</html>`
 
 export const CONTROLS_PAGE = `<!doctype html>
 <html>
@@ -86,11 +116,14 @@ export interface SeenRequest {
 export interface WebSite {
   readonly origin: string
   readonly seen: Effect.Effect<ReadonlyArray<SeenRequest>>
+  readonly prefetchSeen: Effect.Effect<void>
 }
 
 const ROUTES: Readonly<Record<string, { readonly type: string; readonly body: string }>> = {
   '/form': { type: 'text/html', body: FORM_PAGE },
   '/next': { type: 'text/html', body: NEXT_PAGE },
+  '/prefetch': { type: 'text/html', body: PREFETCH_PAGE },
+  '/forged': { type: 'text/html', body: FORGED_PAGE },
   '/controls': { type: 'text/html', body: CONTROLS_PAGE },
   '/help': { type: 'text/html', body: HELP_PAGE },
   '/style.css': { type: 'text/css', body: 'body { font-family: sans-serif; }' },
@@ -126,14 +159,24 @@ const answer = (response: ServerResponse, path: string): void => {
 /** A local static site that records, per request, the value of the secret context header. */
 export const webSite: Effect.Effect<WebSite, never, Scope.Scope> = Effect.gen(function*() {
   const seen: Array<SeenRequest> = []
+  const prefetched = yield* Deferred.make<void>()
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? '/', `http://${LOOPBACK}`).pathname
     const header = request.headers[SECRET_HEADER]
     seen.push({ path, secretHeader: typeof header === 'string' ? header : '' })
+    const purpose = request.headers['sec-purpose']
+    const purposes = Array.isArray(purpose) ? purpose : typeof purpose === 'string' ? [purpose] : []
+    if (path === '/next' && purposes.some((value) => value.includes('prefetch'))) {
+      Deferred.doneUnsafe(prefetched, Effect.void)
+    }
     answer(response, path)
   })
   const port = yield* Effect.acquireRelease(listened(server), () => closed(server))
-  return { origin: `http://${LOOPBACK}:${port}`, seen: Effect.sync(() => [...seen]) }
+  return {
+    origin: `http://${LOOPBACK}:${port}`,
+    seen: Effect.sync(() => [...seen]),
+    prefetchSeen: Deferred.await(prefetched),
+  }
 })
 
 export const refusedOrigin: Effect.Effect<string> = Effect.gen(function*() {

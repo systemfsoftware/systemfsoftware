@@ -1,3 +1,5 @@
+import { DeliveryType } from '@systemfsoftware/effect-e2e/engine'
+import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 
 const AriaBox = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
@@ -41,3 +43,27 @@ export const AriaNode: Schema.Codec<AriaNode> = Schema.Struct({
 /** What `ariaSnapshotJSON` answers for a page or an element: elements and static text fragments. */
 export const AriaAnswer = Schema.Array(Schema.Union([Schema.String, AriaNode]))
 export type AriaAnswer = typeof AriaAnswer.Type
+
+const NavigationRecord = Schema.Struct({
+  deliveryType: DeliveryType.pipe(Schema.withDecodingDefaultKey(Effect.succeed(''))),
+  activationStart: Schema.Finite.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+})
+
+const RevealRecord = Schema.Struct({ viewTransition: Schema.Boolean })
+
+const LayoutShiftRecord = Schema.Struct({ value: Schema.Finite, hadRecentInput: Schema.Boolean })
+
+export const PageReportWire = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('Navigation'),
+    url: Schema.String,
+    record: Schema.fromJsonString(NavigationRecord),
+  }),
+  Schema.Struct({ kind: Schema.Literal('Reveal'), url: Schema.String, record: Schema.fromJsonString(RevealRecord) }),
+  Schema.Struct({
+    kind: Schema.Literal('LayoutShift'),
+    url: Schema.String,
+    record: Schema.fromJsonString(LayoutShiftRecord),
+  }),
+]).pipe(Schema.toTaggedUnion('kind'))
+export type PageReportWire = typeof PageReportWire.Type
