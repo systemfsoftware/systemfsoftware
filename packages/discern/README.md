@@ -114,6 +114,8 @@ console.log(await Effect.runPromise(guarded('bump lodash').pipe(Effect.provide(D
 
 `policy.runWithTrace(input)` returns the value together with a trace of every case evaluated, how it resolved, and the answers it used.
 
+A bound that cannot hold is refused when the pattern is built, not accepted silently. `above` and `atLeast` refuse a `missBelow` greater than the threshold, `below` and `atMost` refuse a `missAbove` less than it, and a `between` whose low end comes after its high end is refused too (ratings compare by level position). Equal bounds stay legal. A policy run, `Eval.run`, `Eval.sweep` and `Eval.calibrate` fail before the model is asked, with `InvalidThresholdError` for a bound and `InvalidRangeError` for a range, whichever case the input would have reached. `Discern.evaluate` on a refused pattern answers `Uncertain` with the refusal message.
+
 ### Record, replay, cache, budget
 
 Interceptors decorate the model. `recording` stores every answer, and `Discern.Model.replayLayer` reruns any program from those answers with no model at all:
@@ -146,6 +148,8 @@ await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
 console.log(await Effect.runPromise(Discern.Model.spent(spend))) // { decisions: 2, calls: 1 }
 ```
 
+`replaying` and `caching` hold a stored answer to the rules a live provider is held to. An answer whose probability, rating or label breaks them fails with an error that `Discern.Model.isInvalidObservation` recognises, before the model is asked.
+
 The same stack is a builder: `Discern.Model.model(cautious).recording(store).budgeted(spend).layer` appends one interceptor at a time and compiles the same layer.
 
 Answers are keyed by the question's content and the input's structure. Rewording instructions or reordering criteria is a new question; reordering an input object's keys is not.
@@ -155,6 +159,8 @@ Stores and budgets are handles: `Discern.Model.snapshot`, `load`, `get`, `set`, 
 ### Evaluate thresholds
 
 `Discern.Eval` runs a pattern over labelled examples and reports accuracy, precision, recall and F1. `Eval.calibrate` asks the model once per example and picks the best threshold from those answers; `Eval.sweep` skips examples a deterministic pattern already settles.
+
+`Eval.calibrate` refuses an empty `values` list with `CalibrationValuesRefused` before it builds a pattern or asks the model.
 
 ### Route between procedures
 

@@ -1,0 +1,5 @@
+---
+"@systemfsoftware/discern": major
+---
+
+Stored answers are validated like a provider's, inverted bounds and reversed ranges are refused when the pattern is built, and calibrate refuses an empty set. `replaying` and `caching` hold each stored answer to the rules a live provider is held to and fail with an error `Discern.Model.isInvalidObservation` recognises, before the model is asked. An `above` or `atLeast` pattern whose `missBelow` exceeds its threshold, a `below` or `atMost` pattern whose `missAbove` is under it, and a `between` whose low end follows its high end are refused with `InvalidThresholdError` or the new `InvalidRangeError` in policy runs and in `Eval.run`, `Eval.sweep` and `Eval.calibrate`, before any model call and whichever case the input reaches. `Discern.evaluate` on such a pattern answers `Uncertain` with the refusal message. `PatternRefusal` is now a union of `ThresholdRefusal` and `RangeRefusal` discriminated by `kind`, so code that reads `refusal.threshold` must narrow first. `Eval.calibrate` with an empty `values` list fails with the new `CalibrationValuesRefused` instead of resolving.
