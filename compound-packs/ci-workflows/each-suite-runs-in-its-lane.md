@@ -3,6 +3,7 @@ title: A pull request runs only lint and typecheck, a merge-queue batch runs the
 applies_when:
   - adding or changing a workflow trigger, or what a job runs
   - adding a test suite, a VM test or a machine-image build to CI, or moving one to another event
+  - adding a check on a different event than the job it would join, or splitting it into a job for that reason
   - wiring a job into another through needs: or a called reusable workflow
 tags: [ci, lanes, triggers, merge-queue, nightly, mutation]
 ---
@@ -13,9 +14,10 @@ Each kind of run has one lane, and a job runs only its lane's work:
 - A merge-queue batch run (a `merge_group` event, or the batch pull request a queue tool opens) runs lint, typecheck and the test suites: unit, integration, browser, Storybook and property tests.
 - A push to main runs no check and no test suite. Its jobs write the cache and release or deploy.
 - The full test matrix and mutation testing run on a nightly schedule on main and on a manual dispatch on main.
+- A check that must run on a different event than the job it would join gets its own job; a difference only in event type, such as a pull request's `edited` activity, is resolved with an `if:` inside the shared job, not a new job (a-check-gets-its-own-runner-only-for-a-named-reason.md).
 - A VM test or a machine-image build never runs in a job that a pull request's own run or a merge-queue batch reaches, whether directly, through `needs:`, or through a called reusable workflow.
 
-Decision test: for each job the diff adds or changes, list every event that reaches it, directly, through `needs:` or through a called reusable workflow, and list what it runs. The diff fails when a pull request's own run reaches anything but lint and typecheck, when a test suite runs on a pull request's own run or on a push to main, when the full matrix or mutation runs on any event but the nightly schedule or a dispatch on main, or when a VM test or image build is reachable from a pull request or a queue batch.
+Decision test: for each job the diff adds or changes, list every event that reaches it, directly, through `needs:` or through a called reusable workflow, and list what it runs. The diff fails when a check on a different event is folded into a job its event does not reach, or when a job is split out only because of an event type that an `if:` could select, or when a pull request's own run reaches anything but lint and typecheck, when a test suite runs on a pull request's own run or on a push to main, when the full matrix or mutation runs on any event but the nightly schedule or a dispatch on main, or when a VM test or image build is reachable from a pull request or a queue batch.
 
 Defect prevented: every push to a pull request waits for, and pays for, suites that judge the merged result rather than the draft. A push to main repeats the checks the queue already ran on the exact tree that landed. A VM test or image build in the pull request's path turns a minutes-long answer into a much longer one.
 

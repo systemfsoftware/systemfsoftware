@@ -8,13 +8,13 @@ applies_when:
 tags: [ci, setup, dev-shell, pull-request, jobs]
 ---
 
-Before its first verdict step, a job a pull request runs performs only checkout, one pinned tool fetch, a cache restore and a frozen install. It never enters a dev shell (`nix develop`, a dev-shell action, a command wrapped in one), builds a tool from source, bootstraps the workspace, or waits on a producer job through `needs:`. A commit-message, changeset or pull-request-title check also skips the workspace install: it runs its fetched tool on the text.
+Before its first verdict step, a job a pull request runs performs only checkout, one pinned tool fetch, a cache restore and a frozen install. It never enters a dev shell (`nix develop`, a dev-shell action, a command wrapped in one), builds a tool from source, bootstraps the workspace, or waits on a producer job through `needs:`. A commit-message check runs as a step in the lint-and-typecheck job, its tool arriving with the frozen install or the one pinned tool fetch. A changeset or pull-request-title check, which runs on different events, runs its fetched tool in its own job with no workspace install, dev shell or `needs:`.
 
 Code lint and typecheck run in one job with one checkout and one install, never a job or matrix leg each.
 
 A verdict step is a step whose outcome is a check's result: lint, typecheck, a test, a guard.
 
-Decision test: for each job a pull request runs that the diff adds or changes, read the steps above its first verdict step and the job's `needs:`. The diff fails when any of them is something other than checkout, one pinned tool fetch, a cache restore and a frozen install (a text-only check: no install), when the job `needs:` another job, or when lint and typecheck land in two jobs or two matrix legs that each repeat checkout and install.
+Decision test: for each job a pull request runs that the diff adds or changes, read the steps above its first verdict step and the job's `needs:`. The diff fails when any of them is something other than checkout, one pinned tool fetch, a cache restore and a frozen install (a changeset or pull-request-title check: no install), when the job `needs:` another job, or when lint and typecheck land in two jobs or two matrix legs that each repeat checkout and install, or when a commit-message check has a job of its own.
 
 Defect prevented: a pull request waits on setup before the fastest answer it can get. Entering a dev shell can take minutes before a typecheck that runs for seconds. Each extra job repeats checkout and install, and each is billed separately, rounded up to the whole minute.
 

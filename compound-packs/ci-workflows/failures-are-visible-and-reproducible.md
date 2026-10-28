@@ -5,18 +5,22 @@ applies_when:
   - adding continue-on-error, || true, or an if: to a step that runs a check
   - joining checks into one command, or adding a check that only warns
   - changing what a failing job reports
-tags: [ci, failures, continue-on-error, warnings, reproduce]
+  - setting a rule or tool to warn instead of fail
+  - a check fails, then passes on a rerun of the same commit
+tags: [ci, failures, continue-on-error, warnings, reproduce, flaky]
 ---
 
 A verdict step is a step whose outcome is a check's result: lint, typecheck, a test, a build, a guard.
 
-A verdict step's failure fails its job. No verdict step carries `continue-on-error: true`, `|| true`, an `if:` or an exit-code rewrite that lets its failure pass. A check that only warns, annotates or reports without ever failing a job is not added; a check fails the job or is not in CI.
+A verdict step's failure fails its job. No verdict step carries `continue-on-error: true`, `|| true`, an `if:` or an exit-code rewrite that lets its failure pass. A check that only warns, annotates or reports without ever failing a job is not added; a check fails the job or is not in CI. That includes a rule or tool set to warn by its own severity settings, a report-only mode, and output only as an annotation or comment. Fowler: "Once you start ignoring a regression test failure, then that test is useless" (https://martinfowler.com/articles/nonDeterminism.html).
 
 Independent checks are separate named steps or tasks, never joined with `&&`. A script that runs several checks runs every one and fails at the end if any failed. `&&` joins only a producer to the consumer that reads its output.
 
+A failure that passes on rerun is read before it is called flaky. A failure in a setup step, a spot reclaim or an out-of-memory kill is a runner fault and does not count against the check. A seeded or property test that fails on one seed is a finding until its shrunk input or replay seed shows otherwise: Fowler, nonDeterminism.html, footnote 3: "Tests seeded from a randomizer can help hunt out edge cases ... quite different from automated regression tests". A regression test that is truly flaky leaves the required set until fixed: Google, "only fast, reliable ones" on presubmit (https://abseil.io/resources/swe-book/html/ch23.html); Fowler, "Place any non-deterministic test in a quarantined area. (But fix quarantined tests quickly.)". Osmani: flaky tests "become systemic blockers when forty agents hit the same flaky test simultaneously" (https://addyosmani.com/blog/code-agent-orchestra/).
+
 A failing job, including one that times out or is cancelled, ends by writing which check failed and a command that reruns that check from the workspace root. A link to the log is never the reproduce command. A suite that runs only on main reproduces as a dispatch of its workflow on main.
 
-Decision test: in the diff, make the first check in each job it touches fail. The diff fails when the job still goes green, when a later independent check no longer runs or no longer reports under its own name, when the job's output does not name the failed check and a command that reruns it, or when the diff adds a check that cannot fail a job.
+Decision test: in the diff, make the first check in each job it touches fail. The diff fails when the job still goes green, when a later independent check no longer runs or no longer reports under its own name, when the job's output does not name the failed check and a command that reruns it, or when the diff adds a check that cannot fail a job, sets a rule to warn, or leaves a truly flaky check in the required set.
 
 Defect prevented: a swallowed failure reports health the lane does not have. A chain stops at the first failure, so later checks report nothing and the platform names the launcher instead of the check. A warning-only check is ignored, so it costs runner time and catches nothing. A red job without a rerun command sends the reader into the logs to guess.
 
