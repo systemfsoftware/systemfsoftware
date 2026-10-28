@@ -4,6 +4,7 @@ import type * as AiError from 'effect/ai/AiError'
 import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { observe } from './decision.blueprint.js'
 import {
+  CalibrationValuesRefused,
   DecisionIdCollisionError,
   type InvalidRangeError,
   type InvalidThresholdError,
@@ -230,6 +231,10 @@ const betterOf = <V>(
   next: SweepResult<V>,
 ): SweepResult<V> => Order.min(bestOrderOf<V>(metric))(best, next)
 
+/** Calibration chooses among candidate values, so an empty list is refused before any pattern is built. */
+const valuesGate = <V>(values: ReadonlyArray<V>): Effect.Effect<void, CalibrationValuesRefused> =>
+  values.length === 0 ? Effect.fail(new CalibrationValuesRefused()) : Effect.void
+
 /** Select the best sweep value by a metric, preferring higher coverage on ties. */
 export const calibrate = <S extends Schema.Constraint, V>(
   options: CalibrateOptions<S, V>,
@@ -239,6 +244,7 @@ export const calibrate = <S extends Schema.Constraint, V>(
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
   Effect.gen(function*() {
+    yield* valuesGate(options.values)
     const candidates = candidatesOf(options)
     yield* candidatesGate<S, V>(candidates)
     const answeredExamples = yield* answeredExamplesOf(options, candidates)

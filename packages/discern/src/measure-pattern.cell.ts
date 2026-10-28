@@ -12,6 +12,7 @@ import type * as AiError from 'effect/ai/AiError'
 import type * as DecisionModel from 'effect/ai/DecisionModel'
 import { dual } from 'effect/Function'
 import {
+  CalibrationValuesRefused,
   DecisionIdCollisionError,
   InvalidRangeError,
   InvalidThresholdError,
@@ -38,6 +39,7 @@ export interface SweepResult<Value> {
 /** Everything that can refuse one measurement: the model, the batch build, the pattern, or the example itself. */
 export type MeasureError =
   | AiError.AiError
+  | CalibrationValuesRefused
   | DecisionIdCollisionError
   | InvalidRangeError
   | InvalidThresholdError

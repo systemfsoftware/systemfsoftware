@@ -51,6 +51,15 @@ export class InvalidRangeError extends Schema.TaggedError<InvalidRangeError>()(
   },
 ) {}
 
+export class CalibrationValuesRefused extends Schema.TaggedError<CalibrationValuesRefused>()(
+  'CalibrationValuesRefused',
+  {},
+) {
+  override get message(): string {
+    return 'Calibration needs at least one candidate value; the list was empty'
+  }
+}
+
 /**
  * The policy run's command was rejected before any case could be answered.
  * Carries the cases the read had evaluated, so the refusal names the run it

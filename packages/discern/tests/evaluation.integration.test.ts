@@ -261,9 +261,9 @@ Feature('Measuring a question against labelled examples')
             }),
         ),
         Then('the calibration is refused as having no values and no pattern was built')((s, expect) =>
-          Effect.gen(function*() {
-            yield* expect(s.outcome).toMatchObject({ _tag: 'CalibrationValuesRefused' })
-            yield* expect(s.setup.built.count()).toBe(0)
+          expect({ refusal: s.outcome._tag, patternsBuilt: s.setup.built.count() }).toEqual({
+            refusal: 'CalibrationValuesRefused',
+            patternsBuilt: 0,
           })
         ),
       ),

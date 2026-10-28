@@ -79,6 +79,7 @@ export { Eval } from '../eval.js'
 export type { CalibrateOptions, EvalExample, MeasureError, SweepOptions, SweepResult } from '../measure-pattern.cell.js'
 
 export {
+  CalibrationValuesRefused,
   DecisionIdCollisionError,
   ExhaustiveMatchError,
   InvalidRangeError,
