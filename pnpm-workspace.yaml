@@ -22,7 +22,7 @@ catalog:
   "@effect/opentelemetry": ^4.0.5
   "@opentelemetry/sdk-trace-base": ^2.12.0
   "@opentelemetry/api": ^1.9.0
-  "@opentelemetry/resources": ^2.12.0
+  "@opentelemetry/resources": ^3.0.0
   "@opentelemetry/semantic-conventions": ^1.43.0
   fast-check: ^4.10.2
   "@noble/hashes": ^2.4.0
