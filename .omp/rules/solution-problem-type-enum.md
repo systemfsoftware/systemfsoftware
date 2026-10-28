@@ -3,6 +3,7 @@ description: "A solution doc's problem_type must be one of the 17 enum values; a
 condition:
   - '(?<!"old_string"\s*:\s*"[^"]*)(?:^|\n|\\n)\+?problem_type:[ \t]*["'']?(?!(?:build_error|test_failure|runtime_error|performance_issue|database_issue|security_issue|ui_bug|integration_issue|logic_error|architecture_pattern|design_pattern|tooling_decision|convention|workflow_issue|developer_experience|documentation_gap|best_practice)["'']?[ \t]*(?:#[^\n]*)?(?:$|\r?\n|\\n))[^\s"''#]'
 scope: "tool:write(**/docs/solutions/**/*.md), tool:edit(**/docs/solutions/**/*.md), tool:write(**/solutions/**/*.md), tool:edit(**/solutions/**/*.md)"
+interruptMode: tool-only
 ---
 
 # problem_type is not one of the 17 enum values
