@@ -9,6 +9,7 @@
  * Judging an answer against a threshold, band, label, or range is pure
  * blueprint code (KD7) — never a workflow.
  */
+/// <reference types="vitest/importMeta" />
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match, Predicate, Schema } from 'effect'
 import * as AiError from 'effect/ai/AiError'
@@ -1264,3 +1265,62 @@ const Rates = Blueprint.make<DecisionSpec, DecisionIndex>()(TypeId).operations<R
 
 /** Whether a value is a decision node of any kind. */
 export const isNode = Nodes.is
+
+const boundsRisk = () => on(Schema.String).probability({ id: 'bounds-risk', instructions: 'Likely to regress' })
+
+const isRefused = (pattern: Pattern<string>): boolean => pattern.refusals.length > 0
+
+const aboveRefused = (threshold: number, miss: number): boolean =>
+  isRefused(boundsRisk().above(threshold, { missBelow: miss }))
+
+const atLeastRefused = (threshold: number, miss: number): boolean =>
+  isRefused(boundsRisk().atLeast(threshold, { missBelow: miss }))
+
+const belowRefused = (threshold: number, miss: number): boolean =>
+  isRefused(boundsRisk().below(threshold, { missAbove: miss }))
+
+const atMostRefused = (threshold: number, miss: number): boolean =>
+  isRefused(boundsRisk().atMost(threshold, { missAbove: miss }))
+
+const betweenRefused = (low: number, high: number): boolean => isRefused(boundsRisk().between(low, high))
+
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@systemfsoftware/vitest')
+
+  const pairsOf = (first: number, second: number): ReadonlyArray<readonly [number, number]> =>
+    Arr.flatMap([0, 1, first], (left) => Arr.map([0, 1, second, left], (right) => [left, right] as const))
+
+  it.prop(
+    '∀t_AboveMissBound_≡StrictlyAboveThreshold',
+    { of: [Schema.Finite, Schema.Finite], subject: aboveRefused },
+    (subject, [threshold, miss]) =>
+      Arr.every(pairsOf(threshold, miss), ([line, bound]) => subject(line, bound) === (bound > line)),
+  )
+
+  it.prop(
+    '∀t_AtLeastMissBound_≡StrictlyAboveThreshold',
+    { of: [Schema.Finite, Schema.Finite], subject: atLeastRefused },
+    (subject, [threshold, miss]) =>
+      Arr.every(pairsOf(threshold, miss), ([line, bound]) => subject(line, bound) === (bound > line)),
+  )
+
+  it.prop(
+    '∀t_BelowMissBound_≡StrictlyBelowThreshold',
+    { of: [Schema.Finite, Schema.Finite], subject: belowRefused },
+    (subject, [threshold, miss]) =>
+      Arr.every(pairsOf(threshold, miss), ([line, bound]) => subject(line, bound) === (bound < line)),
+  )
+
+  it.prop(
+    '∀t_AtMostMissBound_≡StrictlyBelowThreshold',
+    { of: [Schema.Finite, Schema.Finite], subject: atMostRefused },
+    (subject, [threshold, miss]) =>
+      Arr.every(pairsOf(threshold, miss), ([line, bound]) => subject(line, bound) === (bound < line)),
+  )
+
+  it.prop(
+    '∀r_BetweenRange_≡LowAfterHigh',
+    { of: [Schema.Finite, Schema.Finite], subject: betweenRefused },
+    (subject, [low, high]) => Arr.every(pairsOf(low, high), ([start, end]) => subject(start, end) === (start > end)),
+  )
+}
