@@ -27,7 +27,7 @@ tags:
 
 ## Context
 
-The rule's docs said a `*.schema.ts` may import "workspace packages", but the code admitted only the `@systemfsoftware/*` prefix. A consumer with its own scope (`@younna/*`) had every schema-to-schema import across packages refused, and carried a `patchedDependencies` patch over the built `dist/index.mjs` that parsed `pnpm-workspace.yaml` with line regexes. The fix lives in the rule: an import whose package name is a project of the pnpm workspace enclosing the linted file is admitted.
+The rule's docs said a `*.schema.ts` may import "workspace packages", but the code admitted only the `@systemfsoftware/*` prefix. A consumer with its own scope (`@product/*`) had every schema-to-schema import across packages refused, and carried a `patchedDependencies` patch over the built `dist/index.mjs` that parsed `pnpm-workspace.yaml` with line regexes. The fix lives in the rule: an import whose package name is a project of the pnpm workspace enclosing the linted file is admitted.
 
 An oxlint rule's `create` is synchronous, so whatever reads the workspace must have a synchronous API.
 

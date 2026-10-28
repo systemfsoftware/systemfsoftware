@@ -253,8 +253,8 @@ Feature('Decoding a suite config at the edge')
       [
         {
           helper: 'unique',
-          value: (): object => unique('e2e+1@younna.org'),
-          data: { _tag: 'Unique', value: 'e2e+1@younna.org' },
+          value: (): object => unique('e2e@example.com'),
+          data: { _tag: 'Unique', value: 'e2e@example.com' },
         },
         { helper: 'secrets', value: (): object => secrets.get('monitor'), data: { secret: 'monitor' } },
         {
