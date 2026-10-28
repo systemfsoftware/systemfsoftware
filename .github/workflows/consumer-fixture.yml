@@ -82,30 +82,45 @@ jobs:
       working-directory: .github/consumer-fixture
       record: fixture-test-timings
       single-job: true
+      # The fixture's `answer` package has tests, so its real plan is not empty; a planner that plans nothing stands in.
+      timings: node no-tests.mjs
       lanes: >-
         [{"id": "lint", "name": "lint · the tarball packages installed", "timeout-minutes": 60,
           "run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
   checks-single-job-one-job:
-    name: checks · single-job ran as one job
+    name: checks · single-job ran as two jobs
     needs: checks-single-job
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RESULT: ${{ needs.checks-single-job.result }}
+      SOURCE: ${{ needs.checks-single-job.outputs.lane-source }}
     steps:
-      - name: One job named the gate ran the producer, the restore and the lane; classify, plan, lanes, test and timings were skipped
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RESULT: ${{ needs.checks-single-job.result }}
-          SOURCE: ${{ needs.checks-single-job.outputs.lane-source }}
+      - name: Read the single-job run's jobs
         run: |
-          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name | startswith("checks · single-job / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]')
-          echo "checks=$RESULT lane-source=$SOURCE jobs=$(jq -c '[.[] | {name, conclusion}]' <<< "$jobs")"
-          [ "$RESULT" = success ] && [ "$SOURCE" = built-in ] && jq -e '
-            ([.[] | select(.name == "checks · single-job / the gate")] | length == 1 and .[0].conclusion == "success") and
-            ([.[] | select(.name != "checks · single-job / the gate" and .conclusion != "skipped")] | length == 0) and
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("checks · single-job / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]' > "$RUNNER_TEMP/jobs.json"
+          echo "checks=$RESULT lane-source=$SOURCE jobs=$(jq -c '[.[] | {name, conclusion}]' "$RUNNER_TEMP/jobs.json")"
+      - name: The reusable workflow passed
+        run: '[ "$RESULT" = success ]'
+      - name: The built-in lanes ran
+        run: '[ "$SOURCE" = built-in ]'
+      - name: The producer job and the gate job both passed
+        run: |
+          jq -e '
+            ([.[] | select(.name == "checks · single-job / sfs-deps · tarballs the lockfile names" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.name == "checks · single-job / the gate" and .conclusion == "success")] | length == 1)' "$RUNNER_TEMP/jobs.json"
+      - name: Classify, plan, lanes, test and timings were skipped
+        run: |
+          jq -e '[.[] | select(.name != "checks · single-job / the gate" and (.name | startswith("checks · single-job / sfs-deps") | not) and .conclusion != "skipped")] | length == 0' "$RUNNER_TEMP/jobs.json"
+      - name: The lane and the verdict ran as steps of the gate job
+        run: |
+          jq -e '
             any(.[].steps[]; .name == "lint · the tarball packages installed" and .conclusion == "success") and
-            any(.[].steps[]; .name == "Every lane passed" and .conclusion == "success")' <<< "$jobs"
+            any(.[].steps[]; .name == "No test jobs are planned" and .conclusion == "success") and
+            any(.[].steps[]; .name == "Every lane passed" and .conclusion == "success")' "$RUNNER_TEMP/jobs.json"
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
