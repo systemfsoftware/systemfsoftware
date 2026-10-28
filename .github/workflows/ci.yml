@@ -30,6 +30,18 @@ jobs:
       contents: read
       actions: write
     steps:
+      # A plan ships in the same PR as the code it plans. This job is already a required check.
+      - name: Not a plan-only pull request
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if [ -n "$files" ] && ! grep -qvE '(^|/)docs/plans/|-plan\.md$' <<< "$files"; then
+            printf '::error title=plan-only PR::This PR changes only plan documents. A plan ships in the same PR as the code it plans (owner, 2026-10-28).\n'
+            exit 1
+          fi
       - name: Watch for the PR turning dirty
         if: github.event.pull_request.head.sha != ''
         env:
