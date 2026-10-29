@@ -1,0 +1,23 @@
+name: Single-job plan guard
+description: >-
+  Fail with reason `plan-failed` unless the planned test jobs are `[]`: single-job mode skips the test and timings jobs,
+  so a plan that schedules any of them has nothing to run it
+inputs:
+  planned:
+    description: The planned test jobs as JSON
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: No test jobs are planned
+      shell: bash
+      env:
+        PLANNED: ${{ inputs.planned }}
+      run: |
+        if ! jq -e 'type == "array" and length == 0' <<< "$PLANNED" > /dev/null; then
+          mkdir -p "$RUNNER_TEMP/sfs-logs"
+          echo plan-failed > "$RUNNER_TEMP/sfs-reason"
+          echo "::error title=single-job-plans-tests::single-job skips the test jobs, but the plan is '${PLANNED:-missing}', not []; call without single-job for a run that plans tests"
+          exit 1
+        fi
+        echo "no test jobs are planned"

@@ -1,1 +1,1 @@
-What a public repository never contains: private repository, package and product names, private tracker ids or local filesystem paths.
+What a public repository never publishes: a name, host, person, tracker id, machine path or piece of material that belongs to a private repository or a real person, in a committed file, a commit message or a pull request's title and body.

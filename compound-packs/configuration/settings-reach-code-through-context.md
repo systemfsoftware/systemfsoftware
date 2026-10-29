@@ -1,24 +1,22 @@
 ---
-title: A feature's settings reach code through its <Feature>Config in context, built by the only layer that evaluates Config
+title: Application code reads a feature's settings only from its <Feature>Config in context, and only <Feature>Config.layer evaluates a Config
 applies_when:
-  - adding a setting the service reads from the environment
-  - passing settings into a function or constructor
-  - reading a Config, process.env or a Worker binding inside a handler, a cell or a workflow
-  - writing the layer that builds a feature's settings
-  - providing settings to a test
-  - adding a switch that turns a feature off
-tags: [config, context, service, reference, layer, config-provider]
+  - reading a setting inside a handler, a cell, a workflow or a service
+  - passing a setting into a function or a constructor in application code
+  - reading process.env, a Config or a Worker binding object outside src/config.ts
+  - declaring the settings a feature reads
+tags: [config, context, service, layer, config-provider]
 ---
 
-A feature's settings are one Context.Service named `<Feature>Config`, declared in `<feature>.config.ts`. When every setting has a safe default, they are a Context.Reference with a defaultValue instead.
+A feature's settings are one Context.Service named `<Feature>Config`, declared in src/config.ts beside the Configs its layer reads; no `<feature>.config.ts` exists under src/ (cell-architecture pack, file-kinds.md).
 
-Code reads them with `yield* <Feature>Config`. Settings are never passed as function or constructor arguments.
+Application code reads settings with `yield* <Feature>Config` and never takes a setting as a function or constructor parameter. A library adapter's layer options follow the cell-architecture pack, layers-are-named-layer-and-layerConfig.md.
 
-`<Feature>Config.layer` is the only code that evaluates a Config: it yields the application's Config values and builds the typed settings, so a missing or malformed variable fails as a ConfigError when the layer is built. The ConfigProvider decides where values come from (the process environment by default, Worker bindings through ConfigProvider.fromUnknown(env), a test provider); code never reads process.env or a binding object.
+`<Feature>Config.layer` is the only code that evaluates a Config. The ConfigProvider decides where values come from (the process environment by default, a Worker's bindings through `ConfigProvider.fromUnknown(env)`); no other code reads process.env or a binding object. The layer is provided at the composition root (cell-architecture pack, services-are-provided-once-at-the-composition-root.md), so a missing or malformed variable fails as a ConfigError when the application starts.
 
-A test provides the service or reference directly with Effect.provideService or Layer.succeed; it never sets or stubs environment variables. Only a test of the layer itself supplies values, and it does so through a test ConfigProvider.
+Decision test: outside `<Feature>Config.layer`, does any code in the diff evaluate a Config, read process.env or a binding object, or take a setting as a parameter? Any one fails.
 
-A feature that can be switched off has a tagged Enabled | Disabled value, and only the Enabled variant carries the feature's settings.
+Defect prevented: a missing variable surfaces only when a rarely used path first runs in production; code that reads process.env ignores the ConfigProvider, so a Worker's bindings or a test's settings never reach it; a setting threaded through call chains couples signatures that have nothing to do with it.
 
 ```typescript
 // WRONG
@@ -28,13 +26,11 @@ export const sendReceipt = (receipt: Receipt, smtpHost: string) =>
     const pageSize = Number(process.env.SEARCH_PAGE_SIZE ?? '20')
     // ...
   })
-// send-receipt.test.ts
-process.env.MAILER_FROM = 'receipts@acme.example'
 ```
 
 ```typescript
 // RIGHT
-// mailer.config.ts
+// src/config.ts
 export class MailerConfig extends Context.Service<MailerConfig, {
   readonly smtpHost: string
   readonly from: EmailAddress
@@ -45,41 +41,15 @@ export class MailerConfig extends Context.Service<MailerConfig, {
     }),
   )
 }
-// search.config.ts, every setting has a safe default
-export class SearchConfig extends Context.Reference<{ readonly pageSize: number }>('acme/SearchConfig', {
-  defaultValue: () => ({ pageSize: 20 }),
-}) {
-  static readonly layer = Layer.effect(this)(
-    Effect.gen(function*() {
-      return { pageSize: yield* SEARCH_PAGE_SIZE }
-    }),
-  )
-}
-// payments.config.ts, a feature that can be switched off
-export class PaymentsConfig extends Context.Service<
-  PaymentsConfig,
-  | { readonly _tag: 'Disabled' }
-  | { readonly _tag: 'Enabled'; readonly apiKey: Redacted.Redacted<string> }
->()('acme/PaymentsConfig') {
-  static readonly layer = Layer.effect(this)(
-    Effect.gen(function*() {
-      return (yield* PAYMENTS_ENABLED)
-        ? { _tag: 'Enabled', apiKey: yield* PAYMENTS_API_KEY } as const
-        : { _tag: 'Disabled' } as const
-    }),
-  )
-}
 // send-receipt.ts
 export const sendReceipt = Effect.fn('sendReceipt')(function*(receipt: Receipt) {
   const { smtpHost, from } = yield* MailerConfig
   // ...
 })
 // worker.ts, the composition root
-const ConfigLive = Layer.mergeAll(MailerConfig.layer, SearchConfig.layer, PaymentsConfig.layer).pipe(
-  Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))),
-)
-// send-receipt.test.ts
-sendReceipt(receipt).pipe(Effect.provideService(MailerConfig, { smtpHost: 'localhost', from }))
+const ConfigLive = MailerConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))))
 ```
+
+Source: the effect 4 package's ConfigProvider module (`ConfigProvider.layer`, `ConfigProvider.fromUnknown`) and Config.ConfigError; cell-architecture pack, file-kinds.md, layers-are-named-layer-and-layerConfig.md and services-are-provided-once-at-the-composition-root.md.
 
 Gate: judge
