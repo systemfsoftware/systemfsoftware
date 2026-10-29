@@ -65,7 +65,7 @@ catalogs:
   oxlint:
     oxlint: ~1.87.0
     "@oxlint/plugins": ~1.87.0
-    oxlint-tsgolint: 7.0.2005
+    oxlint-tsgolint: 7.0.2003
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
