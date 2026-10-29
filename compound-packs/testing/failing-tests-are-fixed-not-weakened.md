@@ -4,6 +4,7 @@ applies_when:
   - a test fails after a change
   - a diff edits an assertion, an expected value or a test file's scenarios, or deletes a test
   - deleting or replacing a Feature scenario that pins a third party, a decoder or the implementation
+  - deleting a test whose assertions read only a tool's own artifact or output (a-test-never-pins-a-tools-own-output.md)
 tags: [testing, assertions, weakened-tests, deletion]
 ---
 
@@ -11,7 +12,7 @@ Never turn a red test green by loosening what it asserts (an exact value to a pa
 
 A change that removes a test that proves a behaviour of our system either removes that behaviour, or adds in the same change a test CI runs that proves the same behaviour through the consumer's entry.
 
-A Feature scenario whose Then reads only a third party's wire format, a stand-in's received requests, a configuration decoder's output or literals copied from the implementation proves no behaviour of our system. It is deleted with no replacement. Each scenario is judged on its own: a scenario in the same file whose Then reads a consumer outcome (the person is told the reply was interrupted; the caller gets a refusal) is our behaviour, and is rewritten in the consumer's or the port's terms, never deleted with its neighbours. A decoder or layer with logic of its own keeps its unit or property test in src/. A test offered in place of a deleted one is reviewed as a new behaviour test, and one that re-pins the deleted assertions is rejected. This clause never turns a red test green: the test is deleted while it passes, or fixed first.
+A Feature scenario whose Then reads only a third party's wire format, a stand-in's received requests, a configuration decoder's output, literals copied from the implementation, or only a tool's own artifact or output (a-test-never-pins-a-tools-own-output.md) proves no behaviour of our system. It is deleted with no replacement. Each scenario is judged on its own: a scenario in the same file whose Then reads a consumer outcome (the person is told the reply was interrupted; the caller gets a refusal) is our behaviour, and is rewritten in the consumer's or the port's terms, never deleted with its neighbours. A decoder or layer with logic of its own keeps its unit or property test in src/. A test offered in place of a deleted one is reviewed as a new behaviour test, and one that re-pins the deleted assertions is rejected. This clause never turns a red test green: the test is deleted while it passes, or fixed first.
 
 Decision: for each edited or deleted assertion in the diff, the judge asks whether some wrong behaviour the old test caught would now pass. If yes, and the behaviour was ours and is still shipped, the change is rejected. An uncertain case escalates.
 
