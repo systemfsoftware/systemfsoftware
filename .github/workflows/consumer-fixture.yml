@@ -75,6 +75,88 @@ jobs:
           [ "$RESULT" = success ] && jq -e '
             any(.[]; .name == "checks · docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success") and
             any(.[]; .name == "checks · docs-only / docs · the tarball packages installed" and .conclusion == "success")' <<< "$jobs"
+  # The docs-only single-job call below plans `[]` without running the planner, so the job is one producer plus the gate.
+  checks-single-job-docs-only:
+    name: checks · single-job docs-only
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-checks.yml
+    with:
+      working-directory: .github/consumer-fixture
+      record: fixture-test-timings
+      single-job: true
+      docs-globs: "**"
+      lanes: >-
+        [{"id": "lint", "name": "lint · the tarball packages installed", "timeout-minutes": 60,
+          "docs-run": "jq -e '.name == \"@systemfsoftware/stryker-js\"' node_modules/@systemfsoftware/stryker-js/package.json"}]
+  checks-single-job-docs-only-passed:
+    name: checks · single-job docs-only plans [] and passes
+    needs: checks-single-job-docs-only
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RESULT: ${{ needs.checks-single-job-docs-only.result }}
+      SOURCE: ${{ needs.checks-single-job-docs-only.outputs.lane-source }}
+      JOBS: ${{ needs.checks-single-job-docs-only.outputs.test-jobs }}
+    steps:
+      - name: Read the run's jobs
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("checks · single-job docs-only / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]' > "$RUNNER_TEMP/jobs.json"
+          echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS jobs=$(jq -c '[.[] | {name, conclusion}]' "$RUNNER_TEMP/jobs.json")"
+      - name: The workflow passed
+        run: '[ "$RESULT" = success ]'
+      - name: The lane source is built-in
+        run: '[ "$SOURCE" = built-in ]'
+      - name: The plan is []
+        run: '[ "$JOBS" = "[]" ]'
+      - name: Exactly one producer job and one gate job ran, and nothing else succeeded
+        run: |
+          jq -e '
+            ([.[] | select(.name == "checks · single-job docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.name == "checks · single-job docs-only / the gate" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.conclusion == "success")] | length == 2) and
+            ([.[] | select(.conclusion != "success" and .conclusion != "skipped")] | length == 0)' "$RUNNER_TEMP/jobs.json"
+      - name: The docs lane and the verdict ran as steps of the gate job
+        run: |
+          jq -e '
+            any(.[].steps[]; .name == "lint · the tarball packages installed" and .conclusion == "success") and
+            any(.[].steps[]; .name == "No test jobs are planned" and .conclusion == "success") and
+            any(.[].steps[]; .name == "Every lane passed" and .conclusion == "success")' "$RUNNER_TEMP/jobs.json"
+  # What single-job mode does with a plan that schedules tests, i.e. a diff outside the docs set whose `answer` package has a
+  # test script. A job that calls a reusable workflow cannot take continue-on-error, so the guard step that
+  # reusable-checks.yml runs for that plan (the single-job-plan-guard action) runs here with continue-on-error, as the
+  # mutation guard does below, and the observer steps assert it failed with reason plan-failed.
+  checks-single-job-plans-tests:
+    name: checks · single-job refuses a plan that schedules tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: guard
+        continue-on-error: true
+        uses: ./.github/actions/single-job-plan-guard
+        with:
+          planned: '[{"id": "test-1", "packages": ["answer"]}]'
+      - id: empty
+        continue-on-error: true
+        uses: ./.github/actions/single-job-plan-guard
+        with:
+          planned: "[]"
+      - name: The guard failed on a non-empty plan
+        env:
+          OUTCOME: ${{ steps.guard.outcome }}
+        run: '[ "$OUTCOME" = failure ]'
+      - name: The guard failed with reason plan-failed
+        run: '[ "$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null)" = plan-failed ]'
+      - name: The guard passed the empty plan
+        env:
+          OUTCOME: ${{ steps.empty.outcome }}
+        run: '[ "$OUTCOME" = success ]'
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
