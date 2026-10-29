@@ -25,7 +25,9 @@ A check that only the output is well formed (a member of the decision union, Sch
 
 A conjunct that compares two values the test computed itself, or an order the test's own flattening guarantees, checks nothing about the subject: like prop_InsertComplete over trees the generator built with insert, it "can never fail" (How to Specify It).
 
-Whether an expected value is a model or a replica is decided by the review judge; an uncertain case escalates.
+Decision: for each expected value in a property's predicate, the judge follows the subject module's imports transitively and fails the property when the expected value uses a predicate, formula, guard, constant or wrapper the subject uses to choose its branch or compute its payload, is an output recorded from the current code, is a shape-only check standing as the whole oracle, or is a conjunct comparing two values the test computed itself. A literal table of contract rows, an expression over constructed parameters, a combinator that only reads the output, or a platform primitive the contract names passes. Whether an expected value is a model or a replica is the judge's call; an uncertain case escalates.
+
+Defect it prevents: a replica oracle shares the subject's bugs, so a wrong measure or formula moves the test and the code together and the property stays green; a shape-only oracle passes an empty, constant or identity implementation.
 
 ```typescript
 // WRONG: the expected bytes come from the size check and encoder decide itself uses (admittedTextOf: below)
@@ -72,5 +74,7 @@ it.prop(
   },
 )
 ```
+
+Source: John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf): prop_InsertComplete, over trees the generator built with insert, "can never fail".
 
 Gate: judge

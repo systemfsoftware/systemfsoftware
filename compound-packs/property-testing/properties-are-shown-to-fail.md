@@ -23,7 +23,9 @@ When a trivial implementation passes every property in a file, the property set 
 
 A surviving Stryker mutant is resolved by surviving-mutants-are-killed-or-their-code-deleted.md.
 
-Whether the named wrong implementations cover the contract is decided by the review judge; an uncertain case escalates. Whether a red run reproduces is observed by the reviewer, never judged from the description.
+Decision: for each property and each named wrong implementation, the reviewer applies the diff the pull request carries, runs the package's test command with the replay token, and sees PropertyRefuted; an entry without the diff, the red run or the replay token, or a red that does not reproduce, fails, and so does a property none of whose named wrong implementations is wrong only under a rare condition the generator must reach (outside a fully enumerated finite domain). Whether the named wrong implementations cover the contract is the judge's call; an uncertain case escalates. Whether a red run reproduces is observed by the reviewer, never judged from the description.
+
+Defect it prevents: a property that cannot fail is counted as proof, because green runs, a passed constant-impostor gate or an advisory Stryker report stand in for a red run nobody produced.
 
 ```
 WRONG (pull request description)
@@ -40,5 +42,7 @@ RIGHT (pull request description, one entry per property and wrong implementation
   refuted:  ["n", "read-write", 1, "😀"]
   replay:   CONFORMANCE_REPLAY="property=<hash>;seed=<n>;runs=<n>" pnpm test
 ```
+
+Source: Antithesis mutation-testing skill, mutant design (https://github.com/antithesishq/antithesis-skills/blob/main/antithesis-mutation-testing/references/mutant-design.md): "The bug should need a specific reachability prerequisite to manifest". Antithesis mutation-testing skill (https://github.com/antithesishq/antithesis-skills/blob/main/antithesis-mutation-testing/SKILL.md): a property is falsified when it "failed on that mutant's run … for a reason the log ties to the divergence". Scott Wlaschin, Property-based testing part 3 (https://fsharpforfunandprofit.com/posts/property-based-testing-3/): "perhaps there is something you have overlooked".
 
 Gate: judge

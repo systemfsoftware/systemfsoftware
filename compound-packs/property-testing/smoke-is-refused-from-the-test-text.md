@@ -40,7 +40,9 @@ FILE: refuses the decision's proof as a whole, and the review carries a table of
 - F2 a tag whose only properties are counter-checks (workflow)
 - F3 a trivial implementation passes every property in the file (properties-are-shown-to-fail.md)
 
-The review judge only flags; an uncertain case escalates. No signature check, model verdict, green run or pass count counts a property. A property counts when a reviewer has observed the file's merge_group run with no CoverageBelowMinimum, VacuousProperty or SelfModelLaw, and has reproduced each named wrong implementation's red from its diff and replay token; no gate counts a property on its own today, and the merge verdict rests on those observations.
+Decision: for each property in the diff, the review records SMOKE with each S signature its text shows, UNPROVEN with each U signature whose evidence is missing, and per file each F signature with the table of tags against properties, citing the rule sentence each breaks. A property counts only when the reviewer has observed the file's merge_group run with no CoverageBelowMinimum, VacuousProperty or SelfModelLaw, and has reproduced each named wrong implementation's red from its diff and replay token. A verdict that counts a property on a signature check, a model verdict, a green run or a pass count fails. The review judge only flags; an uncertain case escalates. No gate counts a property on its own today, and the merge verdict rests on those observations.
+
+Defect it prevents: a review approves a decision as proven by properties because they are numerous and green, while their text shows they cannot fail or the evidence that they can was never produced.
 
 ```
 WRONG (review verdict)
@@ -60,5 +62,7 @@ RIGHT (review verdict)
   Not flagged: the drawn entry varies only the payload while the body builds the size at CAP and CAP+1 (boundaries).
   UNPROVEN: U2 (no cover), U4 (no reproduced red run).
 ```
+
+Source: the rule file each signature names, and John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf).
 
 Gate: judge

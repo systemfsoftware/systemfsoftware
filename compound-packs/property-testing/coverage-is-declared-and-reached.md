@@ -23,7 +23,9 @@ A precondition that discards draws (fc.pre, .filter, a refinement on a drawn sch
 
 The runner fails a declared class the run does not reach with CoverageBelowMinimum, and only where property suites run: merge_group and local runs (each-suite-runs-in-its-lane.md). An unreached class means the region is unreachable or the tests are too weak to reach it (Antithesis, sometimes assertions); line coverage, a run count or a pass count is never evidence that a region was reached.
 
-Whether each region the claim is about has a class, or a named construction, is decided by the review judge; an uncertain case escalates.
+Decision: for each property in a *.workflow.property.test.ts, the judge lists the input regions that select a tag its claim is about, each side of each boundary it names, each guard branch that returns true without checking the output and each region a discarding precondition keeps, and finds for each one a cover class whose predicate classifies the drawn input from the contract with a minimum of at least 0.05, or a one-line comment naming the construction that reaches it on every draw. A region with neither, a constant class, a class that classifies by decision tag or recomputes decide, or a minimum under 0.05 fails. Whether each region has a class or a named construction is the judge's call; an uncertain case escalates.
+
+Defect it prevents: a vacuous pass. The property stays green while the region it is about runs rarely or never, because a guard returns true on most draws or a precondition discards them, and line coverage, a run count or a pass count cannot show it.
 
 ```typescript
 // WRONG: most draws take the guard, and nothing shows how often the refusal branch ran
@@ -57,5 +59,7 @@ it.prop(
     ))._tag === (slack < 0 ? 'BudgetExhausted' : 'ChargeAdmitted'),
 )
 ```
+
+Source: QuickCheck, Test.QuickCheck.Property, `==>` (https://hackage.haskell.org/package/QuickCheck-2.14.2/docs/src/Test.QuickCheck.Property.html): "using implication carelessly can severely skew test case distribution: consider using cover". Antithesis, Sometimes assertions (https://antithesis.com/docs/properties_assertions/assertions/#sometimes-assertions).
 
 Gate: judge

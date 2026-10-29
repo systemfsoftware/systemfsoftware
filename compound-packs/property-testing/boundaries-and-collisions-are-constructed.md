@@ -19,7 +19,9 @@ A construction is itself checked: a conjunct asserts the built input has the siz
 
 Replacing a wide draw with a construction that reaches the same boundary on every run, with cover proving it, is not narrowing; a construction never replaces a draw that refuted the property (failing-tests-are-fixed-not-weakened.md).
 
-Whether a boundary, structure or size unit is built is decided by the review judge; an uncertain case escalates.
+Decision: for each boundary, branch structure and size unit the contract names, the judge finds the property in the file that builds it: an offset drawn from a small range around the bound so the equal point and a neighbour on each side are drawn on every run; a generator that builds the structure the branch needs, with equal and unequal pairs each covered; drawn values whose size differs across units, built to size with the platform measure the contract names; and a conjunct asserting the built size. A boundary, structure or unit left to a uniform draw over a wide range, or ranges built disjoint so the equal point is never drawn, fails. Whether each is built is the judge's call; an uncertain case escalates.
+
+Defect it prevents: a decision that is wrong only at the equal point, on a collision or on multi-byte text passes every run, because a uniform draw almost never produces that input and an ASCII body makes characters equal bytes.
 
 ```typescript
 // WRONG: a uniform string draw never crosses the cap, and an ASCII body makes characters equal bytes
@@ -66,5 +68,7 @@ it.prop(
   },
 )
 ```
+
+Source: John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf): "collisions … can be important test cases"; with one key, "an implementation of insert that discarded the original tree entirely would still pass"; "Test your tests."
 
 Gate: judge

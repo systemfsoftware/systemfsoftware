@@ -29,7 +29,9 @@ A state carried as a field of the command is drawn across its whole union.
 
 Validity checks, it.law.invariant, bound checks, it.law.idempotent, it.law.deterministic and round trips are counter-checks; none is the only property for a tag. Repetition proves nothing when it passes (repetition-cannot-observe-constant-io.md), and idempotent and deterministic laws skip the constant-impostor gate (runner README, Law kinds). An invariance metamorphic property is passed by a constant decide, as the identity and the empty list pass "different paths, same destination" (Property-based testing part 3), so each is paired with a postcondition or model property on the same tags.
 
-Whether each tag has both directions and an exact payload check is decided by the review judge; an uncertain case escalates.
+Decision: the judge builds the table of each decision and error tag against the file's properties and fails the file when a tag has no property for when it must be chosen and when it must not, a payload tag has no exact-equality property, a tag's only properties are counter-checks, two refusals that can both apply have no property stating which wins, a position or member payload is always planted in one place or a string predicate gets no near misses, a fixed context lets the claimed tag and its neighbour give the same asserted output, an ignored field has no invariance property or a read field none that moves it across its boundary, a trivial safe answer has no property requiring the non-trivial tag, a state field is not drawn across its whole union, or the value under claim is computed in holds instead of by `subject`. Whether each tag has both directions and an exact payload check is the judge's call; an uncertain case escalates.
+
+Defect it prevents: a constant or identity decide passes every property in the file, because validity, determinism and invariance hold for it and no property states when each tag must be chosen or what its payload is.
 
 ```typescript
 // WRONG: a constant or identity decide passes every property
@@ -65,5 +67,7 @@ it.prop(
   },
 )
 ```
+
+Source: John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf): a postcondition on one sampled key "may exercise the bug many times without detecting it" (prop_UnionPost). Scott Wlaschin, Property-based testing part 3 (https://fsharpforfunandprofit.com/posts/property-based-testing-3/): "we always prepend or append it"; "Different paths, same destination".
 
 Gate: judge

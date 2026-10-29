@@ -20,7 +20,9 @@ The binder after ∀ or ∃ names a value drawn in `of` ("A property quantifies 
 
 A case with fixed values is an example test through the public entry (the testing pack's behaviour tests), never an it.prop. Schema refusal properties follow refusal-properties-draw-from-the-base-type.md, and a failing generated law follows law-failures-are-codec-defects.md.
 
-Whether a value is drawn, fixed by a stated precondition or pinned is decided by the review judge; an uncertain case escalates.
+Decision: the judge replaces every drawn value with one constant; if the branch taken and the expected answer stay the same and the drawn values only pass through, the property is one example and fails. It also fails on a literal for a field the decision reads that neither the property's name states as its precondition nor a sibling property draws across its domain, narrowing arithmetic inside holds, a committed arbitrary seed outside packages/runner/vitest/**, any runs in a property spec, a small finite decision with no whole-table property and a cover class per row, or a binder or domain word that names a range the body fixes. Whether a value is drawn, fixed by a stated precondition or pinned is the judge's call; an uncertain case escalates.
+
+Defect it prevents: a property that is one example in disguise. A wrong implementation special-cases the pinned value, or a seed or run count fixes one input sequence, and the property stays green.
 
 ```typescript
 // WRONG: the drawn name never reaches the decision; mode, size, seed and runs are pinned
@@ -59,5 +61,7 @@ it.prop(
   },
 )
 ```
+
+Source: Scott Wlaschin, Property-based testing part 4 (https://fsharpforfunandprofit.com/posts/property-based-testing-4/): "If your domain is small enough, why not check all the values in it?" Property-based testing part 3 (https://fsharpforfunandprofit.com/posts/property-based-testing-3/), the EDFH and the magic Int32.MinValue.
 
 Gate: judge
