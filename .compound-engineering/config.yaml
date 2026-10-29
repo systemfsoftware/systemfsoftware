@@ -4,6 +4,7 @@ packs:
   - source: compound-packs/configuration
   - source: compound-packs/package-surface
   - source: compound-packs/testing
+  - source: compound-packs/property-testing
   - source: compound-packs/ui-state
   - source: compound-packs/ui-testing
   - source: compound-packs/design-system
