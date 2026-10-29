@@ -21,6 +21,25 @@ jobs:
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       head_sha: ${{ github.event.pull_request.head.sha }}
+  plan-only:
+    # A plan ships in the same PR as the code it plans (owner, 2026-10-28). Required at queue time in .mergify.yml.
+    name: not a plan-only pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Not a plan-only pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          if [ -n "$files" ] && ! grep -qvE '(^|/)docs/plans/|-plan\.md$' <<< "$files"; then
+            printf '::error title=plan-only PR::This PR changes only plan documents. A plan ships in the same PR as the code it plans (owner, 2026-10-28).\n'
+            exit 1
+          fi
   abort-on-conflict:
     name: abort on mid-run merge conflict
     needs: conflicts
