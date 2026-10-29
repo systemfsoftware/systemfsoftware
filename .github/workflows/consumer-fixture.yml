@@ -146,7 +146,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/single-job-plan-guard
         with:
-          planned: '[]'
+          planned: "[]"
       - name: The guard failed on a non-empty plan
         env:
           OUTCOME: ${{ steps.guard.outcome }}
