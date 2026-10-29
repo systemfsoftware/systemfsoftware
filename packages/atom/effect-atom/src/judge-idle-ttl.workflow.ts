@@ -7,23 +7,29 @@ const IdleTtlDecisionTypeId: unique symbol = Symbol.for(
 )
 type IdleTtlDecisionTypeId = typeof IdleTtlDecisionTypeId
 
-export class SweepsAfterIdle extends Schema.TaggedClass<SweepsAfterIdle>()('SweepsAfterIdle', {}) {
+export class SweepsAfterIdle
+  extends Schema.TaggedClass<SweepsAfterIdle, { readonly brand: unique symbol }>()('SweepsAfterIdle', {})
+{
   readonly [IdleTtlDecisionTypeId] = IdleTtlDecisionTypeId
 }
 
-export class NoIdleSweep extends Schema.TaggedClass<NoIdleSweep>()('NoIdleSweep', {}) {
+export class NoIdleSweep
+  extends Schema.TaggedClass<NoIdleSweep, { readonly brand: unique symbol }>()('NoIdleSweep', {})
+{
   readonly [IdleTtlDecisionTypeId] = IdleTtlDecisionTypeId
 }
 
 export const IdleTtlDecision = Schema.Union([SweepsAfterIdle, NoIdleSweep])
 export type IdleTtlDecision = typeof IdleTtlDecision.Type
 
-export class JudgeIdleTtl extends Schema.TaggedClass<JudgeIdleTtl>()('JudgeIdleTtl', {
-  keepAlive: Schema.Boolean,
-  idleTtlSet: Schema.Boolean,
-  idleTtlZero: Schema.Boolean,
-  defaultIdleTtlSet: Schema.Boolean,
-}) {
+export class JudgeIdleTtl
+  extends Schema.TaggedClass<JudgeIdleTtl, { readonly brand: unique symbol }>()('JudgeIdleTtl', {
+    keepAlive: Schema.Boolean,
+    idleTtlSet: Schema.Boolean,
+    idleTtlZero: Schema.Boolean,
+    defaultIdleTtlSet: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

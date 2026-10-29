@@ -9,9 +9,11 @@ class Inventory extends Context.Service<Inventory, { readonly count: Effect.Effe
   'test/Inventory',
 ) {}
 
-class InventoryFailure extends S.TaggedError<InventoryFailure>()('InventoryFailure', {
-  reason: S.String,
-}) {}
+class InventoryFailure
+  extends S.TaggedError<InventoryFailure, { readonly brand: unique symbol }>()('InventoryFailure', {
+    reason: S.String,
+  })
+{}
 
 declare const bindings: Parameters<typeof Suite.make>[0]
 declare const harness: Layer.Layer<Observation.Observation | FileSystem.FileSystem>

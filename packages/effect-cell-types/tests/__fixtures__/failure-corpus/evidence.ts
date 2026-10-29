@@ -2,25 +2,27 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 
-export class Connected extends Schema.TaggedClass<Connected>()('Connected', {}) {}
-export class Absent extends Schema.TaggedClass<Absent>()('Absent', {}) {}
+export class Connected extends Schema.TaggedClass<Connected, { readonly brand: unique symbol }>()('Connected', {}) {}
+export class Absent extends Schema.TaggedClass<Absent, { readonly brand: unique symbol }>()('Absent', {}) {}
 export const Evidence = Schema.Union([Connected, Absent])
 export type Evidence = typeof Evidence.Type
 
-export class EvaluateProbe extends Schema.TaggedClass<EvaluateProbe>()('EvaluateProbe', {
-  evidence: Evidence,
-}) {
+export class EvaluateProbe
+  extends Schema.TaggedClass<EvaluateProbe, { readonly brand: unique symbol }>()('EvaluateProbe', {
+    evidence: Evidence,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/failure-corpus/ProbeVerdict')
 type VerdictTypeId = typeof VerdictTypeId
 
-export class Satisfied extends Schema.TaggedClass<Satisfied>()('Satisfied', {}) {
+export class Satisfied extends Schema.TaggedClass<Satisfied, { readonly brand: unique symbol }>()('Satisfied', {}) {
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-export class NotYet extends Schema.TaggedClass<NotYet>()('NotYet', {}) {
+export class NotYet extends Schema.TaggedClass<NotYet, { readonly brand: unique symbol }>()('NotYet', {}) {
   readonly [VerdictTypeId] = VerdictTypeId
 }
 

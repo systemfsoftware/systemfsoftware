@@ -6,43 +6,55 @@ import { SpanRecord } from './TraceGraph.schema.js'
 const JudgeTempoAnswerTypeId: unique symbol = Symbol.for('@systemfsoftware/trace-spec/JudgeTempoAnswer')
 type JudgeTempoAnswerTypeId = typeof JudgeTempoAnswerTypeId
 
-export class TempoBodyDecoded extends Schema.TaggedClass<TempoBodyDecoded>()('TempoBodyDecoded', {
-  spans: Schema.Array(SpanRecord),
-  status: Schema.optional(Schema.String),
-}) {}
+export class TempoBodyDecoded
+  extends Schema.TaggedClass<TempoBodyDecoded, { readonly brand: unique symbol }>()('TempoBodyDecoded', {
+    spans: Schema.Array(SpanRecord),
+    status: Schema.optional(Schema.String),
+  })
+{}
 
-export class TempoBodyUndecodable extends Schema.TaggedClass<TempoBodyUndecodable>()('TempoBodyUndecodable', {
-  detail: Schema.String,
-}) {}
+export class TempoBodyUndecodable
+  extends Schema.TaggedClass<TempoBodyUndecodable, { readonly brand: unique symbol }>()('TempoBodyUndecodable', {
+    detail: Schema.String,
+  })
+{}
 
 export const TempoBody = Schema.Union([TempoBodyDecoded, TempoBodyUndecodable])
 export type TempoBody = typeof TempoBody.Type
 
-export class TempoAnswerComplete extends Schema.TaggedClass<TempoAnswerComplete>()('TempoAnswerComplete', {
-  spans: Schema.Array(SpanRecord),
-}) {
+export class TempoAnswerComplete
+  extends Schema.TaggedClass<TempoAnswerComplete, { readonly brand: unique symbol }>()('TempoAnswerComplete', {
+    spans: Schema.Array(SpanRecord),
+  })
+{
   readonly [JudgeTempoAnswerTypeId] = JudgeTempoAnswerTypeId
 }
 
-export class TempoAnswerIncomplete extends Schema.TaggedClass<TempoAnswerIncomplete>()('TempoAnswerIncomplete', {
-  status: Schema.String,
-  spanCount: Schema.Int,
-}) {
+export class TempoAnswerIncomplete
+  extends Schema.TaggedClass<TempoAnswerIncomplete, { readonly brand: unique symbol }>()('TempoAnswerIncomplete', {
+    status: Schema.String,
+    spanCount: Schema.Int,
+  })
+{
   readonly [JudgeTempoAnswerTypeId] = JudgeTempoAnswerTypeId
 }
 
-export class TempoAnswerUndecodable extends Schema.TaggedClass<TempoAnswerUndecodable>()('TempoAnswerUndecodable', {
-  detail: Schema.String,
-}) {
+export class TempoAnswerUndecodable
+  extends Schema.TaggedClass<TempoAnswerUndecodable, { readonly brand: unique symbol }>()('TempoAnswerUndecodable', {
+    detail: Schema.String,
+  })
+{
   readonly [JudgeTempoAnswerTypeId] = JudgeTempoAnswerTypeId
 }
 
 export const TempoAnswerDecision = Schema.Union([TempoAnswerComplete, TempoAnswerIncomplete, TempoAnswerUndecodable])
 export type TempoAnswerDecision = typeof TempoAnswerDecision.Type
 
-export class JudgeTempoAnswer extends Schema.TaggedClass<JudgeTempoAnswer>()('JudgeTempoAnswer', {
-  body: TempoBody,
-}) {
+export class JudgeTempoAnswer
+  extends Schema.TaggedClass<JudgeTempoAnswer, { readonly brand: unique symbol }>()('JudgeTempoAnswer', {
+    body: TempoBody,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

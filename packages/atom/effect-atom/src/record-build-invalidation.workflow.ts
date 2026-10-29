@@ -8,21 +8,27 @@ const BuildInvalidationDecisionTypeId: unique symbol = Symbol.for(
 )
 type BuildInvalidationDecisionTypeId = typeof BuildInvalidationDecisionTypeId
 
-export class RecordDuringBuild extends Schema.TaggedClass<RecordDuringBuild>()('RecordDuringBuild', {}) {
+export class RecordDuringBuild
+  extends Schema.TaggedClass<RecordDuringBuild, { readonly brand: unique symbol }>()('RecordDuringBuild', {})
+{
   readonly [BuildInvalidationDecisionTypeId] = BuildInvalidationDecisionTypeId
 }
 
-export class SkipRecording extends Schema.TaggedClass<SkipRecording>()('SkipRecording', {}) {
+export class SkipRecording
+  extends Schema.TaggedClass<SkipRecording, { readonly brand: unique symbol }>()('SkipRecording', {})
+{
   readonly [BuildInvalidationDecisionTypeId] = BuildInvalidationDecisionTypeId
 }
 
 export const BuildInvalidationDecision = Schema.Union([RecordDuringBuild, SkipRecording])
 export type BuildInvalidationDecision = typeof BuildInvalidationDecision.Type
 
-export class BuildInvalidation extends Schema.TaggedClass<BuildInvalidation>()('BuildInvalidation', {
-  building: Schema.Boolean,
-  batchPhase: BatchPhaseName,
-}) {
+export class BuildInvalidation
+  extends Schema.TaggedClass<BuildInvalidation, { readonly brand: unique symbol }>()('BuildInvalidation', {
+    building: Schema.Boolean,
+    batchPhase: BatchPhaseName,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

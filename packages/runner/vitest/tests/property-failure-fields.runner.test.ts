@@ -357,7 +357,7 @@ it('Should_NarrowToTheSelfModelLawWithItsNameAndSite_When_TheModelIsTheSubjectIt
   const failure = selfModelOf(result.records[0])
   yield* expect({
     tag: failure._tag,
-    name: failure.name,
+    name: failure.law,
     siteNamesThisFile: siteNamesThisFile(failure.site),
   }).toEqual({
     tag: 'SelfModelLaw',

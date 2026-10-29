@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 
-export class StepMishap extends Schema.TaggedError<StepMishap>()('StepMishap', {
+export class StepMishap extends Schema.TaggedError<StepMishap, { readonly brand: unique symbol }>()('StepMishap', {
   step: Schema.String,
   detail: Schema.String,
 }) {

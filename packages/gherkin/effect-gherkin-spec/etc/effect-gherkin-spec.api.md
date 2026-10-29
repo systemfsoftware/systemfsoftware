@@ -344,14 +344,14 @@ export type WhenStage = {
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:116:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:117:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:119:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:127:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:160:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:215:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:221:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:323:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:118:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:119:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:121:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:129:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:162:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:217:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:223:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:325:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -7,24 +7,26 @@ const NodeFateDecisionTypeId: unique symbol = Symbol.for(
 )
 type NodeFateDecisionTypeId = typeof NodeFateDecisionTypeId
 
-export class KeepNode extends Schema.TaggedClass<KeepNode>()('KeepNode', {}) {
+export class KeepNode extends Schema.TaggedClass<KeepNode, { readonly brand: unique symbol }>()('KeepNode', {}) {
   readonly [NodeFateDecisionTypeId] = NodeFateDecisionTypeId
 }
 
-export class DropNode extends Schema.TaggedClass<DropNode>()('DropNode', {}) {
+export class DropNode extends Schema.TaggedClass<DropNode, { readonly brand: unique symbol }>()('DropNode', {}) {
   readonly [NodeFateDecisionTypeId] = NodeFateDecisionTypeId
 }
 
 export const NodeFateDecision = Schema.Union([KeepNode, DropNode])
 export type NodeFateDecision = typeof NodeFateDecision.Type
 
-export class JudgeNodeFate extends Schema.TaggedClass<JudgeNodeFate>()('JudgeNodeFate', {
-  keepAlive: Schema.Boolean,
-  hasListeners: Schema.Boolean,
-  hasChildren: Schema.Boolean,
-  isLive: Schema.Boolean,
-  isWaiting: Schema.Boolean,
-}) {
+export class JudgeNodeFate
+  extends Schema.TaggedClass<JudgeNodeFate, { readonly brand: unique symbol }>()('JudgeNodeFate', {
+    keepAlive: Schema.Boolean,
+    hasListeners: Schema.Boolean,
+    hasChildren: Schema.Boolean,
+    isLive: Schema.Boolean,
+    isWaiting: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

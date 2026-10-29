@@ -3,33 +3,41 @@ import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-export class Connected extends Schema.TaggedClass<Connected>()('Connected', {}) {}
-export class Absent extends Schema.TaggedClass<Absent>()('Absent', {}) {}
+export class Connected extends Schema.TaggedClass<Connected, { readonly brand: unique symbol }>()('Connected', {}) {}
+export class Absent extends Schema.TaggedClass<Absent, { readonly brand: unique symbol }>()('Absent', {}) {}
 export const Evidence = Schema.Union([Connected, Absent])
 export type Evidence = typeof Evidence.Type
 
-export class AttributedCommand extends Schema.TaggedClass<AttributedCommand>()('AttributedCommand', {
-  evidence: Evidence,
-  length: Schema.Int,
-  secret: Schema.Int,
-}) {
+export class AttributedCommand
+  extends Schema.TaggedClass<AttributedCommand, { readonly brand: unique symbol }>()('AttributedCommand', {
+    evidence: Evidence,
+    length: Schema.Int,
+    secret: Schema.Int,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = { length: 'tests.cell.length' } as const
 }
 
 const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/cell-attribution/Verdict')
 type VerdictTypeId = typeof VerdictTypeId
 
-export class Admitted extends Schema.TaggedClass<Admitted>()('Admitted', { length: Schema.Int }) {
+export class Admitted
+  extends Schema.TaggedClass<Admitted, { readonly brand: unique symbol }>()('Admitted', { length: Schema.Int })
+{
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-export class Refused extends Schema.TaggedClass<Refused>()('Refused', { why: Schema.String }) {
+export class Refused
+  extends Schema.TaggedClass<Refused, { readonly brand: unique symbol }>()('Refused', { why: Schema.String })
+{
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
 export const Verdict = Schema.Union([Admitted, Refused])
 
-export class Malformed extends Schema.TaggedError<Malformed>()('Malformed', { length: Schema.Int }) {
+export class Malformed
+  extends Schema.TaggedError<Malformed, { readonly brand: unique symbol }>()('Malformed', { length: Schema.Int })
+{
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
