@@ -1,0 +1,1 @@
+Where an end-to-end test lives (a package of its own), what runs it (the effect-e2e runner), and how the real processes and services it drives are started (a process-compose stack with readiness probes).

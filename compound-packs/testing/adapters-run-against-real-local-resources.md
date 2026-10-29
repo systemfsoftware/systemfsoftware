@@ -1,13 +1,13 @@
 ---
 title: A boundary adapter is tested against a real local resource, for acceptance and refusal, and asserted only through the port its callers use
 applies_when:
-  - writing or reviewing tests for a socket, file, process, HTTP, database or platform-binding adapter
+  - writing or reviewing tests for a socket, file, HTTP, database or platform-binding adapter
   - writing a stand-in for a third-party service an adapter talks to
   - a test replaces a platform driver, binding or runtime object with a mock, spy or hand-built object
 tags: [testing, adapter, boundary, mocks, stand-in, third-party]
 ---
 
-Test a boundary adapter against a real local resource: a loopback listener on 127.0.0.1:0, a real temporary directory, a real child process, an embedded engine or the platform's local runtime. No test, behaviour test or adapter suite alike, passes a mock, spy or hand-built object where the code under test expects a platform driver, binding or runtime object. Never test an adapter against a vi.fn, vi.mock or vi.spyOn stub, or a hand-built object standing in for any platform driver, binding or runtime object, however it is typed; a type guard or predicate that admits a hand-built object counts as a type assertion.
+Test a boundary adapter against a real resource that runs in a container, never on the host: a database, broker or peer started per test through Testcontainers, an embedded engine, or the platform's local runtime (the integration-testing pack says where IO may run). A child process is never a test resource. No test, behaviour test or adapter suite alike, passes a mock, spy or hand-built object where the code under test expects a platform driver, binding or runtime object. Never test an adapter against a vi.fn, vi.mock or vi.spyOn stub, or a hand-built object standing in for any platform driver, binding or runtime object, however it is typed; a type guard or predicate that admits a hand-built object counts as a type assertion.
 
 The adapter's cases are scenarios in the port's contract suite (port-fakes-share-a-contract-suite.md); a case that needs a peer state only the real resource has (a closed port, a full disk) runs against the adapter alone. They include an acceptance case, where a live local peer answers and the port returns its value, and a refusal case, where an absent, closed or refusing peer makes the port fail with its declared tagged error and never report success.
 
