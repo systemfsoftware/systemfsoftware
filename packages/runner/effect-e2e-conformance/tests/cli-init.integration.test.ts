@@ -8,8 +8,8 @@ import { servedHeadingSite } from './__fixtures__/heading-site-server.js'
 
 const Feature = makeFeature({ it })
 
-const DETERMINISTIC = 'the home page shows a heading'
-const AGENT = 'a visitor reaches the top of the home page'
+const DETERMINISTIC = 'Should_ShowAHeading_When_TheHomePageOpens'
+const AGENT = 'Should_ReachTheTopOfThePage_When_TheAgentScrolls'
 const NEVER_HOLDS = 'a sum that never holds'
 
 const NEVER_HOLDING_TEST = `import { expect, test } from '@systemfsoftware/effect-e2e/runner'
