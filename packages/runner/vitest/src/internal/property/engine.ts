@@ -7,8 +7,6 @@
  * `of` accepts what upstream accepts — a tuple or record of Schemas or Arbitraries (KTD10) — and `holds`
  * receives the generated values exactly as drawn, typed by the gens that produced them.
  */
-import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
-import { layer as nodePathLayer } from '@effect/platform-node/NodePath'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
 import * as Config from 'effect/Config'
@@ -921,7 +919,17 @@ const storeRun = <G extends Gens, S extends PropertySubject, E, R>(
     })
   })
 
-const propertyPlatform = Layer.merge(nodeFileSystemLayer, nodePathLayer)
+// Loaded on first use: the Node file system module reads `process` when it evaluates, so a
+// static import would break every browser test that merely imports the runner.
+const propertyPlatform = Layer.unwrap(
+  Effect.promise(async () => {
+    const [fileSystem, path] = await Promise.all([
+      import('@effect/platform-node/NodeFileSystem'),
+      import('@effect/platform-node/NodePath'),
+    ])
+    return Layer.merge(fileSystem.layer, path.layer)
+  }),
+)
 
 const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
