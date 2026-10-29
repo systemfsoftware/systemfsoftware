@@ -15,26 +15,32 @@ export const EvaluatedRelation = Schema.Struct({
 })
 export type EvaluatedRelation = typeof EvaluatedRelation.Type
 
-export class FirstHardBreak extends Schema.TaggedClass<FirstHardBreak>()('FirstHardBreak', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-  detail: Schema.String,
-}) {
+export class FirstHardBreak
+  extends Schema.TaggedClass<FirstHardBreak, { readonly brand: unique symbol }>()('FirstHardBreak', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+    detail: Schema.String,
+  })
+{
   readonly [CombineRelationVerdictsTypeId] = CombineRelationVerdictsTypeId
 }
 
-export class AggregatedSoftBreak extends Schema.TaggedClass<AggregatedSoftBreak>()('AggregatedSoftBreak', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-  detail: Schema.String,
-}) {
+export class AggregatedSoftBreak
+  extends Schema.TaggedClass<AggregatedSoftBreak, { readonly brand: unique symbol }>()('AggregatedSoftBreak', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+    detail: Schema.String,
+  })
+{
   readonly [CombineRelationVerdictsTypeId] = CombineRelationVerdictsTypeId
 }
 
-export class EveryRelationHeld extends Schema.TaggedClass<EveryRelationHeld>()('EveryRelationHeld', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-}) {
+export class EveryRelationHeld
+  extends Schema.TaggedClass<EveryRelationHeld, { readonly brand: unique symbol }>()('EveryRelationHeld', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+  })
+{
   readonly [CombineRelationVerdictsTypeId] = CombineRelationVerdictsTypeId
 }
 
@@ -45,13 +51,15 @@ export const CombineRelationVerdictsDecision = Schema.Union([
 ])
 export type CombineRelationVerdictsDecision = typeof CombineRelationVerdictsDecision.Type
 
-export class CombineRelationVerdicts extends Schema.TaggedClass<CombineRelationVerdicts>()(
-  'CombineRelationVerdicts',
-  {
-    conjunct: Schema.String,
-    verdicts: Schema.Array(EvaluatedRelation),
-  },
-) {
+export class CombineRelationVerdicts
+  extends Schema.TaggedClass<CombineRelationVerdicts, { readonly brand: unique symbol }>()(
+    'CombineRelationVerdicts',
+    {
+      conjunct: Schema.String,
+      verdicts: Schema.Array(EvaluatedRelation),
+    },
+  )
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

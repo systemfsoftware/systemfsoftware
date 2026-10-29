@@ -7,11 +7,14 @@ const SpanCount = Schema.Int.pipe(
 )
 
 export class IncompleteObservationError
-  extends Schema.TaggedError<IncompleteObservationError>()('IncompleteObservationError', {
-    traceId: Schema.String,
-    spanCount: SpanCount,
-    detail: Schema.String,
-  })
+  extends Schema.TaggedError<IncompleteObservationError, { readonly brand: unique symbol }>()(
+    'IncompleteObservationError',
+    {
+      traceId: Schema.String,
+      spanCount: SpanCount,
+      detail: Schema.String,
+    },
+  )
 {
   override get message(): string {
     return `Trace "${this.traceId}" is incomplete after ${this.spanCount} spans: ${this.detail}`

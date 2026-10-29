@@ -115,11 +115,8 @@ const bracketed = <C, R, E, R2>(
   Effect.flatMap(
     recorded(events, (order) => ({ kind: 'invoke', worker, command, order })),
     () =>
-      Effect.flatMap(effect, (response) =>
-        Effect.as(
-          recorded(events, (order) => ({ kind: 'respond', worker, command, response, order })),
-          response,
-        )),
+      Effect.tap(effect, (response) =>
+        recorded(events, (order) => ({ kind: 'respond', worker, command, response, order }))),
   )
 
 /**

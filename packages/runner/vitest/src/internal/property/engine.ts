@@ -973,7 +973,7 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
 
   const refuseSelfModel = (name: string): void => {
     const site = callFrame()
-    runtime.register(name, (_task) => dieWithSite(new SelfModelLaw({ name, site: site ?? null }), site))
+    runtime.register(name, (_task) => dieWithSite(new SelfModelLaw({ law: name, site: site ?? null }), site))
   }
 
   const judged = <G extends Gens, S extends PropertySubject, N extends number>(

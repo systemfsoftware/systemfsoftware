@@ -430,7 +430,7 @@ const firstRowKeys = (rows: readonly ExampleRow[]): readonly string[] => {
 
 const rememberRowName = (seen: Set<string>, row: ExampleRow, fullName: string): void => {
   if (seen.has(row.name)) {
-    throw OutlineDuplicateRowName.make({ outline: fullName, name: row.name })
+    throw OutlineDuplicateRowName.make({ outline: fullName, row: row.name })
   }
   seen.add(row.name)
 }

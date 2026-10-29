@@ -548,26 +548,26 @@ if (import.meta.vitest !== void 0) {
   const Operation = 'span.command.law'
   const LawDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/SpanLaw/Decision')
 
-  class LawCommand extends Schema.TaggedClass<LawCommand>()('LawCommand', {
+  class LawCommand extends Schema.TaggedClass<LawCommand, { readonly brand: unique symbol }>()('LawCommand', {
     length: Schema.Int,
   }) {
     static readonly [InstrumentationBrand] = { length: 'tests.span.length' } as const
   }
 
-  class LawAdmitted extends Schema.TaggedClass<LawAdmitted>()('LawAdmitted', {
+  class LawAdmitted extends Schema.TaggedClass<LawAdmitted, { readonly brand: unique symbol }>()('LawAdmitted', {
     length: Schema.Int,
   }) {
     readonly [LawDecisionTypeId] = LawDecisionTypeId
     static readonly [InstrumentationBrand] = { length: 'tests.span.admitted.length' } as const
   }
 
-  class LawRefused extends Schema.TaggedClass<LawRefused>()('LawRefused', {
+  class LawRefused extends Schema.TaggedClass<LawRefused, { readonly brand: unique symbol }>()('LawRefused', {
     why: Schema.String,
   }) {
     readonly [LawDecisionTypeId] = LawDecisionTypeId
   }
 
-  class LawMalformed extends Schema.TaggedError<LawMalformed>()('LawMalformed', {
+  class LawMalformed extends Schema.TaggedError<LawMalformed, { readonly brand: unique symbol }>()('LawMalformed', {
     length: Schema.Int,
   }) {
     readonly [LawDecisionTypeId] = LawDecisionTypeId

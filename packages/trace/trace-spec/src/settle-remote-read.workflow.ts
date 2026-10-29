@@ -12,40 +12,46 @@ export const ObservedSpans = Schema.Struct({
 })
 export type ObservedSpans = typeof ObservedSpans.Type
 
-export class ReadSettled extends Schema.TaggedClass<ReadSettled>()('ReadSettled', {
+export class ReadSettled extends Schema.TaggedClass<ReadSettled, { readonly brand: unique symbol }>()('ReadSettled', {
   observation: ObservedSpans,
 }) {
   readonly [SettleRemoteReadTypeId] = SettleRemoteReadTypeId
 }
 
-export class ReadAbsent extends Schema.TaggedClass<ReadAbsent>()('ReadAbsent', {
+export class ReadAbsent extends Schema.TaggedClass<ReadAbsent, { readonly brand: unique symbol }>()('ReadAbsent', {
   observation: ObservedSpans,
 }) {
   readonly [SettleRemoteReadTypeId] = SettleRemoteReadTypeId
 }
 
-export class ReadUnfinished extends Schema.TaggedClass<ReadUnfinished>()('ReadUnfinished', {
-  observation: ObservedSpans,
-}) {
+export class ReadUnfinished
+  extends Schema.TaggedClass<ReadUnfinished, { readonly brand: unique symbol }>()('ReadUnfinished', {
+    observation: ObservedSpans,
+  })
+{
   readonly [SettleRemoteReadTypeId] = SettleRemoteReadTypeId
 }
 
-export class ReadStillGrowing extends Schema.TaggedClass<ReadStillGrowing>()('ReadStillGrowing', {
-  observation: ObservedSpans,
-}) {
+export class ReadStillGrowing
+  extends Schema.TaggedClass<ReadStillGrowing, { readonly brand: unique symbol }>()('ReadStillGrowing', {
+    observation: ObservedSpans,
+  })
+{
   readonly [SettleRemoteReadTypeId] = SettleRemoteReadTypeId
 }
 
 export const SettleRemoteReadDecision = Schema.Union([ReadSettled, ReadAbsent, ReadUnfinished, ReadStillGrowing])
 export type SettleRemoteReadDecision = typeof SettleRemoteReadDecision.Type
 
-export class SettleRemoteRead extends Schema.TaggedClass<SettleRemoteRead>()('SettleRemoteRead', {
-  observed: ObservedSpans,
-  read: Schema.Array(SpanRecord),
-  elapsedMillis: Schema.Finite,
-  settleMillis: Schema.Finite,
-  timeoutMillis: Schema.Finite,
-}) {
+export class SettleRemoteRead
+  extends Schema.TaggedClass<SettleRemoteRead, { readonly brand: unique symbol }>()('SettleRemoteRead', {
+    observed: ObservedSpans,
+    read: Schema.Array(SpanRecord),
+    elapsedMillis: Schema.Finite,
+    settleMillis: Schema.Finite,
+    timeoutMillis: Schema.Finite,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

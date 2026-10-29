@@ -212,7 +212,7 @@ const consumeHole = (
 
 const rememberCapture = (model: StepModel, seen: Set<string>, cap: CaptureModel): void => {
   if (seen.has(cap.name)) {
-    throw DuplicateCapture.make({ step: displayPattern(model), name: cap.name })
+    throw DuplicateCapture.make({ step: displayPattern(model), capture: cap.name })
   }
   seen.add(cap.name)
 }

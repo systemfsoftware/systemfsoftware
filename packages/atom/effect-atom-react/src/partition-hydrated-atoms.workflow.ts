@@ -14,15 +14,19 @@ const PartitionHydratedAtomsDecisionTypeId: unique symbol = Symbol.for(
 )
 type PartitionHydratedAtomsDecisionTypeId = typeof PartitionHydratedAtomsDecisionTypeId
 
-export class HydrateDuringRender extends Schema.TaggedClass<HydrateDuringRender>()('HydrateDuringRender', {
-  key: Schema.String,
-}) {
+export class HydrateDuringRender
+  extends Schema.TaggedClass<HydrateDuringRender, { readonly brand: unique symbol }>()('HydrateDuringRender', {
+    key: Schema.String,
+  })
+{
   readonly [PartitionHydratedAtomsDecisionTypeId] = PartitionHydratedAtomsDecisionTypeId
 }
 
-export class DeferUntilCommit extends Schema.TaggedClass<DeferUntilCommit>()('DeferUntilCommit', {
-  key: Schema.String,
-}) {
+export class DeferUntilCommit
+  extends Schema.TaggedClass<DeferUntilCommit, { readonly brand: unique symbol }>()('DeferUntilCommit', {
+    key: Schema.String,
+  })
+{
   readonly [PartitionHydratedAtomsDecisionTypeId] = PartitionHydratedAtomsDecisionTypeId
 }
 
@@ -31,10 +35,12 @@ export const PartitionHydratedAtomsDecision = Schema.Array(
 )
 export type PartitionHydratedAtomsDecision = typeof PartitionHydratedAtomsDecision.Type
 
-export class PartitionHydratedAtoms extends Schema.TaggedClass<PartitionHydratedAtoms>()('PartitionHydratedAtoms', {
-  knownKeys: Schema.Array(Schema.String),
-  dehydratedKeys: Schema.Array(Schema.String),
-}) {
+export class PartitionHydratedAtoms
+  extends Schema.TaggedClass<PartitionHydratedAtoms, { readonly brand: unique symbol }>()('PartitionHydratedAtoms', {
+    knownKeys: Schema.Array(Schema.String),
+    dehydratedKeys: Schema.Array(Schema.String),
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

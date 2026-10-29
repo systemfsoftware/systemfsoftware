@@ -8,24 +8,30 @@ const NodeReadDecisionTypeId: unique symbol = Symbol.for(
 )
 type NodeReadDecisionTypeId = typeof NodeReadDecisionTypeId
 
-export class SettleChecking extends Schema.TaggedClass<SettleChecking>()('SettleChecking', {}) {
+export class SettleChecking
+  extends Schema.TaggedClass<SettleChecking, { readonly brand: unique symbol }>()('SettleChecking', {})
+{
   readonly [NodeReadDecisionTypeId] = NodeReadDecisionTypeId
 }
 
-export class RebuildWaiting extends Schema.TaggedClass<RebuildWaiting>()('RebuildWaiting', {}) {
+export class RebuildWaiting
+  extends Schema.TaggedClass<RebuildWaiting, { readonly brand: unique symbol }>()('RebuildWaiting', {})
+{
   readonly [NodeReadDecisionTypeId] = NodeReadDecisionTypeId
 }
 
-export class KeepValue extends Schema.TaggedClass<KeepValue>()('KeepValue', {}) {
+export class KeepValue extends Schema.TaggedClass<KeepValue, { readonly brand: unique symbol }>()('KeepValue', {}) {
   readonly [NodeReadDecisionTypeId] = NodeReadDecisionTypeId
 }
 
 export const NodeReadDecision = Schema.Union([SettleChecking, RebuildWaiting, KeepValue])
 export type NodeReadDecision = typeof NodeReadDecision.Type
 
-export class JudgeNodeRead extends Schema.TaggedClass<JudgeNodeRead>()('JudgeNodeRead', {
-  phase: NodePhase,
-}) {
+export class JudgeNodeRead
+  extends Schema.TaggedClass<JudgeNodeRead, { readonly brand: unique symbol }>()('JudgeNodeRead', {
+    phase: NodePhase,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

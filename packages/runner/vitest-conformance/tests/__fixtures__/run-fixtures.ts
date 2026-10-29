@@ -201,11 +201,13 @@ export interface ProbeRunOptions {
 }
 
 /** Every nested-run failure carries this: what failed, and why. */
-export class ProbeFailure extends Schema.TaggedError<ProbeFailure>()('ProbeFailure', {
-  stage: Schema.String,
-  detail: Schema.String,
-  cause: Schema.optional(Schema.Unknown),
-}) {}
+export class ProbeFailure
+  extends Schema.TaggedError<ProbeFailure, { readonly brand: unique symbol }>()('ProbeFailure', {
+    stage: Schema.String,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
+  })
+{}
 
 const claimFileName = (file: JsonTestFile): string => file.name
 

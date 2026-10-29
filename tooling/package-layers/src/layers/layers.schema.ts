@@ -100,9 +100,11 @@ export type UnmappedPackage = typeof UnmappedPackage.Type
 export type SchemaLawVitest = typeof SchemaLawVitest.Type
 export type ForbiddenEdge = typeof ForbiddenEdge.Type
 export type Finding = typeof Finding.Type
-export class LayersRefused extends Schema.TaggedError<LayersRefused>()('LayersRefused', {
-  findings: Schema.Array(Finding),
-}) {
+export class LayersRefused
+  extends Schema.TaggedError<LayersRefused, { readonly brand: unique symbol }>()('LayersRefused', {
+    findings: Schema.Array(Finding),
+  })
+{
   override get message(): string {
     return `${this.findings.length} layer findings`
   }

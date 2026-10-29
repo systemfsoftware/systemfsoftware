@@ -8,23 +8,31 @@ const NodeStateDecisionTypeId: unique symbol = Symbol.for(
 )
 type NodeStateDecisionTypeId = typeof NodeStateDecisionTypeId
 
-export class BecomesValid extends Schema.TaggedClass<BecomesValid>()('BecomesValid', {}) {
+export class BecomesValid
+  extends Schema.TaggedClass<BecomesValid, { readonly brand: unique symbol }>()('BecomesValid', {})
+{
   readonly [NodeStateDecisionTypeId] = NodeStateDecisionTypeId
 }
 
-export class BecomesStale extends Schema.TaggedClass<BecomesStale>()('BecomesStale', {}) {
+export class BecomesStale
+  extends Schema.TaggedClass<BecomesStale, { readonly brand: unique symbol }>()('BecomesStale', {})
+{
   readonly [NodeStateDecisionTypeId] = NodeStateDecisionTypeId
 }
 
-export class BecomesChecking extends Schema.TaggedClass<BecomesChecking>()('BecomesChecking', {}) {
+export class BecomesChecking
+  extends Schema.TaggedClass<BecomesChecking, { readonly brand: unique symbol }>()('BecomesChecking', {})
+{
   readonly [NodeStateDecisionTypeId] = NodeStateDecisionTypeId
 }
 
-export class TakeBuiltValue extends Schema.TaggedClass<TakeBuiltValue>()('TakeBuiltValue', {}) {
+export class TakeBuiltValue
+  extends Schema.TaggedClass<TakeBuiltValue, { readonly brand: unique symbol }>()('TakeBuiltValue', {})
+{
   readonly [NodeStateDecisionTypeId] = NodeStateDecisionTypeId
 }
 
-export class KeepsPhase extends Schema.TaggedClass<KeepsPhase>()('KeepsPhase', {}) {
+export class KeepsPhase extends Schema.TaggedClass<KeepsPhase, { readonly brand: unique symbol }>()('KeepsPhase', {}) {
   readonly [NodeStateDecisionTypeId] = NodeStateDecisionTypeId
 }
 
@@ -46,12 +54,14 @@ export const NodeStateEvent = Schema.Literals([
 ])
 export type NodeStateEvent = Schema.Schema.Type<typeof NodeStateEvent>
 
-export class AdvanceNodeState extends Schema.TaggedClass<AdvanceNodeState>()('AdvanceNodeState', {
-  phase: NodePhase,
-  event: NodeStateEvent,
-  invalidatedDuringBuild: Schema.Boolean,
-  preserveInitialValueOnBuild: Schema.Boolean,
-}) {
+export class AdvanceNodeState
+  extends Schema.TaggedClass<AdvanceNodeState, { readonly brand: unique symbol }>()('AdvanceNodeState', {
+    phase: NodePhase,
+    event: NodeStateEvent,
+    invalidatedDuringBuild: Schema.Boolean,
+    preserveInitialValueOnBuild: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

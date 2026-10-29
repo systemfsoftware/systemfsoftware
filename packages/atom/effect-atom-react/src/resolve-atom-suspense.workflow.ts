@@ -12,28 +12,34 @@ const ResolveAtomSuspenseDecisionTypeId: unique symbol = Symbol.for(
 )
 type ResolveAtomSuspenseDecisionTypeId = typeof ResolveAtomSuspenseDecisionTypeId
 
-export class AtomSuspended extends Schema.TaggedClass<AtomSuspended>()('AtomSuspended', {}) {
+export class AtomSuspended
+  extends Schema.TaggedClass<AtomSuspended, { readonly brand: unique symbol }>()('AtomSuspended', {})
+{
   readonly [ResolveAtomSuspenseDecisionTypeId] = ResolveAtomSuspenseDecisionTypeId
 }
 
-export class AtomReady extends Schema.TaggedClass<AtomReady>()('AtomReady', {}) {
+export class AtomReady extends Schema.TaggedClass<AtomReady, { readonly brand: unique symbol }>()('AtomReady', {}) {
   readonly [ResolveAtomSuspenseDecisionTypeId] = ResolveAtomSuspenseDecisionTypeId
 }
 
-export class AtomRefused extends Schema.TaggedClass<AtomRefused>()('AtomRefused', {}) {
+export class AtomRefused
+  extends Schema.TaggedClass<AtomRefused, { readonly brand: unique symbol }>()('AtomRefused', {})
+{
   readonly [ResolveAtomSuspenseDecisionTypeId] = ResolveAtomSuspenseDecisionTypeId
 }
 
 export const ResolveAtomSuspenseDecision = Schema.Union([AtomSuspended, AtomReady, AtomRefused])
 export type ResolveAtomSuspenseDecision = typeof ResolveAtomSuspenseDecision.Type
 
-export class ResolveAtomSuspense extends Schema.TaggedClass<ResolveAtomSuspense>()('ResolveAtomSuspense', {
-  initial: Schema.Boolean,
-  waiting: Schema.Boolean,
-  suspendOnWaiting: Schema.Boolean,
-  failure: Schema.Boolean,
-  includeFailure: Schema.Boolean,
-}) {
+export class ResolveAtomSuspense
+  extends Schema.TaggedClass<ResolveAtomSuspense, { readonly brand: unique symbol }>()('ResolveAtomSuspense', {
+    initial: Schema.Boolean,
+    waiting: Schema.Boolean,
+    suspendOnWaiting: Schema.Boolean,
+    failure: Schema.Boolean,
+    includeFailure: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

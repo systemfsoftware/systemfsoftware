@@ -36,7 +36,7 @@ export const refusedRecordDetail = (breaches: Breaches): string =>
   `✗ refused a failure record: ${breaches.map((breach) => REFUSED_BREACH_TEXT[breach]).join(', and ')}`
 
 /** @internal */
-export class LeakedState extends S.TaggedError<LeakedState>()('LeakedState', {
+export class LeakedState extends S.TaggedError<LeakedState, { readonly brand: unique symbol }>()('LeakedState', {
   detail: S.String,
 }) {
   override get message(): string {
@@ -45,7 +45,7 @@ export class LeakedState extends S.TaggedError<LeakedState>()('LeakedState', {
 }
 
 /** @internal */
-export class Slop extends S.TaggedError<Slop>()('Slop', {
+export class Slop extends S.TaggedError<Slop, { readonly brand: unique symbol }>()('Slop', {
   detail: S.String,
 }) {
   override get message(): string {
@@ -54,7 +54,7 @@ export class Slop extends S.TaggedError<Slop>()('Slop', {
 }
 
 /** @internal */
-export class InvalidBudget extends S.TaggedError<InvalidBudget>()('InvalidBudget', {
+export class InvalidBudget extends S.TaggedError<InvalidBudget, { readonly brand: unique symbol }>()('InvalidBudget', {
   detail: S.String,
 }) {
   override get message(): string {
@@ -63,10 +63,12 @@ export class InvalidBudget extends S.TaggedError<InvalidBudget>()('InvalidBudget
 }
 
 /** @internal */
-export class FailureRecordRefused extends S.TaggedError<FailureRecordRefused>()('FailureRecordRefused', {
-  breaches: Breaches,
-  cause: S.optional(S.Unknown),
-}) {
+export class FailureRecordRefused
+  extends S.TaggedError<FailureRecordRefused, { readonly brand: unique symbol }>()('FailureRecordRefused', {
+    breaches: Breaches,
+    cause: S.optional(S.Unknown),
+  })
+{
   override get message(): string {
     return refusedRecordDetail(this.breaches)
   }
