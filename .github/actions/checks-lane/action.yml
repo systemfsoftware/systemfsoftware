@@ -2,7 +2,7 @@ name: systemfsoftware checks lane
 description: systemfsoftware's steps for each phase of reusable-checks.yml
 inputs:
   lane:
-    description: plan, static, gritlint, layers, test, test-after, timings, gate or docs
+    description: plan, static, gritlint, layers, affected, test, test-after, timings, gate or docs
     required: true
   job:
     description: The test job from the plan, as JSON
@@ -72,7 +72,7 @@ runs:
       run: |
         status=0
         out="$(env -u GITHUB_ACTIONS -u ALLOW_LOCAL_MUTATION STRYKER_MODE=machine NO_COLOR=1 \
-          timeout 300 corepack pnpm --filter @systemfsoftware/effect-readiness run mutation)" || status=$?
+          timeout 300 corepack pnpm --filter @systemfsoftware/trace-spec run mutation)" || status=$?
         printf '%s\n' "$out"
         test "$status" -ne 0 || { echo '::error::a mutation run outside CI must exit non-zero' >&2; exit 1; }
         printf '%s\n' "$out" | jq -e -R 'fromjson? | select(._tag == "refused" and .rule == "mutation-runs-on-main-ci")' >/dev/null ||
@@ -184,13 +184,13 @@ runs:
       if: inputs.lane == 'gritlint'
       shell: bash -e {0}
       run: |
-        plant=packages/effect-readiness/src/planted-clock.service.ts
+        plant=packages/trace/trace-spec/src/planted-clock.service.ts
         findings="$RUNNER_TEMP/gritlint-repo-plant.json"
         trap 'rm -f "$plant"' EXIT
         printf '%s\n' \
           "import * as Context from 'effect/Context'" \
           "import { readFile } from 'node:fs/promises'" \
-          "export class PlantedClock extends Context.Service<PlantedClock, { readonly read: typeof readFile }>()('effect-readiness/PlantedClock') {}" \
+          "export class PlantedClock extends Context.Service<PlantedClock, { readonly read: typeof readFile }>()('trace-spec/PlantedClock') {}" \
           > "$plant"
         status=0
         ./bin/gritlint check --format json > "$findings" || status=$?
@@ -201,6 +201,54 @@ runs:
         rm "$plant"
         ./bin/gritlint check
         echo "removed from the repository: clean, exit 0"
+
+    - name: Affected lane environment
+      if: inputs.lane == 'affected'
+      shell: bash -e {0}
+      run: printf 'CI=true\nCONFORMANCE_PROFILE=local\nTURBO_LOG_ORDER=stream\n' >> "$GITHUB_ENV"
+    - uses: ./.github/actions/install-deps
+      if: inputs.lane == 'affected'
+    - uses: ./.github/actions/grant-kvm
+      if: inputs.lane == 'affected'
+    - uses: cachix/install-nix-action@v31
+      if: inputs.lane == 'affected'
+    - uses: denoland/setup-deno@v2
+      if: inputs.lane == 'affected'
+    - name: Turbo cache
+      if: inputs.lane == 'affected'
+      uses: actions/cache@v6
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-affected-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-affected-
+          turbo-${{ runner.os }}-checks-
+          turbo-${{ runner.os }}-
+    - name: The tests this change affects or touches
+      id: affected
+      if: inputs.lane == 'affected'
+      shell: bash -e {0}
+      run: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,corepack .github/ci/pr-tests.ts plan
+    - name: Cache Playwright browsers
+      if: inputs.lane == 'affected' && steps.affected.outputs.browsers == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
+    - name: Install Playwright chromium
+      if: inputs.lane == 'affected' && steps.affected.outputs.browsers == 'true'
+      shell: bash -e {0}
+      env:
+        PACKAGE: ${{ steps.affected.outputs.browser-package }}
+      run: corepack pnpm --filter "$PACKAGE" exec playwright install chromium
+    - name: Run them
+      if: inputs.lane == 'affected'
+      shell: bash -e {0}
+      env:
+        BASE: ${{ steps.affected.outputs.base }}
+      run: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read --allow-write --allow-env --allow-run=git,corepack .github/ci/pr-tests.ts run
 
     - name: Test lane environment
       if: inputs.lane == 'test'
