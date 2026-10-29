@@ -20,12 +20,12 @@ Defect it prevents: IO on the host makes a test pass or fail with the machine it
 ```typescript
 // WRONG: IO on the host
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'plan-'))
-yield* ChildProcess.make('git', ['init'], { cwd: dir })
+yield * ChildProcess.make('git', ['init'], { cwd: dir })
 ```
 
 ```typescript
 // RIGHT: the database runs in a container the scenario starts and stops
-const postgres = yield* Effect.acquireRelease(
+const postgres = yield * Effect.acquireRelease(
   Effect.promise(() =>
     new GenericContainer('postgres:17-alpine')
       .withEnvironment({ POSTGRES_PASSWORD: 'test' })
