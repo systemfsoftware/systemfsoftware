@@ -1,1 +1,1 @@
-How a UI's behaviour is proven by Storybook stories: where a story's I/O comes from, how its fakes stay fresh, how a journey reads, and how stories query, size and fail.
+How a UI's behaviour is proven by Storybook stories run in a real browser: what a journey specifies and how it reads, where a story's I/O comes from, how its state stays its own, and how stories query, size and fail on accessibility.

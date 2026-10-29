@@ -32,7 +32,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
  * rather than exploiting one package's shape.
  */
 const BENCH_SET = [
-  '@systemfsoftware/effect-daemon-spec',
+  '@systemfsoftware/trace-spec',
   '@systemfsoftware/stryker-js-mutation-run',
   '@systemfsoftware/oxlint-plugin-effect-workflow',
 ]

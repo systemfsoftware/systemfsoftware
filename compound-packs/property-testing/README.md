@@ -1,0 +1,1 @@
+What makes a property test a real property: drawn inputs that reach the decision, constructed boundaries and collisions, an oracle independent of the code under test, coverage the run proves, reproducible evidence the property can fail, which properties a Workflow decider needs, and how a reviewer tells a smoke property from an unproven one.
