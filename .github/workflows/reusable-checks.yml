@@ -877,6 +877,7 @@ jobs:
       # The test and timings jobs are skipped in this mode, so a plan that schedules any test job must fail here (the
       # consumer fixture runs this action on a non-empty plan). A docs-only diff plans [] above, so it passes.
       - id: single-planned
+        name: No test jobs are planned
         if: inputs.single-job
         uses: $/.github/actions/single-job-plan-guard
         with:
