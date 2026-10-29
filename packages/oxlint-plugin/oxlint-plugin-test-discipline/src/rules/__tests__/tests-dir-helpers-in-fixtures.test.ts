@@ -36,6 +36,21 @@ ruleTester.run('tests-dir-helpers-in-fixtures', testsDirHelpersInFixtures, {
       code: 'export const x = 1',
       filename: '/repo/pkg/lib/helper.ts',
     },
+    {
+      name: 'Should_Pass_When_AnE2eTestLivesDirectlyUnderTests',
+      code: 'export const x = 1',
+      filename: '/repo/pkg/tests/x.e2e.ts',
+    },
+    {
+      name: 'Should_Pass_When_AnE2eTestLivesInANestedTestsDir',
+      code: 'export const x = 1',
+      filename: '/repo/pkg/tests/nested/x.e2e.ts',
+    },
+    {
+      name: 'Should_Pass_When_AnE2eNamedFileLivesUnderFixtures',
+      code: 'export const x = 1',
+      filename: '/repo/pkg/tests/__fixtures__/x.e2e.ts',
+    },
   ],
   invalid: [
     {
@@ -49,6 +64,18 @@ ruleTester.run('tests-dir-helpers-in-fixtures', testsDirHelpersInFixtures, {
       code: 'export const loaded = {}',
       filename: '/repo/pkg/tests/loaded.observer.ts',
       errors: [error('loaded.observer.ts')],
+    },
+    {
+      name: 'Should_Report_When_AHelperLivesDirectlyUnderTests',
+      code: 'export const shared = {}',
+      filename: '/repo/pkg/tests/helper.ts',
+      errors: [error('helper.ts')],
+    },
+    {
+      name: 'Should_Report_When_AnE2eNamedFileIsNotTsTheRunnersDefault',
+      code: 'export const x = 1',
+      filename: '/repo/pkg/tests/x.e2e.mts',
+      errors: [error('x.e2e.mts')],
     },
   ],
 })

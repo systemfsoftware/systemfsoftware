@@ -10,7 +10,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Under tests/, the only non-test modules are helpers and fixtures, and they live inside tests/__fixtures__/.',
+      'Under tests/, the only non-test modules are helpers and fixtures, and they live inside tests/__fixtures__/; the .e2e.ts files the effect-e2e runner collects are tests, not helpers.',
   },
   schema: [],
   messages: {

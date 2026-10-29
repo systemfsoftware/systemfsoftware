@@ -28,6 +28,7 @@ const _default: {
         'src-property-test-cell': Rule;
         'test-file-outside-tests-dir': Rule;
         'test-suffix-outside-src': Rule;
+        'e2e-tier-placement': Rule;
         'behaviour-test-requires-gherkin': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
