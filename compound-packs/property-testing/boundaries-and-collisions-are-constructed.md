@@ -23,9 +23,13 @@ Whether a boundary, structure or size unit is built is decided by the review jud
 
 ```typescript
 // WRONG: a uniform string draw never crosses the cap, and an ASCII body makes characters equal bytes
-it.prop('∀u_AdmitUpload_→OversizedPastCap', { of: [AdmitUpload], subject: admitUpload }, (subject, [command]) =>
-  Result.getOrThrow(subject(command))._tag ===
-    (command.mode === 'read-write' && command.body.length <= CAP ? 'UploadAdmitted' : 'UploadRefused'))
+it.prop(
+  '∀u_AdmitUpload_→OversizedPastCap',
+  { of: [AdmitUpload], subject: admitUpload },
+  (subject, [command]) =>
+    Result.getOrThrow(subject(command))._tag ===
+      (command.mode === 'read-write' && command.body.length <= CAP ? 'UploadAdmitted' : 'UploadRefused'),
+)
 ```
 
 ```typescript
@@ -47,7 +51,10 @@ it.prop(
       belowCap: [(_n, mode, offset) => mode === 'read-write' && offset === -1, 0.05],
       atCap: [(_n, mode, offset) => mode === 'read-write' && offset === 0, 0.05],
       pastCap: [(_n, mode, offset) => mode === 'read-write' && offset === 1, 0.05],
-      multiByteAtEdge: [(_n, mode, offset, filler) => mode === 'read-write' && filler !== 'a' && (offset === 0 || offset === 1), 0.05],
+      multiByteAtEdge: [
+        (_n, mode, offset, filler) => mode === 'read-write' && filler !== 'a' && (offset === 0 || offset === 1),
+        0.05,
+      ],
       readOnly: [(_n, mode) => mode === 'read-only', 0.3],
     },
   },

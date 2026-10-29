@@ -33,8 +33,11 @@ Whether each tag has both directions and an exact payload check is decided by th
 
 ```typescript
 // WRONG: a constant or identity decide passes every property
-it.prop('∀u_AdmitUpload_∈UploadAdmission', { of: [AdmitUpload], subject: admitUpload }, (subject, [command]) =>
-  Schema.is(UploadAdmission)(Result.getOrThrow(subject(command))))
+it.prop(
+  '∀u_AdmitUpload_∈UploadAdmission',
+  { of: [AdmitUpload], subject: admitUpload },
+  (subject, [command]) => Schema.is(UploadAdmission)(Result.getOrThrow(subject(command))),
+)
 it.law.deterministic('∀u_AdmitUpload_=Deterministic', { of: [AdmitUpload], subject: admitUpload })
 ```
 

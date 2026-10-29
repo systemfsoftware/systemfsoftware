@@ -35,8 +35,12 @@ it.prop(
   { of: [AdmitUpload], subject: admitUpload },
   (subject, [command]) =>
     Equal.equals(
-      admittedTextOf(Result.getOrThrow(subject(new AdmitUpload({ name: command.name, mode: 'read-write', body: command.body })))),
-      bodyFitsCap(command.body) ? Option.map(bodyUtf8Of(command.body), (b) => new TextDecoder().decode(b)) : Option.none(),
+      admittedTextOf(
+        Result.getOrThrow(subject(new AdmitUpload({ name: command.name, mode: 'read-write', body: command.body }))),
+      ),
+      bodyFitsCap(command.body)
+        ? Option.map(bodyUtf8Of(command.body), (b) => new TextDecoder().decode(b))
+        : Option.none(),
     ),
 )
 ```
