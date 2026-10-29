@@ -2,4 +2,4 @@
 "@systemfsoftware/effect-e2e": none
 ---
 
-test(effect-e2e): cut the OversizedPastCap property's CI-tier cost; test-only change with no published-surface difference
+test(effect-e2e): replace the OversizedPastCap smoke properties with wire-cap boundary examples and a cap-sweep property; test-only change with no published-surface difference

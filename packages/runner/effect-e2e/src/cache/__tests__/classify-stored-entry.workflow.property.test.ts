@@ -1,5 +1,5 @@
 import { it } from '@systemfsoftware/vitest'
-import * as Arr from 'effect/Array'
+import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -10,8 +10,6 @@ import { ClassifyStoredEntry, classifyStoredEntry } from '../classify-stored-ent
 import { entryWireBytesOf, entryWireTextOf, TraceEntry } from '../entry.schema.js'
 
 type Classify = typeof classifyStoredEntry
-
-const WIRE_BYTES_CAP = 1_048_576
 
 const utf8 = new TextEncoder()
 
@@ -27,26 +25,16 @@ const labelOf = (read: CacheReadResult): string =>
     Invalid: ({ reason }) => `invalid ${reason}`,
   })
 
-const isHit = (read: CacheReadResult): boolean =>
-  Match.valueTags(read, { Hit: () => true, Miss: () => false, Invalid: () => false })
-
 const wireOf = (entry: TraceEntry): string => Option.getOrElse(entryWireTextOf(entry), () => '')
+
+const WIRE_BYTES_CAP = 1_048_576
 
 const withAlerts = (entry: TraceEntry, alerts: ReadonlyArray<string>): TraceEntry => ({ ...entry, alerts })
 
-type AlertSlot = readonly [head: string, tail: string]
-
-const alertSlotOf = (entry: TraceEntry): AlertSlot => {
-  const empty = wireOf(withAlerts(entry, ['']))
-  const filled = wireOf(withAlerts(entry, ['a']))
-  const at = Option.getOrElse(
-    Arr.findFirstIndex(empty.split(''), (char, index) => char !== filled[index]),
-    () => empty.length,
-  )
-  return [empty.slice(0, at), empty.slice(at)]
+const paddedTo = (entry: TraceEntry, bytes: number): TraceEntry => {
+  const slim = withAlerts(entry, [])
+  return withAlerts(slim, ['a'.repeat(bytes - entryWireBytesOf(slim) - 2)])
 }
-
-const paddedWireOf = ([head, tail]: AlertSlot, count: number): string => `${head}${'a'.repeat(count)}${tail}`
 
 it.prop(
   '∀e_ClassifyStoredEntry_≡HitRoundTripsWireText',
@@ -54,18 +42,64 @@ it.prop(
   (subject, [entry]) => labelOf(readOf(subject, foundOf(utf8.encode(wireOf(entry))))) === `hit ${wireOf(entry)}`,
 )
 
+const SWEEP_BOUND = 16
+
+/** Folds a drawn integer onto a size offset in -SWEEP_BOUND..SWEEP_BOUND, so every draw lands near the cap. */
+const offsetOf = (n: number): number => {
+  const span = 2 * SWEEP_BOUND + 1
+  return (((n % span) + span) % span) - SWEEP_BOUND
+}
+
+const templateEntry = Effect.runSync(
+  Schema.decodeEffect(TraceEntry)({
+    schema: 'trace-1',
+    keyedBy: {
+      step: 'act',
+      project: 'shop',
+      test: 'checkout pays',
+      target: 'staging',
+      engine: { adapter: '@systemfsoftware/effect-e2e-web', kind: 'web' },
+      app: 'shop',
+      instruction: 'open /cart',
+      params: {},
+      slots: [],
+      agent: { name: 'default', contextDigest: '0'.repeat(64) },
+    },
+    start: { origin: 'https://shop.example', path: '/', query: [] },
+    actions: [],
+    end: { origin: 'https://shop.example', path: '/cart', query: [] },
+    anchors: { appeared: [], gone: [] },
+    checks: [],
+    alerts: [],
+    provenance: {
+      engine: { adapter: '@systemfsoftware/effect-e2e-web', kind: 'web' },
+      engineVersion: '1.0.0',
+      model: { provider: 'openrouter', model: 'deepseek/deepseek-flash-latest' },
+      agent: 'default',
+      version: '1.0.0',
+    },
+  }),
+)
+
 it.prop(
-  '∀e_ClassifyStoredEntry_→OversizedPastCap',
-  { of: [TraceEntry], subject: classifyStoredEntry, arbitrary: { seed: 500_002 } },
-  (subject, [entry]) => {
-    const slot = alertSlotOf(entry)
-    const base = entryWireBytesOf(withAlerts(entry, ['']))
-    const exact = utf8.encode(paddedWireOf(slot, WIRE_BYTES_CAP - base))
-    const over = utf8.encode(paddedWireOf(slot, WIRE_BYTES_CAP + 1 - base))
-    return exact.length === WIRE_BYTES_CAP &&
-      over.length === WIRE_BYTES_CAP + 1 &&
-      isHit(readOf(subject, foundOf(exact))) &&
-      labelOf(readOf(subject, foundOf(over))) === 'invalid oversized'
+  '∀n_ClassifyStoredEntry_≤WireCap',
+  {
+    of: [Schema.Int],
+    subject: classifyStoredEntry,
+    cover: {
+      BelowCap: [(n: number) => offsetOf(n) < 0, 0.3],
+      AtCap: [(n: number) => offsetOf(n) === 0, 0.02],
+      AboveCap: [(n: number) => offsetOf(n) > 0, 0.3],
+    },
+    arbitrary: { seed: 500_002 },
+  },
+  (subject, [n]) => {
+    const bytes = utf8.encode(wireOf(paddedTo(templateEntry, WIRE_BYTES_CAP + offsetOf(Number(n)))))
+    return Match.valueTags(readOf(subject, foundOf(bytes)), {
+      Hit: () => bytes.length <= WIRE_BYTES_CAP,
+      Invalid: () => bytes.length > WIRE_BYTES_CAP,
+      Miss: () => false,
+    })
   },
 )
 

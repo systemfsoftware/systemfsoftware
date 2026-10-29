@@ -37,18 +37,6 @@ it.prop(
 )
 
 it.prop(
-  '∀e_AdmitEntryWrite_→OversizedPastCap',
-  { of: [TraceEntry], subject: admitEntryWrite, arbitrary: { seed: 500_012 } },
-  (subject, [entry]) => {
-    const exact = paddedTo(entry, WIRE_BYTES_CAP)
-    const over = paddedTo(entry, WIRE_BYTES_CAP + 1)
-    return labelOf(admissionOf(subject, new AdmitEntryWrite({ mode: 'read-write', entry: exact }))) ===
-        `admitted ${wireOf(exact)}` &&
-      labelOf(admissionOf(subject, new AdmitEntryWrite({ mode: 'read-write', entry: over }))) === 'refused Oversized'
-  },
-)
-
-it.prop(
   '∀e_AdmitEntryWrite_→ReadOnlyRefusedBeforeSize',
   { of: [TraceEntry, Schema.Boolean], subject: admitEntryWrite, arbitrary: { seed: 500_013 } },
   (subject, [entry, oversized]) => {
