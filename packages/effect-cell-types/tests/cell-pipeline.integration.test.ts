@@ -3,6 +3,7 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
@@ -79,7 +80,7 @@ Feature('Answering orders when the primary gateway wavers')
             ),
         ),
         Then('the caller reads the outage report')((s, expect) =>
-          expect(s.outcome).toStrictEqual(Exit.fail('Service outage: Gateway unavailable'))
+          expect(Exit.findErrorOption(s.outcome)).toStrictEqual(Option.some('Service outage: Gateway unavailable'))
         ),
       ),
     )

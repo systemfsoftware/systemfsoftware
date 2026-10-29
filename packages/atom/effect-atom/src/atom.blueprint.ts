@@ -1625,17 +1625,51 @@ function pullAccumulatedItems<A>(
   return items
 }
 
+interface PullDelivery<A, E> {
+  readonly accumulate: boolean
+  count: number
+  result: PullResult<A, E> | undefined
+}
+
 function finishPullCallback<A, E>(
   get: AtomContext,
   cancels: Set<() => void>,
   cancel: (() => void) | undefined,
   exit: Exit.Exit<{ readonly done: boolean; readonly items: Arr.NonEmptyReadonlyArray<A> }, E>,
+  delivery: PullDelivery<A, E>,
 ): void {
   if (cancel !== undefined) {
     cancels.delete(cancel)
   }
-  const result = AsyncResult.fromExitWithPrevious(exit, Option.none())
+  const result = newerPullResult(AsyncResult.fromExitWithPrevious(exit, Option.none()), delivery)
   get.setSelf(pullCallbackResult(result, cancels.size > 0))
+}
+
+// Concurrent pulls can finish in a different order than their batches were produced in. An
+// accumulating pull keeps the longest batch it has delivered, so a late, shorter one is dropped.
+function newerPullResult<A, E>(fresh: PullResult<A, E>, delivery: PullDelivery<A, E>): PullResult<A, E> {
+  recordPullDelivery(fresh, delivery)
+  return delivery.result ?? fresh
+}
+
+function recordPullDelivery<A, E>(fresh: PullResult<A, E>, delivery: PullDelivery<A, E>): void {
+  if (isOlderPullBatch(fresh, delivery)) {
+    return
+  }
+  delivery.result = fresh
+  delivery.count = largerPullCount(fresh, delivery.count)
+}
+
+function isOlderPullBatch<A, E>(fresh: PullResult<A, E>, delivery: PullDelivery<A, E>): boolean {
+  return delivery.accumulate ? delivery.count > pullBatchSize(fresh) : false
+}
+
+function pullBatchSize<A, E>(result: PullResult<A, E>): number {
+  return AsyncResult.isSuccess(result) ? result.value.items.length : Number.POSITIVE_INFINITY
+}
+
+function largerPullCount<A, E>(fresh: PullResult<A, E>, count: number): number {
+  return AsyncResult.isSuccess(fresh) ? Math.max(count, fresh.value.items.length) : count
 }
 
 function pullCallbackResult<A, E>(
@@ -2867,6 +2901,11 @@ const makeStreamPullEffect = <A, E, R0>(
       })
 
       const cancels = new Set<() => void>()
+      const delivery: PullDelivery<A, E | Cause.NoSuchElementError> = {
+        accumulate: !pullDisableAccumulation(options),
+        count: 0,
+        result: undefined,
+      }
       get.addFinalizer(() => {
         for (const cancel of cancels) cancel()
       })
@@ -2875,7 +2914,7 @@ const makeStreamPullEffect = <A, E, R0>(
         get.setSelf(AsyncResult.waitingFrom(Option.none()))
         let cancel: (() => void) | undefined = undefined
         cancel = runCallbackSync(services, pull, (exit) => {
-          finishPullCallback(get, cancels, cancel, exit)
+          finishPullCallback(get, cancels, cancel, exit, delivery)
         })
         addPullCancel(cancels, cancel)
       })

@@ -239,7 +239,7 @@ Feature('A gherkin step records its span and the step failure derives its messag
         Given('a traced run whose assertion steps are spelled And and But')('spanLog', () => {
           const log = recordingTracer()
           const both = Effect.all([andPipeline, butPipeline], { concurrency: 1 })
-          return both.pipe(Effect.withTracer(log.tracer), Effect.result, Effect.map(() => log))
+          return both.pipe(Effect.withTracer(log.tracer), Effect.result, Effect.as(log))
         }),
         Then('each assertion step span carries its own keyword and its own spec line')((s, expect) => {
           const facts = [
