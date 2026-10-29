@@ -10,6 +10,7 @@ queue_rules:
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
       - check-success = build · lint · typecheck · test / static checks (pnpm check:static)
+      - check-success = not a plan-only pull request
       - or:
           - check-success = commitlint / lint PR commits
           - check-skipped = commitlint / lint PR commits
