@@ -86,7 +86,6 @@ overrides:
 packages:
   - packages/*
   - packages/atom/*
-  - packages/daemon/*
   - packages/gherkin/*
   - packages/oxlint-plugin/*
   - packages/oxlint-presets/*

@@ -222,15 +222,11 @@ pnpm map
 
 ### Core Architecture & Execution
 
-| Package                                                                     | Purpose                                                                         | Verification Gates                                        |
-| :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------- |
-| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types)          | Type contracts for five-phase cells, stage builders (`Sandwich`), and workflows | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-readiness`](packages/effect-readiness)            | Pure readiness verification workflows and polling probe policies                | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-microsandbox`](packages/effect-microsandbox)      | Declarative container specifications and isolated microVM testcontainers        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-daemon-spec`](packages/daemon/effect-daemon-spec) | Supervision tree daemon primitives and health monitors                          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-memfs`](packages/effect-memfs)                    | In-memory Effect Platform `FileSystem` implementation                           | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-atom`](packages/atom/effect-atom)                 | Reactive atomic state management with Effect streams                            | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-atom-react`](packages/atom/effect-atom-react)     | React bindings and hooks for Effect Atom                                        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| Package                                                                 | Purpose                                                                         | Verification Gates                                        |
+| :---------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types)      | Type contracts for five-phase cells, stage builders (`Sandwich`), and workflows | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-atom`](packages/atom/effect-atom)             | Reactive atomic state management with Effect streams                            | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-atom-react`](packages/atom/effect-atom-react) | React bindings and hooks for Effect Atom                                        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ### Schema & Property Law
 
@@ -239,9 +235,7 @@ pnpm map
 | [`@systemfsoftware/effect-schema-law`](packages/schema/effect-schema-law)                           | Property-test generators for schema roundtrip laws and canonical subsets     | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/effect-schema-vite`](packages/schema/effect-schema-vite)                         | Vite plugin discovering schemas and synthesizing inline property test suites | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/effect-schema-discovery`](packages/schema/effect-schema-discovery)               | AST scanner finding exported schema declarations across workspace packages   | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-schema-extensions`](packages/schema/effect-schema-extensions)             | Common schema combinators, branded types, and transformations                | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 | [`@systemfsoftware/effect-schema-recursion-budget`](packages/schema/effect-schema-recursion-budget) | Recursion depth ceilings and decay guards for recursive schemas              | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/hex-schema`](packages/schema/hex-schema)                                         | Validated hex-encoded string and buffer codecs                               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ### Specification & BDD Verification
 
@@ -254,13 +248,21 @@ pnpm map
 | [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw`              |
 | [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
 
-### End-to-End Testing
+### Packages in their own repositories
 
-| Package                                                             | Purpose                                                                   | Verification Gates                                        |
-| :------------------------------------------------------------------ | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
-| [`@systemfsoftware/effect-e2e`](packages/runner/effect-e2e)         | Runtime-neutral end-to-end testing core: suite config, agent, and reports | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-e2e-web`](packages/runner/effect-e2e-web) | Playwright web engine for effect-e2e                                      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-e2e-cli`](packages/runner/effect-e2e-cli) | The `effect-e2e` command: scaffold and run suites                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
+These packages left this repository; each is built, tested and versioned in its own `systemfsoftware/<repo>`:
+
+| Repository         | Packages                                                                                 |
+| :----------------- | :--------------------------------------------------------------------------------------- |
+| `effect-readiness` | `@systemfsoftware/effect-readiness`                                                      |
+| `effect-daemon`    | `@systemfsoftware/effect-daemon-spec`, `-conformance`, `-process`, `-socket`, `-cluster` |
+| `effect-microvm`   | `@systemfsoftware/effect-microsandbox`, `@systemfsoftware/effect-daemon-microvm`         |
+| `effect-e2e`       | `@systemfsoftware/effect-e2e`, `-web`, `-cli`                                            |
+| `hex-schema`       | `@systemfsoftware/hex-schema`, `@systemfsoftware/effect-schema-extensions`               |
+| `discern`          | `@systemfsoftware/discern`                                                               |
+| `effect-memfs`     | `@systemfsoftware/effect-memfs`                                                          |
+| `npm-package`      | `@systemfsoftware/npm-package`                                                           |
+| `rx-effect`        | `@systemfsoftware/rx-effect`                                                             |
 
 ### Oxlint Static Plugins & Presets
 
