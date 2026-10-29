@@ -8,11 +8,13 @@ const PropagationSweepDecisionTypeId: unique symbol = Symbol.for(
 )
 type PropagationSweepDecisionTypeId = typeof PropagationSweepDecisionTypeId
 
-export class ActOnMember extends Schema.TaggedClass<ActOnMember>()('ActOnMember', {}) {
+export class ActOnMember
+  extends Schema.TaggedClass<ActOnMember, { readonly brand: unique symbol }>()('ActOnMember', {})
+{
   readonly [PropagationSweepDecisionTypeId] = PropagationSweepDecisionTypeId
 }
 
-export class SkipMember extends Schema.TaggedClass<SkipMember>()('SkipMember', {}) {
+export class SkipMember extends Schema.TaggedClass<SkipMember, { readonly brand: unique symbol }>()('SkipMember', {}) {
   readonly [PropagationSweepDecisionTypeId] = PropagationSweepDecisionTypeId
 }
 
@@ -22,7 +24,7 @@ export type PropagationSweepDecision = typeof PropagationSweepDecision.Type
 export const SweepKind = Schema.Literals(['invalidated-child', 'relinked-child', 'rebuilt-parent'])
 export type SweepKind = Schema.Schema.Type<typeof SweepKind>
 
-export class SweepMember extends Schema.TaggedClass<SweepMember>()('SweepMember', {
+export class SweepMember extends Schema.TaggedClass<SweepMember, { readonly brand: unique symbol }>()('SweepMember', {
   phase: NodePhase,
   sweep: SweepKind,
 }) {

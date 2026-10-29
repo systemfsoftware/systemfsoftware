@@ -7,15 +7,17 @@ const BatchStepDecisionTypeId: unique symbol = Symbol.for(
 )
 type BatchStepDecisionTypeId = typeof BatchStepDecisionTypeId
 
-export class RebuildAndNotify extends Schema.TaggedClass<RebuildAndNotify>()('RebuildAndNotify', {}) {
+export class RebuildAndNotify
+  extends Schema.TaggedClass<RebuildAndNotify, { readonly brand: unique symbol }>()('RebuildAndNotify', {})
+{
   readonly [BatchStepDecisionTypeId] = BatchStepDecisionTypeId
 }
 
-export class ResetBatch extends Schema.TaggedClass<ResetBatch>()('ResetBatch', {}) {
+export class ResetBatch extends Schema.TaggedClass<ResetBatch, { readonly brand: unique symbol }>()('ResetBatch', {}) {
   readonly [BatchStepDecisionTypeId] = BatchStepDecisionTypeId
 }
 
-export class StayNested extends Schema.TaggedClass<StayNested>()('StayNested', {}) {
+export class StayNested extends Schema.TaggedClass<StayNested, { readonly brand: unique symbol }>()('StayNested', {}) {
   readonly [BatchStepDecisionTypeId] = BatchStepDecisionTypeId
 }
 
@@ -25,7 +27,7 @@ export type BatchStepDecision = typeof BatchStepDecision.Type
 export const BatchEvent = Schema.Literals(['commit-request', 'finish-request'])
 export type BatchEvent = Schema.Schema.Type<typeof BatchEvent>
 
-export class BatchStep extends Schema.TaggedClass<BatchStep>()('BatchStep', {
+export class BatchStep extends Schema.TaggedClass<BatchStep, { readonly brand: unique symbol }>()('BatchStep', {
   depth: Schema.Int,
   event: BatchEvent,
 }) {

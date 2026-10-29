@@ -8,20 +8,24 @@ const ValuePresenceDecisionTypeId: unique symbol = Symbol.for(
 )
 type ValuePresenceDecisionTypeId = typeof ValuePresenceDecisionTypeId
 
-export class HoldsValue extends Schema.TaggedClass<HoldsValue>()('HoldsValue', {}) {
+export class HoldsValue extends Schema.TaggedClass<HoldsValue, { readonly brand: unique symbol }>()('HoldsValue', {}) {
   readonly [ValuePresenceDecisionTypeId] = ValuePresenceDecisionTypeId
 }
 
-export class HoldsNothing extends Schema.TaggedClass<HoldsNothing>()('HoldsNothing', {}) {
+export class HoldsNothing
+  extends Schema.TaggedClass<HoldsNothing, { readonly brand: unique symbol }>()('HoldsNothing', {})
+{
   readonly [ValuePresenceDecisionTypeId] = ValuePresenceDecisionTypeId
 }
 
 export const ValuePresenceDecision = Schema.Union([HoldsValue, HoldsNothing])
 export type ValuePresenceDecision = typeof ValuePresenceDecision.Type
 
-export class PresenceQuery extends Schema.TaggedClass<PresenceQuery>()('PresenceQuery', {
-  phase: NodePhase,
-}) {
+export class PresenceQuery
+  extends Schema.TaggedClass<PresenceQuery, { readonly brand: unique symbol }>()('PresenceQuery', {
+    phase: NodePhase,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

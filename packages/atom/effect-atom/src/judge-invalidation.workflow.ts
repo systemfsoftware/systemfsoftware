@@ -8,27 +8,35 @@ const InvalidationDecisionTypeId: unique symbol = Symbol.for(
 )
 type InvalidationDecisionTypeId = typeof InvalidationDecisionTypeId
 
-export class DeferToBatch extends Schema.TaggedClass<DeferToBatch>()('DeferToBatch', {}) {
+export class DeferToBatch
+  extends Schema.TaggedClass<DeferToBatch, { readonly brand: unique symbol }>()('DeferToBatch', {})
+{
   readonly [InvalidationDecisionTypeId] = InvalidationDecisionTypeId
 }
 
-export class SkipLazyChildren extends Schema.TaggedClass<SkipLazyChildren>()('SkipLazyChildren', {}) {
+export class SkipLazyChildren
+  extends Schema.TaggedClass<SkipLazyChildren, { readonly brand: unique symbol }>()('SkipLazyChildren', {})
+{
   readonly [InvalidationDecisionTypeId] = InvalidationDecisionTypeId
 }
 
-export class InvalidateValue extends Schema.TaggedClass<InvalidateValue>()('InvalidateValue', {}) {
+export class InvalidateValue
+  extends Schema.TaggedClass<InvalidateValue, { readonly brand: unique symbol }>()('InvalidateValue', {})
+{
   readonly [InvalidationDecisionTypeId] = InvalidationDecisionTypeId
 }
 
 export const InvalidationDecision = Schema.Union([DeferToBatch, SkipLazyChildren, InvalidateValue])
 export type InvalidationDecision = typeof InvalidationDecision.Type
 
-export class JudgeInvalidation extends Schema.TaggedClass<JudgeInvalidation>()('JudgeInvalidation', {
-  batchPhase: BatchPhaseName,
-  lazy: Schema.Boolean,
-  hasListeners: Schema.Boolean,
-  childrenActive: Schema.Boolean,
-}) {
+export class JudgeInvalidation
+  extends Schema.TaggedClass<JudgeInvalidation, { readonly brand: unique symbol }>()('JudgeInvalidation', {
+    batchPhase: BatchPhaseName,
+    lazy: Schema.Boolean,
+    hasListeners: Schema.Boolean,
+    childrenActive: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

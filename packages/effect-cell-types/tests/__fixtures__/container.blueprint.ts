@@ -6,12 +6,12 @@ import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 import { make as running, type RunningContainer } from './running-container.handle.js'
 
-export class ServiceSpec extends Schema.TaggedClass<ServiceSpec>()('Service', {
+export class ServiceSpec extends Schema.TaggedClass<ServiceSpec, { readonly brand: unique symbol }>()('Service', {
   image: Schema.String,
   ports: Schema.Array(Schema.Finite),
 }) {}
 
-export class JobSpec extends Schema.TaggedClass<JobSpec>()('Job', {
+export class JobSpec extends Schema.TaggedClass<JobSpec, { readonly brand: unique symbol }>()('Job', {
   image: Schema.String,
   ports: Schema.Array(Schema.Finite),
   workdir: Schema.String,

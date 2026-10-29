@@ -203,7 +203,7 @@ const propertyOfAFailure = (failure: PropertyFailure): string => {
   if (failure._tag === 'PropertyRefuted') return failure.counterexample.rendered
   if (failure._tag === 'NonBooleanVerdict') return failure.returned.join(',')
   if (failure._tag === 'CoverageBelowMinimum') return failure.classes[0]?.label ?? ''
-  if (failure._tag === 'SelfModelLaw') return failure.name
+  if (failure._tag === 'SelfModelLaw') return failure.law
   return failure.file
 }
 

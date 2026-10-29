@@ -7,11 +7,11 @@ const IdleRemainingDecisionTypeId: unique symbol = Symbol.for(
 )
 type IdleRemainingDecisionTypeId = typeof IdleRemainingDecisionTypeId
 
-export class EvictDue extends Schema.TaggedClass<EvictDue>()('EvictDue', {}) {
+export class EvictDue extends Schema.TaggedClass<EvictDue, { readonly brand: unique symbol }>()('EvictDue', {}) {
   readonly [IdleRemainingDecisionTypeId] = IdleRemainingDecisionTypeId
 }
 
-export class StillIdle extends Schema.TaggedClass<StillIdle>()('StillIdle', {
+export class StillIdle extends Schema.TaggedClass<StillIdle, { readonly brand: unique symbol }>()('StillIdle', {
   millis: Schema.Finite,
 }) {
   readonly [IdleRemainingDecisionTypeId] = IdleRemainingDecisionTypeId
@@ -20,11 +20,13 @@ export class StillIdle extends Schema.TaggedClass<StillIdle>()('StillIdle', {
 export const IdleRemainingDecision = Schema.Union([EvictDue, StillIdle])
 export type IdleRemainingDecision = typeof IdleRemainingDecision.Type
 
-export class IdleRemaining extends Schema.TaggedClass<IdleRemaining>()('IdleRemaining', {
-  nodeIdleTtl: Schema.Finite,
-  elapsedTtl: Schema.Finite,
-  swept: Schema.Boolean,
-}) {
+export class IdleRemaining
+  extends Schema.TaggedClass<IdleRemaining, { readonly brand: unique symbol }>()('IdleRemaining', {
+    nodeIdleTtl: Schema.Finite,
+    elapsedTtl: Schema.Finite,
+    swept: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

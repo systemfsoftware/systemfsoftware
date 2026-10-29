@@ -4,9 +4,11 @@ import * as S from 'effect/Schema'
 
 import { Decision, DecisionOne, DecisionTwo } from './accept-tagged-command.workflow.js'
 
-export class PublishDecisions extends S.TaggedClass<PublishDecisions>()('PublishDecisions', {
-  count: S.Int,
-}) {
+export class PublishDecisions
+  extends S.TaggedClass<PublishDecisions, { readonly brand: unique symbol }>()('PublishDecisions', {
+    count: S.Int,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = { count: 'tests.publishing.count' } as const
 }
 

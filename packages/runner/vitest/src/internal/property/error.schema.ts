@@ -93,12 +93,14 @@ export type VerdictKind = typeof VerdictKind.Type
  *
  * @internal
  */
-export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('PropertyRefuted', {
-  property: PropertyRun,
-  counterexample: Witness,
-  shrinks: PropertyShrinkCount,
-  replay: Schema.String,
-}) {
+export class PropertyRefuted
+  extends Schema.TaggedError<PropertyRefuted, { readonly brand: unique symbol }>()('PropertyRefuted', {
+    property: PropertyRun,
+    counterexample: Witness,
+    shrinks: PropertyShrinkCount,
+    replay: Schema.String,
+  })
+{
   override get message(): string {
     return `${this.property.name}: the property was falsified within ${String(this.property.runs)} run(s), and ` +
       `${String(this.shrinks)} shrink(s) settled on its input. Shrunk input: ${this.counterexample.rendered}`
@@ -106,15 +108,17 @@ export class PropertyRefuted extends Schema.TaggedError<PropertyRefuted>()('Prop
 }
 
 /** @internal */
-export class PropertyExhausted extends Schema.TaggedError<PropertyExhausted>()('PropertyExhausted', {
-  property: PropertyRun,
-  discards: PropertyRunCount,
-  budget: Schema.Struct({
-    runs: PropertyRunCount,
-    maxDiscards: Schema.NullOr(PropertyRunCount),
-  }),
-  replay: Schema.String,
-}) {
+export class PropertyExhausted
+  extends Schema.TaggedError<PropertyExhausted, { readonly brand: unique symbol }>()('PropertyExhausted', {
+    property: PropertyRun,
+    discards: PropertyRunCount,
+    budget: Schema.Struct({
+      runs: PropertyRunCount,
+      maxDiscards: Schema.NullOr(PropertyRunCount),
+    }),
+    replay: Schema.String,
+  })
+{
   override get message(): string {
     const cap = this.budget.maxDiscards === null
       ? 'no configured discard cap'
@@ -131,12 +135,14 @@ export class PropertyExhausted extends Schema.TaggedError<PropertyExhausted>()('
  *
  * @internal
  */
-export class NonBooleanVerdict extends Schema.TaggedError<NonBooleanVerdict>()('NonBooleanVerdict', {
-  property: PropertyRun,
-  drawn: Witness,
-  returned: Schema.Array(VerdictKind),
-  replay: Schema.String,
-}) {
+export class NonBooleanVerdict
+  extends Schema.TaggedError<NonBooleanVerdict, { readonly brand: unique symbol }>()('NonBooleanVerdict', {
+    property: PropertyRun,
+    drawn: Witness,
+    returned: Schema.Array(VerdictKind),
+    replay: Schema.String,
+  })
+{
   override get message(): string {
     return `${this.property.name}: the property returned no boolean; it returned ${this.returned.join(', ')}. ` +
       'A property must return a literal boolean verdict — asserting with expect(), or returning an Option, ' +
@@ -164,11 +170,13 @@ export type CoverageClassFailure = typeof CoverageClassFailure.Type
  *
  * @internal
  */
-export class CoverageBelowMinimum extends Schema.TaggedError<CoverageBelowMinimum>()('CoverageBelowMinimum', {
-  property: PropertyRun,
-  classes: Schema.Array(CoverageClassFailure),
-  replay: Schema.String,
-}) {
+export class CoverageBelowMinimum
+  extends Schema.TaggedError<CoverageBelowMinimum, { readonly brand: unique symbol }>()('CoverageBelowMinimum', {
+    property: PropertyRun,
+    classes: Schema.Array(CoverageClassFailure),
+    replay: Schema.String,
+  })
+{
   override get message(): string {
     const lines = this.classes.map((entry) =>
       `coverage ${entry.label}: ${entry.hits}/${entry.runs} of runs, below the required ${entry.minimum}`
@@ -182,12 +190,14 @@ export class CoverageBelowMinimum extends Schema.TaggedError<CoverageBelowMinimu
  *
  * @internal
  */
-export class SelfModelLaw extends Schema.TaggedError<SelfModelLaw>()('SelfModelLaw', {
-  name: Schema.String,
-  site: Schema.NullOr(Schema.String),
-}) {
+export class SelfModelLaw
+  extends Schema.TaggedError<SelfModelLaw, { readonly brand: unique symbol }>()('SelfModelLaw', {
+    law: Schema.String,
+    site: Schema.NullOr(Schema.String),
+  })
+{
   override get message(): string {
-    return `${this.name}: the model is the subject itself; a model law must compare against an independent oracle.`
+    return `${this.law}: the model is the subject itself; a model law must compare against an independent oracle.`
   }
 }
 
@@ -196,11 +206,13 @@ export class SelfModelLaw extends Schema.TaggedError<SelfModelLaw>()('SelfModelL
  *
  * @internal
  */
-export class SeedStoreUnreadable extends Schema.TaggedError<SeedStoreUnreadable>()('SeedStoreUnreadable', {
-  file: Schema.String,
-  line: Schema.Int,
-  detail: Schema.String,
-}) {
+export class SeedStoreUnreadable
+  extends Schema.TaggedError<SeedStoreUnreadable, { readonly brand: unique symbol }>()('SeedStoreUnreadable', {
+    file: Schema.String,
+    line: Schema.Int,
+    detail: Schema.String,
+  })
+{
   override get message(): string {
     return `the seed store ${this.file} line ${this.line} could not be read: ${this.detail}`
   }
@@ -304,20 +316,24 @@ const subjectMessageOf = (subject: VacuousSubject): string => {
  *
  * @internal
  */
-export class VacuousProperty extends Schema.TaggedError<VacuousProperty>()('VacuousProperty', {
-  subjects: Schema.Array(VacuousSubject),
-  exempt: Schema.Array(ExemptLaw),
-  replay: Schema.String,
-}) {
+export class VacuousProperty
+  extends Schema.TaggedError<VacuousProperty, { readonly brand: unique symbol }>()('VacuousProperty', {
+    subjects: Schema.Array(VacuousSubject),
+    exempt: Schema.Array(ExemptLaw),
+    replay: Schema.String,
+  })
+{
   override get message(): string {
     return this.subjects.map(subjectMessageOf).join('\n\n')
   }
 }
 
 /** @internal */
-export class ReplayUnreadable extends Schema.TaggedError<ReplayUnreadable>()('ReplayUnreadable', {
-  text: Schema.String,
-}) {
+export class ReplayUnreadable
+  extends Schema.TaggedError<ReplayUnreadable, { readonly brand: unique symbol }>()('ReplayUnreadable', {
+    text: Schema.String,
+  })
+{
   override get message(): string {
     return `CONFORMANCE_REPLAY names neither a seed and path nor a property entry: ${this.text}`
   }
@@ -330,13 +346,15 @@ export class ReplayUnreadable extends Schema.TaggedError<ReplayUnreadable>()('Re
  *
  * @internal
  */
-export class ReplayNoLongerReproduces extends Schema.TaggedError<ReplayNoLongerReproduces>()(
-  'ReplayNoLongerReproduces',
-  {
-    property: PropertyRun,
-    replay: Schema.String,
-  },
-) {
+export class ReplayNoLongerReproduces
+  extends Schema.TaggedError<ReplayNoLongerReproduces, { readonly brand: unique symbol }>()(
+    'ReplayNoLongerReproduces',
+    {
+      property: PropertyRun,
+      replay: Schema.String,
+    },
+  )
+{
   override get message(): string {
     return `${this.property.name}: the CONFORMANCE_REPLAY replay ${this.replay} no longer reproduces a failure ` +
       'for this property; the case it named is gone or its generator changed.'
@@ -348,7 +366,7 @@ export class ReplayNoLongerReproduces extends Schema.TaggedError<ReplayNoLongerR
  *
  * @internal
  */
-export class NonTupleOf extends Schema.TaggedError<NonTupleOf>()('NonTupleOf', {
+export class NonTupleOf extends Schema.TaggedError<NonTupleOf, { readonly brand: unique symbol }>()('NonTupleOf', {
   detail: Schema.String,
 }) {
   override get message(): string {
