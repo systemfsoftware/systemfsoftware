@@ -26,7 +26,7 @@ Given('the server is unavailable', () => {
 ```
 
 ```typescript
-// RIGHT: startup-unavailable.stories.tsx
+// RIGHT: the story's meta, for a component that builds its runtime on mount
 beforeEach: () => {
   resetAll()
   rpc.failNext('unavailable')
@@ -34,6 +34,6 @@ beforeEach: () => {
 },
 ```
 
-Sources: owner ruling, 2026-10-29: the reference app's pattern overrides this pack. The reference app's `features/steps/app-shell.ts` calls `resetAll()` in its first Given; its `features/startup-unavailable.stories.tsx` resets and sets a fault in `beforeEach` because "a `Given` step runs after the runtime already exists and would prove nothing". effect-atom-react RegistryProvider documentation (packages/atom/effect-atom-react/src/registry-context.ts): "Option changes after the first render do not rebuild the registry. When the provider unmounts, registry disposal is delayed briefly and canceled if the provider remounts before the timeout fires."
+Sources: owner ruling, 2026-10-29: the first Given resets every fixture control, and a control that a component reads on mount is reset and set in `beforeEach`, because a Given runs after the component has mounted. Storybook, beforeEach (https://storybook.js.org/docs/writing-tests/interaction-testing#run-code-before-the-component-gets-rendered): `beforeEach` runs before the story renders, and the function it returns runs after. effect-atom-react RegistryProvider documentation (packages/atom/effect-atom-react/src/registry-context.ts): "Option changes after the first render do not rebuild the registry. When the provider unmounts, registry disposal is delayed briefly and canceled if the provider remounts before the timeout fires."
 
 Gate: judge

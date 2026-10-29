@@ -7,7 +7,7 @@ applies_when:
 tags: [storybook, sb-mock, io, fakes]
 ---
 
-The preview substitutes each I/O module the components reach with `sb.mock(import('../src/io/<module>.ts'))`. The stand-in lives in a `__mocks__` folder beside that module (`src/io/__mocks__/<module>.ts`) and exports the same names and types as the module it replaces. Stand-ins are TypeScript files, as in the reference app (`src/io/__mocks__/layer.ts`).
+The preview substitutes each I/O module the components reach with `sb.mock(import('../src/io/<module>.ts'))`. The stand-in lives in a `__mocks__` folder beside that module (`src/io/__mocks__/<module>.ts`) and exports the same names and types as the module it replaces. Stand-ins are TypeScript files.
 
 Every module the preview passes to `sb.mock` has its stand-in file. Without one, Storybook automocks the module and a missing stand-in goes unnoticed.
 
@@ -31,6 +31,6 @@ sb.mock(import('../src/features/orders/order.service.ts'))
 sb.mock(import('../src/io/layer.ts')) // stand-in: src/io/__mocks__/layer.ts
 ```
 
-Sources: owner rulings, 2026-10-24: "we do not want to mock anything other than IO otherwise it would be a FAKE test"; 2026-10-29: the reference app's pattern overrides this pack, as in the reference app's `.storybook/preview.tsx` and `src/io/__mocks__/`. Storybook, Mocking modules (https://storybook.js.org/docs/writing-stories/mocking-data-and-modules/mocking-modules): a mock file "should be placed in a `__mocks__` directory next to the module you want to mock"; "If no `__mocks__` file is found, the original module's code is transformed at build-time to replace its exports with mocks or spies." Kent C. Dodds, Write tests (https://kentcdodds.com/blog/write-tests): "When you mock something you're removing all confidence in the integration between what you're testing and what's being mocked."
+Sources: owner rulings, 2026-10-24: "we do not want to mock anything other than IO otherwise it would be a FAKE test"; 2026-10-29: a story's I/O comes from `sb.mock` stand-ins beside each I/O module. Storybook, Mocking modules (https://storybook.js.org/docs/writing-stories/mocking-data-and-modules/mocking-modules): a mock file "should be placed in a `__mocks__` directory next to the module you want to mock"; "If no `__mocks__` file is found, the original module's code is transformed at build-time to replace its exports with mocks or spies." Kent C. Dodds, Write tests (https://kentcdodds.com/blog/write-tests): "When you mock something you're removing all confidence in the integration between what you're testing and what's being mocked."
 
 Gate: judge

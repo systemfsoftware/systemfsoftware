@@ -44,6 +44,6 @@ const OnBothAdapters = pairwiseFor({
 }, Messages)
 ```
 
-Source: Martin Fowler, ContractTest (https://martinfowler.com/bliki/ContractTest.html): a contract test checks that calls against a test double return the same results as the real service would. The `__mocks__` exception: owner ruling, 2026-10-29: the reference app's pattern overrides this pack, as in the reference app's `src/io/__mocks__/`.
+Source: Martin Fowler, ContractTest (https://martinfowler.com/bliki/ContractTest.html): a contract test checks that calls against a test double return the same results as the real service would. The `__mocks__` exception: owner ruling, 2026-10-29: Storybook I/O stand-ins live beside the I/O module they replace.
 
 Gate: judge
