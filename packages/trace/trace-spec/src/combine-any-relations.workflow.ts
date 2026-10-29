@@ -7,29 +7,35 @@ const CombineAnyRelationsTypeId: unique symbol = Symbol.for('@systemfsoftware/tr
 type CombineAnyRelationsTypeId = typeof CombineAnyRelationsTypeId
 
 /** At least one relation held, so the disjunction holds over every inspected span. */
-export class AnyRelationHeld extends Schema.TaggedClass<AnyRelationHeld>()('AnyRelationHeld', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-}) {
+export class AnyRelationHeld
+  extends Schema.TaggedClass<AnyRelationHeld, { readonly brand: unique symbol }>()('AnyRelationHeld', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+  })
+{
   readonly [CombineAnyRelationsTypeId] = CombineAnyRelationsTypeId
 }
 
 /** No relation held: every conjunct is named in the break. */
-export class NoRelationHeld extends Schema.TaggedClass<NoRelationHeld>()('NoRelationHeld', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-  detail: Schema.String,
-}) {
+export class NoRelationHeld
+  extends Schema.TaggedClass<NoRelationHeld, { readonly brand: unique symbol }>()('NoRelationHeld', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+    detail: Schema.String,
+  })
+{
   readonly [CombineAnyRelationsTypeId] = CombineAnyRelationsTypeId
 }
 
 export const CombineAnyRelationsDecision = Schema.Union([AnyRelationHeld, NoRelationHeld])
 export type CombineAnyRelationsDecision = typeof CombineAnyRelationsDecision.Type
 
-export class CombineAnyRelations extends Schema.TaggedClass<CombineAnyRelations>()('CombineAnyRelations', {
-  conjunct: Schema.String,
-  verdicts: Schema.Array(Verdict),
-}) {
+export class CombineAnyRelations
+  extends Schema.TaggedClass<CombineAnyRelations, { readonly brand: unique symbol }>()('CombineAnyRelations', {
+    conjunct: Schema.String,
+    verdicts: Schema.Array(Verdict),
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

@@ -6,28 +6,34 @@ const DualExitJudgementTypeId: unique symbol = Symbol.for(
 )
 type DualExitJudgementTypeId = typeof DualExitJudgementTypeId
 
-export class Agreed extends Schema.TaggedClass<Agreed>()('Agreed', {}) {
+export class Agreed extends Schema.TaggedClass<Agreed, { readonly brand: unique symbol }>()('Agreed', {}) {
   readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
 }
 
-export class DisagreedByOutput extends Schema.TaggedClass<DisagreedByOutput>()('DisagreedByOutput', {}) {
+export class DisagreedByOutput
+  extends Schema.TaggedClass<DisagreedByOutput, { readonly brand: unique symbol }>()('DisagreedByOutput', {})
+{
   readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
 }
 
-export class DisagreedByFailureFingerprint extends Schema.TaggedClass<DisagreedByFailureFingerprint>()(
-  'DisagreedByFailureFingerprint',
-  {},
-) {
+export class DisagreedByFailureFingerprint
+  extends Schema.TaggedClass<DisagreedByFailureFingerprint, { readonly brand: unique symbol }>()(
+    'DisagreedByFailureFingerprint',
+    {},
+  )
+{
   readonly [DualExitJudgementTypeId] = DualExitJudgementTypeId
 }
 
 export const DualExitJudgement = Schema.Union([Agreed, DisagreedByOutput, DisagreedByFailureFingerprint])
 export type DualExitJudgement = typeof DualExitJudgement.Type
 
-export class JudgeDualExits extends Schema.TaggedClass<JudgeDualExits>()('JudgeDualExits', {
-  bothSucceeded: Schema.Boolean,
-  oracleHeld: Schema.Boolean,
-  failuresMatch: Schema.Boolean,
-}) {
+export class JudgeDualExits
+  extends Schema.TaggedClass<JudgeDualExits, { readonly brand: unique symbol }>()('JudgeDualExits', {
+    bothSucceeded: Schema.Boolean,
+    oracleHeld: Schema.Boolean,
+    failuresMatch: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }

@@ -5,30 +5,36 @@ import * as Result from 'effect/Result'
 const JudgeEdgePlacementTypeId: unique symbol = Symbol.for('@systemfsoftware/trace-spec/JudgeEdgePlacement')
 type JudgeEdgePlacementTypeId = typeof JudgeEdgePlacementTypeId
 
-export class EdgePlacementHeld extends Schema.TaggedClass<EdgePlacementHeld>()('EdgePlacementHeld', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-}) {
+export class EdgePlacementHeld
+  extends Schema.TaggedClass<EdgePlacementHeld, { readonly brand: unique symbol }>()('EdgePlacementHeld', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+  })
+{
   readonly [JudgeEdgePlacementTypeId] = JudgeEdgePlacementTypeId
 }
 
-export class EdgePlacementBroken extends Schema.TaggedClass<EdgePlacementBroken>()('EdgePlacementBroken', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-  detail: Schema.String,
-}) {
+export class EdgePlacementBroken
+  extends Schema.TaggedClass<EdgePlacementBroken, { readonly brand: unique symbol }>()('EdgePlacementBroken', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+    detail: Schema.String,
+  })
+{
   readonly [JudgeEdgePlacementTypeId] = JudgeEdgePlacementTypeId
 }
 
 export const JudgeEdgePlacementDecision = Schema.Union([EdgePlacementHeld, EdgePlacementBroken])
 export type JudgeEdgePlacementDecision = typeof JudgeEdgePlacementDecision.Type
 
-export class JudgeEdgePlacement extends Schema.TaggedClass<JudgeEdgePlacement>()('JudgeEdgePlacement', {
-  conjunct: Schema.String,
-  placed: Schema.Array(Schema.String),
-  reached: Schema.Array(Schema.String),
-  detail: Schema.String,
-}) {
+export class JudgeEdgePlacement
+  extends Schema.TaggedClass<JudgeEdgePlacement, { readonly brand: unique symbol }>()('JudgeEdgePlacement', {
+    conjunct: Schema.String,
+    placed: Schema.Array(Schema.String),
+    reached: Schema.Array(Schema.String),
+    detail: Schema.String,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

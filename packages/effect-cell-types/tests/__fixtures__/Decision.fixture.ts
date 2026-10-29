@@ -5,11 +5,11 @@ import { DecisionOne } from './accept-tagged-command.workflow.js'
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/Decision')
 type DecisionTypeId = typeof DecisionTypeId
 
-export class LoneDecision extends S.TaggedClass<LoneDecision>()('LoneDecision', {}) {
+export class LoneDecision extends S.TaggedClass<LoneDecision, { readonly brand: unique symbol }>()('LoneDecision', {}) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {
+export class DecisionError extends S.TaggedError<DecisionError, { readonly brand: unique symbol }>()('DecisionError', {
   why: S.String,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId

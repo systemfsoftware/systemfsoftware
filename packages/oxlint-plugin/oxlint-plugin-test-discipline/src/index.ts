@@ -5,6 +5,7 @@ import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gh
 import { conformanceTestRequiresHarness } from './rules/conformance-test-requires-harness.js'
 import { dampTestNaming } from './rules/damp-test-naming.js'
 import { differentialTestRequiresHarness } from './rules/differential-test-requires-harness.js'
+import { e2eTierPlacement } from './rules/e2e-tier-placement.js'
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { modelFixtureImportsSubject } from './rules/model-fixture-imports-subject.js'
@@ -49,6 +50,7 @@ const recommendedRules = {
   [rule('src-property-test-cell')]: 'error',
   [rule('test-file-outside-tests-dir')]: 'error',
   [rule('test-suffix-outside-src')]: 'error',
+  [rule('e2e-tier-placement')]: 'error',
   [rule('behaviour-test-requires-gherkin')]: 'error',
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
@@ -85,6 +87,7 @@ export default {
     'src-property-test-cell': srcPropertyTestCell,
     'test-file-outside-tests-dir': testFileOutsideTestsDir,
     'test-suffix-outside-src': testSuffixOutsideSrc,
+    'e2e-tier-placement': e2eTierPlacement,
     'behaviour-test-requires-gherkin': behaviourTestRequiresGherkin,
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,

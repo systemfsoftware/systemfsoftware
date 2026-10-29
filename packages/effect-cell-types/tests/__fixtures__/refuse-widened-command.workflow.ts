@@ -18,13 +18,13 @@ const WidenedDecisionTypeId: unique symbol = Symbol.for(
 )
 type WidenedDecisionTypeId = typeof WidenedDecisionTypeId
 
-export class WidenedOne extends S.TaggedClass<WidenedOne>()('WidenedOne', {
+export class WidenedOne extends S.TaggedClass<WidenedOne, { readonly brand: unique symbol }>()('WidenedOne', {
   value: S.Int,
 }) {
   readonly [WidenedDecisionTypeId] = WidenedDecisionTypeId
 }
 
-export class WidenedTwo extends S.TaggedClass<WidenedTwo>()('WidenedTwo', {
+export class WidenedTwo extends S.TaggedClass<WidenedTwo, { readonly brand: unique symbol }>()('WidenedTwo', {
   reason: S.String,
 }) {
   readonly [WidenedDecisionTypeId] = WidenedDecisionTypeId

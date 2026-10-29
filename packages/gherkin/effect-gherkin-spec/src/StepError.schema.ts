@@ -20,7 +20,7 @@ const messageOf = (keyword: string, text: string, cause: Cause): string => {
  * Derives `message` from `keyword`, `text` and `cause`, so a step failure never prints an empty
  * headline. Declared as a getter because a `message` field would change the error's encoded shape.
  */
-export class StepError extends Schema.TaggedError<StepError>()('StepError', {
+export class StepError extends Schema.TaggedError<StepError, { readonly brand: unique symbol }>()('StepError', {
   keyword: Schema.String,
   text: Schema.String,
   cause: Schema.Unknown,

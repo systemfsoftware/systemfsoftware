@@ -35,7 +35,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm dts:check && pnpm api:check",
     "typecheck": "tsc -b",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "mutation": "stryker run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",

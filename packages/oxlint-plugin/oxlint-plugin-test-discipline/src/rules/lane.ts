@@ -3,18 +3,19 @@ import { Option, Schema as S } from 'effect'
 import {
   CONFORMANCE_PACKAGE,
   DIFFERENTIAL_PACKAGE,
+  E2E_RUNNER_ENTRY,
   FOREIGN_RUNNERS,
   GHERKIN_PACKAGE,
   TRACE_SPEC_PACKAGE,
 } from './path.config.js'
-import { basenameOf, isTestFile } from './path.js'
+import { basenameOf, isE2eTestFile, isTestFile } from './path.js'
 import { isPropCallee } from './prop-call.js'
 
 /**
  * What a test exercises, read from what it imports and calls. A file is in every
  * lane its content selects, whatever its name or location (`CONST-T12`).
  */
-export type Lane = 'behaviour' | 'conformance' | 'differential' | 'trace' | 'property'
+export type Lane = 'behaviour' | 'conformance' | 'differential' | 'trace' | 'property' | 'e2e'
 
 export type Lanes = ReadonlySet<Lane>
 
@@ -35,6 +36,20 @@ export const isTypeOnly = (node: ESTree.ImportDeclaration): boolean =>
   node.importKind === 'type' || (node.specifiers.length > 0 && node.specifiers.every(
     (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
   ))
+
+/**
+ * Whether an import declaration registers end-to-end tests: it takes the
+ * runner entry's `test` (an alias counts) or its namespace as a value. The
+ * rest of the entry (`expect`, `describe`, hooks, the composition API, types)
+ * registers no test, so importing it selects no lane.
+ */
+const importsE2eTest = (node: ESTree.ImportDeclaration): boolean =>
+  node.source.value === E2E_RUNNER_ENTRY && node.specifiers.some(
+    (specifier) =>
+      specifier.type === 'ImportNamespaceSpecifier' ||
+      (specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' &&
+        specifier.imported.type === 'Identifier' && specifier.imported.name === 'test'),
+  )
 
 /**
  * Where a value import brings FastCheck in: the whole declaration for the
@@ -74,6 +89,7 @@ const derive = (program: ESTree.Program, keys: VisitorKeys): Lanes => {
     if (statement.type !== 'ImportDeclaration' || isTypeOnly(statement)) continue
     const lane = harnessLaneOf(statement.source.value)
     if (lane !== undefined) lanes.add(lane)
+    if (importsE2eTest(statement)) lanes.add('e2e')
     if (fastCheckImportSites(statement).length > 0) lanes.add('property')
   }
   if (!lanes.has('property') && callsProperty(program, keys)) lanes.add('property')
@@ -86,12 +102,13 @@ const cache = new WeakMap<ESTree.Program, Lanes>()
 
 /**
  * The lanes the linted test file is in, derived once per program and shared by
- * every rule. Only a file Vitest runs as a test (the `.test.ts` / `.spec.ts`
- * ending) is in a lane; a fixture or helper a test imports is not a test.
+ * every rule. A file is in a lane when Vitest runs it as a test (the `.test.ts` /
+ * `.spec.ts` ending) or the `effect-e2e` runner collects it (`isE2eTestFile`);
+ * a fixture or helper a test imports is not a test.
  * Call it from a visitor: the AST is complete once traversal starts.
  */
 export const lanesOf = (context: Context): Lanes => {
-  if (!isTestFile(basenameOf(context.filename))) return NO_LANES
+  if (!isTestFile(basenameOf(context.filename)) && !isE2eTestFile(context.filename)) return NO_LANES
   const program = context.sourceCode.ast
   const cached = cache.get(program)
   if (cached !== undefined) return cached
@@ -116,29 +133,40 @@ export const mixesPropertyIntoAHarness = (lanes: Lanes): boolean =>
 
 /**
  * What a package is, declared once in its own lint config's `settings`:
- * `vitest-runner` for the packages that are the test framework itself. Every rule
- * reads the same declaration, so two rules can never disagree about it, and no
- * rule takes a role option (oxlint refuses one as a configuration error). The
- * rule cannot see how a package is wired, so it takes the declaration at its
- * word; a package that declares the role without being the runner gets the
- * runner's lane all the same, and the declaration is reviewed where it is made,
- * in the config diff.
+ * `vitest-runner` for the packages that are the test framework itself, `e2e`
+ * for the packages that hold end-to-end suites. Every rule reads the same
+ * declaration, so two rules can never disagree about it, and no rule takes a
+ * role option (oxlint refuses one as a configuration error). The rule cannot
+ * see how a package is wired, so it takes the declaration at its word; a
+ * package that declares a role without being what it names gets that role's
+ * treatment all the same, and the declaration is reviewed where it is made, in
+ * the config diff.
  */
 export const SETTINGS_KEY = '@systemfsoftware/oxlint-plugin-test-discipline'
 
+const Role = S.Literals(['vitest-runner', 'e2e'])
+
 const PluginSettings = S.Struct({
-  [SETTINGS_KEY]: S.optional(S.Struct({ role: S.optional(S.Literal('vitest-runner')) })),
+  [SETTINGS_KEY]: S.optional(S.Struct({ role: S.optional(Role) })),
 })
+
+const declaresRole = (context: Context, role: typeof Role.Type): boolean =>
+  Option.exists(
+    S.decodeUnknownOption(PluginSettings)(context.settings),
+    (settings) => settings[SETTINGS_KEY]?.role === role,
+  )
 
 /**
  * Whether the linted file's package declares itself the Vitest runner. Settings
  * that do not decode declare no role, so every raw Vitest import is then refused.
  */
-export const isRunnerPackage = (context: Context): boolean =>
-  Option.exists(
-    S.decodeUnknownOption(PluginSettings)(context.settings),
-    (settings) => settings[SETTINGS_KEY]?.role === 'vitest-runner',
-  )
+export const isRunnerPackage = (context: Context): boolean => declaresRole(context, 'vitest-runner')
+
+/**
+ * Whether the linted file's package declares itself an end-to-end package.
+ * Settings that do not decode declare no role.
+ */
+export const isE2ePackage = (context: Context): boolean => declaresRole(context, 'e2e')
 
 const importsARunner = (program: ESTree.Program): boolean =>
   program.body.some((statement) =>

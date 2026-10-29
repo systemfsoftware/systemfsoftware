@@ -5,6 +5,22 @@ export const TYPE_TEST_BASENAME = /\.tst\.[cm]?tsx?$/
 export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
 
 /**
+ * The basename of a test the `effect-e2e` runner collects. Mirrors the runner's
+ * default pattern `tests/**\/*.e2e.ts`, which is `.ts` only.
+ */
+export const E2E_TEST_BASENAME = /\.e2e\.ts$/
+
+/**
+ * The directory the runner excludes from collection when it sits directly under
+ * a `tests` directory (`tests/__fixtures__/**`): files there are suites under
+ * test, not suites to run.
+ */
+export const FIXTURES_DIR = '__fixtures__' as const
+
+/** The `effect-e2e` runner entry whose `test` registers an end-to-end test. */
+export const E2E_RUNNER_ENTRY = '@systemfsoftware/effect-e2e/runner' as const
+
+/**
  * The only test location sanctioned under `src/`. A workflow property test
  * earns colocation with the workflow it covers, but not adjacency: it lives in
  * a `__tests__` directory beside that workflow, never as a sibling file.

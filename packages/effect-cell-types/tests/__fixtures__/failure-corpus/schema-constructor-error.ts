@@ -9,15 +9,19 @@ const defectFile = 'packages/effect-cell-types/tests/__fixtures__/failure-corpus
 const PlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/failure-corpus/CountPlan')
 type PlanTypeId = typeof PlanTypeId
 
-export class CountCommand extends Schema.TaggedClass<CountCommand>()('CountCommand', { count: Schema.Int }) {
+export class CountCommand
+  extends Schema.TaggedClass<CountCommand, { readonly brand: unique symbol }>()('CountCommand', { count: Schema.Int })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
-export class Counted extends Schema.TaggedClass<Counted>()('Counted', { count: Schema.Int }) {
+export class Counted
+  extends Schema.TaggedClass<Counted, { readonly brand: unique symbol }>()('Counted', { count: Schema.Int })
+{
   readonly [PlanTypeId] = PlanTypeId
 }
 
-export class Uncounted extends Schema.TaggedClass<Uncounted>()('Uncounted', {}) {
+export class Uncounted extends Schema.TaggedClass<Uncounted, { readonly brand: unique symbol }>()('Uncounted', {}) {
   readonly [PlanTypeId] = PlanTypeId
 }
 

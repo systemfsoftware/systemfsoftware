@@ -1,8 +1,10 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { isInRunnerLane, type Lanes, lanesOf } from './lane.js'
-import { basenameOf, isTestFile, isUnderSrc } from './path.js'
+import { E2E_TEST_BASENAME } from './path.config.js'
+import { basenameOf, isE2eTestFile, isTestFile, isUnderSrc } from './path.js'
 import {
+  E2E_SUFFIX,
   LANE_MISMATCH_ACTUAL,
   LANE_MISMATCH_FIX,
   LANE_WORDS,
@@ -40,10 +42,19 @@ export const testSuffixOutsideSrc = defineRule({
   create(context: Context) {
     const filename = context.filename
     const basename = basenameOf(filename)
-    if (isUnderSrc(filename) || !isTestFile(basename)) return {}
+    if (isUnderSrc(filename) || !(isTestFile(basename) || isE2eTestFile(filename))) return {}
     return {
       Program(node: ESTree.Program) {
         const lanes = lanesOf(context)
+        if (lanes.has('e2e')) {
+          if (E2E_TEST_BASENAME.test(basename)) return
+          context.report({
+            node,
+            messageId: 'laneMismatch',
+            data: { name: basename, expected: E2E_SUFFIX, actual: LANE_MISMATCH_ACTUAL, fix: LANE_MISMATCH_FIX },
+          })
+          return
+        }
         const nameable = nameableLanes(lanes, isInRunnerLane(context))
         if (nameable.length === 0) {
           const property = lanes.has('property')
