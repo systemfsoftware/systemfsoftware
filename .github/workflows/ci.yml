@@ -7,9 +7,11 @@ on:
     branches: [main]
   merge_group:
   workflow_dispatch:
+# Every commit on main gets its own run and verdict: grouping main by SHA keeps a newer push from cancelling it. On any
+# other ref a newer push cancels the superseded run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -73,24 +75,29 @@ jobs:
           done
   checks:
     name: build · lint · typecheck · test
-    needs: conflicts
+    # Fast checks before the merge, heavy suites after it (owner, 2026-10-29: "They need to be fast with the heavier
+    # checks on main"). A pull request and a merge-queue draft run the static, gritlint and layers lanes and the
+    # `affected` lane (.github/ci/pr-tests.ts), and their plan schedules no packed test job
+    # (.github/ci/no-tests-before-merge.ts). Main runs every package's whole suite in the packed test jobs.
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/reusable-checks.yml
     with:
-      profile: ${{ github.event_name == 'pull_request' && 'local' || 'per-change' }}
-      record: test-timings-${{ github.event_name == 'pull_request' && 'local' || 'per-change' }}
-      timings: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts
+      profile: ${{ github.ref == 'refs/heads/main' && 'per-change' || 'local' }}
+      record: test-timings-${{ github.ref == 'refs/heads/main' && 'per-change' || 'local' }}
+      timings: >-
+        ${{ github.ref == 'refs/heads/main'
+        && 'deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts'
+        || 'deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-env --allow-write .github/ci/no-tests-before-merge.ts' }}
       node-options: --max-old-space-size=4096
       pnpm: corepack pnpm
       test-flags: --output-logs=new-only --log-order=stream --log-prefix=none
       gate-name: the gate (pnpm check:ci)
       lanes: >-
-        [{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static",
-          "docs-run": "./bin/dprint check"},
-        {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30},
-        {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}]
+        ${{ github.ref == 'refs/heads/main'
+        && '[{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static", "docs-run": "./bin/dprint check"}, {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}, {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}]'
+        || '[{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static", "docs-run": "./bin/dprint check"}, {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}, {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}, {"id": "affected", "name": "affected tests (turbo --affected, vitest --changed)", "timeout-minutes": 30, "fetch-depth": 2, "node-options": "--max-old-space-size=4096"}]' }}
   scope:
     name: classify · docs-only or full
     runs-on: ubuntu-latest
@@ -106,7 +113,7 @@ jobs:
   smoke:
     name: smoke · effect-microsandbox journeys (real microVM)
     needs: [conflicts, scope]
-    if: needs.scope.outputs.scope != 'docs-only'
+    if: github.ref == 'refs/heads/main' && needs.scope.outputs.scope != 'docs-only'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
