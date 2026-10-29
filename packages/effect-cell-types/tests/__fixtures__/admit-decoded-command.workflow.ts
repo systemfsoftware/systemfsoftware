@@ -3,7 +3,7 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-export class Decoded extends S.Class<Decoded>('Decoded')({
+export class Decoded extends S.Class<Decoded, { readonly brand: unique symbol }>('Decoded')({
   length: S.Int,
 }) {
   static readonly [Workflow.InstrumentationBrand] = { length: 'tests.decoded.length' } as const
@@ -12,28 +12,30 @@ export class Decoded extends S.Class<Decoded>('Decoded')({
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/InterpreterDecide')
 type DecisionTypeId = typeof DecisionTypeId
 
-export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
+export class Admitted extends S.TaggedClass<Admitted, { readonly brand: unique symbol }>()('Admitted', {
   length: S.Finite,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
   static readonly [Workflow.InstrumentationBrand] = { length: 'tests.admitted.length' } as const
 }
 
-export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {
+export class Rejected extends S.TaggedClass<Rejected, { readonly brand: unique symbol }>()('Rejected', {
   why: S.String,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export class Malformed extends S.TaggedError<Malformed>()('Malformed', {
+export class Malformed extends S.TaggedError<Malformed, { readonly brand: unique symbol }>()('Malformed', {
   length: S.Int,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export class InfraCrashError extends S.TaggedError<InfraCrashError>()('InfraCrashError', {
-  message: S.String,
-}) {}
+export class InfraCrashError
+  extends S.TaggedError<InfraCrashError, { readonly brand: unique symbol }>()('InfraCrashError', {
+    message: S.String,
+  })
+{}
 
 export const AdmissionDecision = S.Union([Admitted, Rejected])
 

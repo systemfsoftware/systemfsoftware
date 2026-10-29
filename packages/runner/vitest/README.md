@@ -214,7 +214,7 @@ Other property failures are exported from the package root as tagged errors — 
 - **`PropertyExhausted`**: `property`, `discards`, `budget` (`{ runs, maxDiscards }`, `maxDiscards` null when uncapped), `replay` — the generator discarded too many draws, so the property was never evaluated; it is not a refutation and records nothing to the seed store
 - **`NonBooleanVerdict`**: `property`, `drawn` (rendered, value), `returned` (array of kinds), `replay`
 - **`CoverageBelowMinimum`**: `property`, `classes` (array of {label, hits, runs, minimum}), `replay`
-- **`SelfModelLaw`**: `name`, `site` — the law compared the subject to itself
+- **`SelfModelLaw`**: `law`, `site` — the law compared the subject to itself
 - **`SeedStoreUnreadable`**: `file`, `line`, `detail` — a seed store file's line could not be decoded
 - **`ReplayUnreadable`**: `text` — `CONFORMANCE_REPLAY` names neither the kernel's `seed=…;path=…` nor a property entry
 - **`ReplayNoLongerReproduces`**: `property`, `replay` — a `CONFORMANCE_REPLAY` replay no longer reproduces its recorded failure

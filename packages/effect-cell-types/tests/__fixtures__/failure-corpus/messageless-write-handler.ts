@@ -9,15 +9,21 @@ const defectFile = 'packages/effect-cell-types/tests/__fixtures__/failure-corpus
 const PlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/failure-corpus/WritePlan')
 type PlanTypeId = typeof PlanTypeId
 
-export class ProbeCommand extends Schema.TaggedClass<ProbeCommand>()('ProbeCommand', { hostPort: Schema.Int }) {
+export class ProbeCommand
+  extends Schema.TaggedClass<ProbeCommand, { readonly brand: unique symbol }>()('ProbeCommand', {
+    hostPort: Schema.Int,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
-export class Probed extends Schema.TaggedClass<Probed>()('Probed', { hostPort: Schema.Int }) {
+export class Probed
+  extends Schema.TaggedClass<Probed, { readonly brand: unique symbol }>()('Probed', { hostPort: Schema.Int })
+{
   readonly [PlanTypeId] = PlanTypeId
 }
 
-export class Unprobed extends Schema.TaggedClass<Unprobed>()('Unprobed', {}) {
+export class Unprobed extends Schema.TaggedClass<Unprobed, { readonly brand: unique symbol }>()('Unprobed', {}) {
   readonly [PlanTypeId] = PlanTypeId
 }
 

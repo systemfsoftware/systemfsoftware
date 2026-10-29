@@ -1,8 +1,10 @@
 import * as Schema from 'effect/Schema'
 
-export class CommandRejected extends Schema.TaggedError<CommandRejected>()('CommandRejected', {
-  issue: Schema.String,
-}) {
+export class CommandRejected
+  extends Schema.TaggedError<CommandRejected, { readonly brand: unique symbol }>()('CommandRejected', {
+    issue: Schema.String,
+  })
+{
   override get message(): string {
     return this.issue
   }

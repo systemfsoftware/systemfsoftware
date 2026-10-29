@@ -8,25 +8,29 @@ const ListenerNotifyDecisionTypeId: unique symbol = Symbol.for(
 )
 type ListenerNotifyDecisionTypeId = typeof ListenerNotifyDecisionTypeId
 
-export class StaySilent extends Schema.TaggedClass<StaySilent>()('StaySilent', {}) {
+export class StaySilent extends Schema.TaggedClass<StaySilent, { readonly brand: unique symbol }>()('StaySilent', {}) {
   readonly [ListenerNotifyDecisionTypeId] = ListenerNotifyDecisionTypeId
 }
 
-export class QueueForBatch extends Schema.TaggedClass<QueueForBatch>()('QueueForBatch', {}) {
+export class QueueForBatch
+  extends Schema.TaggedClass<QueueForBatch, { readonly brand: unique symbol }>()('QueueForBatch', {})
+{
   readonly [ListenerNotifyDecisionTypeId] = ListenerNotifyDecisionTypeId
 }
 
-export class NotifyNow extends Schema.TaggedClass<NotifyNow>()('NotifyNow', {}) {
+export class NotifyNow extends Schema.TaggedClass<NotifyNow, { readonly brand: unique symbol }>()('NotifyNow', {}) {
   readonly [ListenerNotifyDecisionTypeId] = ListenerNotifyDecisionTypeId
 }
 
 export const ListenerNotifyDecision = Schema.Union([StaySilent, QueueForBatch, NotifyNow])
 export type ListenerNotifyDecision = typeof ListenerNotifyDecision.Type
 
-export class ListenerNotify extends Schema.TaggedClass<ListenerNotify>()('ListenerNotify', {
-  batchPhase: BatchPhaseName,
-  hasListeners: Schema.Boolean,
-}) {
+export class ListenerNotify
+  extends Schema.TaggedClass<ListenerNotify, { readonly brand: unique symbol }>()('ListenerNotify', {
+    batchPhase: BatchPhaseName,
+    hasListeners: Schema.Boolean,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

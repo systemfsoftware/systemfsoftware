@@ -4,7 +4,7 @@ import { describe, expect, it } from 'tstyche'
 
 class Guest extends Context.Service<Guest, { readonly handshake: Effect.Effect<string> }>()('test/Guest') {}
 
-class Outage extends S.TaggedError<Outage>()('Outage', {
+class Outage extends S.TaggedError<Outage, { readonly brand: unique symbol }>()('Outage', {
   detail: S.String,
 }) {}
 

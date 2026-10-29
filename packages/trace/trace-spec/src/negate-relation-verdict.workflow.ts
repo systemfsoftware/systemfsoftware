@@ -6,7 +6,7 @@ import { Verdict } from './Verdict.schema.js'
 const NegateRelationVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/trace-spec/NegateRelationVerdict')
 type NegateRelationVerdictTypeId = typeof NegateRelationVerdictTypeId
 
-export class HoldNegated extends Schema.TaggedClass<HoldNegated>()('HoldNegated', {
+export class HoldNegated extends Schema.TaggedClass<HoldNegated, { readonly brand: unique symbol }>()('HoldNegated', {
   conjunct: Schema.String,
   inspected: Schema.Array(Schema.String),
   detail: Schema.String,
@@ -14,20 +14,24 @@ export class HoldNegated extends Schema.TaggedClass<HoldNegated>()('HoldNegated'
   readonly [NegateRelationVerdictTypeId] = NegateRelationVerdictTypeId
 }
 
-export class BreakNegated extends Schema.TaggedClass<BreakNegated>()('BreakNegated', {
-  conjunct: Schema.String,
-  inspected: Schema.Array(Schema.String),
-}) {
+export class BreakNegated
+  extends Schema.TaggedClass<BreakNegated, { readonly brand: unique symbol }>()('BreakNegated', {
+    conjunct: Schema.String,
+    inspected: Schema.Array(Schema.String),
+  })
+{
   readonly [NegateRelationVerdictTypeId] = NegateRelationVerdictTypeId
 }
 
 export const NegateRelationVerdictDecision = Schema.Union([HoldNegated, BreakNegated])
 export type NegateRelationVerdictDecision = typeof NegateRelationVerdictDecision.Type
 
-export class NegateRelationVerdict extends Schema.TaggedClass<NegateRelationVerdict>()('NegateRelationVerdict', {
-  conjunct: Schema.String,
-  verdict: Verdict,
-}) {
+export class NegateRelationVerdict
+  extends Schema.TaggedClass<NegateRelationVerdict, { readonly brand: unique symbol }>()('NegateRelationVerdict', {
+    conjunct: Schema.String,
+    verdict: Verdict,
+  })
+{
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 

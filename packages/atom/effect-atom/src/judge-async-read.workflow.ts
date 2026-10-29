@@ -7,19 +7,27 @@ const AsyncReadDecisionTypeId: unique symbol = Symbol.for(
 )
 type AsyncReadDecisionTypeId = typeof AsyncReadDecisionTypeId
 
-export class SuspendImmediately extends Schema.TaggedClass<SuspendImmediately>()('SuspendImmediately', {}) {
+export class SuspendImmediately
+  extends Schema.TaggedClass<SuspendImmediately, { readonly brand: unique symbol }>()('SuspendImmediately', {})
+{
   readonly [AsyncReadDecisionTypeId] = AsyncReadDecisionTypeId
 }
 
-export class AwaitNextResult extends Schema.TaggedClass<AwaitNextResult>()('AwaitNextResult', {}) {
+export class AwaitNextResult
+  extends Schema.TaggedClass<AwaitNextResult, { readonly brand: unique symbol }>()('AwaitNextResult', {})
+{
   readonly [AsyncReadDecisionTypeId] = AsyncReadDecisionTypeId
 }
 
-export class KeepAwaiting extends Schema.TaggedClass<KeepAwaiting>()('KeepAwaiting', {}) {
+export class KeepAwaiting
+  extends Schema.TaggedClass<KeepAwaiting, { readonly brand: unique symbol }>()('KeepAwaiting', {})
+{
   readonly [AsyncReadDecisionTypeId] = AsyncReadDecisionTypeId
 }
 
-export class ResolveWithResult extends Schema.TaggedClass<ResolveWithResult>()('ResolveWithResult', {}) {
+export class ResolveWithResult
+  extends Schema.TaggedClass<ResolveWithResult, { readonly brand: unique symbol }>()('ResolveWithResult', {})
+{
   readonly [AsyncReadDecisionTypeId] = AsyncReadDecisionTypeId
 }
 
@@ -37,7 +45,7 @@ export type AsyncReadStage = Schema.Schema.Type<typeof AsyncReadStage>
 export const AsyncResultPhase = Schema.Literals(['initial', 'success', 'failure'])
 export type AsyncResultPhase = Schema.Schema.Type<typeof AsyncResultPhase>
 
-export class AsyncRead extends Schema.TaggedClass<AsyncRead>()('AsyncRead', {
+export class AsyncRead extends Schema.TaggedClass<AsyncRead, { readonly brand: unique symbol }>()('AsyncRead', {
   stage: AsyncReadStage,
   phase: AsyncResultPhase,
   waiting: Schema.Boolean,

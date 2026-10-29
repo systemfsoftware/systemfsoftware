@@ -7,7 +7,7 @@ import { Schema } from 'effect'
 /** The model rejection a check reports at definition. */
 export const ModelProblem = Schema.Literals(['state-schema-mismatch', 'state-not-structural'])
 
-export class ModelError extends Schema.TaggedError<ModelError>()('ModelError', {
+export class ModelError extends Schema.TaggedError<ModelError, { readonly brand: unique symbol }>()('ModelError', {
   problem: ModelProblem,
   detail: Schema.String,
 }) {
