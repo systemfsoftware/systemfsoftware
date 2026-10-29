@@ -6,7 +6,7 @@ applies_when:
 tags: [exports-map, subpath, entry-point, encapsulation]
 ---
 
-A library exports `.` only. The only other keys are assets (such as `./styles.css`) and tool-config roles (such as `./vite`), each added for a consumer that imports it. A module that would load a dependency, a runtime-specific API or a side effect other importers must not pay for does not get a subpath: entries-load-only-what-importers-run.md says where it goes (the application, its own adapter library, or an export condition on `.`).
+A subpath is added only for a consumer that imports it, with a reason the root entry cannot carry the same names, such as importing them from the root would load a dependency, a runtime-specific API or a side effect that other importers of the root must not pay for.
 A subpath key names what the consumer imports it for. The exports map is never written to follow the source tree: no wildcard onto source paths (`./*` to `./src/*`) and no subpath per source folder or file.
 A sibling package that needs a module the root entry keeps private gets it in one of two ways: the root entry exports the names it needs as a deliberate addition to the surface, or the module moves to the package that uses it. A subpath opened for that sibling is neither.
 A subpath, import map or export added so that a test can reach a module is governed by the testing pack's rule that tests reach a package only through its published entries, not by this rule.
@@ -25,11 +25,10 @@ Defect prevented: every module reachable through a subpath is part of the publis
 ```
 
 ```jsonc
-// RIGHT: the root carries the public names; the one extra key is an asset its consumers import
-// (a React binding is its own adapter library, never a ./react key)
+// RIGHT: the root carries the public names; one subpath exists because it loads a UI framework the root must not
 "exports": {
   ".": "./dist/index.js",
-  "./styles.css": "./dist/styles.css"
+  "./react": "./dist/react.js"
 }
 ```
 
