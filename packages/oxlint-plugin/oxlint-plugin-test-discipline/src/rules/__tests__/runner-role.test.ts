@@ -1,3 +1,4 @@
+import plugin from '@systemfsoftware/oxlint-plugin-test-discipline'
 import { RuleTester } from 'oxlint/plugins-dev'
 import { expect, it } from 'vitest'
 import { testSuffixOutsideSrc } from '../test-suffix-outside-src.js'
@@ -39,6 +40,7 @@ it.each(
   [
     ['vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVitest],
     ['test-suffix-outside-src', testSuffixOutsideSrc],
+    ['e2e-tier-placement', plugin.rules['e2e-tier-placement']],
   ] as const,
 )('Should_RefuseTheConfig_When_TheRunnerRoleIsDeclaredOnTheRule_%s', (_name, rule) => {
   expect(lintWithRoleOption(rule)).toThrow('does not accept options')
