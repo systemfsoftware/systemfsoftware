@@ -1,4 +1,5 @@
 import { it } from '@systemfsoftware/vitest'
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -26,14 +27,26 @@ const labelOf = (read: CacheReadResult): string =>
     Invalid: ({ reason }) => `invalid ${reason}`,
   })
 
+const isHit = (read: CacheReadResult): boolean =>
+  Match.valueTags(read, { Hit: () => true, Miss: () => false, Invalid: () => false })
+
 const wireOf = (entry: TraceEntry): string => Option.getOrElse(entryWireTextOf(entry), () => '')
 
 const withAlerts = (entry: TraceEntry, alerts: ReadonlyArray<string>): TraceEntry => ({ ...entry, alerts })
 
-const paddedTo = (entry: TraceEntry, bytes: number): TraceEntry => {
-  const slim = withAlerts(entry, [])
-  return withAlerts(slim, ['a'.repeat(bytes - entryWireBytesOf(slim) - 2)])
+type AlertSlot = readonly [head: string, tail: string]
+
+const alertSlotOf = (entry: TraceEntry): AlertSlot => {
+  const empty = wireOf(withAlerts(entry, ['']))
+  const filled = wireOf(withAlerts(entry, ['a']))
+  const at = Option.getOrElse(
+    Arr.findFirstIndex(empty.split(''), (char, index) => char !== filled[index]),
+    () => empty.length,
+  )
+  return [empty.slice(0, at), empty.slice(at)]
 }
+
+const paddedWireOf = ([head, tail]: AlertSlot, count: number): string => `${head}${'a'.repeat(count)}${tail}`
 
 it.prop(
   '∀e_ClassifyStoredEntry_≡HitRoundTripsWireText',
@@ -45,11 +58,13 @@ it.prop(
   '∀e_ClassifyStoredEntry_→OversizedPastCap',
   { of: [TraceEntry], subject: classifyStoredEntry, arbitrary: { seed: 500_002 } },
   (subject, [entry]) => {
-    const exact = utf8.encode(wireOf(paddedTo(entry, WIRE_BYTES_CAP)))
-    const over = utf8.encode(wireOf(paddedTo(entry, WIRE_BYTES_CAP + 1)))
+    const slot = alertSlotOf(entry)
+    const base = entryWireBytesOf(withAlerts(entry, ['']))
+    const exact = utf8.encode(paddedWireOf(slot, WIRE_BYTES_CAP - base))
+    const over = utf8.encode(paddedWireOf(slot, WIRE_BYTES_CAP + 1 - base))
     return exact.length === WIRE_BYTES_CAP &&
       over.length === WIRE_BYTES_CAP + 1 &&
-      labelOf(readOf(subject, foundOf(exact))).startsWith('hit ') &&
+      isHit(readOf(subject, foundOf(exact))) &&
       labelOf(readOf(subject, foundOf(over))) === 'invalid oversized'
   },
 )
