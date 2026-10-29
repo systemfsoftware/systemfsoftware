@@ -874,20 +874,13 @@ jobs:
           dry=()
           if [ -f .timings/dry.json ]; then dry=(--dry .timings/dry.json); fi
           $TIMINGS plan "${dry[@]}" --target ${{ inputs.target }} --max-jobs ${{ inputs.max-jobs }} --max-seconds ${{ inputs.max-seconds }} --record .timings/previous/test-timings.json --passes .timings/passes 2>&1 | tee "$RUNNER_TEMP/sfs-logs/plan.log"
-      # The test and timings jobs are skipped in this mode, so a plan that schedules any test job must fail here. A
-      # docs-only diff plans [] above, so it passes as the multi-job gate does.
+      # The test and timings jobs are skipped in this mode, so a plan that schedules any test job must fail here (the
+      # consumer fixture runs this action on a non-empty plan). A docs-only diff plans [] above, so it passes.
       - id: single-planned
-        name: No test jobs are planned
         if: inputs.single-job
-        env:
-          PLANNED: ${{ steps.single-plan.outputs.jobs }}
-        run: |
-          if ! jq -e 'type == "array" and length == 0' <<< "$PLANNED" > /dev/null; then
-            mkdir -p "$RUNNER_TEMP/sfs-logs"
-            echo plan-failed > "$RUNNER_TEMP/sfs-reason"
-            echo "::error title=single-job-plans-tests::single-job skips the test jobs, but the plan is '${PLANNED:-missing}', not []; call without single-job for a run that plans tests"
-            exit 1
-          fi
+        uses: $/.github/actions/single-job-plan-guard
+        with:
+          planned: ${{ steps.single-plan.outputs.jobs }}
       - id: single-hook
         if: inputs.single-job && steps.single-lane.outputs.lane != '' && steps.single-mode.outputs.source == 'hook'
         uses: ./.github/actions/checks-lane
@@ -931,7 +924,7 @@ jobs:
             exit 1
           fi
           echo "scope=$SCOPE lane-ran=$([ -n "$LANE" ] && echo true || echo false)"
-      - if: failure() && inputs.single-job
+      - if: (failure() || cancelled()) && inputs.single-job
         uses: $/.github/actions/failure-summary
         with:
           job: lane-${{ fromJSON(inputs.lanes)[0].id }}

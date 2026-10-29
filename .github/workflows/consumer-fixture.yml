@@ -75,7 +75,7 @@ jobs:
           [ "$RESULT" = success ] && jq -e '
             any(.[]; .name == "checks · docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success") and
             any(.[]; .name == "checks · docs-only / docs · the tarball packages installed" and .conclusion == "success")' <<< "$jobs"
-  # Both single-job calls run the real planner (the default `timings`); the fixture's `answer` package has a test script.
+  # The docs-only single-job call below plans `[]` without running the planner, so the job is one producer plus the gate.
   checks-single-job-docs-only:
     name: checks · single-job docs-only
     if: github.event_name == 'pull_request'
@@ -105,13 +105,18 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
             --jq '[.jobs[] | select(.name | startswith("checks · single-job docs-only / ")) | {name, conclusion, steps: [.steps[] | {name, conclusion}]}]' > "$RUNNER_TEMP/jobs.json"
           echo "checks=$RESULT lane-source=$SOURCE test-jobs=$JOBS jobs=$(jq -c '[.[] | {name, conclusion}]' "$RUNNER_TEMP/jobs.json")"
-      - name: The workflow passed, built-in, with the plan []
-        run: '[ "$RESULT" = success ] && [ "$SOURCE" = built-in ] && [ "$JOBS" = "[]" ]'
-      - name: One producer job and one gate job passed; nothing else ran
+      - name: The workflow passed
+        run: '[ "$RESULT" = success ]'
+      - name: The lane source is built-in
+        run: '[ "$SOURCE" = built-in ]'
+      - name: The plan is []
+        run: '[ "$JOBS" = "[]" ]'
+      - name: Exactly one producer job and one gate job ran, and nothing else succeeded
         run: |
           jq -e '
             ([.[] | select(.name == "checks · single-job docs-only / sfs-deps · tarballs the lockfile names" and .conclusion == "success")] | length == 1) and
             ([.[] | select(.name == "checks · single-job docs-only / the gate" and .conclusion == "success")] | length == 1) and
+            ([.[] | select(.conclusion == "success")] | length == 2) and
             ([.[] | select(.conclusion != "success" and .conclusion != "skipped")] | length == 0)' "$RUNNER_TEMP/jobs.json"
       - name: The docs lane and the verdict ran as steps of the gate job
         run: |
@@ -119,29 +124,39 @@ jobs:
             any(.[].steps[]; .name == "lint · the tarball packages installed" and .conclusion == "success") and
             any(.[].steps[]; .name == "No test jobs are planned" and .conclusion == "success") and
             any(.[].steps[]; .name == "Every lane passed" and .conclusion == "success")' "$RUNNER_TEMP/jobs.json"
-  # What a diff outside the docs set plans: the real planner over the fixture, with no record and no cache. The `answer`
-  # package has a test script, so the plan is not [], and the single-job gate step fails on exactly that.
+  # What single-job mode does with a plan that schedules tests, i.e. a diff outside the docs set whose `answer` package has a
+  # test script. A job that calls a reusable workflow cannot take continue-on-error, so the guard step that
+  # reusable-checks.yml runs for that plan (the single-job-plan-guard action) runs here with continue-on-error, as the
+  # mutation guard does below, and the observer steps assert it failed with reason plan-failed.
   checks-single-job-plans-tests:
-    name: checks · single-job code diff plans tests
+    name: checks · single-job refuses a plan that schedules tests
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/sfs-tools
+      - id: guard
+        continue-on-error: true
+        uses: ./.github/actions/single-job-plan-guard
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.sha }}
-      - name: The real planner plans the answer package, and the single-job gate rejects that plan
-        working-directory: .github/consumer-fixture
-        run: |
-          set -o pipefail
-          test-timings plan --target 300 --max-jobs 12 --max-seconds 1800 2>&1 | tee "$RUNNER_TEMP/plan.log"
-          planned=$(sed -n 's/^jobs=//p' "$GITHUB_OUTPUT" | tail -n 1)
-          echo "planned=$planned"
-          jq -e 'any(.[]; .packages | index("answer"))' <<< "$planned"
-          ! jq -e 'type == "array" and length == 0' <<< "$planned" > /dev/null
+          planned: '[{"id": "test-1", "packages": ["answer"]}]'
+      - id: empty
+        continue-on-error: true
+        uses: ./.github/actions/single-job-plan-guard
+        with:
+          planned: '[]'
+      - name: The guard failed on a non-empty plan
+        env:
+          OUTCOME: ${{ steps.guard.outcome }}
+        run: '[ "$OUTCOME" = failure ]'
+      - name: The guard failed with reason plan-failed
+        run: '[ "$(cat "$RUNNER_TEMP/sfs-reason" 2>/dev/null)" = plan-failed ]'
+      - name: The guard passed the empty plan
+        env:
+          OUTCOME: ${{ steps.empty.outcome }}
+        run: '[ "$OUTCOME" = success ]'
   mutation-refuses-pull-request:
     name: mutation · refuses a pull request
     if: github.event_name == 'pull_request'
