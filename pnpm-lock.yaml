@@ -176,18 +176,12 @@ catalogs:
     '@effect/platform-node-shared':
       specifier: ^4.0.5
       version: 4.0.5
-    '@effect/sql-pglite':
-      specifier: ^4.0.5
-      version: 4.0.5
     '@effect/tsgo':
       specifier: ^0.51.1
       version: 0.51.1
     '@microsoft/api-extractor':
       specifier: ^7.59.4
       version: 7.59.4
-    '@noble/hashes':
-      specifier: ^2.4.0
-      version: 2.4.0
     '@opentelemetry/api':
       specifier: ^1.9.0
       version: 1.9.1
@@ -208,19 +202,19 @@ catalogs:
       version: 1100.0.0
     '@pnpm/workspace.projects-reader':
       specifier: ^1101.1.5
-      version: 1101.1.5
+      version: 1101.1.6
     '@pnpm/workspace.root-finder':
       specifier: ^1100.1.4
-      version: 1100.1.4
+      version: 1100.1.5
     '@pnpm/workspace.workspace-manifest-reader':
       specifier: ^1100.3.0
-      version: 1100.3.0
+      version: 1100.3.1
     '@storybook/addon-vitest':
       specifier: ^10.6.3
-      version: 10.6.3
+      version: 10.6.5
     '@storybook/react-vite':
       specifier: ^10.6.3
-      version: 10.6.3
+      version: 10.6.5
     '@systemfsoftware/arethetypeswrong-cli':
       specifier: ^4.2.0
       version: 4.2.0
@@ -260,9 +254,6 @@ catalogs:
     effect:
       specifier: ^4.0.5
       version: 4.0.5
-    microsandbox:
-      specifier: 0.7.11
-      version: 0.7.11
     oxc-parser:
       specifier: ^0.155.0
       version: 0.155.0
@@ -286,7 +277,7 @@ catalogs:
       version: 0.28.0
     storybook:
       specifier: ^10.6.3
-      version: 10.6.3
+      version: 10.6.5
     tsdown:
       specifier: ^0.23.0
       version: 0.23.0
@@ -358,16 +349,16 @@ importers:
         version: link:packages/oxlint-presets/oxlint-config-rule-authoring
       '@systemfsoftware/stryker-js':
         specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
+        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
       concurrently:
         specifier: ^10
-        version: 10.0.6
+        version: 10.0.5
       husky:
         specifier: ^9.1.7
         version: 9.1.7
       lint-staged:
         specifier: ^17
-        version: 17.6.0
+        version: 17.5.1
       oxlint:
         specifier: catalog:oxlint
         version: 1.87.0(oxlint-tsgolint@7.0.2003)
@@ -451,10 +442,10 @@ importers:
         version: 26.6.5
       '@vitest/browser':
         specifier: 'catalog:'
-        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       '@vitest/browser-playwright':
         specifier: 'catalog:'
-        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       '@vitest/coverage-istanbul':
         specifier: 'catalog:'
         version: 5.0.5(vitest@5.0.5)
@@ -487,7 +478,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/atom/effect-atom-react:
     dependencies:
@@ -566,10 +557,10 @@ importers:
         version: 0.28.0
       '@vitest/browser':
         specifier: 'catalog:'
-        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       '@vitest/browser-playwright':
         specifier: 'catalog:'
-        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       '@vitest/coverage-istanbul':
         specifier: 'catalog:'
         version: 5.0.5(vitest@5.0.5)
@@ -608,614 +599,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-cluster:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-daemon-conformance':
-        specifier: workspace:^
-        version: link:../effect-daemon-conformance
-      '@systemfsoftware/effect-daemon-spec':
-        specifier: workspace:^
-        version: link:../effect-daemon-spec
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/sql-pglite':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-conformance:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-daemon-spec':
-        specifier: workspace:^
-        version: link:../effect-daemon-spec
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-microvm:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-daemon-conformance':
-        specifier: workspace:^
-        version: link:../effect-daemon-conformance
-      '@systemfsoftware/effect-daemon-spec':
-        specifier: workspace:^
-        version: link:../effect-daemon-spec
-      '@systemfsoftware/effect-microsandbox':
-        specifier: workspace:^
-        version: link:../../effect-microsandbox
-      '@systemfsoftware/effect-readiness':
-        specifier: workspace:^
-        version: link:../../effect-readiness
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/microvm-test-images':
-        specifier: workspace:^
-        version: link:../../microvm-test-images
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      microsandbox:
-        specifier: 'catalog:'
-        version: 0.7.11
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-process:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-daemon-conformance':
-        specifier: workspace:^
-        version: link:../effect-daemon-conformance
-      '@systemfsoftware/effect-daemon-spec':
-        specifier: workspace:^
-        version: link:../effect-daemon-spec
-    devDependencies:
-      '@effect/platform-node-shared':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-socket:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-daemon-conformance':
-        specifier: workspace:^
-        version: link:../effect-daemon-conformance
-      '@systemfsoftware/effect-daemon-spec':
-        specifier: workspace:^
-        version: link:../effect-daemon-spec
-      '@systemfsoftware/effect-readiness':
-        specifier: workspace:^
-        version: link:../../effect-readiness
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/daemon/effect-daemon-spec:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: ^7.59.4
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/effect-spec-runtime':
-        specifier: workspace:^
-        version: link:../../effect-spec-runtime
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      tstyche:
-        specifier: 'catalog:'
-        version: 7.2.5(typescript@7.0.2)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/discern:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/differential-spec':
-        specifier: workspace:^
-        version: link:../sim/differential-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      tstyche:
-        specifier: 'catalog:'
-        version: 7.2.5(typescript@7.0.2)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/effect-cell-types:
     devDependencies:
@@ -1272,274 +656,7 @@ importers:
         version: 7.2.5(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/effect-memfs:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
-      memfs:
-        specifier: ^4.80.0
-        version: 4.80.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../sim/conformance-spec
-      '@systemfsoftware/differential-spec':
-        specifier: workspace:^
-        version: link:../sim/differential-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/effect-microsandbox:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
-      '@systemfsoftware/effect-readiness':
-        specifier: workspace:*
-        version: link:../effect-readiness
-      microsandbox:
-        specifier: 'catalog:'
-        version: 0.7.11
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
-      '@systemfsoftware/microvm-test-images':
-        specifier: workspace:^
-        version: link:../microvm-test-images
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/effect-readiness:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/effect-spec-runtime:
     dependencies:
@@ -1591,7 +708,7 @@ importers:
         version: 7.2.5(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/gherkin/effect-gherkin-spec:
     dependencies:
@@ -1643,7 +760,7 @@ importers:
         version: 7.2.5(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/gherkin/storybook-gherkin:
     dependencies:
@@ -1656,10 +773,10 @@ importers:
         version: 7.59.4(@types/node@26.6.5)
       '@storybook/addon-vitest':
         specifier: 'catalog:'
-        version: 10.6.3(@vitest/browser-playwright@5.0.5)(@vitest/browser@5.0.5)(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vitest@5.0.5)
+        version: 10.6.5(@vitest/browser-playwright@5.0.5)(@vitest/browser@5.0.5)(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vitest@5.0.5)
       '@storybook/react-vite':
         specifier: 'catalog:'
-        version: 10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rollup@4.62.4)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rollup@4.62.4)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -1701,10 +818,10 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       '@vitest/browser':
         specifier: 'catalog:'
-        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       '@vitest/browser-playwright':
         specifier: 'catalog:'
-        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
+        version: 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
       effect:
         specifier: 'catalog:'
         version: 4.0.5
@@ -1728,7 +845,7 @@ importers:
         version: 6.1.3
       storybook:
         specifier: 'catalog:'
-        version: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+        version: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
       tsdown:
         specifier: 'catalog:'
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
@@ -1737,94 +854,10 @@ importers:
         version: 7.0.2
       vite:
         specifier: ^8.3.4
-        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/microvm-test-images: {}
-
-  packages/npm-package:
-    dependencies:
-      '@andrewbranch/untar.js':
-        specifier: ^1.0.4
-        version: 1.0.4
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-memfs':
-        specifier: workspace:^
-        version: link:../effect-memfs
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.9)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.9)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-plugin/import-origin:
     dependencies:
@@ -1944,7 +977,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-plugin/oxlint-plugin-dmmf-workflow:
     dependencies:
@@ -2002,7 +1035,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-plugin/oxlint-plugin-effect-platform:
     dependencies:
@@ -2060,7 +1093,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-plugin/oxlint-plugin-effect-schema:
     dependencies:
@@ -2075,13 +1108,13 @@ importers:
         version: 1100.0.0
       '@pnpm/workspace.projects-reader':
         specifier: 'catalog:'
-        version: 1101.1.5(@pnpm/logger@1100.0.0)
+        version: 1101.1.6(@pnpm/logger@1100.0.0)
       '@pnpm/workspace.root-finder':
         specifier: 'catalog:'
-        version: 1100.1.4
+        version: 1100.1.5
       '@pnpm/workspace.workspace-manifest-reader':
         specifier: 'catalog:'
-        version: 1100.3.0
+        version: 1100.3.1
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -2130,7 +1163,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-plugin/oxlint-plugin-test-discipline:
     dependencies:
@@ -2188,7 +1221,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-presets/oxlint-config-cell-architecture:
     dependencies:
@@ -2326,7 +1359,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/oxlint-presets/oxlint-config-rule-authoring:
     dependencies:
@@ -2355,267 +1388,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-
-  packages/runner/effect-e2e:
-    dependencies:
-      '@noble/hashes':
-        specifier: 'catalog:'
-        version: 2.4.0
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/stryker-config':
-        specifier: workspace:^
-        version: link:../../toolchain/stryker-config
-      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
-        specifier: catalog:stryker
-        version: 0.2.0(rolldown@1.2.14)
-      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
-        specifier: catalog:stryker
-        version: 0.1.1(rolldown@1.2.14)
-      '@systemfsoftware/stryker-js':
-        specifier: catalog:stryker
-        version: 17.0.2(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: catalog:stryker
-        version: 8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.14)(supports-color@10.2.2)
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: catalog:stryker
-        version: 8.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)(supports-color@10.2.2)(vitest@5.0.5)
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      tstyche:
-        specifier: 'catalog:'
-        version: 7.2.5(typescript@7.0.2)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/runner/effect-e2e-cli:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-e2e':
-        specifier: workspace:^
-        version: link:../effect-e2e
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-    devDependencies:
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-e2e-web':
-        specifier: workspace:^
-        version: link:../effect-e2e-web
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      playwright:
-        specifier: 'catalog:'
-        version: 1.64.1
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  packages/runner/effect-e2e-conformance:
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@systemfsoftware/effect-e2e':
-        specifier: workspace:^
-        version: link:../effect-e2e
-      '@systemfsoftware/effect-e2e-cli':
-        specifier: workspace:^
-        version: link:../effect-e2e-cli
-      '@systemfsoftware/effect-e2e-web':
-        specifier: workspace:^
-        version: link:../effect-e2e-web
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/jsdom':
-        specifier: 30.0.0
-        version: 30.0.0
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      jsdom:
-        specifier: 30.1.3
-        version: 30.1.3(@noble/hashes@2.4.0)
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      playwright:
-        specifier: 'catalog:'
-        version: 1.64.1
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/runner/effect-e2e-web:
-    dependencies:
-      '@systemfsoftware/effect-e2e':
-        specifier: workspace:^
-        version: link:../effect-e2e
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../gherkin/effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../schema/effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      playwright:
-        specifier: 'catalog:'
-        version: 1.64.1
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
 
   packages/runner/vitest:
     dependencies:
@@ -2658,7 +1430,7 @@ importers:
         version: 7.2.5(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/runner/vitest-conformance:
     devDependencies:
@@ -2688,64 +1460,7 @@ importers:
         version: 1.87.0(oxlint-tsgolint@7.0.2003)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/rx-effect:
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/conformance-spec':
-        specifier: workspace:^
-        version: link:../sim/conformance-spec
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../gherkin/effect-gherkin-spec
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      rxjs:
-        specifier: ^7.8.2
-        version: 7.8.2
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/schema/effect-schema-discovery:
     dependencies:
@@ -2791,59 +1506,7 @@ importers:
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/schema/effect-schema-extensions:
-    dependencies:
-      '@systemfsoftware/hex-schema':
-        specifier: workspace:^
-        version: link:../hex-schema
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/oxlint-config-dmmf':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-dmmf
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/schema/effect-schema-law:
     dependencies:
@@ -2892,7 +1555,7 @@ importers:
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/schema/effect-schema-recursion-budget:
     dependencies:
@@ -2950,7 +1613,7 @@ importers:
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/schema/effect-schema-vite:
     dependencies:
@@ -3011,61 +1674,10 @@ importers:
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vite:
         specifier: ^8.3.4
-        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-
-  packages/schema/hex-schema:
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.4(@types/node@26.6.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../effect-schema-vite
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config-recommended
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@systemfsoftware/vitest':
-        specifier: workspace:^
-        version: link:../../runner/vitest
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.5
-      fast-check:
-        specifier: ^4.10.2
-        version: 4.10.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.87.0(oxlint-tsgolint@7.0.2003)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/sim/conformance-spec:
     dependencies:
@@ -3120,7 +1732,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/sim/differential-spec:
     dependencies:
@@ -3196,7 +1808,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/sim/effect-sim-kernel:
     devDependencies:
@@ -3238,7 +1850,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/sim/effect-sim-kernel-tests:
     devDependencies:
@@ -3274,7 +1886,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/toolchain/stryker-config:
     devDependencies:
@@ -3319,7 +1931,7 @@ importers:
         version: 0.23.0(oxc-resolver@11.21.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/toolchain/vitest-config:
     devDependencies:
@@ -3334,10 +1946,10 @@ importers:
         version: 26.6.5
       vite:
         specifier: ^8.3.4
-        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/trace/trace-spec:
     dependencies:
@@ -3431,7 +2043,7 @@ importers:
         version: 7.2.5(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/trace/trace-taxonomy:
     devDependencies:
@@ -3482,7 +2094,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
 
   tooling/package-layers:
     dependencies:
@@ -3528,9 +2140,6 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
-
-  '@andrewbranch/untar.js@1.0.4':
-    resolution: {integrity: sha512-pVXSwPsLuw8IGLo2Di0EaOfsk+ntVvpkk942J/sHYIkwvtKUakEcPh7HBgZ6tuimgzKSEHgCvO4XgQ05DEbwDw==}
 
   '@asamuzakjp/css-color@7.1.5':
     resolution: {integrity: sha512-jCpAvj8apa7SKHZYogk0rbXB3Kb0hLFrpkWF+Ap+vBA5rirItnpv9NKyAyEuDuFizvl0qwnj6JWR70RGJ0rOlw==}
@@ -3850,11 +2459,6 @@ packages:
       effect: ^4.0.5
       redis: '>=5.0.0 <7.0.0'
 
-  '@effect/sql-pglite@4.0.5':
-    resolution: {integrity: sha512-1kwizzeOqX3l/+YSTG+LWZq07xuKY+jYOziOEumqOCLGjfxr3S5m61jWrAGDFejQLK1zUQtBYNe6FpcFSynzaQ==}
-    peerDependencies:
-      effect: ^4.0.5
-
   '@effect/tsgo-darwin-arm64@0.51.1':
     resolution: {integrity: sha512-Jx+1RB3pz1B2zYs1EmxybwDOq9KRpfdu/rn1XTULNMZmqUJZuvTQU9CRqB0g/ZgIa6MeNBZEYvmAu4Dq2/QVWA==}
     cpu: [arm64]
@@ -3893,9 +2497,6 @@ packages:
   '@effect/tsgo@0.51.1':
     resolution: {integrity: sha512-i6mA6cNah+0mkPdu8qZILCO3Pnd9kWo03/s82Ju+1DFhdL28HFagi+1PRGxqgq1uMaHziWQ+ciKvOmIoks2RdA==}
     hasBin: true
-
-  '@electric-sql/pglite@0.5.8':
-    resolution: {integrity: sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q==}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -4133,129 +2734,6 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
-
-  '@jsonjoy.com/base64@1.1.2':
-    resolution: {integrity: sha512-q6XAnWQDIMA3+FTiOYajoYqySkO+JSat0ytXGSuRdq9uXE7o92gzuQwQM14xaCRlBLGq3v5miDGC4vkVTn54xA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/base64@17.67.0':
-    resolution: {integrity: sha512-5SEsJGsm15aP8TQGkDfJvz9axgPwAEm98S5DxOuYe8e1EbfajcDmgeXXzccEjh+mLnjqEKrkBdjHWS5vFNwDdw==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/buffers@1.2.1':
-    resolution: {integrity: sha512-12cdlDwX4RUM3QxmUbVJWqZ/mrK6dFQH4Zxq6+r1YXKXYBNgZXndx2qbCJwh3+WWkCSn67IjnlG3XYTvmvYtgA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/buffers@17.67.0':
-    resolution: {integrity: sha512-tfExRpYxBvi32vPs9ZHaTjSP4fHAfzSmcahOfNxtvGHcyJel+aibkPlGeBB+7AoC6hL7lXIE++8okecBxx7lcw==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/codegen@1.0.0':
-    resolution: {integrity: sha512-E8Oy+08cmCf0EK/NMxpaJZmOxPqM+6iSe2S4nlSBrPZOORoDJILxtbSUEDKQyTamm/BVAhIGllOBNU79/dwf0g==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/codegen@17.67.0':
-    resolution: {integrity: sha512-idnkUplROpdBOV0HMcwhsCUS5TRUi9poagdGs70A6S4ux9+/aPuKbh8+UYRTLYQHtXvAdNfQWXDqZEx5k4Dj2Q==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-core@4.80.0':
-    resolution: {integrity: sha512-qMKWshnyjbyhm+NbzqGE3w5y1mckFFEMj0aDPU2/JBNh1BzIjVy9esq9lBmRnNVmhMEkxwDzLZ8Gqh5G1P5Dag==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-fsa@4.80.0':
-    resolution: {integrity: sha512-ZBEKl7J6dbkRCfmrFV48Re211A/FHqniTUhsWCsaRteNSOqMgkX3qF1UreVgwB9oSPm81JLAwhIi6Lb/NH/PoA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-node-builtins@4.80.0':
-    resolution: {integrity: sha512-OIOIhqaWiwUySFMny4epIAoviXsyMaQQ63PTc3zH+5HEOvarl5hpUmZIhp2m5+OfyKAh5ylxXnQIgew1OgJDVw==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-node-to-fsa@4.80.0':
-    resolution: {integrity: sha512-ljeaR5xwtX1EyRmB0wvXANUMQZ3mjKcm7z8s2N8D8SLQ04CcAGtUhHFRZQXFb9mhgFyEVMydQGQtSOFS7pcrFQ==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-node-utils@4.80.0':
-    resolution: {integrity: sha512-xwHeVVi3f+Khg/Fmb8i5qoYVmQ08QznE5TWhQokUmIZjz4KBPzU+zt/+bahBI6G1ghtqajt27lWuAciIxApuzA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-node@4.80.0':
-    resolution: {integrity: sha512-yiBlUfkMMRFFGy8CD/h2zd5rPnrM6bjlF+nx2LRAxNV6hOSiuObQIUEE7m7y2VTMisjxCRtzINH94bFGySWL7g==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-print@4.80.0':
-    resolution: {integrity: sha512-1ocZLJw/m/xlq0moaIHO7HV9nHRVBUvdc2zMzhsJGkFOrqfwWvexfCv5cYCPPLRhP+9p3yunoi4Ep5YhRORC9Q==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/fs-snapshot@4.80.0':
-    resolution: {integrity: sha512-3AV23Q1H228KTtJKTUE0nNq8FCtxSvtENOLrEat80wkAJCKHuqQEv8yjhpS8Bei2OEFJAnluGXp9Ri2SWBlROw==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/json-pack@1.21.0':
-    resolution: {integrity: sha512-+AKG+R2cfZMShzrF2uQw34v3zbeDYUqnQ+jg7ORic3BGtfw9p/+N6RJbq/kkV8JmYZaINknaEQ2m0/f693ZPpg==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/json-pack@17.67.0':
-    resolution: {integrity: sha512-t0ejURcGaZsn1ClbJ/3kFqSOjlryd92eQY465IYrezsXmPcfHPE/av4twRSxf6WE+TkZgLY+71vCZbiIiFKA/w==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/json-pointer@1.0.2':
-    resolution: {integrity: sha512-Fsn6wM2zlDzY1U+v4Nc8bo3bVqgfNTGcn6dMgs6FjrEnt4ZCe60o6ByKRjOGlI2gow0aE/Q41QOigdTqkyK5fg==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/json-pointer@17.67.0':
-    resolution: {integrity: sha512-+iqOFInH+QZGmSuaybBUNdh7yvNrXvqR+h3wjXm0N/3JK1EyyFAeGJvqnmQL61d1ARLlk/wJdFKSL+LHJ1eaUA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/util@1.9.0':
-    resolution: {integrity: sha512-pLuQo+VPRnN8hfPqUTLTHk126wuYdXVxE6aDmjSeV4NCAgyxWbiOIeNJVtID3h1Vzpoi9m4jXezf73I6LgabgQ==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@jsonjoy.com/util@17.67.0':
-    resolution: {integrity: sha512-6+8xBaz1rLSohlGh68D1pdw3AwDi9xydm8QNlAFkvnavCJYSze+pxoW2VKP8p308jtlMRLs5NTHfPlZLd4w7ew==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
-
-  '@microsandbox/types@0.7.11':
-    resolution: {integrity: sha512-qEqpdGEjlI3jUUE4579vCYUAyGUeDTxnotwNi9xYDfFDL4XCNzbThtFdfpdGBbP3iaj/ZLAd/j0NvSL/Stgwqg==}
 
   '@microsoft/api-extractor-model@7.33.15':
     resolution: {integrity: sha512-UpCnItIJwu03iNTWtJVKv8Qbf0MXN7WLQZUail9cpAQmnZiIX36YPRRoRxz0pocwytzUpmJhstsLkyW5tsaHBA==}
@@ -5134,18 +3612,18 @@ packages:
     resolution: {integrity: sha512-OtSZ6NxNkS7bkVy7zk9zGnajz2hVIu0uRPP/dJvJesGRaXtimpA4lpxap7FaIJndG2UIoKhnBU4DxyDQIWv6yg==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@pnpm/cli.meta@1100.1.3':
-    resolution: {integrity: sha512-KvdVLWbTpf5UilUCOQQEm0hrd4bMghGR/4CkoS6/Y0G9l+XmDwOvIEroLTkAzRAj4eol2Zmc2F8HGp3hM3VA9w==}
+  '@pnpm/cli.meta@1100.1.4':
+    resolution: {integrity: sha512-Y3T9G2Fsl9DnN7gKw0uom7aPUClpYoRtl+JJgRsHOcxdvHRt1nO4QxNL2YU/q9hCCMg5TU2VhIEb4hPvrxx20g==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/cli.utils@1101.0.33':
-    resolution: {integrity: sha512-Byq2ClI9hFfmAfd9kLEeSk8gcD5UW9zUftF6bM7JTxzZFo59kOwkmzxItrWsVVQazProYRgm6nfR4bpy/k6EYw==}
+  '@pnpm/cli.utils@1101.0.34':
+    resolution: {integrity: sha512-PlyEBXNluqTOkjwnJ6VoGyXCPy1ruFjxsEq5mUch7jpQSImmkC+8I1b+Sc0qbXz311dOYSW/tKL4iOZefPl3NA==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
 
-  '@pnpm/config.package-is-installable@1100.2.4':
-    resolution: {integrity: sha512-ukjjNhTustUYmMdLQQkGBKbr2g7ix54JNJiF+IOc/hiwGPo0uqqKZJByry/GnYF4OFdK4OE9tfjt8kK2nBbEwQ==}
+  '@pnpm/config.package-is-installable@1100.2.5':
+    resolution: {integrity: sha512-lCZyCw6kRMLFiTTkKDX5ENanIBrH5lb/v+zxojqMEMpueJyBFN314fx7nnlCSGhbJPnLGw/yiek9DIW80Yy1Iw==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
@@ -5154,8 +3632,8 @@ packages:
     resolution: {integrity: sha512-vLulGZ3iRt6kHcwbGYckrUF2Rd18nfGtpFjyRgbKmEyxLcZmFTBOWKFZSEyS3VVnxFEI7bTPNOGmRC0lD4U1qg==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/core-loggers@1101.0.3':
-    resolution: {integrity: sha512-liB0A98iwu3X3O1v9S+uvifSTtFy83ICS+WSIeZHd7nmXp/JLhbBIXL4QOrmlmumSr5HkNOGtjW4j7EtWoQIQg==}
+  '@pnpm/core-loggers@1101.0.4':
+    resolution: {integrity: sha512-kBzjyaQcNLVGu4q2LnwjxhwEEwBkqWp6E0LOv2ABODcMu5OriZfTbkIHjFlOi7bUCG5S6+k8mnWT8SEkNVaS8w==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
@@ -5164,8 +3642,8 @@ packages:
     resolution: {integrity: sha512-PFGNtptMRhqQd7FogcaCsfMpCkvDhFQVuO3+BnMw0PByAUPjXpE7jJMIGduRUSETb2E/zDr2PZ13cXO2OQiAeQ==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/engine.runtime.system-version@1100.0.14':
-    resolution: {integrity: sha512-Wn5iOm5hENEUj/+5csLgoDXYPTC1IKCIuKWdyXtEfNDgiOAl/aoWi84mdCfcdJgVnMCv2O5nEHtObOK0509hCA==}
+  '@pnpm/engine.runtime.system-version@1100.0.15':
+    resolution: {integrity: sha512-Mx+mNZPjbbTcAqV2hft2QFCjWQ41+Q2bhESTupAyw8weqO7gWfT2MrJC3Sahp8PT4etvHwFaqwn5B8I3atTmfA==}
     engines: {node: '>=22.13'}
 
   '@pnpm/error@1100.2.2':
@@ -5180,8 +3658,8 @@ packages:
     resolution: {integrity: sha512-A3bRMTIZ5ptDPAE/KsDeY1J5UqqOiyo66+k/mUvaVjx++OJdMbp9If5kisEq9ljAV5r5TRpkxsJbSdrdJ5WtzQ==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/pkg-manifest.utils@1100.4.10':
-    resolution: {integrity: sha512-jjcy1MSyHw2mQew1RO4vGbepfXMcgFy+O+iNlzFrS8BIaDHZfCsYQtBmzZeLV6dmXNxC0bhaLAwz8OkUd8wiSg==}
+  '@pnpm/pkg-manifest.utils@1100.4.11':
+    resolution: {integrity: sha512-oUJDolKSG2CSGeR+v6TsLBL0UEZ6VnAKwMOsF/T717f1mrHIb3wh2wdzcL5eZb0dLvKOGI+zMdc0UXgve/mcVQ==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
@@ -5194,36 +3672,36 @@ packages:
     resolution: {integrity: sha512-1mtSzx973BzS4c0QGW8NMweIG3PXq8LFRjff+JMpXDYyqZEn+1u6brAnaWDH8mgx7pgiUyjTmXNJa+MrSVjXCA==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/types@1102.1.2':
-    resolution: {integrity: sha512-B2Dt1fBR2DLX2ipme0F3Wzwj2S60rJ7Y8LpuIBNApT2nkShfk43ROeuxKcW+1JSs0YIBS8BnOpPswOwcDdf8Vg==}
+  '@pnpm/types@1102.1.3':
+    resolution: {integrity: sha512-uFm6fYunXaWeZs6um75cZefbmzszpaWdf8257a57HgyvodfEHugUKokUS/OEY1Xu15O9kWWlml8EbfX+sRdE/Q==}
     engines: {node: '>=22.13'}
 
   '@pnpm/workspace.package-patterns@1100.0.2':
     resolution: {integrity: sha512-pJUo7FOteC8me1LY/kfbydiUynLXeqZBeHWHSvRP5eYrOi8gHPuq5cpi/NJjO507mUYWIs9D4cvrg2uxGcADDA==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/workspace.project-manifest-reader@1100.1.4':
-    resolution: {integrity: sha512-jX/stVa/kCc9uV6GjCPq5SppsZLQlNAzm1hQr/4fyjlsyq/p/68P3Io72cTPZwHYda+etHbXOM7lIJiGRdGYuA==}
+  '@pnpm/workspace.project-manifest-reader@1100.1.5':
+    resolution: {integrity: sha512-CsBHMk4h+2SAWznc3+pJgbfj2EuCctAiXcFnUkVGOW32pdIWQi5XYfBu7uLiYAr4brmRTJTDahTvR5aFnRviTg==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
 
-  '@pnpm/workspace.project-manifest-writer@1100.0.21':
-    resolution: {integrity: sha512-+WuX2mX5UmcMh/NmcAwLk0wIVouM3z98BkZpygVviZlQCLU2f84jgLH6RX8ISNh2I6M93xWIFY69g9Pm5Pix6A==}
+  '@pnpm/workspace.project-manifest-writer@1100.0.22':
+    resolution: {integrity: sha512-cyDFidRE3ihL1Hx98kHB5G7/52Ei+PalHVBuNYdBXAKNG+3kqQBW9rnhfxuoXLd+uRKsuNzlyAqW0dxTRA8FTw==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/workspace.projects-reader@1101.1.5':
-    resolution: {integrity: sha512-5jae+n2eBbh28khXtEMdDM3pYj2mp77j/piR8PwRVP/79cIK5J9qadL1aVbPV0GdG9JyOhujNAnzkJIpBQGGEw==}
+  '@pnpm/workspace.projects-reader@1101.1.6':
+    resolution: {integrity: sha512-tbBMAsqZthUV5FRXPGiFPUOybkiF306MeEsdtZP++NyPgxeuL1FEoeM+JSO4YdUAbKakSqwIt+/QJwhErXK/Ww==}
     engines: {node: '>=22.13'}
     peerDependencies:
       '@pnpm/logger': ^1100.0.0
 
-  '@pnpm/workspace.root-finder@1100.1.4':
-    resolution: {integrity: sha512-d7gj7+Kqu6KS7t6PiCADLINaKRyuoDUbEaP63fRnY2l0+2kmcCDfwF91u0bv1aiRoc1+a03OqFgYiWQZeKqZYg==}
+  '@pnpm/workspace.root-finder@1100.1.5':
+    resolution: {integrity: sha512-Jeq5eQ5sOnNdrpK1c9cFVWIfye5T0iI0hECM3+a8nhHnu6zCLKHioPcXgFee8M23HLUHLmvaqqQ20aKpjuAjgw==}
     engines: {node: '>=22.13'}
 
-  '@pnpm/workspace.workspace-manifest-reader@1100.3.0':
-    resolution: {integrity: sha512-NbSCV9Qn7npshp+8WMb0zJm+eP/LTHDSoQle0BFWY1XUlRr/83PcwnirdQAUA1gOq8QiRlzOZDdjO/C4kI2CRw==}
+  '@pnpm/workspace.workspace-manifest-reader@1100.3.1':
+    resolution: {integrity: sha512-FggIroCEbuVuJUdjb4gJspTYF/19sHrEB6dBTa2PHl3ajVWfwTK69R1zmA3OOZ/hVuQ0TvPvCFfqOuN06cM6YA==}
     engines: {node: '>=22.13'}
 
   '@pnpm/yaml.document-sync@1100.0.2':
@@ -5788,12 +4266,12 @@ packages:
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
 
-  '@storybook/addon-vitest@10.6.3':
-    resolution: {integrity: sha512-ANz0SHAi9OTtrZt+YmcQvP7tcUZrTSm8Gq/nI7p9ZRyHAUOTdGoCex2cPyLc3mEqZTCBnaYXR6ZhURlpGsh9dQ==}
+  '@storybook/addon-vitest@10.6.5':
+    resolution: {integrity: sha512-0N0E7TQgmdrPNCPqNiVdTWOEQ1Nes+YsUphYX/abzlp6ReOyYBoQJw6mZ0b7BN5ACgdXQsr9Tth161t72k+51Q==}
     peerDependencies:
       '@vitest/browser': ^4.0.0 || ^5.0.0
       '@vitest/browser-playwright': ^4.0.0 || ^5.0.0
-      storybook: ^10.6.3
+      storybook: ^10.6.5
       vitest: ^4.0.0 || ^5.0.0
     peerDependenciesMeta:
       '@vitest/browser':
@@ -5803,10 +4281,10 @@ packages:
       vitest:
         optional: true
 
-  '@storybook/builder-vite@10.6.3':
-    resolution: {integrity: sha512-1+WCZZg/fPxxyHDB5sFKniFt9/4RFUIzoNqMujv+BLRROM+gQeyUHvdvoyZOZ51+P8ee+/PgnNKHjsTupV+nOA==}
+  '@storybook/builder-vite@10.6.5':
+    resolution: {integrity: sha512-udrGjg3yt38pz4FxplypXxw1creIGS7N6QS8xfvTFM8MQNtPyojT/gZdd4fhX0dFrQx5MMuJEYJA5gUBiPsLtg==}
     peerDependencies:
-      storybook: ^10.6.3
+      storybook: ^10.6.5
       vite: ^8.3.4
 
   '@storybook/global@5.0.0':
@@ -5817,40 +4295,40 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@storybook/react-dom-shim@10.6.3':
-    resolution: {integrity: sha512-cJUuPrieiTl06kzlgaU89iG+CtLAgUTt0Xdvm8qFT9yR2qwafSaswhwYWlZCNX4nWuOu7eK7uzWTwzKqyDBOWQ==}
+  '@storybook/react-dom-shim@10.6.5':
+    resolution: {integrity: sha512-Qbbkp+5Otg32w8Ddav6rH6MGPiYVfEzrgn0HqbqlqS8kY+DRXo+NYXJwZTVSDSwrYPrfH+Ok2tV4uE8Zo0c3cg==}
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       '@types/react-dom': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.3
+      storybook: ^10.6.5
     peerDependenciesMeta:
       '@types/react':
         optional: true
       '@types/react-dom':
         optional: true
 
-  '@storybook/react-vite@10.6.3':
-    resolution: {integrity: sha512-geWwLi9JnaRG2t9bYBfz+94skARzzXNT1Toaf0lk7Oog13rtNK7ay2pWNm9SP6/L2S7mEjoWu9+zHLpwxXvfIw==}
+  '@storybook/react-vite@10.6.5':
+    resolution: {integrity: sha512-RsRF1drYtCku7+PMdRnuFt3EdG8Rn8I5G8ne0cBjn24xSn5Pbo9W+y9IoyD2llAeaeCpzEEdASY12wpKd3aCQA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.3
+      storybook: ^10.6.5
       typescript: '>= 4.9.x'
       vite: ^8.3.4
     peerDependenciesMeta:
       typescript:
         optional: true
 
-  '@storybook/react@10.6.3':
-    resolution: {integrity: sha512-3tfAkZNdUyx3I4IjM8dgbNWg4k0gj89Hi1MPiawfTybRRWhvnX2YqV9Ut4mrud7YzRv0v+U7+ZYEvj+maUPaow==}
+  '@storybook/react@10.6.5':
+    resolution: {integrity: sha512-vvRjRe/O8NRiQbGyA7Ne6h2jbD6GjwNZFkMdHl+0kZH8Z/S9ZWWmKmjCySvH/OmgighdCOQ98tcfND7m65WQBg==}
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       '@types/react-dom': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.3
+      storybook: ^10.6.5
       typescript: '>= 4.9.x'
     peerDependenciesMeta:
       '@types/react':
@@ -5859,38 +4337,6 @@ packages:
         optional: true
       typescript:
         optional: true
-
-  '@superradcompany/microsandbox-darwin-arm64@0.7.11':
-    resolution: {integrity: sha512-Y6e0WpLYQQk1jMj+UCMxPc4bK52cw55AxjYVo4ad7/YY/4zGHGDWzD3X5bEakrMWDgenq69TiXnrcW3JERz20Q==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.11':
-    resolution: {integrity: sha512-F2qnHthaV5Ak4WiX8zmD1lz+/9SscCzF42hy9KXmK2R4gOLqsrTR3wj1f8NujzNltqNyHHBB2BE8/yY0TrEN/w==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@superradcompany/microsandbox-linux-x64-gnu@0.7.11':
-    resolution: {integrity: sha512-QvGvA3OfsRohyE9OyUAxj7kc0QmBzH4mD/yDWwPzPWwHt0zJKjGFANBqx7VHcuUxXxE3UtFyc7s2EkDMf/oSWQ==}
-    engines: {node: '>= 22'}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.11':
-    resolution: {integrity: sha512-Vpf0hQLHc1z/soCPMMgbduJKIqxX+1iC7/F1Llr9kigW+gPGu238yq0dcyPbFORLakbhSM9oShxqMyC5kyyLsw==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [win32]
-
-  '@superradcompany/microsandbox-win32-x64-msvc@0.7.11':
-    resolution: {integrity: sha512-PkfbS1SpAV9p1VOBRs2XE81gbcWuFx7jBydTOXiOOPpmTEEigjOZxgUBiZWIE8MYvsV1We2TlvNuRIImfhcs8w==}
-    engines: {node: '>= 22'}
-    cpu: [x64]
-    os: [win32]
 
   '@systemfsoftware/arethetypeswrong-cli@4.2.0':
     resolution: {integrity: sha512-mdHrpcy9N2RD6zBOlJnLD03fH2DcA7S1wabKDWv5TOsnyJCZR+m/Khd1yUFI9siI6az+oqHTVfJVgRTS4Sw0XA==}
@@ -6044,9 +4490,6 @@ packages:
   '@types/gensync@1.0.5':
     resolution: {integrity: sha512-MbsRCT7mTikHwKZ0X+LVUTLRrZZRLipTuXEO9qOYO+zmjMVk81axyClMROf6uoPD9MRVu46bx8zoR0Ad9q3NAg==}
 
-  '@types/jsdom@30.0.0':
-    resolution: {integrity: sha512-uAHGxujGE0cDaKGdK28zgDotFtNA7MKq5DXl8LrfdxdCI8VHcg15oJz+amHTChPNI5JpgEPQWc2xFdrw3em/nQ==}
-
   '@types/jsesc@2.5.1':
     resolution: {integrity: sha512-9VN+6yxLOPLOav+7PwjZbxiID2bVaeq0ED4qSQmdQTdjnXJSaCVKTR58t15oqH1H5t8Ng2ZX1SabJVoN9Q34bw==}
 
@@ -6066,9 +4509,6 @@ packages:
 
   '@types/scheduler@0.28.0':
     resolution: {integrity: sha512-WuK7EQ0YBvNbYwanHo+x3kixrg10+7Ak4rmYmy1dYo3l4FCh0XWeoq/SdqQamKA5wShXse8WRhh0Tt1czTAuTQ==}
-
-  '@types/tough-cookie@4.0.5':
-    resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
   '@types/ws@8.18.2':
     resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
@@ -6588,8 +5028,8 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
-  concurrently@10.0.6:
-    resolution: {integrity: sha512-qgICXXFp2/3nAebRLmxcINKEXM1mLK3ij/y31P02VTs/KIkddIeC05n73DxOXsXMB9LFSqNU1/na3lDlOhcbIw==}
+  concurrently@10.0.5:
+    resolution: {integrity: sha512-JaP/CoftUrCcAFW/g//RbgEGwlelnEae6cfBLgH6ZdO6s8jPkn6p9SB9u6pdVxYXoiSnFqseOlHfrEfF82TVOg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -6846,6 +5286,10 @@ packages:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
 
+  get-east-asian-width@1.6.0:
+    resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
+    engines: {node: '>=18'}
+
   get-east-asian-width@1.7.0:
     resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
     engines: {node: '>=18'}
@@ -6857,12 +5301,6 @@ packages:
   get-tsconfig@5.0.0-beta.6:
     resolution: {integrity: sha512-X6fBC0pmImC70gvX2zm56go9hx0MyoGVdG0tUCkg/D+Xnh5TJsOZ7iDbOdI3PvmtrDxnu1YdDufpK2QJX1Meqw==}
     engines: {node: '>=20.20.0'}
-
-  glob-to-regex.js@1.3.1:
-    resolution: {integrity: sha512-zhWhMRsgnOym+1txhUmYJGD6eUsbUdrZv55gCYKuJX8t2p3+M8My23PD09bEIsreGUs5pnSa/idmcfp2/IlqGg==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
 
   glob@13.0.6:
     resolution: {integrity: sha512-Wjlyrolmm8uDpm/ogGyXZXb1Z+Ca2B8NbJwqBVg0axK9GbBeoS7yGV6vjXnYdGm6X53iehEuxxbyiKp8QmN4Vw==}
@@ -6898,10 +5336,6 @@ packages:
     resolution: {integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==}
     engines: {node: '>=18'}
     hasBin: true
-
-  hyperdyperid@1.2.0:
-    resolution: {integrity: sha512-Y93lCzHYgGWdrJ66yIktxiaGULYc6oGiABxhcO5AufBeOyoIdZF7bIfLaOrbM0iGIOXQQgxxRrFEnb+Y6w1n4A==}
-    engines: {node: '>=10.18'}
 
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
@@ -7113,8 +5547,8 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
-  lint-staged@17.6.0:
-    resolution: {integrity: sha512-nOhBfYkZEwkFtNzD5pK9s9LkcWoxJ+whLzEnhqi9nl7zTB5n7tg8+9iYgMGx2Wm3VlLu8cbNj0RACzY+nWi5iQ==}
+  lint-staged@17.5.1:
+    resolution: {integrity: sha512-7EDuco1xnBMeVpvAbeMq1U5KXwJGLmY8q6l+Ye78r36C4mPc+Vg1Z2SK8gHyRTyvPro90A0q5/FAZ+Au23d6QQ==}
     engines: {node: '>=22.22.1'}
     hasBin: true
 
@@ -7155,9 +5589,6 @@ packages:
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
 
-  memfs@4.80.0:
-    resolution: {integrity: sha512-N70W2isi44XdGn7uPo9NJ4zRukcdkwSFHlnYx42SWOH/+hzqNc8P7+tVoA2up4z7faHvNi1RSNCFjxoYQ71VPQ==}
-
   memoize@11.0.0:
     resolution: {integrity: sha512-cjsfZaC9b1clqPeIVMbb5dLHSXgdgGWGxdAU3oTUUkHiwWTKTBNnSmcqWJncNjYtBi3S8Rp0c5GIiyGztR8TRA==}
     engines: {node: '>=22'}
@@ -7165,11 +5596,6 @@ packages:
   micromatch@4.0.8:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
-
-  microsandbox@0.7.11:
-    resolution: {integrity: sha512-bnxogljZdRts9zNAzsubhanYBwXbcswWMemrJJMtys1KlhE/RdmJ6cPzMuHEkIgrG6oJ6ixnkTsO5JdZBch9LA==}
-    engines: {node: '>= 22'}
-    hasBin: true
 
   mimic-function@5.0.1:
     resolution: {integrity: sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA==}
@@ -7554,8 +5980,8 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  shell-quote@1.12.0:
-    resolution: {integrity: sha512-PcByqNyT/38F2kDNi006HAMRJaULuBzq/FOsw3qdZvX/GA9W/jamDaRskgHjubHiftXK5sIFxLNkvrXUwcof6Q==}
+  shell-quote@1.9.0:
+    resolution: {integrity: sha512-Iov+JwFv/2HcTpcwNMKd8+IWNb8tboQJNQTkAY/LLVK7gGH9jy+LGkVqPxfekHl+yMmiqXszdGWXgkfml7hjqA==}
     engines: {node: '>= 0.4'}
 
   signal-exit@4.1.0:
@@ -7584,8 +6010,8 @@ packages:
   std-env@4.3.0:
     resolution: {integrity: sha512-OtU/EgQ1kIm5KwqQpBC6ZEMXrZRui11w8zgfTWp8cdO9B8OaPsbA8bTHO2P+HNo1VlUTGMVBwPhydu6poeXiag==}
 
-  storybook@10.6.3:
-    resolution: {integrity: sha512-lNBvcZFG44C98KvQHYzfq1O46m+sl94zY1+na5/9E3ihtNMbvpOgYyMFMIcWYUvOMo3OM4q9jzvB73KU20bU8w==}
+  storybook@10.6.5:
+    resolution: {integrity: sha512-qurC38Nx4PDF9YIq6GO95dpUx8a3B9AZwlcHBo4cOI9At09ifjQRsqcwcdOf2YX0cpVhFKmHkI20SWCrxqYQrg==}
     hasBin: true
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -7662,12 +6088,6 @@ packages:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
 
-  thingies@2.6.0:
-    resolution: {integrity: sha512-rMHRjmlFLM1R96UYPvpmnc3LYtdFrT33JIB7L9hetGue1qAPfn1N2LJeEjxUSidu1Iku+haLZXDuEXUHNGO/lg==}
-    engines: {node: '>=10.18'}
-    peerDependencies:
-      tslib: ^2
-
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
 
@@ -7717,12 +6137,6 @@ packages:
   tr46@7.0.0:
     resolution: {integrity: sha512-BcDSDW+SIGWVOns1Zm6Yg91q9AEj7eaID0QDY9oIqJD1A8dscNwMcl9Sms2DeuWCNov1X0/oXanHGYQBSLwZsg==}
     engines: {node: ^22.14.0 || >=24.0.0}
-
-  tree-dump@1.1.0:
-    resolution: {integrity: sha512-rMuvhU4MCDbcbnleZTFezWsaZXRFemSqAM+7jPnzUl1fo9w3YEKOxAeui0fz3OI4EU4hf23iyA7uQRVko+UaBA==}
-    engines: {node: '>=10.0'}
-    peerDependencies:
-      tslib: '2'
 
   tree-kill@1.2.2:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
@@ -8018,6 +6432,11 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yaml@2.9.1:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
@@ -8063,8 +6482,6 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
-
-  '@andrewbranch/untar.js@1.0.4': {}
 
   '@asamuzakjp/css-color@7.1.5':
     dependencies:
@@ -8128,7 +6545,7 @@ snapshots:
       '@babel/types': 8.0.6
       '@types/gensync': 1.0.5
       convert-source-map: 2.0.0
-      empathic: 2.1.0
+      empathic: 2.0.1
       gensync: 1.0.0-beta.2
       import-meta-resolve: 4.2.0
       json5: 2.2.3
@@ -8468,11 +6885,6 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-pglite@4.0.5(effect@4.0.5)':
-    dependencies:
-      '@electric-sql/pglite': 0.5.8
-      effect: 4.0.5
-
   '@effect/tsgo-darwin-arm64@0.51.1':
     optional: true
 
@@ -8503,8 +6915,6 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.51.1
       '@effect/tsgo-win32-arm64': 0.51.1
       '@effect/tsgo-win32-x64': 0.51.1
-
-  '@electric-sql/pglite@0.5.8': {}
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -8647,11 +7057,11 @@ snapshots:
 
   '@istanbuljs/schema@0.1.6': {}
 
-  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))':
+  '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       glob: 13.0.6
       react-docgen-typescript: 2.4.0(typescript@7.0.2)
-      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
     optionalDependencies:
       typescript: 7.0.2
 
@@ -8680,136 +7090,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   '@js-sdsl/ordered-map@4.4.2': {}
-
-  '@jsonjoy.com/base64@1.1.2(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/base64@17.67.0(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/buffers@1.2.1(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/buffers@17.67.0(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/codegen@1.0.0(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/codegen@17.67.0(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-core@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-fsa@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-core': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-node-builtins@4.80.0(tslib@2.8.1)':
-    dependencies:
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-node-to-fsa@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-fsa': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-node-utils@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      glob-to-regex.js: 1.3.1(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-node@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-core': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-print': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-snapshot': 4.80.0(tslib@2.8.1)
-      glob-to-regex.js: 1.3.1(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-print@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/fs-snapshot@4.80.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pack': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/json-pack@1.21.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/base64': 1.1.2(tslib@2.8.1)
-      '@jsonjoy.com/buffers': 1.2.1(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pointer': 1.0.2(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
-      hyperdyperid: 1.2.0
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/json-pack@17.67.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/base64': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pointer': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
-      hyperdyperid: 1.2.0
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/json-pointer@1.0.2(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/json-pointer@17.67.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/util': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/util@1.9.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/buffers': 1.2.1(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 1.0.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@jsonjoy.com/util@17.67.0(tslib@2.8.1)':
-    dependencies:
-      '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
-      '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
-      tslib: 2.8.1
-
-  '@microsandbox/types@0.7.11': {}
 
   '@microsoft/api-extractor-model@7.33.15(@types/node@26.6.5)':
     dependencies:
@@ -9446,32 +7726,32 @@ snapshots:
 
   '@oxlint/plugins@1.87.0': {}
 
-  '@pnpm/cli.meta@1100.1.3':
+  '@pnpm/cli.meta@1100.1.4':
     dependencies:
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       empathic: 2.1.0
       load-json-file: 7.0.1
 
-  '@pnpm/cli.utils@1101.0.33(@pnpm/logger@1100.0.0)':
+  '@pnpm/cli.utils@1101.0.34(@pnpm/logger@1100.0.0)':
     dependencies:
-      '@pnpm/cli.meta': 1100.1.3
-      '@pnpm/config.package-is-installable': 1100.2.4(@pnpm/logger@1100.0.0)
+      '@pnpm/cli.meta': 1100.1.4
+      '@pnpm/config.package-is-installable': 1100.2.5(@pnpm/logger@1100.0.0)
       '@pnpm/error': 1100.2.2
       '@pnpm/logger': 1100.0.0
-      '@pnpm/pkg-manifest.utils': 1100.4.10(@pnpm/logger@1100.0.0)
-      '@pnpm/types': 1102.1.2
-      '@pnpm/workspace.project-manifest-reader': 1100.1.4(@pnpm/logger@1100.0.0)
+      '@pnpm/pkg-manifest.utils': 1100.4.11(@pnpm/logger@1100.0.0)
+      '@pnpm/types': 1102.1.3
+      '@pnpm/workspace.project-manifest-reader': 1100.1.5(@pnpm/logger@1100.0.0)
       chalk: 6.0.1
       load-json-file: 7.0.1
 
-  '@pnpm/config.package-is-installable@1100.2.4(@pnpm/logger@1100.0.0)':
+  '@pnpm/config.package-is-installable@1100.2.5(@pnpm/logger@1100.0.0)':
     dependencies:
-      '@pnpm/cli.meta': 1100.1.3
-      '@pnpm/core-loggers': 1101.0.3(@pnpm/logger@1100.0.0)
-      '@pnpm/engine.runtime.system-version': 1100.0.14
+      '@pnpm/cli.meta': 1100.1.4
+      '@pnpm/core-loggers': 1101.0.4(@pnpm/logger@1100.0.0)
+      '@pnpm/engine.runtime.system-version': 1100.0.15
       '@pnpm/error': 1100.2.2
       '@pnpm/logger': 1100.0.0
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       detect-libc: 2.1.2
       execa: safe-execa@0.3.0
       memoize: 11.0.0
@@ -9479,19 +7759,19 @@ snapshots:
 
   '@pnpm/constants@1102.0.1': {}
 
-  '@pnpm/core-loggers@1101.0.3(@pnpm/logger@1100.0.0)':
+  '@pnpm/core-loggers@1101.0.4(@pnpm/logger@1100.0.0)':
     dependencies:
       '@pnpm/logger': 1100.0.0
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
 
   '@pnpm/deps.peer-range@1100.1.2':
     dependencies:
       semver: 7.8.5
 
-  '@pnpm/engine.runtime.system-version@1100.0.14':
+  '@pnpm/engine.runtime.system-version@1100.0.15':
     dependencies:
-      '@pnpm/cli.meta': 1100.1.3
-      '@pnpm/types': 1102.1.2
+      '@pnpm/cli.meta': 1100.1.4
+      '@pnpm/types': 1102.1.3
       execa: safe-execa@0.3.0
       memoize: 11.0.0
 
@@ -9509,13 +7789,13 @@ snapshots:
       bole: 5.0.29
       split2: 4.2.0
 
-  '@pnpm/pkg-manifest.utils@1100.4.10(@pnpm/logger@1100.0.0)':
+  '@pnpm/pkg-manifest.utils@1100.4.11(@pnpm/logger@1100.0.0)':
     dependencies:
-      '@pnpm/core-loggers': 1101.0.3(@pnpm/logger@1100.0.0)
+      '@pnpm/core-loggers': 1101.0.4(@pnpm/logger@1100.0.0)
       '@pnpm/deps.peer-range': 1100.1.2
       '@pnpm/error': 1100.2.2
       '@pnpm/logger': 1100.0.0
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       semver: 7.8.5
       semver-utils: 1.1.4
 
@@ -9525,21 +7805,21 @@ snapshots:
 
   '@pnpm/text.ordinal-comparator@1100.0.0': {}
 
-  '@pnpm/types@1102.1.2': {}
+  '@pnpm/types@1102.1.3': {}
 
   '@pnpm/workspace.package-patterns@1100.0.2':
     dependencies:
       micromatch: 4.0.8
 
-  '@pnpm/workspace.project-manifest-reader@1100.1.4(@pnpm/logger@1100.0.0)':
+  '@pnpm/workspace.project-manifest-reader@1100.1.5(@pnpm/logger@1100.0.0)':
     dependencies:
       '@pnpm/error': 1100.2.2
       '@pnpm/fs.graceful-fs': 1100.2.5
       '@pnpm/logger': 1100.0.0
-      '@pnpm/pkg-manifest.utils': 1100.4.10(@pnpm/logger@1100.0.0)
+      '@pnpm/pkg-manifest.utils': 1100.4.11(@pnpm/logger@1100.0.0)
       '@pnpm/text.comments-parser': 1100.0.1
-      '@pnpm/types': 1102.1.2
-      '@pnpm/workspace.project-manifest-writer': 1100.0.21
+      '@pnpm/types': 1102.1.3
+      '@pnpm/workspace.project-manifest-writer': 1100.0.22
       detect-indent: 7.0.2
       fast-deep-equal: 3.1.3
       is-windows: 1.0.2
@@ -9549,42 +7829,42 @@ snapshots:
       read-yaml-file: 3.0.0
       strip-bom: 5.0.0
 
-  '@pnpm/workspace.project-manifest-writer@1100.0.21':
+  '@pnpm/workspace.project-manifest-writer@1100.0.22':
     dependencies:
       '@pnpm/error': 1100.2.2
       '@pnpm/text.comments-parser': 1100.0.1
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       '@pnpm/yaml.document-sync': 1100.0.2
       json5: 2.2.3
       write-file-atomic: 7.0.1
       yaml: 2.9.1
 
-  '@pnpm/workspace.projects-reader@1101.1.5(@pnpm/logger@1100.0.0)':
+  '@pnpm/workspace.projects-reader@1101.1.6(@pnpm/logger@1100.0.0)':
     dependencies:
-      '@pnpm/cli.utils': 1101.0.33(@pnpm/logger@1100.0.0)
+      '@pnpm/cli.utils': 1101.0.34(@pnpm/logger@1100.0.0)
       '@pnpm/constants': 1102.0.1
       '@pnpm/error': 1100.2.2
       '@pnpm/logger': 1100.0.0
       '@pnpm/text.ordinal-comparator': 1100.0.0
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       '@pnpm/workspace.package-patterns': 1100.0.2
-      '@pnpm/workspace.project-manifest-reader': 1100.1.4(@pnpm/logger@1100.0.0)
+      '@pnpm/workspace.project-manifest-reader': 1100.1.5(@pnpm/logger@1100.0.0)
       p-filter: 4.1.0
       tinyglobby: 0.2.17
 
-  '@pnpm/workspace.root-finder@1100.1.4':
+  '@pnpm/workspace.root-finder@1100.1.5':
     dependencies:
       '@pnpm/constants': 1102.0.1
       '@pnpm/error': 1100.2.2
       '@pnpm/workspace.package-patterns': 1100.0.2
-      '@pnpm/workspace.workspace-manifest-reader': 1100.3.0
+      '@pnpm/workspace.workspace-manifest-reader': 1100.3.1
       empathic: 2.1.0
 
-  '@pnpm/workspace.workspace-manifest-reader@1100.3.0':
+  '@pnpm/workspace.workspace-manifest-reader@1100.3.1':
     dependencies:
       '@pnpm/constants': 1102.0.1
       '@pnpm/error': 1100.2.2
-      '@pnpm/types': 1102.1.2
+      '@pnpm/types': 1102.1.3
       read-yaml-file: 3.0.0
 
   '@pnpm/yaml.document-sync@1100.0.2':
@@ -9915,23 +8195,23 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
-  '@storybook/addon-vitest@10.6.3(@vitest/browser-playwright@5.0.5)(@vitest/browser@5.0.5)(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vitest@5.0.5)':
+  '@storybook/addon-vitest@10.6.5(@vitest/browser-playwright@5.0.5)(@vitest/browser@5.0.5)(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vitest@5.0.5)':
     dependencies:
       '@storybook/global': 5.0.0
       '@storybook/icons': 2.1.0(react@19.3.1)
-      storybook: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+      storybook: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
     optionalDependencies:
-      '@vitest/browser': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
-      '@vitest/browser-playwright': 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+      '@vitest/browser': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
+      '@vitest/browser-playwright': 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
     transitivePeerDependencies:
       - react
 
-  '@storybook/builder-vite@10.6.3(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))':
+  '@storybook/builder-vite@10.6.5(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
-      storybook: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+      storybook: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
       ts-dedent: 2.3.0
-      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
 
   '@storybook/global@5.0.0': {}
 
@@ -9939,30 +8219,30 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  '@storybook/react-dom-shim@10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))':
+  '@storybook/react-dom-shim@10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))':
     dependencies:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
-      storybook: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+      storybook: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
     optionalDependencies:
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
 
-  '@storybook/react-vite@10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rollup@4.62.4)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))':
+  '@storybook/react-vite@10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rollup@4.62.4)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
-      '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+      '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
       '@rollup/pluginutils': 5.4.0(rollup@4.62.4)
-      '@storybook/builder-vite': 10.6.3(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
-      '@storybook/react': 10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)
+      '@storybook/builder-vite': 10.6.5(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      '@storybook/react': 10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)
       empathic: 2.1.0
       magic-string: 1.4.3
       react: 19.3.1
       react-docgen: 8.0.3(supports-color@10.2.2)
       react-dom: 19.3.1(react@19.3.1)
       resolve: 1.22.12
-      storybook: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+      storybook: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
       tsconfig-paths: 4.2.0
-      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
     optionalDependencies:
       typescript: 7.0.2
     transitivePeerDependencies:
@@ -9971,36 +8251,21 @@ snapshots:
       - rollup
       - supports-color
 
-  '@storybook/react@10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)':
+  '@storybook/react@10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)':
     dependencies:
       '@storybook/global': 5.0.0
-      '@storybook/react-dom-shim': 10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))
+      '@storybook/react-dom-shim': 10.6.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1))
       react: 19.3.1
       react-docgen: 8.0.3(supports-color@10.2.2)
       react-docgen-typescript: 2.4.0(typescript@7.0.2)
       react-dom: 19.3.1(react@19.3.1)
-      storybook: 10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
+      storybook: 10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1)
     optionalDependencies:
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
       typescript: 7.0.2
     transitivePeerDependencies:
       - supports-color
-
-  '@superradcompany/microsandbox-darwin-arm64@0.7.11':
-    optional: true
-
-  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.11':
-    optional: true
-
-  '@superradcompany/microsandbox-linux-x64-gnu@0.7.11':
-    optional: true
-
-  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.11':
-    optional: true
-
-  '@superradcompany/microsandbox-win32-x64-msvc@0.7.11':
-    optional: true
 
   '@systemfsoftware/arethetypeswrong-cli@4.2.0': {}
 
@@ -10012,24 +8277,10 @@ snapshots:
     dependencies:
       '@systemfsoftware/stryker-ignorer-interface': 0.1.1
 
-  '@systemfsoftware/stryker-ignorer-effect-schema-declarations@0.2.0(rolldown@1.2.14)':
-    dependencies:
-      '@systemfsoftware/stryker-ignorer-interface': 0.1.1
-      '@systemfsoftware/stryker-ignorer-kit': 0.1.1(rolldown@1.2.14)
-    transitivePeerDependencies:
-      - rolldown
-
   '@systemfsoftware/stryker-ignorer-effect-schema-declarations@0.2.0(rolldown@1.2.9)':
     dependencies:
       '@systemfsoftware/stryker-ignorer-interface': 0.1.1
       '@systemfsoftware/stryker-ignorer-kit': 0.1.1(rolldown@1.2.9)
-    transitivePeerDependencies:
-      - rolldown
-
-  '@systemfsoftware/stryker-ignorer-in-source-vitest-block@0.1.1(rolldown@1.2.14)':
-    dependencies:
-      '@systemfsoftware/stryker-ignorer-interface': 0.1.1
-      '@systemfsoftware/stryker-ignorer-kit': 0.1.1(rolldown@1.2.14)
     transitivePeerDependencies:
       - rolldown
 
@@ -10041,15 +8292,6 @@ snapshots:
       - rolldown
 
   '@systemfsoftware/stryker-ignorer-interface@0.1.1': {}
-
-  '@systemfsoftware/stryker-ignorer-kit@0.1.1(rolldown@1.2.14)':
-    dependencies:
-      '@oxc-project/types': 0.150.0
-      '@systemfsoftware/stryker-ignorer-interface': 0.1.1
-      oxc-parser: 0.150.0
-      oxc-walker: 1.1.1(@oxc-project/types@0.150.0)(oxc-parser@0.150.0)(rolldown@1.2.14)
-    transitivePeerDependencies:
-      - rolldown
 
   '@systemfsoftware/stryker-ignorer-kit@0.1.1(rolldown@1.2.9)':
     dependencies:
@@ -10064,21 +8306,6 @@ snapshots:
     dependencies:
       '@systemfsoftware/stryker-js-plugin-interface': 14.0.0
       effect: 4.0.5
-
-  '@systemfsoftware/stryker-js-instrumenter@12.1.1(rolldown@1.2.14)':
-    dependencies:
-      '@eslint-community/regexpp': 4.12.2
-      '@noble/hashes': 2.4.0
-      '@oxc-project/types': 0.150.0
-      '@systemfsoftware/effect-cell-types': 12.0.0(effect@4.0.5)
-      '@systemfsoftware/stryker-framework-interface': 0.0.0
-      '@systemfsoftware/stryker-js-cli-contract': 0.3.1
-      '@systemfsoftware/stryker-js-plugin-interface': 14.0.0
-      effect: 4.0.5
-      oxc-parser: 0.150.0
-      oxc-walker: 1.1.1(@oxc-project/types@0.150.0)(oxc-parser@0.150.0)(rolldown@1.2.14)
-    transitivePeerDependencies:
-      - rolldown
 
   '@systemfsoftware/stryker-js-instrumenter@12.1.1(rolldown@1.2.9)':
     dependencies:
@@ -10117,31 +8344,6 @@ snapshots:
       '@systemfsoftware/effect-cell-types': 12.0.0(effect@4.0.5)
       '@systemfsoftware/stryker-js-cli-contract': 0.3.1
       '@systemfsoftware/stryker-js-instrumenter': 12.1.1(rolldown@1.2.9)
-      '@systemfsoftware/stryker-js-plugin-interface': 14.0.0
-      '@systemfsoftware/stryker-js-plugin-runtime': 7.0.2
-      effect: 4.0.5
-      typescript: 7.0.2
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - '@opentelemetry/api-logs'
-      - '@opentelemetry/resources'
-      - '@opentelemetry/sdk-logs'
-      - '@opentelemetry/sdk-metrics'
-      - '@opentelemetry/sdk-trace-node'
-      - '@opentelemetry/sdk-trace-web'
-      - '@opentelemetry/semantic-conventions'
-      - rolldown
-      - supports-color
-
-  '@systemfsoftware/stryker-js-typescript-checker@8.2.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(rolldown@1.2.14)(supports-color@10.2.2)':
-    dependencies:
-      '@effect/opentelemetry': 4.0.5(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.5)
-      '@opentelemetry/exporter-trace-otlp-http': 0.222.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-node': 0.222.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
-      '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
-      '@systemfsoftware/effect-cell-types': 12.0.0(effect@4.0.5)
-      '@systemfsoftware/stryker-js-cli-contract': 0.3.1
-      '@systemfsoftware/stryker-js-instrumenter': 12.1.1(rolldown@1.2.14)
       '@systemfsoftware/stryker-js-plugin-interface': 14.0.0
       '@systemfsoftware/stryker-js-plugin-runtime': 7.0.2
       effect: 4.0.5
@@ -10210,7 +8412,7 @@ snapshots:
       '@opentelemetry/sdk-node': 0.222.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.9.1)
       '@systemfsoftware/effect-cell-types': 12.0.0(effect@4.0.5)
-      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@opentelemetry/api-logs'
@@ -10372,13 +8574,6 @@ snapshots:
 
   '@types/gensync@1.0.5': {}
 
-  '@types/jsdom@30.0.0':
-    dependencies:
-      '@types/node': 26.6.5
-      '@types/tough-cookie': 4.0.5
-      parse5: 8.0.1
-      undici-types: 8.9.0
-
   '@types/jsesc@2.5.1': {}
 
   '@types/node@26.6.5':
@@ -10396,8 +8591,6 @@ snapshots:
   '@types/resolve@1.20.6': {}
 
   '@types/scheduler@0.28.0': {}
-
-  '@types/tough-cookie@4.0.5': {}
 
   '@types/ws@8.18.2':
     dependencies:
@@ -10463,6 +8656,19 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
+  '@vitest/browser-playwright@5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)':
+    dependencies:
+      '@vitest/browser': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
+      '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      playwright: 1.64.1
+      tinyrainbow: 3.2.0
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+
   '@vitest/browser-playwright@5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)':
     dependencies:
       '@vitest/browser': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))(vitest@5.0.5)
@@ -10470,6 +8676,25 @@ snapshots:
       playwright: 1.64.1
       tinyrainbow: 3.2.0
       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
+
+  '@vitest/browser@5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)':
+    dependencies:
+      '@blazediff/core': 1.10.0
+      '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      '@vitest/ui': 5.0.5(vitest@5.0.5)
+      '@vitest/utils': 5.0.5
+      magic-string: 1.4.3
+      pngjs: 7.0.0
+      sirv: 3.0.2
+      tinyrainbow: 3.2.0
+      vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -10493,6 +8718,7 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+    optional: true
 
   '@vitest/coverage-istanbul@5.0.5(vitest@5.0.5)':
     dependencies:
@@ -10548,6 +8774,15 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/istanbul-lib-coverage': 1.0.2
       obug: 2.1.4
+
+  '@vitest/mocker@5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))':
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.31
+      '@vitest/spy': 5.0.5
+      estree-walker: 3.0.3
+      magic-string: 1.4.3
+    optionalDependencies:
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
 
   '@vitest/mocker@5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1))':
     dependencies:
@@ -10811,11 +9046,11 @@ snapshots:
 
   color-name@1.1.4: {}
 
-  concurrently@10.0.6:
+  concurrently@10.0.5:
     dependencies:
       chalk: 5.6.2
       rxjs: 7.8.2
-      shell-quote: 1.12.0
+      shell-quote: 1.9.0
       supports-color: 10.2.2
       tree-kill: 1.2.2
       yargs: 18.0.0
@@ -11043,6 +9278,8 @@ snapshots:
 
   get-caller-file@2.0.5: {}
 
+  get-east-asian-width@1.6.0: {}
+
   get-east-asian-width@1.7.0: {}
 
   get-stream@9.0.1:
@@ -11053,10 +9290,6 @@ snapshots:
   get-tsconfig@5.0.0-beta.6:
     dependencies:
       resolve-pkg-maps: 1.0.0
-
-  glob-to-regex.js@1.3.1(tslib@2.8.1):
-    dependencies:
-      tslib: 2.8.1
 
   glob@13.0.6:
     dependencies:
@@ -11087,8 +9320,6 @@ snapshots:
   human-signals@8.0.1: {}
 
   husky@9.1.7: {}
-
-  hyperdyperid@1.2.0: {}
 
   import-fresh@3.3.1:
     dependencies:
@@ -11251,13 +9482,13 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
-  lint-staged@17.6.0:
+  lint-staged@17.5.1:
     dependencies:
       picomatch: 4.0.7
       string-argv: 0.3.2
       tinyexec: 1.3.1
     optionalDependencies:
-      yaml: 2.9.1
+      yaml: 2.9.0
 
   load-json-file@7.0.1: {}
 
@@ -11289,23 +9520,6 @@ snapshots:
 
   mdn-data@2.27.1: {}
 
-  memfs@4.80.0:
-    dependencies:
-      '@jsonjoy.com/fs-core': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-fsa': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-builtins': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-to-fsa': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-node-utils': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-print': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/fs-snapshot': 4.80.0(tslib@2.8.1)
-      '@jsonjoy.com/json-pack': 1.21.0(tslib@2.8.1)
-      '@jsonjoy.com/util': 1.9.0(tslib@2.8.1)
-      glob-to-regex.js: 1.3.1(tslib@2.8.1)
-      thingies: 2.6.0(tslib@2.8.1)
-      tree-dump: 1.1.0(tslib@2.8.1)
-      tslib: 2.8.1
-
   memoize@11.0.0:
     dependencies:
       mimic-function: 5.0.1
@@ -11314,16 +9528,6 @@ snapshots:
     dependencies:
       braces: 3.0.3
       picomatch: 2.3.2
-
-  microsandbox@0.7.11:
-    dependencies:
-      '@microsandbox/types': 0.7.11
-    optionalDependencies:
-      '@superradcompany/microsandbox-darwin-arm64': 0.7.11
-      '@superradcompany/microsandbox-linux-arm64-gnu': 0.7.11
-      '@superradcompany/microsandbox-linux-x64-gnu': 0.7.11
-      '@superradcompany/microsandbox-win32-arm64-msvc': 0.7.11
-      '@superradcompany/microsandbox-win32-x64-msvc': 0.7.11
 
   mimic-function@5.0.1: {}
 
@@ -11461,12 +9665,6 @@ snapshots:
       '@oxc-resolver/binding-wasm32-wasi': 11.21.2
       '@oxc-resolver/binding-win32-arm64-msvc': 11.21.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.21.2
-
-  oxc-walker@1.1.1(@oxc-project/types@0.150.0)(oxc-parser@0.150.0)(rolldown@1.2.14):
-    optionalDependencies:
-      '@oxc-project/types': 0.150.0
-      oxc-parser: 0.150.0
-      rolldown: 1.2.14
 
   oxc-walker@1.1.1(@oxc-project/types@0.150.0)(oxc-parser@0.150.0)(rolldown@1.2.9):
     optionalDependencies:
@@ -11846,7 +10044,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  shell-quote@1.12.0: {}
+  shell-quote@1.9.0: {}
 
   signal-exit@4.1.0: {}
 
@@ -11866,7 +10064,7 @@ snapshots:
 
   std-env@4.3.0: {}
 
-  storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1):
+  storybook@10.6.5(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.1):
     dependencies:
       '@storybook/global': 5.0.0
       '@storybook/icons': 2.1.0(react@19.3.1)
@@ -11904,7 +10102,7 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
-      get-east-asian-width: 1.7.0
+      get-east-asian-width: 1.6.0
       strip-ansi: 7.2.0
 
   string-width@8.2.2:
@@ -11944,10 +10142,6 @@ snapshots:
 
   tagged-tag@1.0.0: {}
 
-  thingies@2.6.0(tslib@2.8.1):
-    dependencies:
-      tslib: 2.8.1
-
   tiny-invariant@1.3.3: {}
 
   tinybench@6.2.2: {}
@@ -11984,10 +10178,6 @@ snapshots:
   tr46@7.0.0:
     dependencies:
       punycode: 2.3.1
-
-  tree-dump@1.1.0(tslib@2.8.1):
-    dependencies:
-      tslib: 2.8.1
 
   tree-kill@1.2.2: {}
 
@@ -12115,6 +10305,21 @@ snapshots:
 
   verkit@0.4.1: {}
 
+  vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.30
+      rolldown: 1.2.14
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.6.5
+      esbuild: 0.28.2
+      fsevents: 2.3.3
+      jiti: 2.6.1
+      tsx: 4.23.13
+      yaml: 2.9.0
+
   vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
@@ -12129,6 +10334,33 @@ snapshots:
       jiti: 2.6.1
       tsx: 4.23.13
       yaml: 2.9.1
+
+  vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)):
+    dependencies:
+      '@types/chai': 5.2.3
+      '@vitest/mocker': 5.0.5(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      chai: 6.3.0
+      es-module-lexer: 2.3.2
+      expect-type: 1.4.0
+      magic-string: 1.4.3
+      obug: 3.0.0
+      picomatch: 4.0.7
+      std-env: 4.3.0
+      tinybench: 6.2.2
+      tinyexec: 1.3.1
+      tinyglobby: 0.2.17
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0)
+      why-is-node-running: 3.2.1
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
+      '@types/node': 26.6.5
+      '@vitest/browser-playwright': 5.0.5(playwright@1.64.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))(vitest@5.0.5)
+      '@vitest/coverage-istanbul': 5.0.5(vitest@5.0.5)
+      '@vitest/coverage-v8': 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
+      '@vitest/ui': 5.0.5(vitest@5.0.5)
+      jsdom: 30.1.3(@noble/hashes@2.4.0)
+    transitivePeerDependencies:
+      - msw
 
   vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-istanbul@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.1)):
     dependencies:
@@ -12208,6 +10440,9 @@ snapshots:
   y18n@5.0.8: {}
 
   yallist@3.1.1: {}
+
+  yaml@2.9.0:
+    optional: true
 
   yaml@2.9.1: {}
 

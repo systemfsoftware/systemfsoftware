@@ -19,7 +19,7 @@ The atom library's own React bindings are the runtime edge and are not governed 
 
 Decision test: does any component or hook module the diff adds or changes name an API in the list above, or call a helper outside the app's Layer that does? Any yes fails.
 
-Defect: an I/O or clock call made from render or a mount effect runs outside the runtime. Two responses can arrive out of order and the stale one wins; the value is a hidden input that a story or test cannot set; and a failure lands in no AsyncResult the UI can show. Stories and browser tests then need the real network, storage or clock instead of the port fakes the preview provides (pack: ui-testing, stories-get-io-from-the-preview-provider.md).
+Defect: an I/O or clock call made from render or a mount effect runs outside the runtime. Two responses can arrive out of order and the stale one wins; the value is a hidden input that a story or test cannot set; and a failure lands in no AsyncResult the UI can show. Stories and browser tests then need the real network, storage or clock instead of the I/O stand-ins the preview loads (pack: ui-testing, stories-get-io-from-stand-ins-beside-the-io-module.md).
 
 ```tsx
 // WRONG
