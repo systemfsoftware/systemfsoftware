@@ -18,8 +18,8 @@ Defect prevented: an importer that never calls a module still loads it, so a mod
 ```ts
 // WRONG: the package root re-exports a service that loads a Node-only bundler,
 // so a deploy script that only needs the schemas loads the bundler (and its .wasm) too
-export * from './schemas.ts'
 export * from './deploy.service.ts'
+export * from './schemas.ts'
 ```
 
 ```ts
