@@ -1,42 +1,35 @@
 ---
-title: An integration test's IO runs in a container it starts, never on the host, and the test never starts a child process
+title: An integration test's IO runs in a container it starts, never on the host, and a test with any fake-integration smell is not an integration test
 applies_when:
   - an integration test or Feature needs a database, broker, cache, HTTP peer or other service
   - a test, fixture or helper reads or writes the host filesystem, listens on a host port, or starts a process
-  - choosing between Testcontainers, a microVM, a compose stack or a host resource for a test
-tags: [integration, containers, testcontainers, io, child-process, bare-metal]
+  - reviewing an integration test that passes but whose caught behaviour nobody can name
+tags: [integration, containers, testcontainers, io, child-process, smells, mocks]
 ---
 
-Every resource an integration test does IO against runs in a container the test starts in its own scope and stops when it ends: a database, broker, cache or HTTP peer, started through Testcontainers (`GenericContainer` or a module such as `PostgreSqlContainer`) with a wait strategy. Testcontainers finds the engine through `DOCKER_HOST`, never a hardcoded `/var/run/docker.sock`: a rootless podman socket on a developer machine, Docker on a CI runner. The code under test runs in the test's own process and reaches the container through the port Testcontainers maps.
+Every resource an integration test does IO against runs in a container the test starts in its own scope and stops when it ends (Testcontainers, with a wait strategy). The code under test runs in the test's own process and reaches the container through the mapped port.
 
-Nothing runs on the host. A test never listens on a host port of its own, never reads or writes the host filesystem (a filesystem the code needs is an in-memory one, such as `@systemfsoftware/effect-memfs`, or a volume inside the container), and never starts a child process: not git, not a package manager or build tool, not a shell, not the package's own CLI binary, not a server, and not a shim script standing in for one.
+Nothing runs on the host. A test never listens on a host port of its own, never reads or writes the host filesystem (use an in-memory one such as `@systemfsoftware/effect-memfs`, or a volume inside the container), and never starts a child process: not git, a package manager, a build tool, a shell, the package's own CLI, a server, or a shim script standing in for one.
 
-A behaviour that needs a real binary, a real server process or several services running together is not an integration test: it belongs to the e2e-testing pack.
+A behaviour that needs a real binary, a real server process or several services running together is not an integration test; it belongs to the e2e-testing pack.
 
-Decision: the judge fails an integration test, Feature, fixture or helper that starts a process, runs git or a CLI or server binary, writes an executable shim, listens on a host port, touches the host filesystem, or reaches a service not started as a container in the test's own scope (a shared dev stack, a developer's local database). An uncertain case escalates.
+Any one of these marks a fake integration test and fails it:
 
-Defect it prevents: IO on the host makes a test pass or fail with the machine it runs on, its binaries, their versions and whatever state the last run left; a container started per test gives every run the same clean resource, on a developer machine and in CI alike.
+- It starts a child process, or writes an executable shim or replays a recorded capture of a third party through one.
+- It does IO on the host (temp directory, host port, a developer's running service).
+- It replaces a driver, binding or client with a mock, spy, `vi.fn` or hand-built object.
+- Its Then reads what a stand-in received instead of what our caller gets back.
+- Its subject is a third party's API or wire format, not our system's behaviour.
+- It is named live, real or end-to-end but runs nothing a person or caller would.
+- It was deleted with its test target and the package it covered stayed (testing pack: failing-tests-are-fixed-not-weakened.md).
 
 ```typescript
 // WRONG: IO on the host
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'plan-'))
 yield * ChildProcess.make('git', ['init'], { cwd: dir })
-```
-
-```typescript
-// RIGHT: the database runs in a container the scenario starts and stops
+// RIGHT: a container the scenario starts and stops
 const postgres = yield * Effect.acquireRelease(
-  Effect.promise(() =>
-    new GenericContainer('postgres:17-alpine')
-      .withEnvironment({ POSTGRES_PASSWORD: 'test' })
-      .withExposedPorts(5432)
-      .withWaitStrategy(Wait.forLogMessage(/ready to accept connections/, 2))
-      .start()
-  ),
+  Effect.promise(() => new GenericContainer('postgres:17-alpine').withExposedPorts(5432).start()),
   (c) => Effect.promise(() => c.stop()),
 )
 ```
-
-Source: owner rulings, 2026-10-28: "integration tests CAN use testcontainers like identity backend community but no fucking io runs on the bare metal", "ANYTHING THAT RUNS A CHILD PROCESS IS AUTOMATIC FAIL". Measured on a rootless podman 6.1 host the same day: Testcontainers for Node 12.2 started `postgres:17-alpine` through the user podman socket via `DOCKER_HOST`, with Ryuk enabled, and the host process queried it through the mapped port.
-
-Gate: judge

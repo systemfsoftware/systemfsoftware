@@ -7,37 +7,13 @@ applies_when:
 tags: [config, secret, redacted, environment]
 ---
 
-A variable whose value grants access (a password, a token, an API key, a signing secret, or a connection URL or DSN that embeds a credential) is decoded in src/config.ts with `S.Redacted(...)`, and the `<Feature>Config` field that carries it is typed `Redacted.Redacted<...>`.
+Decode a variable whose value grants access (a password, token, API key, signing secret, or a connection URL or DSN that embeds a credential) in src/config.ts with `S.Redacted(...)`, and type the `<Feature>Config` field that carries it `Redacted.Redacted<...>`.
 
-It is never unwrapped into a plain string that is stored in settings, logged, put in an error or attached to a span.
-
-Decision test: does every credential the diff reads decode through S.Redacted, and is every settings field that holds one typed Redacted? A credential decoded as a plain string, or unwrapped into a plain-string field, log line, error or span attribute, fails.
-
-Defect prevented: a credential printed in a log line, an error message or a trace, where everyone who can read those can use it.
+Never unwrap it into a plain string that is stored in settings, logged, put in an error or attached to a span.
 
 ```typescript
 // WRONG
-export const PAYMENTS_API_KEY = Config.schema(
-  S.String.annotate({ description: 'API key of the payment provider' }),
-  'PAYMENTS_API_KEY',
-)
-export class PaymentsConfig
-  extends Context.Service<PaymentsConfig, { readonly apiKey: string }>()('acme/PaymentsConfig')
-{}
-```
-
-```typescript
+S.String.annotate({ description: 'API key of the payment provider' })
 // RIGHT
-export const PAYMENTS_API_KEY = Config.schema(
-  S.Redacted(S.String).annotate({ description: 'API key of the payment provider' }),
-  'PAYMENTS_API_KEY',
-)
-export class PaymentsConfig extends Context.Service<
-  PaymentsConfig,
-  { readonly apiKey: Redacted.Redacted<string> }
->()('acme/PaymentsConfig') {}
+S.Redacted(S.String).annotate({ description: 'API key of the payment provider' })
 ```
-
-Source: the effect 4 package's Schema.Redacted and Redacted module (a Redacted value prints as `<redacted>`).
-
-Gate: judge

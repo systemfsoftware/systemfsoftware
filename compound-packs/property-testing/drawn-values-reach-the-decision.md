@@ -6,23 +6,15 @@ applies_when:
 tags: [property-test, generator, seed, finite-domain, workflow]
 ---
 
-A workflow property draws the whole command from the command schema passed to Workflow.make, or each field the decision reads from that field's production schema. A construction parameter with no production counterpart (an offset, a filler character, a pool index) is drawn inline in `of` (Schema.Literals([-2, -1, 0, 1, 2])); a test never declares a module-scope schema (schema-declaration-location refuses it) and never refines a production schema (invariants-live-in-the-schema.md). A drawn value is narrowed in the schema in `of`, never by arithmetic inside holds (`% n`, Math.abs, clamping): a filter or map over a stock draw is a hand-built generator (prop-arbitrary-schema-origin).
+Draw the whole command from the command schema passed to `Workflow.make`, or each field the decision reads from that field's production schema. Draw a construction parameter with no production counterpart (an offset, a filler character, a pool index) inline in `of` (`Schema.Literals([-2, -1, 0, 1, 2])`). Narrow a drawn value in the schema in `of`, never by arithmetic inside the predicate (`% n`, `Math.abs`, clamping), and never refine a production schema in a test (schema-modelling pack: invariants-live-in-the-schema.md).
 
-Never write a literal for a command field the decision reads, and never draw only fields the decision ignores: a hard-coded value is one a wrong implementation can special-case (Property-based testing part 3, the EDFH and the magic Int32.MinValue). A literal is allowed for a field the property's name states as its precondition (→ReadWrite_…, StrictProjection), or one a sibling property in the same file draws across its domain. The test: replace every drawn value with one constant; if the branch taken and the expected answer stay the same, and the drawn values only pass through (equal on both sides, or echoed into the expected payload), the property is one example.
+Never write a literal for a command field the decision reads: a pinned value is one a wrong implementation can special-case. A literal is fine for a field the property's name states as its precondition, or one a sibling property in the file draws across its domain. Test: replace every drawn value with one constant; if the branch taken and the expected answer stay the same, the property is one example.
 
-Never commit arbitrary: { seed } on a property outside packages/runner/vitest/**: a seed pins every run to one input sequence. A fixed seed is for documentation and investigation; a failure is reproduced by its replay token (ARBITRARY.md), and pinning a seed or raising runs hides an unmet precondition instead of meeting it (small-budget-refutation-probe-misses-under-edge-bias.md).
+Never commit `arbitrary: { seed }` in a property: a seed pins every run to one input sequence. Reproduce a failure with its replay token. Never set `runs` in a property spec: it overrides every tier the shared config sets.
 
-Never set runs in a property spec: any explicit runs overrides every tier the shared config sets, 30 in a Stryker worker, 1000 in CI and 100 otherwise (vitest-config lib/base.js; the runner's mergedOptions).
+For a decision over a small finite domain (booleans, literals, a few tags), write one property that compares the whole table with a literal model written from the contract, with a cover class for every row.
 
-A decision over a small finite domain (booleans, literals, a few tags) has one property that compares the whole table with a literal model written from the contract, and a cover class for every row, so CoverageBelowMinimum fails a row the run never drew ("If your domain is small enough, why not check all the values in it?", Property-based testing part 4); the runner has no exhaustive enumeration today. Region properties beside it may fix fields their name's domain states, and Schema.Literals may list a claim's whole stated domain.
-
-The binder after ∀ or ∃ names a value drawn in `of` ("A property quantifies over a named input drawn from a generator", pbt-naming); a binder after → names the precondition the body fixes. A word in the domain or operand that claims something about the inputs (First, Any, WhateverTheBudgets, TracksItsLimit) names a range the body varies; an operand that names the output relation (a tag, a law, an oracle) is exempt.
-
-A case with fixed values is an example test through the public entry (the testing pack's behaviour tests), never an it.prop. Schema refusal properties follow refusal-properties-draw-from-the-base-type.md, and a failing generated law follows law-failures-are-codec-defects.md.
-
-Decision: the judge replaces every drawn value with one constant; if the branch taken and the expected answer stay the same and the drawn values only pass through, the property is one example and fails. It also fails on a literal for a field the decision reads that neither the property's name states as its precondition nor a sibling property draws across its domain, narrowing arithmetic inside holds, a committed arbitrary seed outside packages/runner/vitest/**, any runs in a property spec, a small finite decision with no whole-table property and a cover class per row, or a binder or domain word that names a range the body fixes. Whether a value is drawn, fixed by a stated precondition or pinned is the judge's call; an uncertain case escalates.
-
-Defect it prevents: a property that is one example in disguise. A wrong implementation special-cases the pinned value, or a seed or run count fixes one input sequence, and the property stays green.
+A case with fixed values is an example test through the public entry (testing pack), never an `it.prop`. Schema refusal properties follow the schema-modelling pack's refusal-properties-draw-from-the-base-type.md, and failing generated laws law-failures-are-codec-defects.md.
 
 ```typescript
 // WRONG: the drawn name never reaches the decision; mode, size, seed and runs are pinned
@@ -34,34 +26,3 @@ it.prop(
       'UploadRefused',
 )
 ```
-
-```typescript
-// RIGHT: the whole mode × size table against a literal model, every row covered
-// bodyOf and answerOf: boundaries-and-collisions-are-constructed.md
-it.prop(
-  '∀u_AdmitUpload_≡ContractTable',
-  {
-    of: [UploadName, StoreMode, Schema.Boolean, Schema.Literals(['a', 'é', '€', '😀'])],
-    subject: admitUpload,
-    cover: {
-      writeFits: [(_n, mode, over) => mode === 'read-write' && over === false, 0.15],
-      writeOver: [(_n, mode, over) => mode === 'read-write' && over === true, 0.15],
-      readFits: [(_n, mode, over) => mode === 'read-only' && over === false, 0.15],
-      readOver: [(_n, mode, over) => mode === 'read-only' && over === true, 0.15],
-    },
-  },
-  (subject, [name, mode, over, filler]) => {
-    const body = bodyOf(filler, over ? CAP + 1 : CAP)
-    const table = {
-      'read-write': { fits: `Admitted ${body}`, over: 'Oversized' },
-      'read-only': { fits: 'ReadOnly', over: 'ReadOnly' },
-    }
-    return answerOf(Result.getOrThrow(subject(new AdmitUpload({ name, mode, body })))) ===
-      table[mode][over ? 'over' : 'fits']
-  },
-)
-```
-
-Source: Scott Wlaschin, Property-based testing part 4 (https://fsharpforfunandprofit.com/posts/property-based-testing-4/): "If your domain is small enough, why not check all the values in it?" Property-based testing part 3 (https://fsharpforfunandprofit.com/posts/property-based-testing-3/), the EDFH and the magic Int32.MinValue.
-
-Gate: judge
