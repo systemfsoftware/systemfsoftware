@@ -7,74 +7,15 @@ applies_when:
 tags: [property-test, oracle, model, metamorphic, postcondition]
 ---
 
-The expected value never comes from the subject or from a replica. An expected value is a replica when it uses the predicate, formula, guard or constant the subject uses to choose its branch or compute its payload, found by following the subject module's imports transitively (admit-entry-write.workflow.ts reaches entryWireTextOf through entryWireUtf8Of), including a library predicate that is the decision's core (Cause.hasInterruptsOnly).
+Never take the expected value from the subject or a replica. A replica uses the predicate, formula, guard or constant the subject uses to choose its branch or compute its payload, found by following the subject module's imports transitively, including a library predicate that is the decision's core (`Cause.hasInterruptsOnly`). A combinator that only reads the output (`Match.tag`, `Schema.is` on one member) is not a replica, nor is a platform primitive the contract names as its measure (`TextEncoder`); the subject module's own wrapper around it is.
 
-A combinator that only reads the output (Match.tag, Schema.is on one member, Arr.join) is not a replica, and neither is a platform primitive the contract names as its measure (TextEncoder for UTF-8 bytes); the subject module's own wrapper around it is. A literal table of contract rows, or an expression over constructed parameters (offset, mode) that states the contract's sentences, is a model; an expression copied from decide over the command's fields is a replica.
+Write the oracle from the contract: a literal table of contract rows, an expression over constructed parameters that states the contract's sentences, a model simpler than the implementation that calls nothing from src/, a metamorphic relation, a round trip through an independent decoder, or a check that verifies an answer without recomputing it. Build the input so the contract fixes its answer (an offset past a cap is refused) rather than computing the answer from the input. Where the contract is a formula (a backoff delay), use values known by construction or a relation on the outputs (monotone in k, the cap reached at a known k).
 
-Where the contract is itself a formula (a backoff delay), the property uses values known by construction or a relation on the subject's outputs (monotone in k, the cap reached at a known k).
-
-An oracle is a postcondition written from the contract that ties the output to the drawn input, a model, a metamorphic relation, a round trip through an independent decoder, or a check that verifies an answer without recomputing it.
-
-An expected value is known by construction where it can be: build the input so the contract fixes its answer (an offset past a cap is refused), rather than computing the answer from the input.
-
-A model is simpler than the implementation and calls nothing from src/; a model that mirrors the implementation shares its bugs. it.law.model fails with SelfModelLaw only when the oracle is the subject itself (Object.is), so a wrapper such as (c) => subject(c) passes the runner and is refused here.
-
-An output recorded from the current code (a snapshot, a value copied from a run) is not an oracle.
-
-A check that only the output is well formed (a member of the decision union, Schema.is, a preserved length, Result.isSuccess on a workflow whose error is Schema.Never) is never a property's whole oracle; an empty, constant or identity implementation passes it.
-
-A conjunct that compares two values the test computed itself, or an order the test's own flattening guarantees, checks nothing about the subject: like prop_InsertComplete over trees the generator built with insert, it "can never fail" (How to Specify It).
-
-Decision: for each expected value in a property's predicate, the judge follows the subject module's imports transitively and fails the property when the expected value uses a predicate, formula, guard, constant or wrapper the subject uses to choose its branch or compute its payload, is an output recorded from the current code, is a shape-only check standing as the whole oracle, or is a conjunct comparing two values the test computed itself. A literal table of contract rows, an expression over constructed parameters, a combinator that only reads the output, or a platform primitive the contract names passes. Whether an expected value is a model or a replica is the judge's call; an uncertain case escalates.
-
-Defect it prevents: a replica oracle shares the subject's bugs, so a wrong measure or formula moves the test and the code together and the property stays green; a shape-only oracle passes an empty, constant or identity implementation.
+Never use an output recorded from the current code (a snapshot), a shape-only check as the whole oracle (a member of the decision union, `Schema.is`, a preserved length, `Result.isSuccess`: an empty, constant or identity implementation passes it), a conjunct comparing two values the test computed itself, or a wrapper `(c) => subject(c)` as an `it.law.model` oracle.
 
 ```typescript
-// WRONG: the expected bytes come from the size check and encoder decide itself uses (admittedTextOf: below)
+// WRONG: expected bytes come from the size check and encoder decide itself uses
 import { bodyFitsCap, bodyUtf8Of } from '../admit-upload.workflow.js'
-it.prop(
-  '→ReadWrite_AdmitUpload_≡AdmittedBytes',
-  { of: [AdmitUpload], subject: admitUpload },
-  (subject, [command]) =>
-    Equal.equals(
-      admittedTextOf(
-        Result.getOrThrow(subject(new AdmitUpload({ name: command.name, mode: 'read-write', body: command.body }))),
-      ),
-      bodyFitsCap(command.body)
-        ? Option.map(bodyUtf8Of(command.body), (b) => new TextDecoder().decode(b))
-        : Option.none(),
-    ),
-)
+// RIGHT: admitted bytes decode, through the platform's decoder, to the body that was built
+UploadAdmitted: ({ bytes }) => Option.some(new TextDecoder().decode(bytes))
 ```
-
-```typescript
-// RIGHT: admitted bytes decode, through the platform's decoder, to the body that was built; past the cap nothing is admitted
-// bodyOf: boundaries-and-collisions-are-constructed.md; read-only rows: ∀u_AdmitUpload_≡ContractTable
-const admittedTextOf = (admission: UploadAdmission): Option.Option<string> =>
-  Match.valueTags(admission, {
-    UploadAdmitted: ({ bytes }) => Option.some(new TextDecoder().decode(bytes)),
-    UploadRefused: () => Option.none(),
-  })
-it.prop(
-  '→ReadWrite_AdmitUpload_≡AdmittedBytesDecodeToBody',
-  {
-    of: [UploadName, Schema.Literals([-1, 0, 1]), Schema.Literals(['a', 'é', '€', '😀'])],
-    subject: admitUpload,
-    cover: {
-      fits: [(_n, offset) => offset === -1 || offset === 0, 0.3],
-      pastCap: [(_n, offset) => offset === 1, 0.15],
-    },
-  },
-  (subject, [name, offset, filler]) => {
-    const body = bodyOf(filler, CAP + offset)
-    return Equal.equals(
-      admittedTextOf(Result.getOrThrow(subject(new AdmitUpload({ name, mode: 'read-write', body })))),
-      offset <= 0 ? Option.some(body) : Option.none(),
-    )
-  },
-)
-```
-
-Source: John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf): prop_InsertComplete, over trees the generator built with insert, "can never fail".
-
-Gate: judge

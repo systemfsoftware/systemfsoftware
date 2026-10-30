@@ -203,9 +203,9 @@ The principles and design laws governing code in this repository live in standal
 - [Property Testing](compound-packs/property-testing): What makes a property test a real property: drawn inputs that reach the decision, constructed boundaries and collisions, an oracle independent of the code under test, coverage the run proves, reproducible evidence the property can fail, which properties a Workflow decider needs, and how a reviewer tells a smoke property from an unproven one.
 - [UI State](compound-packs/ui-state): How React component and hook code in an effect-atom application reads data, runs Effects and derives display values.
 - [UI Testing](compound-packs/ui-testing): How a UI's behaviour is proven by Storybook stories: where a story's I/O comes from, how its fakes stay fresh, how a journey reads, and how stories query, size and fail.
-- [Design System](compound-packs/design-system): How an app builds and styles UI with the Astryx design system through Tailwind: components and utilities, stylesheet order, roots, themes and navigation.
+- [Design System](compound-packs/design-system): How an app builds and styles UI with the Astryx design system through Tailwind: components, token utilities, where styles may be written, roots, themes and navigation.
 - [Screen Content](compound-packs/screen-content): What a user-facing screen shows and says: real data, claims the deployed product delivers, failure states that say what happened and what to do next, and copy without stock AI patterns.
-- [CI Workflows](compound-packs/ci-workflows): What each CI lane runs, how a pull-request job is set up and fails, who writes the cache, how long a job may run, and what CI never grades.
+- [CI Workflows](compound-packs/ci-workflows): What a CI check is for, and that CI never grades the repository itself.
 - [Public Repository](compound-packs/public-repository): What a public repository never contains: private repository, package and product names, private tracker ids or local filesystem paths.
 
 Concepts, definitions, and verification gates are indexed in [CONCEPTS.md](CONCEPTS.md).

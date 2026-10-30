@@ -1,74 +1,26 @@
 ---
-title: A boundary, a collision or a size unit the contract names is built by the generator, so every run reaches both sides
+title: A boundary, a collision or a size unit the contract names is built by the generator, and the property declares a coverage class for each region it is about
 applies_when:
   - a decision compares a value with a cap, a threshold, zero or an empty list
   - a branch runs only when drawn values line up (equal, matching a pattern, a member of a set, ordered)
   - a contract measures the size of drawn text in one unit (bytes, code points)
-tags: [property-test, generator, boundary, collision, size-unit]
+  - writing or changing a property in a *.workflow.property.test.ts
+  - a property's predicate holds trivially on some inputs, or its draws pass a precondition that discards some
+tags: [property-test, generator, boundary, collision, size-unit, coverage, cover]
 ---
 
-A boundary the contract names (a >= or <=, a cap, zero) is reached by construction: some property in the file draws an offset from a small range around the bound and builds the input from it, so the equal point and its neighbour on each side are drawn on every run. Never leave it to a uniform draw over a wide range, or to ranges built disjoint so the equal point is never drawn.
+Reach a boundary the contract names (a `>=` or `<=`, a cap, zero) by construction: some property draws an offset from a small range around the bound and builds the input from it, so the equal point and a neighbour on each side are drawn on every run. Never leave it to a uniform draw over a wide range or to ranges built disjoint.
 
-A branch that runs only when a drawn value has a structure a plain draw of its schema rarely produces (equal to another value or to a literal, matching a pattern, a member of a set, an ordering among elements) has a generator that builds that structure ("collisions … can be important test cases", How to Specify It).
+Give a branch that runs only when drawn values have a structure a plain draw rarely produces (equal to another value or a literal, matching a pattern, a member of a set, an ordering) a generator that builds that structure. Draw two values whose equality selects the branch from a small pool that yields both equal and unequal pairs; a same-value property goes beside the general one, never in place of it.
 
-Two values whose equality selects the branch are drawn from a generator that produces both equal and unequal pairs (a small pool), with a cover class for each. A same-value property, if written, is added beside the general property and never replaces it: with one key, "an implementation of insert that discarded the original tree entirely would still pass" (How to Specify It, prop_InsertPost).
+When the contract measures size in one unit, draw values whose size differs across units (multi-byte code points for a byte cap) and build the input to its target size with the platform measure the contract names (`TextEncoder` for UTF-8 bytes), never a helper of the subject's module. Assert the built input has the size it was built to.
 
-When the contract measures size in one unit, the generator draws values whose size differs across units (multi-byte code points for a byte cap), the input is built to its target size with the platform measure the contract names (TextEncoder for UTF-8 bytes), never a helper of the subject's module, and "characters counted for bytes" is a named wrong implementation (properties-are-shown-to-fail.md).
-
-A construction is itself checked: a conjunct asserts the built input has the size it was built to ("Test your tests", How to Specify It).
-
-Replacing a wide draw with a construction that reaches the same boundary on every run, with cover proving it, is not narrowing; a construction never replaces a draw that refuted the property (failing-tests-are-fixed-not-weakened.md).
-
-Decision: for each boundary, branch structure and size unit the contract names, the judge finds the property in the file that builds it: an offset drawn from a small range around the bound so the equal point and a neighbour on each side are drawn on every run; a generator that builds the structure the branch needs, with equal and unequal pairs each covered; drawn values whose size differs across units, built to size with the platform measure the contract names; and a conjunct asserting the built size. A boundary, structure or unit left to a uniform draw over a wide range, or ranges built disjoint so the equal point is never drawn, fails. Whether each is built is the judge's call; an uncertain case escalates.
-
-Defect it prevents: a decision that is wrong only at the equal point, on a collision or on multi-byte text passes every run, because a uniform draw almost never produces that input and an ASCII body makes characters equal bytes.
+Declare `cover` on every workflow property: one class for each input region that selects a tag the claim is about and one for each side of each boundary. A class predicate reads only the drawn inputs, classifies from the contract (`offset === 0`), never a constant, never by decision tag, and never recomputes `decide`. Its minimum is at least 0.05; a rarer region gets a generator that builds it. A region reached on every draw by construction declares no class and names the construction in a one-line comment. A guard branch that returns true without checking the output, and a precondition that discards draws (`fc.pre`, `.filter`), each get a class for the region they keep. Line coverage, a run count or a pass count never shows a region was reached.
 
 ```typescript
-// WRONG: a uniform string draw never crosses the cap, and an ASCII body makes characters equal bytes
-it.prop(
-  '∀u_AdmitUpload_→OversizedPastCap',
-  { of: [AdmitUpload], subject: admitUpload },
-  (subject, [command]) =>
-    Result.getOrThrow(subject(command))._tag ===
-      (command.mode === 'read-write' && command.body.length <= CAP ? 'UploadAdmitted' : 'UploadRefused'),
-)
+// WRONG: a uniform draw never crosses the cap, and ASCII makes characters equal bytes
+(subject, [command]) => Result.getOrThrow(subject(command))._tag === (command.body.length <= CAP ? 'UploadAdmitted' : 'UploadRefused')
+// RIGHT: offset and filler are drawn; the body is built to CAP + offset bytes
+of: [UploadName, StoreMode, Schema.Literals([-2, -1, 0, 1, 2]), Schema.Literals(['a', 'é', '€', '😀'])],
+cover: { atCap: [(_n, mode, offset) => mode === 'read-write' && offset === 0, 0.05], pastCap: [(_n, mode, offset) => mode === 'read-write' && offset === 1, 0.05] },
 ```
-
-```typescript
-// RIGHT: offset and filler are drawn inline; the platform's UTF-8 measure, not the subject's module, builds the body to CAP + offset bytes
-const bytesOf = (text: string): number => new TextEncoder().encode(text).byteLength
-const bodyOf = (filler: string, bytes: number): string =>
-  filler.repeat(Math.floor(bytes / bytesOf(filler))) + 'a'.repeat(bytes % bytesOf(filler))
-const answerOf = (admission: UploadAdmission): string =>
-  Match.valueTags(admission, {
-    UploadAdmitted: ({ bytes }) => `Admitted ${new TextDecoder().decode(bytes)}`,
-    UploadRefused: ({ reason }) => reason,
-  })
-it.prop(
-  '∀u_AdmitUpload_→OversizedPastCap',
-  {
-    of: [UploadName, StoreMode, Schema.Literals([-2, -1, 0, 1, 2]), Schema.Literals(['a', 'é', '€', '😀'])],
-    subject: admitUpload,
-    cover: {
-      belowCap: [(_n, mode, offset) => mode === 'read-write' && offset === -1, 0.05],
-      atCap: [(_n, mode, offset) => mode === 'read-write' && offset === 0, 0.05],
-      pastCap: [(_n, mode, offset) => mode === 'read-write' && offset === 1, 0.05],
-      multiByteAtEdge: [
-        (_n, mode, offset, filler) => mode === 'read-write' && filler !== 'a' && (offset === 0 || offset === 1),
-        0.05,
-      ],
-      readOnly: [(_n, mode) => mode === 'read-only', 0.3],
-    },
-  },
-  (subject, [name, mode, offset, filler]) => {
-    const body = bodyOf(filler, CAP + offset)
-    return bytesOf(body) === CAP + offset &&
-      answerOf(Result.getOrThrow(subject(new AdmitUpload({ name, mode, body })))) ===
-        (mode === 'read-only' ? 'ReadOnly' : offset <= 0 ? `Admitted ${body}` : 'Oversized')
-  },
-)
-```
-
-Source: John Hughes, How to Specify It! (https://research.chalmers.se/publication/517894/file/517894_Fulltext.pdf): "collisions … can be important test cases"; with one key, "an implementation of insert that discarded the original tree entirely would still pass"; "Test your tests."
-
-Gate: judge

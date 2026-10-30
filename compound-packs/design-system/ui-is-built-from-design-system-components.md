@@ -7,28 +7,13 @@ applies_when:
 tags: [design-system, astryx, components, layout]
 ---
 
-An element whose role is one an @astryxdesign/core component serves (button, link, text input, select, checkbox, dialog, drawer, menu, tabs, tooltip, toast, card, badge, stack or other layout) is that component, imported from @astryxdesign/core. It is never a hand-built element doing the same job, a copy of the component's source kept in the app (astryx swizzle output included), or a component from another library such as shadcn/ui, installed or copied in.
+Render an element whose role an `@astryxdesign/core` component serves (button, link, text input, select, checkbox, dialog, drawer, menu, tabs, tooltip, toast, card, badge, stack or other layout) as that component. Never hand-build an element doing the same job, keep a copy of the component's source in the app (`astryx swizzle` output included), or use a component from another library such as shadcn/ui. A lookalike misses the package's fixes, keyboard and screen-reader behaviour, theme overrides and codemods. `npx @astryxdesign/cli component --list` lists what exists.
 
-Spacing between children, alignment and padding of a group are set through the props of Astryx layout components (Stack, VStack, HStack, Layout, Card padding); never a div or span given flex, gap or padding classes to do what those props do.
-
-Decision test: for each element the diff adds, name its role. If `npx @astryxdesign/cli component --list` lists a component for that role and the element is not that component imported from @astryxdesign/core, the diff fails. A div or span whose classes are only flex, gap, items-_, justify-_ or p-* around children fails.
-
-Defect it prevents: a lookalike or ejected copy does not receive the package's fixes, keyboard and screen-reader behaviour, theme overrides or upgrade codemods, so it drifts from every other instance of the same control.
+Set spacing between children, alignment and group padding through the props of Astryx layout components (`Stack`, `VStack`, `HStack`, `Layout`, `Card` padding), never a `div` or `span` given flex, gap or padding classes to do what those props do.
 
 ```tsx
 // WRONG
-<div className='flex flex-col gap-3 p-4'>
-  <button className='rounded-md bg-surface px-3' onClick={save}>Save</button>
-</div>
-```
-
-```tsx
+<div className='flex flex-col gap-3 p-4'><button className='rounded-md bg-surface px-3' onClick={save}>Save</button></div>
 // RIGHT
-<VStack gap={3} padding={4}>
-  <Button label='Save' onClick={save} />
-</VStack>
+<VStack gap={3} padding={4}><Button label='Save' onClick={save} /></VStack>
 ```
-
-Source: @astryxdesign/core README (Component Docs: look a component up with `astryx component`; Astryx CLI: `swizzle` ejects component source for customization).
-
-Gate: judge
