@@ -19,8 +19,11 @@ Validity, `it.law.invariant`, bound checks, `it.law.idempotent`, `it.law.determi
 
 ```typescript
 // WRONG: a constant or identity decide passes every property
-it.prop('∀u_AdmitUpload_∈UploadAdmission', { of: [AdmitUpload], subject: admitUpload },
-  (subject, [command]) => Schema.is(UploadAdmission)(Result.getOrThrow(subject(command))))
+it.prop(
+  '∀u_AdmitUpload_∈UploadAdmission',
+  { of: [AdmitUpload], subject: admitUpload },
+  (subject, [command]) => Schema.is(UploadAdmission)(Result.getOrThrow(subject(command))),
+)
 // RIGHT: table, boundary, exact-payload and ignored-field properties
 // ∀u_AdmitUpload_≡ContractTable · ∀u_AdmitUpload_→OversizedPastCap · →ReadWrite_AdmitUpload_≡AdmittedBytesDecodeToBody · ∀u_AdmitUpload_=IgnoresName
 ```

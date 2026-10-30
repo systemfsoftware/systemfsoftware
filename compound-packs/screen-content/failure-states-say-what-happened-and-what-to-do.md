@@ -13,9 +13,15 @@ Never render the error's own text (its message, a serialised error, a stack trac
 
 ```tsx
 // WRONG
-{error && <Alert>{error.message}</Alert>}
+{
+  error && <Alert>{error.message}</Alert>
+}
 // RIGHT
-{error?.kind === 'card-declined' && (
-  <Alert>Your card was declined, so the order was not placed. <Button onClick={chooseAnotherCard}>Use another card</Button></Alert>
-)}
+{
+  error?.kind === 'card-declined' && (
+    <Alert>
+      Your card was declined, so the order was not placed. <Button onClick={chooseAnotherCard}>Use another card</Button>
+    </Alert>
+  )
+}
 ```

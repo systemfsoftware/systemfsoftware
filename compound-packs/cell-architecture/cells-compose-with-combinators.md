@@ -13,8 +13,8 @@ Never call `.run` on one cell and pass its answer to another cell's `.run`, run 
 
 ```typescript
 // WRONG
-const validated = yield* validateCell.run(command)
-return yield* chargeCell.run(validated)
+const validated = yield * validateCell.run(command)
+return yield * chargeCell.run(validated)
 // RIGHT
 export const placeOrderCell = validateCell.pipe(Cell.andThen(chargeCell))
 ```

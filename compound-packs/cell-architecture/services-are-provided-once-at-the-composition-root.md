@@ -15,6 +15,6 @@ Never call `Effect.provide` with a Layer, `Layer.build` or `Cell.provideContext`
 // WRONG: order-routes.ts
 placeOrderCell.run(request).pipe(Effect.provide(PostgresLedger.layer({ schema: 'billing' })))
 // RIGHT: order-routes.ts keeps Ledger in the requirement type; main.ts builds it once
-const context = yield* Layer.build(LedgerLive)
+const context = yield * Layer.build(LedgerLive)
 const placeOrder = Cell.provideContext(placeOrderCell, context)
 ```

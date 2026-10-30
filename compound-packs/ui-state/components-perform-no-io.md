@@ -19,9 +19,17 @@ This keeps responses from racing out of order, keeps inputs a story can set, and
 
 ```tsx
 // WRONG
-useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
+useEffect(() => {
+  const t = setInterval(() => setNow(Date.now()), 30_000)
+  return () => clearInterval(t)
+}, [])
 useEffect(() => localStorage.setItem('sync-view', view), [view])
 // RIGHT
 export const nowAtom = appRuntime.atom(DateTime.now).pipe(Atom.withRefresh('30 seconds'))
-export const syncViewAtom = Atom.kvs({ runtime: appRuntime, key: 'sync-view', schema: SyncView, defaultValue: () => 'list' })
+export const syncViewAtom = Atom.kvs({
+  runtime: appRuntime,
+  key: 'sync-view',
+  schema: SyncView,
+  defaultValue: () => 'list',
+})
 ```

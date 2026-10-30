@@ -16,7 +16,9 @@ Write an operation that would be a method (a value derived from one instance, a 
 ```typescript
 // WRONG
 export class Order extends S.TaggedClass<Order>()('Order', { qty: Quantity }) {
-  withQty(qty: Quantity) { return Order.make({ ...this, qty }) }
+  withQty(qty: Quantity) {
+    return Order.make({ ...this, qty })
+  }
 }
 // RIGHT
 export const Order = S.TaggedStruct('Order', { qty: Quantity })

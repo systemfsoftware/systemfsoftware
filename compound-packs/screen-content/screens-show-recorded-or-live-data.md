@@ -13,5 +13,7 @@ Read every number, person, count, rating, review, testimonial, customer logo and
 // WRONG
 const stats = [{ label: 'Teams', value: '12,000+' }]
 // RIGHT
-{account.teamCount === 0 ? <NoTeamsYet /> : <Stat label='Teams' value={account.teamCount} />}
+{
+  account.teamCount === 0 ? <NoTeamsYet /> : <Stat label='Teams' value={account.teamCount} />
+}
 ```

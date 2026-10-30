@@ -14,6 +14,9 @@ Prove a refusal no consumer can observe with a refusal property that passes the 
 // WRONG: draws only accepted values
 it.prop('Amount decodes', { of: [Amount], subject: amountDecodes }, (subject, [value]) => subject(value))
 // RIGHT: draws from the base type, judges by "an amount is a finite number of zero or more"
-it.prop('Amount refusal', { of: [S.Finite], subject: amountDecodes }, (subject, [value]) =>
-  Arr.every(Arr.append(seeds, value), (n) => subject(n) === (Number.isFinite(n) && n >= 0)))
+it.prop(
+  'Amount refusal',
+  { of: [S.Finite], subject: amountDecodes },
+  (subject, [value]) => Arr.every(Arr.append(seeds, value), (n) => subject(n) === (Number.isFinite(n) && n >= 0)),
+)
 ```

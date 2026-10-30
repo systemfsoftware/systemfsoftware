@@ -20,7 +20,10 @@ An empty API report diff does not prove the surface unchanged: API Extractor rea
 
 ```markdown
 <!-- WRONG: a rename at 0.4.2 -->
+
 "@example/inventory-client": patch
+
 <!-- RIGHT: a rename is a removal plus an addition -->
+
 "@example/inventory-client": major
 ```

@@ -17,7 +17,9 @@ Application code reads settings with `yield* <Feature>Config` and never takes a 
 ```typescript
 // WRONG
 export const sendReceipt = (receipt: Receipt, smtpHost: string) =>
-  Effect.gen(function*() { const from = yield* Config.String('MAILER_FROM') /* ... */ })
+  Effect.gen(function*() {
+    const from = yield* Config.String('MAILER_FROM') /* ... */
+  })
 // RIGHT
 export const sendReceipt = Effect.fn('sendReceipt')(function*(receipt: Receipt) {
   const { smtpHost, from } = yield* MailerConfig

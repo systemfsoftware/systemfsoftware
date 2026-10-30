@@ -16,6 +16,10 @@ export const decorators = [(Story) => <Story />]
 // RIGHT
 import '../src/global.css'
 export const decorators = [(Story) => (
-  <Theme theme={brandTheme} mode='light'><LinkProvider component={RouterLink}><Story /></LinkProvider></Theme>
+  <Theme theme={brandTheme} mode='light'>
+    <LinkProvider component={RouterLink}>
+      <Story />
+    </LinkProvider>
+  </Theme>
 )]
 ```

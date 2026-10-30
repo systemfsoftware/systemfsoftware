@@ -18,6 +18,11 @@ A case with fixed values is an example test through the public entry (testing pa
 
 ```typescript
 // WRONG: the drawn name never reaches the decision; mode, size, seed and runs are pinned
-it.prop('∀u_AdmitUpload_→OversizedPastCap', { of: [UploadName], subject: admitUpload, runs: 100, arbitrary: { seed: 500_012 } },
-  (subject, [name]) => Result.getOrThrow(subject(new AdmitUpload({ name, mode: 'read-write', body: 'a'.repeat(CAP + 1) })))._tag === 'UploadRefused')
+it.prop(
+  '∀u_AdmitUpload_→OversizedPastCap',
+  { of: [UploadName], subject: admitUpload, runs: 100, arbitrary: { seed: 500_012 } },
+  (subject, [name]) =>
+    Result.getOrThrow(subject(new AdmitUpload({ name, mode: 'read-write', body: 'a'.repeat(CAP + 1) })))._tag ===
+      'UploadRefused',
+)
 ```

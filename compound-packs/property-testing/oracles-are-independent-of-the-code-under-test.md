@@ -17,5 +17,6 @@ Never use an output recorded from the current code (a snapshot), a shape-only ch
 // WRONG: expected bytes come from the size check and encoder decide itself uses
 import { bodyFitsCap, bodyUtf8Of } from '../admit-upload.workflow.js'
 // RIGHT: admitted bytes decode, through the platform's decoder, to the body that was built
-UploadAdmitted: ({ bytes }) => Option.some(new TextDecoder().decode(bytes))
+UploadAdmitted: ;
+;(({ bytes }) => Option.some(new TextDecoder().decode(bytes)))
 ```

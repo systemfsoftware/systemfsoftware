@@ -16,8 +16,8 @@ Where a host contract requires an object-shaped export (a plugin object the host
 ```ts
 // WRONG
 export * as Stock from './stock.js'
-export { reserve } from './stock.js'               // the same declaration flat as well
-export { reserve as holdStock } from './stock.js'  // alias left behind by a rename
+export { reserve } from './stock.js' // the same declaration flat as well
+export { reserve as holdStock } from './stock.js' // alias left behind by a rename
 // RIGHT
 export * as Stock from './stock.js'
 ```

@@ -12,9 +12,14 @@ Write the handle's operations as functions exported from its module, with `dual(
 
 ```typescript
 // WRONG
-Handle.make<{ readonly id: string; readonly client: Client; readonly query: (sql: string) => Effect.Effect<Rows> }>()(TypeId)
+Handle.make<{ readonly id: string; readonly client: Client; readonly query: (sql: string) => Effect.Effect<Rows> }>()(
+  TypeId,
+)
 // RIGHT
 const ConnectionKind = Handle.make<{ readonly id: string }, Client>()(TypeId) // not exported
-export const query = dual(2, (self: Connection, sql: string) =>
-  Effect.tryPromise({ try: () => ConnectionKind.slot(self).query(sql), catch: (cause) => new QueryError({ cause }) }))
+export const query = dual(
+  2,
+  (self: Connection, sql: string) =>
+    Effect.tryPromise({ try: () => ConnectionKind.slot(self).query(sql), catch: (cause) => new QueryError({ cause }) }),
+)
 ```

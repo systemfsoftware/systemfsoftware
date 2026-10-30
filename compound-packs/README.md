@@ -30,19 +30,19 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 
 ## Packs
 
-| Pack | Holds |
-|---|---|
-| `cell-architecture` | File kinds, adapters, layers, handles, scopes and cell composition for `effect-cell-types` |
-| `schema-modelling` | Effect Schema invariants, states, foreign wire shapes and generated laws |
-| `configuration` | How settings are declared, redacted and reach code |
-| `package-surface` | What a package exports, and the bump a surface change takes |
-| `testing` | Behaviour tests, fakes, adapters, mutants, and that configuration gets no test |
-| `integration-testing` | Where an integration test's IO runs |
-| `e2e-testing` | Where end-to-end tests live |
-| `property-testing` | What makes a property a real property |
-| `ui-state` | Atoms, commands and derivations in React code |
-| `ui-testing` | Storybook journeys, stand-ins and queries |
-| `design-system` | Building and styling UI with Astryx |
-| `screen-content` | What screens show and say |
-| `ci-workflows` | What a CI check is for |
-| `public-repository` | What a public repository never publishes |
+| Pack                  | Holds                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `cell-architecture`   | File kinds, adapters, layers, handles, scopes and cell composition for `effect-cell-types` |
+| `schema-modelling`    | Effect Schema invariants, states, foreign wire shapes and generated laws                   |
+| `configuration`       | How settings are declared, redacted and reach code                                         |
+| `package-surface`     | What a package exports, and the bump a surface change takes                                |
+| `testing`             | Behaviour tests, fakes, adapters, mutants, and that configuration gets no test             |
+| `integration-testing` | Where an integration test's IO runs                                                        |
+| `e2e-testing`         | Where end-to-end tests live                                                                |
+| `property-testing`    | What makes a property a real property                                                      |
+| `ui-state`            | Atoms, commands and derivations in React code                                              |
+| `ui-testing`          | Storybook journeys, stand-ins and queries                                                  |
+| `design-system`       | Building and styling UI with Astryx                                                        |
+| `screen-content`      | What screens show and say                                                                  |
+| `ci-workflows`        | What a CI check is for                                                                     |
+| `public-repository`   | What a public repository never publishes                                                   |
