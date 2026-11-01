@@ -14,7 +14,7 @@ axe fails an `img`, `input[type=image]`, `svg[role=img]` or `[role=img]` with no
 - No accessible name of an image is a file name, a URL, or only a word such as "image", "photo", "picture", "graphic", "icon" or "logo".
 - The test prints each page's image names for review.
 
-Decorative is a choice the source makes: the site's image component's props are `{ alt: string }` with a non-empty string, or `{ decorative: true }`, which renders `alt=""`; pages never render a bare `<img>`. Review (judge) reads the printed names: each states what the image tells a person on that page.
+Decorative is a choice the source makes: the site's image component's props are `{ alt: string }` with a non-empty string, or `{ decorative: true }`, which renders `alt=""`; pages never render a bare `<img>`. The reviewer reads the printed names.
 
 ```astro
 <!-- WRONG -->
@@ -24,4 +24,4 @@ Decorative is a choice the source makes: the site's image component's props are 
 <Image src={swirl} decorative />
 ```
 
-Gate: the page suite's `alternatives` test; typecheck of the image component's props; review (judge) of the printed names.
+Gate: the page suite's `alternatives` test; typecheck of the image component's props; review — the reviewer confirms each printed name states what the image tells a person on that page.

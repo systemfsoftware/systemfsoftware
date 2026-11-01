@@ -11,13 +11,13 @@ One Playwright Test suite in the site's E2E package runs against the served buil
 | Check           | Matrix                             | Rule                                                                |
 | --------------- | ---------------------------------- | ------------------------------------------------------------------- |
 | `axe`           | scheme × width                     | `built-pages-pass-axe-in-every-scheme-and-width.md`                 |
-| `contrast`      | scheme × width                     | `contrast-axe-cannot-compute-is-measured-from-pixels.md`            |
+| `contrast`      | scheme × width                     | `contrast-axe-cannot-compute-is-reviewed-or-measured.md`            |
 | `keyboard`      | width                              | `every-control-is-reached-and-operated-by-keyboard.md`              |
 | `focus`         | scheme × width, and forced colours | `focus-is-visible-and-never-hidden.md`                              |
 | `pointer`       | width                              | `pointer-targets-are-24-px-and-dragging-has-a-click-alternative.md` |
-| `reflow`        | once, at 320                       | `pages-reflow-at-320-px-and-keep-their-text-when-it-grows.md`       |
-| `text`          | once, at 1280                      | `pages-reflow-at-320-px-and-keep-their-text-when-it-grows.md`       |
-| `motion`        | width, reduced motion              | `reduced-motion-stills-the-page.md`                                 |
+| `reflow`        | once, at 320                       | `pages-survive-200-percent-zoom-reflow-and-text-spacing.md`         |
+| `text`          | once, at 200% zoom and spacing     | `pages-survive-200-percent-zoom-reflow-and-text-spacing.md`         |
+| `motion`        | width, reduced and no preference   | `motion-honours-reduced-motion-and-can-be-paused.md`                |
 | `forced-colors` | width, forced colours              | `forced-colors-keep-every-control-and-state-visible.md`             |
 | `structure`     | once                               | `a-page-has-one-h1-a-unique-title-and-a-skip-link.md`               |
 | `alternatives`  | once                               | `images-and-graphics-state-what-they-show.md`                       |

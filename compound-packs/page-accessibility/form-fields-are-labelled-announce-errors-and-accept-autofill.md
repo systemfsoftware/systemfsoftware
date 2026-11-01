@@ -14,7 +14,7 @@ axe fails a field with no name (`label`), a field named only by a hidden label o
 - Autocomplete: every `input`, `select` and `textarea` has an `autocomplete` attribute. A field asking for the person's own data uses its HTML token (`name`, `email`, `tel`, `organization`, `street-address`, `postal-code`); others say `off`.
 - Authentication (WCAG 3.3.8): a password field says `current-password` or `new-password` and a one-time code `one-time-code`; the test pastes text into each field from the keyboard and the value arrives.
 
-Review (judge) checks that each token matches its label, that no CAPTCHA puzzle stands without a non-puzzle route, and that a multi-step form never asks again for what an earlier step collected (WCAG 3.3.7).
+The reviewer checks that each token matches its label, that no CAPTCHA puzzle stands without a non-puzzle route, and that a multi-step form never asks again for what an earlier step collected (WCAG 3.3.7).
 
 ```html
 <!-- WRONG -->
@@ -25,4 +25,4 @@ Review (judge) checks that each token matches its label, that no CAPTCHA puzzle 
 <p id="email-error" hidden>Enter an email address, like name@example.com</p>
 ```
 
-Gate: the page suite's `forms` test; review (judge) for token choice, CAPTCHA and repeated entry.
+Gate: the page suite's `forms` test; review — the reviewer confirms each token matches its label, no CAPTCHA puzzle stands without a non-puzzle route, and no step asks again for what an earlier one collected.

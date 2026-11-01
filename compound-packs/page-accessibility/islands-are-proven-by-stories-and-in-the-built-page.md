@@ -15,4 +15,4 @@ WRONG  the newsletter island has stories, so its page is left out of the page su
 RIGHT  newsletter-signup.stories.tsx proves the journey; the page suite tests / with the island hydrated
 ```
 
-Gate: review (judge) checks that each island has stories and that every page using it is in the page suite's built page list.
+Gate: review — the reviewer confirms each island has stories and that every page using it is in the page suite's built page list.

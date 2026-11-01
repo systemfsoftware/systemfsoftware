@@ -17,4 +17,4 @@ tags: [accessibility, target-size, dragging, pointer, wcag22, page-suite]
 <a href="/rss" class="inline-grid size-6 place-items-center">…</a>
 ```
 
-Gate: the page suite's `pointer` test fails an incomplete target that is undersized and crowded; review (judge) checks each drag handler the test lists against its island's single-click journey.
+Gate: the page suite's `pointer` test fails an incomplete target that is undersized and crowded; review — the reviewer matches each drag handler the test lists to a single-click journey in its island's stories.

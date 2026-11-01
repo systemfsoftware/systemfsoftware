@@ -16,7 +16,7 @@ Test the site as it ships. Build it, serve the build output the deploy uploads w
 - Ready: check only after every island has hydrated (no `astro-island[ssr]` is left; scroll so `client:visible` islands load) and `document.fonts.ready` has resolved.
 - axe: `new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])`. The `wcag22aa` tag also runs `target-size`, which axe leaves off by default.
 - Any violation fails the test and is printed with its rule id, selector, page, scheme and width. Never call `disableRules` or `exclude`, turn a rule off through `options`, filter violations, allow a count of them, or skip a page, globally or for one page: fix the page.
-- Print every incomplete ("needs review") result in the run's output with its rule id, selector and reason, and attach the list to the report. Incomplete colour results are measured (contrast-axe-cannot-compute-is-measured-from-pixels.md); the rest are read in review.
+- Print every incomplete ("needs review") result in the run's output with its rule id, selector and reason, and attach the list to the report. Incomplete colour results get screenshots (contrast-axe-cannot-compute-is-reviewed-or-measured.md); the reviewer reads the rest.
 
 ```typescript
 // WRONG: one scheme, one width, a rule switched off and a component render
@@ -28,4 +28,4 @@ printNeedsReview(incomplete, { path, colorScheme, width })
 expect(violations).toEqual([])
 ```
 
-Gate: the page suite's `axe` test fails on any violation in any page × scheme × width; review rejects any exclusion, disabled rule, violation filter, allowance or skipped page in the suite.
+Gate: the page suite's `axe` test fails on any violation in any page × scheme × width; review — the reviewer rejects any exclusion, disabled rule, violation filter, allowance or skipped page in the suite.

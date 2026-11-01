@@ -23,4 +23,4 @@ await expect(page.getByRole('region', { name: 'Pricing' })).toMatchAriaSnapshot(
 `)
 ```
 
-Gate: the page suite's `aria-snapshot` test fails on a changed role, name, level or state; review reads every snapshot diff.
+Gate: the page suite's `aria-snapshot` test fails on a changed role, name, level or state; review — the reviewer reads every snapshot diff as a change to what a person hears.
