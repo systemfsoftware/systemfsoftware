@@ -1,6 +1,6 @@
 # Compound Packs
 
-A Compound Pack ingests domain knowledge into the steps of Compound Engineering at runtime. Each pack in this folder is a set of prescriptive rules that `ce-brainstorm` and `ce-plan` ground requirements and plans in, and that `ce-code-review` and `ce-doc-review` flag work against. Every constraint a pack shapes is cited as `(pack: <id>, <path within the pack>)`, so a reader can trace it to its file. A rule's text is evidence that those steps quote, not an enforcement contract: no rule here asks for a new test, gate, check or CI job.
+A Compound Pack ingests domain knowledge into the steps of Compound Engineering at runtime. Each pack in this folder is a set of prescriptive rules that `ce-brainstorm` and `ce-plan` ground requirements and plans in, and that `ce-code-review` and `ce-doc-review` flag work against. Every constraint a pack shapes is cited as `(pack: <id>, <path within the pack>)`, so a reader can trace it to its file. A rule's text is evidence that those steps quote, not an enforcement contract: no rule here asks for a new test, gate, check or CI job, except in `page-accessibility`, whose rules are the page tests the owner asked for and each end with a `Gate:` line.
 
 Packs are declared in `.compound-engineering/config.yaml` and are never scanned. Other repositories declare packs from this folder by git source, `ref` and `path: compound-packs`.
 
@@ -42,6 +42,7 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 | `property-testing`    | What makes a property a real property                                                      |
 | `ui-state`            | Atoms, commands and derivations in React code                                              |
 | `ui-testing`          | Storybook journeys, stand-ins and queries                                                  |
+| `page-accessibility`  | Accessibility tests of a static or island site's built pages                               |
 | `design-system`       | Building and styling UI with Astryx                                                        |
 | `screen-content`      | What screens show and say                                                                  |
 | `ci-workflows`        | What a CI check is for                                                                     |

@@ -7,6 +7,7 @@ packs:
   - source: compound-packs/property-testing
   - source: compound-packs/ui-state
   - source: compound-packs/ui-testing
+  - source: compound-packs/page-accessibility
   - source: compound-packs/design-system
   - source: compound-packs/screen-content
   - source: compound-packs/ci-workflows
