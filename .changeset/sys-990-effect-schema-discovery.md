@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/effect-schema-discovery": none
+"@systemfsoftware/effect-schema-discovery": patch
 ---
 
-No release: the packed tarball is byte-identical to main (SHA-256 verified); only the Turbo build hash moved after the workspace dependency upgrade.
+Repacked: its workspace dependency ranges follow this release's patch bumps.
