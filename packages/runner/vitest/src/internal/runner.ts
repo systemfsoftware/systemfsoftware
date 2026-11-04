@@ -703,7 +703,7 @@ const freshBlock = <R, E>(
   const makeIt = (it: V.TestAPI): Vitest.Vitest.MethodsNonLive<R> =>
     methodsFor<R>(
       (effect, env) =>
-        effect.pipe(Effect.scoped, (scoped) => Effect.provide(scoped, Layer.orDie(Layer.fresh(withTestEnv(env))))),
+        effect.pipe(Effect.scoped, (scoped) => Effect.provide(scoped, withTestEnv(env).pipe(Layer.fresh, Layer.orDie))),
       it,
       perRun,
       true,
