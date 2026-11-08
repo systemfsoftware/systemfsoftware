@@ -1,21 +1,39 @@
 ---
-title: The mutable state of a service, adapter, blueprint or handle is created inside its constructor, never at module scope
+title: Mutable state belongs to its instance, never to a module
 applies_when:
-  - keeping a cache, counter, registry or connection table inside a service, adapter, blueprint or handle
-  - adding a module-level let, var, Map, Set, WeakMap or Ref to a library module
-tags: [service, state, module-scope, layer, handle]
+  - adding a cache, counter, registry, connection, client or memo table
+  - declaring module-level state in a library, application or composition root
+  - carrying request context into a callback
+tags: [cell, state, module-scope, layer, request-context]
 ---
 
-Create the state an instance reads and writes (a cache, a counter, a table of open connections) inside the Effect that builds the instance: the service's `make`, the Layer's constructor, the blueprint's scoped target, or the code that mints the handle. Each build then owns its own state, so two tests in one worker or two tenants never share it.
+Module-level state is a top-level binding or module-retained closure whose binding, reachable properties, collection entries or captured data can change after module evaluation. Never declare top-level `let` or `var`, a mutable `Map`, `Set`, `WeakMap`, `WeakSet`, array, object, `Ref`, client or stateful class instance, or a lazy closure that retains a value. Weak keys do not change the lifetime rule.
 
-A library module holds no module-level `let` or `var`, and no module-level `const` bound to a mutable container (Map, Set, WeakMap, Ref, MutableRef, or an array or object written later). Immutable module-level values (a schema, a frozen lookup table, a constant) are fine, and a composition root's own values are outside this rule.
+Module-level `const` may hold an immutable value, a pure function without mutable captures, or an inert Schema or Layer description. Deeply immutable means no reachable data or captured state can change through any retained reference; `readonly` and a shallow `Object.freeze` do not prove it. A function may build a fresh immutable table on each call without retaining it. A `Context.Service` key is an identity, not a service instance; a `Context.Reference` default retaining mutable state is not exempt.
+
+Create mutable state inside the owning cell's service, Layer, blueprint or handle constructor. Acquire and release connections, pools, clients and sockets in a scoped service or Layer. Read application settings from the feature configuration service; only library-adapter Layer options may receive configuration explicitly (pack: configuration, settings-reach-code-through-context.md).
+
+A cache is justified only by all three, in order: a stated production latency, throughput or cost budget; production telemetry or a production-representative load measurement showing the uncached path misses it; and a measurement showing the cached path meets it under the same load. A benchmark speedup alone, faster tests or CI, or “it is faster” is not evidence. Even then, the cache belongs to the cell's scoped service or `Ref`, with its lifetime bound to the scope, never to the module. For slow properties, see (pack: schema-modelling, diagnose-slow-properties-before-optimizing.md).
+
+The only mutable module-scope exception is an `AsyncLocalStorage` carrying request context across a callback boundary whose signature this repository does not own and cannot change: a third-party library or runtime invokes our callback outside any Effect context and provides no parameter or context slot for the value. Demonstrate the use by citing the external API's package, version, symbol and callback signature showing the absent slot, identifying carrier lifetime and cleanup, and demonstrating request isolation. A boundary between functions this repository owns never qualifies, however many files explicit parameters or an Effect service would touch.
 
 ```typescript
-// WRONG: shared by every instance
-const entries = new Map<CacheKey, CacheEntry>()
-// RIGHT
-export const make = Effect.sync(() => {
-  const entries = new Map<CacheKey, CacheEntry>() // one per built layer
-  return { get: (key: CacheKey) => Effect.sync(() => Option.fromNullishOr(entries.get(key))) }
+// WRONG: shared memo state, even with weak keys; our own handlers can pass the ID
+const cache = new Map<string, string>()
+const byCaller = new WeakMap<object, string>()
+const userId = new AsyncLocalStorage<string>()
+const ownHandler = () => nextHandler(userId.getStore())
+
+// RIGHT: immutable declarations; use a scoped cache only after the production proof above
+const labels = Object.freeze({ ok: 'ok' })
+const makeLabels = () => Object.freeze({ ok: 'ok' })
+const make = Effect.gen(function*() {
+  return yield* Ref.make(new Map<string, string>())
 })
+
+// RIGHT only when lifetime, cleanup and request isolation are demonstrated:
+// Node.js v24.22.2, node:util inspect.custom(depth, opts, inspect) has no context slot:
+// https://nodejs.org/docs/v24.22.2/api/util.html#custom-inspection-functions-on-objects
+const requestId = new AsyncLocalStorage<string>()
+const logValue = { [inspect.custom]: (_depth: number, _opts: unknown, _inspect: unknown) => requestId.getStore() }
 ```
