@@ -1,22 +1,22 @@
 ---
-title: Wire Storybook file for file as this worked example does, with the control-primitives package, the preview, the I/O layer stand-in and its data, the app's named fixture controls, the router stand-in, a journey with its steps and the stand-in's contract suite
+title: Wire Storybook file for file as this worked example does, with the control-primitives package, the preview, the I/O layer stand-in and its seed, the app's named fixture controls, the router stand-in, journeys with their steps, a presentational story and the stand-in's contract suite
 applies_when:
   - setting up Storybook in an app, or adding its first story or journey
   - writing or changing .storybook/preview, a file in a __mocks__ folder, a story, a step file, the control-primitives package or the I/O layer stand-in's contract suite
-  - unsure what a stand-in, a fixture control, a control primitive or the router stand-in looks like in code
+  - unsure what a stand-in, its seed, a fixture control, a control primitive or the router stand-in looks like in code
   - deciding where a story's data comes from
-tags: [storybook, sb-mock, io, router, stand-in, fixture-controls, control-primitives, contract-test, worked-example]
+tags: [storybook, sb-mock, io, router, stand-in, seed, fixture-controls, control-primitives, contract-test, worked-example]
 ---
 
 Applies to: every app with Storybook stories. Copy these files and rename `Orders` to the app's own I/O services; keep every path, export name and wiring as shown. This file is everything needed: no other source is required to follow this pack. It puts together stories-get-io-from-stand-ins-beside-the-io-module.md and each-journey-starts-from-reset-fixture-controls.md in this pack, and port-fakes-share-a-contract-suite.md in the testing pack.
 
-Three roles, never mixed:
+Who holds what:
 
-- The I/O layer stand-in `src/io/__mocks__/layer.ts` owns the stand-in data and behaviour: its seeded state and what every service does with it.
-- Control primitives (landing, fault, approval, record, `resetAll`) are mechanism only. They live in their own workspace package, `packages/fixture-controls`, which imports nothing from any app.
-- `src/io/__mocks__/fixture-controls.ts` is a thin per-app module that names the app's own controls (`holdOrderLanding`, `setOrdersUnreachableFault`) and builds them from the primitives. It is test-only steering for the stand-in's timing and failures. It is not an I/O service and carries no data.
+- Data: the I/O layer stand-in `src/io/__mocks__/layer.ts` declares the seeded records and builds a fresh world from them each time the app runtime builds it. Each story mounts a new registry, so each story starts on the same seed. A story chooses its data by naming a seeded record in step text, or by doing the person's actions in the real UI. No story, step or decorator hands the stand-in records or writes an app atom. Data the seed lacks is added to the seed.
+- Behaviour: control primitives (landing, fault, approval, record, `resetAll`) are mechanism only, in their own workspace package `packages/fixture-controls`, which imports nothing from any app. `src/io/__mocks__/fixture-controls.ts` names the app's controls from them. A control holds behaviour (a fault, a held landing) or one value the stand-in produced (the id it just minted), never the records a screen lists. It is not an I/O service.
+- Props: a presentational component that reaches no I/O takes its data as `args`, built with the domain's own constructors.
 
-A story renders the real app or a component. Its steps import only `resetAll` and the named hold, confirm and fault controls. The data a story shows is the stand-in's own state, reached by driving the real UI.
+Two reset paths: `resetAll()` resets the controls; the new registry per story resets the world and atom state.
 
 ## The control-primitives package
 
@@ -169,7 +169,7 @@ export const makeApproval = (name: string): HumanApproval => {
 ```
 
 ```typescript
-// packages/fixture-controls/src/record.ts: a valued slot, restored to its creation value on reset or take
+// packages/fixture-controls/src/record.ts: one value the stand-in produced, restored to its creation value on reset or take
 import { defineControl } from './registry.js'
 
 export interface ValuedRecord<A> {
@@ -238,10 +238,7 @@ export class OrdersConfig extends Context.Service<OrdersConfig, { readonly baseU
 import { OrdersConfig } from '@/config'
 import { Context, Data, Effect, Layer } from 'effect'
 
-export interface Order {
-  readonly id: string
-  readonly item: string
-}
+export class Order extends Data.Class<{ readonly id: string; readonly item: string }> {}
 export class OrdersUnreachable extends Data.TaggedError('OrdersUnreachable') {}
 
 export class OrdersClient extends Context.Service<OrdersClient, {
@@ -259,8 +256,9 @@ export const OrdersClientLive = Layer.effect(
         catch: () => new OrdersUnreachable(),
       })
     return OrdersClient.of({
-      list: () => call<ReadonlyArray<Order>>(),
-      place: (item) => call<Order>({ method: 'POST', body: JSON.stringify({ item }) }),
+      list: () => call<ReadonlyArray<Order>>().pipe(Effect.map((rows) => rows.map((row) => new Order(row)))),
+      place: (item) =>
+        call<Order>({ method: 'POST', body: JSON.stringify({ item }) }).pipe(Effect.map((row) => new Order(row))),
     })
   }),
 )
@@ -277,7 +275,7 @@ export type ServiceLayer = typeof ServiceLayer
 ```
 
 ```typescript
-// src/runtime.ts and src/features/orders/orders.atom.ts: atoms reach I/O only through the I/O layer
+// src/runtime.ts and src/features/orders/orders.atom.ts: one runtime per registry; atoms reach I/O only through the I/O layer
 import { ServiceLayer } from '@/io/layer'
 import { OrdersClient } from '@/io/orders.client'
 import { Effect } from 'effect'
@@ -298,8 +296,18 @@ export const placeOrderAtom = appRuntime.fn((item: string) =>
 ```
 
 ```tsx
-// src/features/orders/OrdersPanel.tsx: the component under test
+// src/features/orders/OrderRow.tsx: presentational, reaches no I/O
+import type { Order } from '@/io/orders.client'
+
+export function OrderRow({ order }: { readonly order: Order }) {
+  return <li>{order.item}</li>
+}
+```
+
+```tsx
+// src/features/orders/OrdersPanel.tsx: the component under test, which reaches I/O through its atoms
 import { useAtomSet, useAtomValue } from '@effect/atom-react'
+import { OrderRow } from './OrderRow'
 import { ordersAtom, placeOrderAtom } from './orders.atom'
 
 export function OrdersPanel() {
@@ -309,7 +317,7 @@ export function OrdersPanel() {
   return (
     <section aria-label='Your orders'>
       {orders._tag === 'Success' && (
-        <ul aria-label='Orders'>{orders.value.map((order) => <li key={order.id}>{order.item}</li>)}</ul>
+        <ul aria-label='Orders'>{orders.value.map((order) => <OrderRow key={order.id} order={order} />)}</ul>
       )}
       {orders._tag === 'Failure' && <p role='alert'>We could not load your orders</p>}
       <form
@@ -346,7 +354,7 @@ declare module '@tanstack/react-router' {
 
 ## The Storybook files
 
-1. `.storybook/preview.tsx`: the two `sb.mock` calls, and the decorator that wraps every story in the registry, the real router and `LinkProvider`. Add `Theme` and the global stylesheet as the design-system pack's roots-load-styles-and-providers.md says.
+1. `.storybook/preview.tsx`: the two `sb.mock` calls, and the decorator that wraps every story in a new registry, the real router and `LinkProvider`. The new registry per story is what gives each story a new runtime and a fresh world. Add `Theme` and the global stylesheet as the design-system pack's roots-load-styles-and-providers.md says.
 
 ```tsx
 import { LinkProvider } from '@astryxdesign/core/Link'
@@ -375,10 +383,10 @@ export default definePreview({
 })
 ```
 
-2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. It carries no data and is no I/O service; only the stand-in, step files and the stand-in's contract suite import it.
+2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in and step files import it.
 
 ```typescript
-import { makeFault, makeLanding, resetAll } from '@app/fixture-controls'
+import { makeFault, makeLanding, makeRecord, resetAll } from '@app/fixture-controls'
 
 export { resetAll }
 
@@ -388,44 +396,61 @@ export const holdOrderLanding = (): void => orderLanding.hold('placed')
 export const confirmOrderLanding = (): void => orderLanding.release('placed')
 export const awaitOrderLanding = orderLanding.awaitPhase('placed')
 
-// The orders boundary can fault.
-const ordersFault = makeFault('ordersUnreachable')
-export const setOrdersUnreachableFault = (unreachable: boolean): void =>
-  unreachable ? ordersFault.arm() : ordersFault.disarm()
-export const ordersUnreachableFault = (): boolean => ordersFault.consult()
+// The orders boundary can fault on read and on write.
+const ordersRead = makeFault('ordersRead')
+export const setOrdersReadFault = (on: boolean): void => on ? ordersRead.arm() : ordersRead.disarm()
+export const ordersReadFault = (): boolean => ordersRead.consult()
+const ordersWrite = makeFault('ordersWrite')
+export const setOrdersWriteFault = (on: boolean): void => on ? ordersWrite.arm() : ordersWrite.disarm()
+export const ordersWriteFault = (): boolean => ordersWrite.consult()
+
+// One value the stand-in produced: the id it just minted. The stand-in writes it.
+const lastPlacedOrderId = makeRecord<string | null>('lastPlacedOrderId', null)
+export const notePlacedOrderId = (id: string): void => lastPlacedOrderId.set(id)
+export const takePlacedOrderId = (): string | null => lastPlacedOrderId.take()
 ```
 
-3. `src/io/__mocks__/layer.ts`: the I/O layer stand-in. It owns the stand-in data: a world built fresh each time the layer builds, seeded with what a person has before they act. It exports every name `src/io/layer.ts` exports, with the same type, builds each service through its real `Context.Service`, and asks the fixture controls only when to land and whether to fault. It may export more (`makeWorld`, `OrdersClientStandIn`) for its contract suite.
+3. `src/io/__mocks__/layer.ts`: the I/O layer stand-in. It declares the seed and builds a fresh world from it each time the runtime builds the layer; the world never lives in module scope. It exports every name `src/io/layer.ts` exports, with the same type, builds each service through its real `Context.Service`, and asks the controls only when to land and whether to fault. A story that needs a record the seed lacks adds it to `SEEDED_ORDERS`.
 
 ```typescript
-import { awaitOrderLanding, ordersUnreachableFault } from '@/io/__mocks__/fixture-controls'
+import {
+  awaitOrderLanding,
+  notePlacedOrderId,
+  ordersReadFault,
+  ordersWriteFault,
+} from '@/io/__mocks__/fixture-controls'
 import type { ServiceLayer as IOLayer } from '@/io/layer'
-import { type Order, OrdersClient, OrdersUnreachable } from '@/io/orders.client'
+import { Order, OrdersClient, OrdersUnreachable } from '@/io/orders.client'
 import { Effect, Layer, Ref } from 'effect'
 
-const SEEDED_ORDERS: ReadonlyArray<Order> = [{ id: 'order-1', item: 'Desk lamp' }]
+const SEEDED_ORDERS: ReadonlyArray<Order> = [
+  new Order({ id: 'order-1', item: 'Desk lamp' }),
+  new Order({ id: 'order-2', item: 'Bookshelf' }),
+]
 
-export const makeWorld = Effect.gen(function*() {
+const makeWorld = Effect.gen(function*() {
   return {
     orders: yield* Ref.make(SEEDED_ORDERS),
     nextId: yield* Ref.make(SEEDED_ORDERS.length + 1),
   }
 })
-export type World = Effect.Success<typeof makeWorld>
+type World = Effect.Success<typeof makeWorld>
 
-const boundary = Effect.suspend(() => ordersUnreachableFault() ? Effect.fail(new OrdersUnreachable()) : Effect.void)
+const faultWhen = (faulted: () => boolean) =>
+  Effect.suspend(() => faulted() ? Effect.fail(new OrdersUnreachable()) : Effect.void)
 
-export const OrdersClientStandIn = (world: World) =>
+const OrdersClientStandIn = (world: World) =>
   Layer.succeed(
     OrdersClient,
     OrdersClient.of({
-      list: () => boundary.pipe(Effect.andThen(Ref.get(world.orders))),
+      list: () => faultWhen(ordersReadFault).pipe(Effect.andThen(Ref.get(world.orders))),
       place: (item) =>
         Effect.gen(function*() {
-          yield* boundary
+          yield* faultWhen(ordersWriteFault)
           yield* awaitOrderLanding
-          const order = { id: `order-${yield* Ref.getAndUpdate(world.nextId, (n) => n + 1)}`, item }
+          const order = new Order({ id: `order-${yield* Ref.getAndUpdate(world.nextId, (n) => n + 1)}`, item })
           yield* Ref.update(world.orders, (orders) => [...orders, order])
+          notePlacedOrderId(order.id)
           return order
         }),
     }),
@@ -453,29 +478,40 @@ declare module '@tanstack/react-router' {
 }
 ```
 
-5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The steps drive the real UI and read what a person sees. They import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure. The seeded order and the placed order both come from the stand-in's world.
+5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The journey names a seeded order in its step text, and the new order exists because the person placed it in the real UI. Steps import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure.
 
 ```typescript
 // features/steps/placing-an-order.ts
-import { holdOrderLanding, resetAll, setOrdersUnreachableFault } from '@/io/__mocks__/fixture-controls'
+import { holdOrderLanding, resetAll, setOrdersWriteFault } from '@/io/__mocks__/fixture-controls'
+import { capture } from '@systemfsoftware/storybook-gherkin'
 import type { StepContext } from '@systemfsoftware/storybook-gherkin'
 import { within } from 'storybook/test'
 
-export async function theirOrdersAreShown(ctx: StepContext): Promise<void> {
+export const existingOrder = capture('existingOrder', { default: 'Desk lamp' }) // a record in SEEDED_ORDERS
+export const newItem = capture('newItem', { default: 'Reading chair' })
+
+export async function theirOrdersAreShown(
+  ctx: StepContext,
+  { existingOrder }: { readonly existingOrder: string },
+): Promise<void> {
   resetAll()
-  await ctx.canvas.findByRole('list', { name: 'Orders' })
+  const list = await ctx.canvas.findByRole('list', { name: 'Orders' })
+  await ctx.expect(within(list).getByText(existingOrder)).toBeVisible()
 }
 export const placingIsSlow = (): void => holdOrderLanding()
-export const ordersCannotBeReached = (): void => setOrdersUnreachableFault(true)
+export const ordersCannotBeWritten = (): void => setOrdersWriteFault(true)
 
-export async function theyPlaceAnOrder(ctx: StepContext): Promise<void> {
-  await ctx.userEvent.type(ctx.canvas.getByRole('textbox', { name: 'Item' }), 'Reading chair')
+export async function theyPlaceAnOrder(ctx: StepContext, { newItem }: { readonly newItem: string }): Promise<void> {
+  await ctx.userEvent.type(ctx.canvas.getByRole('textbox', { name: 'Item' }), newItem)
   await ctx.userEvent.click(ctx.canvas.getByRole('button', { name: 'Place order' }))
 }
-export async function theOrderJoinsTheirList(ctx: StepContext): Promise<void> {
+export async function theOrderJoinsTheirList(
+  ctx: StepContext,
+  caps: { readonly existingOrder: string; readonly newItem: string },
+): Promise<void> {
   const list = ctx.canvas.getByRole('list', { name: 'Orders' })
-  await ctx.expect(await within(list).findByText('Reading chair')).toBeVisible()
-  await ctx.expect(within(list).getByText('Desk lamp')).toBeVisible()
+  await ctx.expect(await within(list).findByText(caps.newItem)).toBeVisible()
+  await ctx.expect(within(list).getByText(caps.existingOrder)).toBeVisible()
 }
 export async function theyAreToldItIsBeingPlaced(ctx: StepContext): Promise<void> {
   await ctx.expect(await ctx.canvas.findByRole('status')).toHaveTextContent('Placing your order')
@@ -491,7 +527,9 @@ import { OrdersPanel } from '@/features/orders/OrdersPanel'
 import type { StoryObj } from '@storybook/react-vite'
 import { feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
 import {
-  ordersCannotBeReached,
+  existingOrder,
+  newItem,
+  ordersCannotBeWritten,
   placingIsSlow,
   theirOrdersAreShown,
   theOrderJoinsTheirList,
@@ -507,62 +545,97 @@ type Story = StoryObj<typeof meta>
 const f = feature(meta, {})
 
 export const ANewOrderJoinsTheList: Story = f.scenario(
-  'A person who places an order sees it join their orders',
-  Given`their orders are shown`(theirOrdersAreShown),
-  When`they place an order`(theyPlaceAnOrder),
-  Then`the order joins their orders`(theOrderJoinsTheirList),
+  'A person who places an order sees it beside the orders they already had',
+  Given`their orders, including ${existingOrder}, are shown`(theirOrdersAreShown),
+  When`they place an order for ${newItem}`(theyPlaceAnOrder),
+  Then`${newItem} joins their orders`(theOrderJoinsTheirList),
 )
 
 export const APendingOrderIsAnnounced: Story = f.scenario(
   'A person whose order is still being placed is told so',
-  Given`their orders are shown`(theirOrdersAreShown),
+  Given`their orders, including ${existingOrder}, are shown`(theirOrdersAreShown),
   Given`placing an order is slow`(placingIsSlow),
-  When`they place an order`(theyPlaceAnOrder),
+  When`they place an order for ${newItem}`(theyPlaceAnOrder),
   Then`they are told the order is being placed`(theyAreToldItIsBeingPlaced),
 )
 
 export const AFailedOrderIsReported: Story = f.scenario(
   'A person whose order cannot be placed is told so',
-  Given`their orders are shown`(theirOrdersAreShown),
-  Given`orders cannot be reached`(ordersCannotBeReached),
-  When`they place an order`(theyPlaceAnOrder),
+  Given`their orders, including ${existingOrder}, are shown`(theirOrdersAreShown),
+  Given`orders cannot be saved`(ordersCannotBeWritten),
+  When`they place an order for ${newItem}`(theyPlaceAnOrder),
   Then`they are told the order could not be placed`(theyAreToldItFailed),
 )
 ```
 
-6. `tests/io-layer.contract.test.ts`: the contract suite. It is required because every service the I/O layer stand-in provides is a port fake. It is the one test that imports from a `__mocks__` folder, by the app's source alias. Each scenario runs one workload on the stand-in, with a fresh world, and on the real adapter, then expects the requirement's value from both. The real side talks to the app's real orders backend, which `tests/__fixtures__/orders-backend.ts` starts in a container and whose URL it provides (integration-testing pack). The router stand-in is the real router, and the control-primitives package is mechanism, not a fake; neither needs a suite.
+6. `features/seeing-orders.stories.tsx`: state the I/O layer would answer, read while the component mounts, is a named control set in the meta's `beforeEach`. It is never an atom a story or decorator writes.
+
+```tsx
+import { OrdersPanel } from '@/features/orders/OrdersPanel'
+import { resetAll, setOrdersReadFault } from '@/io/__mocks__/fixture-controls'
+import type { StoryObj } from '@storybook/react-vite'
+import { expect } from 'storybook/test'
+
+const meta = {
+  title: 'Journeys/Seeing orders',
+  component: OrdersPanel,
+  beforeEach: () => {
+    resetAll()
+    setOrdersReadFault(true)
+    return resetAll
+  },
+}
+export default meta
+
+export const OrdersThatCannotBeReadAreReported: StoryObj<typeof meta> = {
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('We could not load your orders')
+  },
+}
+```
+
+7. `src/features/orders/OrderRow.stories.tsx`: a presentational component that reaches no I/O takes `args`, built with the domain's own constructor. No stand-in data and no control.
+
+```tsx
+import { Order } from '@/io/orders.client'
+import type { Meta, StoryObj } from '@storybook/react-vite'
+import { expect } from 'storybook/test'
+import { OrderRow } from './OrderRow'
+
+const meta = { component: OrderRow, args: { order: new Order({ id: 'order-1', item: 'Desk lamp' }) } } satisfies Meta<
+  typeof OrderRow
+>
+export default meta
+
+export const ShowsTheItem: StoryObj<typeof meta> = {
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('listitem')).toHaveTextContent('Desk lamp')
+  },
+}
+```
+
+8. `tests/orders.contract.integration.test.ts`: the contract suite. It is required because every service the I/O layer stand-in provides is a port fake. It is its own unit and lands before the first story that uses the stand-in. It runs in the app's Node integration project, not in Storybook. It reaches both sides through the I/O module's own specifier: `vi.mock` with no factory loads the stand-in beside it, and `vi.importActual` of the same specifier loads the real module, so the test never imports from `__mocks__` and nothing on the real side is mocked. The real module runs in the test's process against the real backend, which `tests/__fixtures__/orders-backend.ts` starts in a container and whose URL it provides; the URL reaches the real module through `Config` (integration-testing pack). Each scenario reads only what it created through the port on both sides, and never compares the stand-in's seed with an empty real store. Every operation of the port appears in at least one scenario. The router stand-in is the real router, and the control-primitives package is mechanism, not a fake; neither needs a suite.
 
 ```typescript
-import { OrdersConfig } from '@/config'
-import { resetAll, setOrdersUnreachableFault } from '@/io/__mocks__/fixture-controls'
-import { makeWorld, OrdersClientStandIn } from '@/io/__mocks__/layer'
-import { OrdersClient, OrdersClientLive, OrdersUnreachable } from '@/io/orders.client'
-import { Gherkin, Given, it, makeFeature, pairwiseFor, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Result } from 'effect'
+import { vi } from 'vitest'
+vi.mock('../src/io/layer.ts') // no factory: loads src/io/__mocks__/layer.ts, the stand-in
+
+import { Gherkin, it, makeFeature, pairwiseFor, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { ConfigProvider, Effect, Layer } from 'effect'
+import { ServiceLayer as StandIn } from '../src/io/layer.ts' // the stand-in, reached through the real specifier
+import { OrdersClient } from '../src/io/orders.client.ts'
 import { OrdersBackend } from './__fixtures__/orders-backend'
 
-const Feature = makeFeature({ it })
+const Real = await vi.importActual<typeof import('../src/io/layer.ts')>('../src/io/layer.ts')
+const realAt = (url: string) =>
+  Real.ServiceLayer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ VITE_ORDERS_URL: url }))))
 
-const standIn = Layer.unwrap(Effect.map(makeWorld, OrdersClientStandIn))
-const realAt = (baseUrl: string) =>
-  OrdersClientLive.pipe(Layer.provide(Layer.succeed(OrdersConfig, OrdersConfig.of({ baseUrl }))))
-
-const Reachable = pairwiseFor({
-  a: { name: 'stand-in', layer: standIn },
+const Pairwise = pairwiseFor({
+  a: { name: 'stand-in', layer: StandIn },
   b: { name: 'real', layer: Layer.unwrap(Effect.map(OrdersBackend.url, realAt)) },
 }, OrdersClient)
 
-const Unreachable = pairwiseFor({
-  a: { name: 'stand-in', layer: standIn },
-  b: { name: 'real', layer: realAt('http://127.0.0.1:9') }, // nothing listens there
-}, OrdersClient)
-
-const placeThenFind = (orders: OrdersClient['Service']) =>
-  Effect.gen(function*() {
-    const placed = yield* orders.place('Reading chair')
-    const listed = yield* orders.list()
-    return listed.some((order) => order.id === placed.id && order.item === 'Reading chair')
-  })
+const Feature = makeFeature({ it })
 
 Feature('Placing and listing orders')
   .withLayer(OrdersBackend.layer)
@@ -570,27 +643,13 @@ Feature('Placing and listing orders')
     scenario(
       'An order that was placed is in the list',
       Gherkin.Do.pipe(
-        Given('no control is set')(() => Effect.sync(resetAll)),
-        Reachable('an order is placed and the orders are listed')('found', () => placeThenFind),
+        Pairwise('the order is placed and the orders are listed')('found', () => (orders) =>
+          Effect.gen(function*() {
+            const placed = yield* orders.place('Reading chair')
+            const listed = yield* orders.list()
+            return listed.some((order) => order.id === placed.id && order.item === 'Reading chair')
+          })),
         Then('both list the placed order')(({ found }, expect) => expect([found.a, found.b]).toEqual([true, true])),
-      ),
-    )
-    scenario(
-      'Orders that cannot be reached are reported as unreachable',
-      Gherkin.Do.pipe(
-        Given('the orders cannot be reached')(() =>
-          Effect.sync(() => {
-            resetAll()
-            setOrdersUnreachableFault(true)
-          })
-        ),
-        Unreachable('the orders are listed')('listed', () => (orders) => Effect.result(orders.list())),
-        Then('both report the orders as unreachable')(({ listed }, expect) =>
-          expect([listed.a, listed.b]).toEqual([
-            Result.fail(new OrdersUnreachable()),
-            Result.fail(new OrdersUnreachable()),
-          ])
-        ),
       ),
     )
   })
@@ -598,9 +657,14 @@ Feature('Placing and listing orders')
 
 ## WRONG
 
-```typescript
+```tsx
 // WRONG: a story pushes data into a fixture module
-export const Shown = { beforeEach: () => setOrders([{ id: 'order-9', item: 'Sofa' }]) }
+export const Shown = { beforeEach: () => seedOrders([new Order({ id: 'order-9', item: 'Sofa' })]) }
+// WRONG: a decorator writes an app atom to set state the I/O layer would answer
+const withNoOrders: Decorator = (Story) => {
+  useAtomSet(ordersSnapshotAtom)(OrdersSnapshot.Empty())
+  return <Story />
+}
 // WRONG: fixture controls modelled as an I/O service
 export class FixtureControls
   extends Context.Service<FixtureControls, { readonly orders: Ref.Ref<ReadonlyArray<Order>> }>()('app/FixtureControls')
@@ -608,4 +672,10 @@ export class FixtureControls
 // WRONG: control primitives defined inside the app, in src/io/__mocks__/fixture-controls.ts
 const controls = new Map<string, () => void>()
 export const makeFault = (name: string) => {/* ... */}
+// WRONG: a control used as a data channel, holding the records a screen lists
+const orders = makeRecord<ReadonlyArray<Order>>('orders', [])
+// WRONG: the world kept in module scope, so one story's writes leak into the next
+const world = { orders: Ref.makeUnsafe(SEEDED_ORDERS) }
+// WRONG: the contract suite imports the stand-in from __mocks__
+import { ServiceLayer } from '../src/io/__mocks__/layer'
 ```
