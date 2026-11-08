@@ -41,22 +41,22 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 **State ownership**
 
 - R1. Extend `compound-packs/cell-architecture/instance-state-lives-in-the-constructor.md` to cover mutable state retained at module lifetime across library and application modules, including composition roots. (pack: cell-architecture, instance-state-lives-in-the-constructor.md)
-- R2. Identify mutable bindings, mutable containers, caches, counters, registries, memo tables, connections, and stateful singletons by retained behavior and reachability, including mutation through aliases, closures, and nested values.
-- R3. Permit immutable constants, schemas, functions, immutable lookup tables, and lazily constructed immutable values when their observable contents cannot change or grow after construction; `const`, TypeScript `readonly`, or shallow `Object.freeze` alone is not proof of deep immutability.
+- R2. Module-level state is a top-level binding or module-retained closure whose binding, reachable properties, collection entries, or captured data can be reassigned or mutated after module evaluation; it includes mutable arrays, objects, collections, refs, and stateful class instances.
+- R3. Permit module-level `const` immutable values, pure functions with no mutable captures, and inert Schema or Layer descriptions; a shallow freeze or TypeScript `readonly` alone does not establish deep immutability. A function may build an immutable table on each call, but module-scoped lazy memoization, mutable closure state, and top-level `let` or `var` are forbidden.
 - R4. Give a memo cache, registry, or counter to its owning cell or service instance, using an instance-owned `Ref` or private closure as appropriate.
-- R5. Acquire a connection within a scoped service or Layer and obtain application configuration through the existing configuration service; pass values explicitly when no service is needed. (pack: cell-architecture, services-are-provided-once-at-the-composition-root.md) (pack: configuration, settings-reach-code-through-context.md)
-- R6. Restrict exceptional mutable module-lifetime state to a demonstrably necessary request-context carrier such as an `AsyncLocalStorage` instance or an explicitly identified platform-mandated singleton whose required lifetime cannot be represented by cell or Layer ownership.
-- R7. Require each exception to identify its platform contract, why explicit or scoped ownership cannot satisfy it, its lifetime and cleanup, and evidence of request isolation; a `WeakMap` keyed by caller-owned objects does not qualify merely because its keys are weak.
-- Effect `Context` tags are identities, not mutable service instances. A module-scoped `FiberRef` is permitted only as a context carrier meeting R6 and R7, never as a general cache or registry.
+- R5. Acquire pools, database or HTTP clients, sockets, and external SDK handles inside a constructor or scoped Layer with appropriate release; obtain application configuration through the existing configuration service and pass values explicitly when no service is needed. (pack: cell-architecture, services-are-provided-once-at-the-composition-root.md) (pack: configuration, settings-reach-code-through-context.md)
+- R6. The only mutable module-scope exception in this Effect 4 repository is an `AsyncLocalStorage` request-context carrier required to cross a non-Effect asynchronous boundary; ordinary clients, pools, telemetry clients, caches, and registries are not exceptions.
+- R7. A demonstrated use names the host interoperability constraint, explains why explicit parameters or Effect context cannot cross the boundary, identifies the carrier's lifetime and cleanup, and demonstrates request isolation. Never instantiate `Map`, `Set`, `WeakMap`, or `WeakSet` as module-level state, regardless of key ownership or garbage collection.
+- Effect `Context.Service` keys are identities rather than service instances; a `Context.Reference` default that retains mutable state is not exempt.
 - R8. Require a measured production need for a cache and give it a cell or scoped-service owner; faster tests alone do not justify a cache or mutable module state.
 
 **Schema diagnostic**
 
 - R9. Add a diagnostic alongside `compound-packs/schema-modelling` that treats slow, flaky, or timing-out properties and repeated defensive validation, normalization, early returns, or invalid-input skipping as reasons to investigate schema constraints, not as proof of a defect.
-- R10. Separate invalid generated inputs and rejection sampling from genuine computation and runner contention using discard ratios, the share of generated inputs that violate independently established domain rules, and time per accepted case under comparable uncontended and contended conditions.
+- R10. A discard is a generated candidate rejected before a property iteration; compare discard counts, independently established domain-invalid accepted values, and time per accepted case under comparable uncontended and contended conditions. Measured generation cost can establish rejection as a slowdown; `SampleError` or `Exhausted` establishes discard-budget exhaustion but not its wall-clock share. Do not infer a schema defect from discards alone.
 - R11. When evidence establishes an under-constrained schema, first encode the real domain invariants using refinements, struct-level checks, or tagged unions as appropriate. (pack: schema-modelling, invariants-live-in-the-schema.md) (pack: schema-modelling, states-are-tagged-unions.md)
 - R12. Make generation constructive without weakening the decoded domain or reducing property runs, including when heavy discards occur against an already-correct schema. (pack: schema-modelling, generation-constraints-the-derivation-reads.md)
-- R13. Delete workflow defenses made dead by the enforced invariant, while retaining branches for valid domain outcomes and external failures.
+- R13. Delete only internal defensive checks made unreachable by the decoded schema invariant; preserve untrusted input decoders, boundary error handling, and branches for valid outcomes or external failures.
 - R14. Do not treat a timeout as justification to raise timeouts, shrink runs, or use caches or module state to accelerate the workflow; do not assert the motivating incident's schema caused its timeout without supporting measurements.
 - R15. Cross-link the state rule and schema diagnostic; record the requested CI wall-clock cross-link as unresolved because that pack is absent from this branch.
 
@@ -70,9 +70,16 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 **Rule clarity**
 
 - R20. Each new or changed rule must state its scope and situational triggers, define the terms needed for its decisions, and make the same code and evidence yield one decision for independent readers.
-- R21. Each new or changed rule must include a concise WRONG/RIGHT pair of concrete TypeScript or Effect examples. The state rule's pair must cover a frozen constant, lazily built immutable table, justified `AsyncLocalStorage`, memo `Map`, and caller-keyed `WeakMap`; the diagnostic pair must distinguish domain-invalid inputs from excessive discards against a correct schema.
+- R21. Each new or changed rule must include a concise WRONG/RIGHT pair of concrete TypeScript or Effect examples. The state pair must cover a frozen constant, a function that builds an immutable table without retained state, justified `AsyncLocalStorage`, a memo `Map`, and a caller-keyed `WeakMap`; the diagnostic pair must distinguish domain-invalid accepted values from excessive discards against a correct schema.
 - R22. Keep one disjoint rule per top-level file, short enough to load as guidance, with required `title` and situational `applies_when` frontmatter; follow the [Compound Packs guide](https://github.com/EveryInc/compound-engineering-plugin/blob/main/docs/guides/packs.md) for discovery and loading.
 - R23. Before a PR, root runs a Gemini clarity pass on the final text of every new or changed rule and rules every finding; the implementation agent never calls Gemini. A changed rule after that pass needs a new pass on its final text.
+
+### Decision terms
+
+- **Under-constrained schema:** a schema that decodes a value violating an independently established domain invariant, such as a linear interval ending before it starts.
+- **Deep immutability:** after construction no reachable data or captured state can be changed through any retained reference; a pure function capturing no mutable binding is allowed as a table value. Freezing an object does not freeze nested objects or collection internal slots.
+- **Constructive generation:** construct a value satisfying an invariant from suitable component generators rather than filtering candidates on that invariant; preserve the decoded domain and run count.
+- **Runner contention:** competition for host resources from concurrent work that measurably increases elapsed time under comparable load. A fast isolated run alone does not prove contention; report the measurements and any unresolved cause.
 
 ### Acceptance Examples
 
@@ -82,6 +89,10 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 - AE4. **Covers R10, R14.** If accepted cases are slow with low discard and invalid-input shares, or contention changes timing materially, investigate measured computation or contention instead of declaring an anemic schema the cause.
 - AE5. **Covers R11, R14.** A weekly trading interval that crosses the week boundary and a closing time expressed in a different zone remain valid unless independent domain evidence establishes otherwise.
 - AE6. **Covers R17, R18.** A detector flags an observable module-level mutation but does not reject an immutable literal merely because it is declared at module scope; opaque factory behavior is not certified safe.
+- AE7. **Covers R2–R3.** A module-level `let` initialized once by a closure is forbidden; a pure function that creates and returns a fresh immutable lookup table without retaining it is allowed.
+- AE8. **Covers R3, R5.** A frozen lookup containing pure functions with no mutable captures and a lazy `Layer.effect` description are allowed; Layer memoization is scoped to its build. Running or building the Layer during module evaluation and retaining its service is forbidden.
+- AE9. **Covers R5–R7.** A module-level connection pool is forbidden even when its vendor recommends a singleton; acquire and release it inside a scoped service Layer.
+- AE10. **Covers R10–R13.** An independently verified `start <= end` invariant belongs on the schema, and a constructive generator may draw a valid start and end directly; if the schema already enforces it, repair only generation. Keep wire decoders and external error handling.
 
 ### Scope Boundaries
 
@@ -93,7 +104,7 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 
 ## Planning Contract
 
-**Product Contract preservation:** Changed R12 and AE3 for the accepted discard finding; added R20–R23 for the owner's rule-clarity directive. Other product decisions and IDs are preserved.
+**Product Contract preservation:** Changed R12 and AE3 for the accepted discard finding; added R20–R23 for rule clarity; revised R2, R3, R5–R7, R10, R13, and R21 and added AE7–AE10 for the owner's accepted clarity rulings. Existing placement and incident-evidence decisions remain.
 
 ### Key Technical Decisions
 
@@ -101,6 +112,13 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 - KTD2. **Treat pack discovery and behavioral uptake as separate evidence.** A resolver finds pack roots; only a real fresh agent session demonstrating selection and use of each applicable rule proves pickup. Neither proves deterministic enforcement. `compound-packs/README.md` and the CE pack resolver define the delivery path.
 - KTD3. **Defer a new detector to the instrument owner.** A bounded AST detector is feasible for syntactically proven cases, but the current filename-limited rule is not complete or sound for the full semantic contract. A new gate requires explicit approval and a separate owner under R19.
 - KTD4. **Leave the absent CI cross-link unresolved.** Do not invent a `ci-wall-clock` rule or link to a historical pack that this branch does not publish; retain the missing target in the delivery report.
+
+### Drafting basis for the two rules
+
+- **State rule:** Create each cache, counter, registry, connection or other mutable instance state in its owning constructor or scoped Layer. Do not retain module-scoped state, including lazy closure caches, except the request-context carrier and evidence defined by R6–R7. Permit immutable declarations and inert Effect descriptions under R3. Use the R21 examples as one short WRONG/RIGHT pair.
+- **Schema diagnostic:** On a slow property or defensive workflow, inspect discards, domain-invalid accepted values, and accepted-case cost before attributing the cause. Apply R11–R13 according to the evidence; do not add arbitrary discard thresholds, increase timeouts, reduce runs, or retain module-scoped caches. Use the R21 diagnostic example as one short WRONG/RIGHT pair.
+
+These are drafting directions, not extra pack files. Use top-level Markdown, situational `applies_when`, compact prescriptive prose and one short example pair per rule. The repository's stricter one-pair limit and ban on incident narratives in rule text take precedence over the broader upstream guide (`compound-packs/README.md`).
 
 ### Detector feasibility
 
@@ -125,13 +143,13 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Goal:** Make the existing rule cover the full ownership and exception contract without a competing state rule.
 
-**Requirements:** R1–R8, R20–R23; AE1–AE2; KTD1.
+**Requirements:** R1–R8, R20–R23; AE1–AE2, AE7–AE9; KTD1.
 
 **Dependencies:** None.
 
 **Files:** `compound-packs/cell-architecture/instance-state-lives-in-the-constructor.md`; consult `compound-packs/cell-architecture/services-are-provided-once-at-the-composition-root.md` and `compound-packs/configuration/settings-reach-code-through-context.md`.
 
-**Approach:** Update the title and `applies_when` to include state in libraries and composition roots. Replace the broad composition-root carve-out with R6–R7's closed categories and proof obligations. Cover the actual alternatives in R4–R5, deep immutability limits, `WeakMap`, `Context` tags, `FiberRef`, and production cache evidence. Add the schema-diagnostic cross-link after U2; keep the rule short and avoid incident details in the pack.
+**Approach:** Update the title and `applies_when` to include state in libraries and composition roots. Apply the state-rule drafting basis and R6–R7's closed exception and evidence test. Cover the alternatives in R4–R5, deep immutability limits, `WeakMap`, Effect context identities, and production cache evidence. Add the schema-diagnostic cross-link after U2; keep the rule short and avoid incident details in the pack.
 
 Define `module-level state` and `demonstrated use` in decision-ready terms, including what evidence establishes the exception. Include R21's boundary cases within one short WRONG/RIGHT pair.
 
@@ -143,13 +161,13 @@ Define `module-level state` and `demonstrated use` in decision-ready terms, incl
 
 **Goal:** Make symptom-to-cause investigation distinguish weak domains, sparse generation, actual work, and contention.
 
-**Requirements:** R9–R15, R20–R23; AE3–AE5; KTD1, KTD4.
+**Requirements:** R9–R15, R20–R23; AE3–AE5, AE10; KTD1, KTD4.
 
 **Dependencies:** U1 for the reciprocal link.
 
 **Files:** Create `compound-packs/schema-modelling/diagnose-slow-properties-before-optimizing.md`; consult `compound-packs/schema-modelling/invariants-live-in-the-schema.md`, `states-are-tagged-unions.md`, and `generation-constraints-the-derivation-reads.md` in the same directory; update the U1 rule for the reciprocal link.
 
-**Approach:** Use the standard top-level rule frontmatter and symptom-shaped `applies_when`. Direct the reader through R10's measurements and independent domain evidence, then link to the existing invariant, union, and generation owners for the applicable remedy. Explicitly distinguish a correct schema with high discards from a schema admitting forbidden values. Keep the incident and unproven causal claims out of the rule body. Preserve valid weekly wraparound and independently chosen close zones when discussing examples.
+**Approach:** Use the schema-rule drafting basis, standard top-level frontmatter, and symptom-shaped `applies_when`. Apply R10's measurements and independent domain evidence, then link to the existing invariant, union, and generation owners for the applicable remedy. Explicitly distinguish a correct schema with high discards from a schema admitting forbidden values. Keep the incident and unproven causal claims out of the rule body. Preserve valid weekly wraparound and independently chosen close zones.
 
 Define `under-constrained`, accepted domain-invalid inputs, and discard in terms that distinguish R11 from R12. Include the diagnostic's concrete WRONG/RIGHT pair per R21.
 
