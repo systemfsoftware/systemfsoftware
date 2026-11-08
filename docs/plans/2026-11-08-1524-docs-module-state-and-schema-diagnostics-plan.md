@@ -67,6 +67,13 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 - R18. Account explicitly for aliases, nested writes, mutator calls, escaped references, lazy initialization, and unknown factory results; label unprovable cases for review rather than claim complete static detection without false positives.
 - R19. Treat a new or changed enforcement gate as a separately owned proposal requiring operator approval, not as part of the pack-rule change. `repos/constitution/ENFORCEMENT.md` governs any eventual instrument.
 
+**Rule clarity**
+
+- R20. Each new or changed rule must state its scope and situational triggers, define the terms needed for its decisions, and make the same code and evidence yield one decision for independent readers.
+- R21. Each new or changed rule must include a concise WRONG/RIGHT pair of concrete TypeScript or Effect examples. The state rule's pair must cover a frozen constant, lazily built immutable table, justified `AsyncLocalStorage`, memo `Map`, and caller-keyed `WeakMap`; the diagnostic pair must distinguish domain-invalid inputs from excessive discards against a correct schema.
+- R22. Keep one disjoint rule per top-level file, short enough to load as guidance, with required `title` and situational `applies_when` frontmatter; follow the [Compound Packs guide](https://github.com/EveryInc/compound-engineering-plugin/blob/main/docs/guides/packs.md) for discovery and loading.
+- R23. Before a PR, root runs a Gemini clarity pass on the final text of every new or changed rule and rules every finding; the implementation agent never calls Gemini. A changed rule after that pass needs a new pass on its final text.
+
 ### Acceptance Examples
 
 - AE1. **Covers R2, R4, R8.** A module-scoped map evicting cached timezone conversions to make a property faster violates ownership even when the binding is `const`; an instance-owned cache needs demonstrated production benefit.
@@ -86,7 +93,7 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 
 ## Planning Contract
 
-**Product Contract preservation:** Changed R12 and AE3 to incorporate the accepted review finding: heavy discards alone do not justify a domain change. Other product decisions and IDs are preserved.
+**Product Contract preservation:** Changed R12 and AE3 for the accepted discard finding; added R20–R23 for the owner's rule-clarity directive. Other product decisions and IDs are preserved.
 
 ### Key Technical Decisions
 
@@ -118,13 +125,15 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Goal:** Make the existing rule cover the full ownership and exception contract without a competing state rule.
 
-**Requirements:** R1–R8; AE1–AE2; KTD1.
+**Requirements:** R1–R8, R20–R23; AE1–AE2; KTD1.
 
 **Dependencies:** None.
 
 **Files:** `compound-packs/cell-architecture/instance-state-lives-in-the-constructor.md`; consult `compound-packs/cell-architecture/services-are-provided-once-at-the-composition-root.md` and `compound-packs/configuration/settings-reach-code-through-context.md`.
 
 **Approach:** Update the title and `applies_when` to include state in libraries and composition roots. Replace the broad composition-root carve-out with R6–R7's closed categories and proof obligations. Cover the actual alternatives in R4–R5, deep immutability limits, `WeakMap`, `Context` tags, `FiberRef`, and production cache evidence. Add the schema-diagnostic cross-link after U2; keep the rule short and avoid incident details in the pack.
+
+Define `module-level state` and `demonstrated use` in decision-ready terms, including what evidence establishes the exception. Include R21's boundary cases within one short WRONG/RIGHT pair.
 
 **Test expectation:** No permanent test for prose; use the real-session scenarios in the Verification Contract.
 
@@ -134,13 +143,15 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Goal:** Make symptom-to-cause investigation distinguish weak domains, sparse generation, actual work, and contention.
 
-**Requirements:** R9–R15; AE3–AE5; KTD1, KTD4.
+**Requirements:** R9–R15, R20–R23; AE3–AE5; KTD1, KTD4.
 
 **Dependencies:** U1 for the reciprocal link.
 
 **Files:** Create `compound-packs/schema-modelling/diagnose-slow-properties-before-optimizing.md`; consult `compound-packs/schema-modelling/invariants-live-in-the-schema.md`, `states-are-tagged-unions.md`, and `generation-constraints-the-derivation-reads.md` in the same directory; update the U1 rule for the reciprocal link.
 
 **Approach:** Use the standard top-level rule frontmatter and symptom-shaped `applies_when`. Direct the reader through R10's measurements and independent domain evidence, then link to the existing invariant, union, and generation owners for the applicable remedy. Explicitly distinguish a correct schema with high discards from a schema admitting forbidden values. Keep the incident and unproven causal claims out of the rule body. Preserve valid weekly wraparound and independently chosen close zones when discussing examples.
+
+Define `under-constrained`, accepted domain-invalid inputs, and discard in terms that distinguish R11 from R12. Include the diagnostic's concrete WRONG/RIGHT pair per R21.
 
 **Test expectation:** No permanent test for prose; use the real-session scenarios in the Verification Contract.
 
@@ -150,7 +161,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Goal:** Show that both changed rules are discoverable and selected by a real agent, not merely present on disk.
 
-**Requirements:** R15–R19; AE6; KTD2–KTD4.
+**Requirements:** R15–R23; AE6; KTD2–KTD4.
 
 **Dependencies:** U1 and U2.
 
@@ -163,6 +174,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 - A task proposing a module-scoped cache for test speed causes the agent to identify the state rule and recommend an owned alternative.
 - A slow property with a correct schema and high discards causes the agent to identify the diagnostic and recommend constructive generation without changing the domain.
 - A property with independently established forbidden accepted values causes the agent to distinguish a domain fix from a generation-only fix.
+- Two independent fresh agents judge the same rule-relevant boundary examples with the same supplied facts; their decisions must agree with each other and the contract, and any disagreement blocks the PR until corrected and rechecked.
 
 **Verification:** For each session, the transcript shows the resolver result, rule file read or citation, and a decision consistent with the scenario. A missing tool call, empty response, absent citation/read, or inaccessible session is a failed or blocked uptake check, not proof of pickup. These probes show observed uptake, not an enforcement guarantee.
 
@@ -172,6 +184,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 - Inspect the actual resolver output for the declared `cell-architecture` and `schema-modelling` roots and any warnings or errors; `.compound-engineering/config.yaml` already names both. Rules must be top-level Markdown with `title` and `applies_when`; the README is not itself a rule.
 - Execute U3's real-session scenarios with the actual CE skill in a fresh session and record the trace, input, output, model and checkout identity. Keep private application names and paths out of committed evidence. This plan does not prescribe an unverified CLI invocation.
+- Request root's final-text Gemini clarity pass for every new or changed rule, supply the exact final file contents and revision, and obtain root's disposition of every finding before the PR per R23. The implementation agent must not call Gemini or publish while the pass or any ruling is pending.
 - Do not run mutation, end-to-end, journey, Playwright, or full-gate suites on this host (OP28). If the required agent-session proof is an end-to-end lane, run it off-host and report the exact command, environment, checkout, and result; a resolver-only check is not a substitute.
 - Pack prose creates no new test, lint gate, or CI requirement. Any later instrument proposal follows R19 and `repos/constitution/ENFORCEMENT.md`; its clean-tree enrollment and independent owner are prerequisites, not work hidden in U1–U3.
 
@@ -180,6 +193,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 ## Definition of Done
 
 - U1 and U2 satisfy their traced requirements and retain the existing pack format and non-duplication boundaries.
+- Each changed rule meets R20–R22 and root has completed R23 on the exact final text; unresolved findings or a subsequent rule edit block the PR.
 - U3 records observed discovery and real-session uptake for all three scenarios, or explicitly reports the unavailable session as a blocker.
 - The absent CI wall-clock cross-link and detector enforcement are reported as unresolved external follow-ups; no fabricated link or silently introduced gate ships.
 - No abandoned fixtures, scratch outputs, unrelated edits, or private incident identifiers remain in the deliverable.
