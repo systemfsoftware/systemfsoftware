@@ -15,7 +15,7 @@ Build a port fake through the port's own service constructor (`Tag.of` inside `L
 
 Every test double a package's tests use for its own ports or services lives under that package's `tests/__fixtures__`, never in src/. No package publishes a test double; a consumer builds its own.
 
-The one exception is the Storybook preview's stand-ins, each in a `__mocks__` folder beside the module it replaces, where `sb.mock` resolves it: the I/O layer stand-in `src/io/__mocks__/layer.ts`, the fixture-controls module `src/io/__mocks__/fixture-controls.ts` it keeps its state in, and the router stand-in `src/__mocks__/router.tsx` (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md). Tests never import them, except the I/O layer stand-in's own contract suite at `tests/io-layer.contract.test.ts`, which imports the stand-in and the fixture controls by the app's source alias; stories never import `tests/__fixtures__`. Every service the I/O layer stand-in provides is a port fake, and the contract-suite paragraph below applies to it as to any other. The router stand-in is the real router on memory history, not a fake, so it has no contract suite.
+The one exception is the Storybook preview's stand-ins, each in a `__mocks__` folder beside the module it replaces, where `sb.mock` resolves it: the I/O layer stand-in `src/io/__mocks__/layer.ts`, the app's fixture-controls module `src/io/__mocks__/fixture-controls.ts`, which names the controls that steer the stand-in's timing and failures and holds no data, and the router stand-in `src/__mocks__/router.tsx` (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md). Tests never import them, except the I/O layer stand-in's own contract suite at `tests/io-layer.contract.test.ts`, which imports the stand-in and the fixture controls by the app's source alias; stories never import `tests/__fixtures__`. Every service the I/O layer stand-in provides is a port fake, and the contract-suite paragraph below applies to it as to any other. The I/O layer stand-in owns the stand-in data. The fixture controls are built from primitives in their own workspace package, `packages/fixture-controls`, which imports nothing from any app. That package is mechanism, not a test double, and is not modelled as an I/O service. The router stand-in is the real router on memory history, not a fake. Neither the package nor the router stand-in has a contract suite.
 
 Every port fake runs in one contract suite whose pairwise scenarios (`pairwiseFor`) run against the fake and the real adapter and expect the same result, the same tagged failure for a refused operation included. Every operation of the port appears in at least one scenario, and no test or story uses a fake that suite does not run. The suite lives in the `tests/` of the package or app whose tests or stories use the fake (the ui-testing pack's worked-example-preview-stand-ins-story-and-contract-suite.md shows one whole). A package that doubles another package's port writes its own contract suite through that package's published entry. The suite's Feature follows features-specify-our-systems-observable-behaviour.md.
 
@@ -26,6 +26,16 @@ Prove a fake's fidelity by running the same suite on the real adapter, never by 
 ```typescript
 // WRONG: src/messages.fake.ts, imported only by tests
 const fakeMessages = Layer.succeed(Messages)({ post: () => Effect.void } as unknown as MessagesShape)
+// WRONG: a story pushes data into a fixture module
+export const Shown = { beforeEach: () => setMessages([{ id: 'm-1', text: 'Hello' }]) }
+// WRONG: fixture controls modelled as an I/O service
+export class FixtureControls
+  extends Context.Service<FixtureControls, { readonly messages: Ref.Ref<ReadonlyArray<Message>> }>()(
+    'app/FixtureControls',
+  )
+{}
+// WRONG: control primitives defined inside the app, in src/io/__mocks__/fixture-controls.ts
+export const makeFault = (name: string) => {/* ... */}
 // RIGHT: tests/__fixtures__/messages.fake.ts, built through the port and run by the port's contract suite
 export const MessagesFake = Layer.succeed(Messages)(Messages.of({ post: () => Effect.void }))
 ```
