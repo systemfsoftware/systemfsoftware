@@ -15,7 +15,7 @@ If the schema accepts a domain-forbidden value, encode the invariant as a field 
 
 Never increase timeouts, reduce runs, or add caches or module state to make the property pass. A production cache needs the independent ownership and evidence in (pack: cell-architecture, instance-state-lives-in-the-constructor.md). Never add a constraint or narrow the schema's valid domain to make a test pass; an invariant must be independently established. If the schema already carries the invariant, change generation, not validation.
 
-If no independent source establishes an invariant, the arbitrary must not filter on it either: generate the schema's whole domain, and make the property assert the workflow's specified outcome for the values the filter used to remove, such as its typed failure. Remove such filters as part of diagnosing the slow property.
+A filter excludes inputs as domain-invalid when it claims the excluded decoded inputs cannot occur. If no independent source establishes that claim, remove the filter: generate the schema's whole domain and assert the workflow's specified outcome for the excluded values, such as its typed failure. A filter selecting a valid branch, such as equal values, an ordering or membership in a set, is a property precondition, not a domain claim; keep it as a branch-focused property beside the general property. If its discards are costly, replace the filter with constructive branch generation (pack: property-testing, boundaries-and-collisions-are-constructed.md).
 
 ```typescript
 // WRONG: the domain requires start <= end, but the schema accepts an inverted range
