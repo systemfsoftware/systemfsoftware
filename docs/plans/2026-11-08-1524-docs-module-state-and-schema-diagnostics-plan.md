@@ -70,7 +70,7 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 **Rule clarity**
 
 - R20. Each new or changed rule must state its scope and situational triggers, define the terms needed for its decisions, and make the same code and evidence yield one decision for independent readers.
-- R21. Each new or changed rule must include a concise WRONG/RIGHT pair of concrete TypeScript or Effect examples. The state pair must cover a frozen constant, a function that builds an immutable table without retained state, justified `AsyncLocalStorage`, a memo `Map`, and a caller-keyed `WeakMap`; the diagnostic pair must distinguish domain-invalid accepted values from excessive discards against a correct schema.
+- R21. Each new or changed rule must include one concise WRONG/RIGHT pair of concrete TypeScript or Effect examples. Check the state and diagnostic boundary decisions with the independent-reader comparison in the Verification Contract, rather than requiring every case in the pair.
 - R22. Keep one disjoint rule per top-level file, short enough to load as guidance, with required `title` and situational `applies_when` frontmatter; follow the [Compound Packs guide](https://github.com/EveryInc/compound-engineering-plugin/blob/main/docs/guides/packs.md) for discovery and loading.
 - R23. Before a PR, root runs a Gemini clarity pass on the final text of every new or changed rule and rules every finding; the implementation agent never calls Gemini. A changed rule after that pass needs a new pass on its final text.
 
@@ -151,7 +151,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Approach:** Update the title and `applies_when` to include state in libraries and composition roots. Apply the state-rule drafting basis and R6–R7's closed exception and evidence test. Cover the alternatives in R4–R5, deep immutability limits, `WeakMap`, Effect context identities, and production cache evidence. Add the schema-diagnostic cross-link after U2; keep the rule short and avoid incident details in the pack.
 
-Define `module-level state` and `demonstrated use` with the exact externally owned callback boundary and signature evidence in R6–R7. Include the WRONG/RIGHT request-context and cache decisions in AE1–AE2 and R21's boundary cases within one short WRONG/RIGHT pair.
+Define `module-level state` and `demonstrated use` with the exact externally owned callback boundary and signature evidence in R6–R7. Include one short WRONG/RIGHT pair and check the boundary decisions through the independent-reader comparison in the Verification Contract.
 
 **Test expectation:** No permanent test for prose; use the real-session scenarios in the Verification Contract.
 
