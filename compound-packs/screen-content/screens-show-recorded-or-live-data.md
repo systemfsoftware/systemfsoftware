@@ -7,7 +7,7 @@ applies_when:
 tags: [content, data, testimonials, empty-state]
 ---
 
-Read every number, person, count, rating, review, testimonial, customer logo and activity item a deployed screen renders from stored or live data. Show a testimonial, review or logo from static content only when the change links to where that real person or customer gave it. A screen with no data yet shows its empty state, never sample rows. Keep sample data in stories, tests and fixtures, which never ship; never ship a hard-coded count ("12,000 teams") or a random or faker call.
+Read every number, person, count, rating, review, testimonial, customer logo and activity item a deployed screen renders from stored or live data. Show a testimonial, review or logo from static content only when the change links to where that real person or customer gave it. A screen with no data yet shows its empty state, never sample rows. Keep sample data in stories, tests and fixtures, which never ship (in a story, sample data is only what the I/O layer stand-in answers, never a scene fixture: ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md); never ship a hard-coded count ("12,000 teams") or a random or faker call.
 
 ```tsx
 // WRONG

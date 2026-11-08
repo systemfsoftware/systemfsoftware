@@ -1,26 +1,31 @@
 ---
-title: A port's fake lives in the test tree, is built through the port's constructor and runs in one contract suite beside the real adapter; the one src/ exception is a Storybook I/O stand-in and its fixture controls
+title: A port's fake lives in the test tree, is built through the port's constructor and runs in one contract suite beside the real adapter; the one src/ exception is the Storybook preview's stand-ins and their fixture controls
 applies_when:
   - writing a fake, stub or in-memory stand-in for a port or service, or adding an operation to a port that has one
   - a module in src/ is imported only by tests
   - a package wants to ship a test double to its consumers
-  - writing a Storybook stand-in for an I/O module
+  - writing a Storybook stand-in for the I/O layer or the router, or its fixture controls
+  - deciding whether a stand-in or fake needs a contract suite, or whether a contract test can be removed
 tags: [testing, fake, contract-test, port, store, fixtures, test-double, storybook]
 ---
+
+Applies to: whoever writes, changes or reviews a test double of a port or service, a Storybook stand-in, or a contract suite, in any package or app.
 
 Build a port fake through the port's own service constructor (`Tag.of` inside `Layer.effect(Tag)` or `Layer.succeed(Tag)`), never `Layer.mock`, a partial object, a never-typed stub or a type assertion, and implement every operation of the port.
 
 Every test double a package's tests use for its own ports or services lives under that package's `tests/__fixtures__`, never in src/. No package publishes a test double; a consumer builds its own.
 
-The one exception is a Storybook stand-in for an I/O module and the fixture-controls module those stand-ins share: they live in a `__mocks__` folder beside that I/O module, where `sb.mock` resolves it (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md). Tests never import them; stories never import `tests/__fixtures__`.
+The one exception is the Storybook preview's stand-ins, each in a `__mocks__` folder beside the module it replaces, where `sb.mock` resolves it: the I/O layer stand-in `src/io/__mocks__/layer.ts`, the fixture-controls module `src/io/__mocks__/fixture-controls.ts` it keeps its state in, and the router stand-in `src/__mocks__/router.tsx` (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md). Tests never import them; stories never import `tests/__fixtures__`. Every service the I/O layer stand-in provides is a port fake, and the contract-suite paragraph below applies to it as to any other. The router stand-in is the real router on memory history, not a fake, so it has no contract suite.
 
-Every port fake runs in one contract suite whose pairwise scenarios (`pairwiseFor`) run against the fake and the real adapter and expect the same result, the same tagged failure for a refused operation included. Every operation of the port appears in at least one scenario, and no test or story uses a fake that suite does not run. A package that doubles another package's port writes its own contract suite through that package's published entry. The suite's Feature follows features-specify-our-systems-observable-behaviour.md.
+Every port fake runs in one contract suite whose pairwise scenarios (`pairwiseFor`) run against the fake and the real adapter and expect the same result, the same tagged failure for a refused operation included. Every operation of the port appears in at least one scenario, and no test or story uses a fake that suite does not run. The suite lives in the `tests/` of the package or app whose tests or stories use the fake. A package that doubles another package's port writes its own contract suite through that package's published entry. The suite's Feature follows features-specify-our-systems-observable-behaviour.md.
 
 A store port's suite asserts read-after-write and that a read changes nothing; it asserts a further law (independent keys, last-write-wins) only where the port's documentation promises it.
 
-Prove a fake's fidelity by running the same suite on the real adapter, never by re-deriving a third party's documentation into the fake.
+Prove a fake's fidelity by running the same suite on the real adapter, never by re-deriving a third party's documentation into the fake. A contract suite is required and is never removed as a low-value test: its Then reads what the port's caller gets back from each side, which is our behaviour, unlike a scenario that reads a stand-in's received requests (failing-tests-are-fixed-not-weakened.md).
 
 ```typescript
 // WRONG: src/messages.fake.ts, imported only by tests
 const fakeMessages = Layer.succeed(Messages)({ post: () => Effect.void } as unknown as MessagesShape)
+// RIGHT: tests/__fixtures__/messages.fake.ts, built through the port and run by the port's contract suite
+export const MessagesFake = Layer.succeed(Messages)(Messages.of({ post: () => Effect.void }))
 ```

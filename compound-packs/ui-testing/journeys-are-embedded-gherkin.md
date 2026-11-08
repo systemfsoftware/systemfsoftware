@@ -7,11 +7,13 @@ applies_when:
 tags: [storybook, gherkin, journey, steps, bdd]
 ---
 
+Applies to: whoever writes or reviews a journey, which lives in a `*.stories.tsx` file.
+
 A journey is a storybook-gherkin Feature in a story file. It specifies the observable behaviour of the app as the person using it meets it, in the app's own domain language. The same bar applies as for a backend Feature (testing pack: features-specify-our-systems-observable-behaviour.md).
 
 - Subject: the Feature title, scenario titles and step text name what a person does or sees. Never name a component, primitive, design-system library, visual state (hover, focus, pressed), atom, fake, route, URL, selector, third-party endpoint, request field or status code. A third party may be named only as what the person themselves sees, picks or connects in the product.
 - Swap: titles, steps and expected values read the same if the component tree is restructured, the UI library replaced, or the third-party service swapped.
-- Roles: a Given sets state only through the fixture-controls module (the first calls `resetAll()`; see each-journey-starts-from-reset-fixture-controls.md), with a step that never clicks, types, navigates or reaches into a stand-in. Exactly one When, the person's action. Then reads only what the person perceives (queries-are-accessible.md), never a fake's call record, a request sent or an atom's value.
+- Roles: a Given sets state only through the fixture-controls module, `src/io/__mocks__/fixture-controls.ts` (the first calls `resetAll()`; see each-journey-starts-from-reset-fixture-controls.md), with a step that never clicks, types, navigates or reaches into a stand-in. Exactly one When, the person's action. Then reads only what the person perceives (queries-are-accessible.md), never a fake's call record, a request sent or an atom's value.
 - Expected values follow the testing pack's expected-values-come-from-the-requirement.md.
 - One capability per story file, named for it (`placing-an-order.stories.tsx`), with no `.feature` file beside it: the story is the feature file.
 - A set of stories that enumerates a component's visual states is a visual or accessibility check written as plain stories, never a Feature.

@@ -2,11 +2,13 @@
 title: Each journey starts from reset fixture controls, set before mount when mount reads them, and a step sets a control only before the action it tests
 applies_when:
   - writing the preview's decorator, a story's beforeEach or a journey's first Given
-  - a story needs an I/O stand-in to answer differently, hold or fail
+  - a story needs the I/O layer stand-in to answer differently, hold or fail
 tags: [storybook, fixture-controls, fakes, lifecycle]
 ---
 
-Call the fixture-controls module's `resetAll()` in the first Given of every journey, so no I/O control a previous story set is still in force. Never reset controls from a hand-written list.
+Applies to: whoever writes or reviews a story, a journey step or `.storybook/preview.tsx`. The fixture-controls module is `src/io/__mocks__/fixture-controls.ts`, beside the I/O layer stand-in (stories-get-io-from-stand-ins-beside-the-io-module.md). Every control registers itself there when it is created, and `resetAll()` resets every registered control.
+
+Call `resetAll()` in the first Given of every journey, so no I/O control a previous story set is still in force. Never reset controls from a hand-written list.
 
 When a component reads a control while it mounts (its services are built on mount, or it fetches on mount), call `resetAll()` in the story's `beforeEach`, set the control there, and return the function that undoes it. A Given runs after mount and sets that state too late.
 

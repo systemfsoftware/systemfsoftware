@@ -15,7 +15,7 @@ A component or hook module (.tsx and .ts alike) calls none of these, and calls n
 
 Each is an Effect service in the app's Layer, read through a runtime atom: server data through `appRuntime.atom(...)`, client-persisted state through `Atom.kvs` over a runtime whose Layer provides a KeyValueStore, the current time through a runtime atom with `Atom.withRefresh`, a delay on input through `Atom.debounce`. `new Date(value)` from a value the component was given is formatting, not a clock read (derivations-live-at-module-scope.md). The atom library's own React bindings are the runtime edge.
 
-This keeps responses from racing out of order, keeps inputs a story can set, and lets stories use the I/O stand-ins the preview loads (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md).
+This keeps responses from racing out of order, keeps inputs a story can set, and lets stories use the I/O layer stand-in the preview loads (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md).
 
 ```tsx
 // WRONG

@@ -41,7 +41,7 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 | `e2e-testing`         | Where end-to-end tests live                                                                |
 | `property-testing`    | What makes a property a real property                                                      |
 | `ui-state`            | Atoms, commands and derivations in React code                                              |
-| `ui-testing`          | Storybook journeys, stand-ins and queries                                                  |
+| `ui-testing`          | Storybook journeys, the preview's two stand-ins (I/O layer, router) and queries            |
 | `page-accessibility`  | Accessibility tests of a static or island site's built pages                               |
 | `design-system`       | Building and styling UI with Astryx                                                        |
 | `screen-content`      | What screens show and say                                                                  |
