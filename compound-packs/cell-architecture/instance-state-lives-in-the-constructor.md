@@ -4,10 +4,13 @@ applies_when:
   - adding a cache, counter, registry, connection, client or memo table
   - declaring module-level state in a library, application or composition root
   - carrying request context into a callback
+  - choosing a representation for service-owned state or its transitions
 tags: [cell, state, module-scope, layer, request-context]
 ---
 
 Make each stateful capability a `Context.Service` whose implementation a Layer builds and the composition root provides once. This includes caches, memo tables, registries, counters, clients, connections, pools, formatters and lookup tables built at runtime, and request-scoped values. Follow (pack: cell-architecture, services-are-provided-once-at-the-composition-root.md), (pack: cell-architecture, layers-are-named-layer-and-layerConfig.md) and (pack: cell-architecture, scopes-close-at-the-run-edge.md).
+
+Choose the tool by the state it owns. For named states with transitions, including lifecycles, protocols, workflows, retry or backoff and connection states, define a machine with [`createMachine` from `@systemfsoftware/xstate`](https://github.com/systemfsoftware/xstate/blob/688aabff96cee96c168d80b277b7616f9faca67d/packages/xstate/src/index.ts); never hand-roll one with a status field and if-chains. The Layer-built service owns the actor: start it and bind its stop to the Layer's scope with [`createEffectActor` from `@systemfsoftware/xstate-effect`](https://github.com/systemfsoftware/xstate/blob/688aabff96cee96c168d80b277b7616f9faca67d/packages/xstate-effect/src/createEffectActor.ts). For a plain observable value store with subscriptions and no named-state transitions, use [`createStore` from `@systemfsoftware/xstate-store`](https://github.com/systemfsoftware/xstate/blob/688aabff96cee96c168d80b277b7616f9faca67d/packages/xstate-store/src/index.ts), owned by the Layer-built service; release subscriptions within their owning scope. For a keyed table or counter with neither named-state transitions nor subscriptions, use a `Ref` or `Map` inside the Layer-built service.
 
 Module-level state is a top-level binding or module-retained closure whose binding, reachable properties, collection entries or captured data can change after module evaluation. Never declare top-level `let` or `var`, a mutable `Map`, `Set`, `WeakMap`, `WeakSet`, array, object, `Ref`, client or stateful class instance, or a lazy closure that retains a value. Weak keys do not change the lifetime rule.
 
