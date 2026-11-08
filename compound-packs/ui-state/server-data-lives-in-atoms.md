@@ -13,6 +13,8 @@ Never import a React server-state library, in any import form, type-only include
 
 React state holds only UI-local values: no other component reads it, it is not derived from an atom, service or fetch result, it is never persisted, and it dies with the component (a DOM element handle, an open or closed flag, hover or focus, an uncommitted input draft).
 
+For state owned by a service rather than UI-local state, choose its representation under (pack: cell-architecture, instance-state-lives-in-the-constructor.md); components still read service data through atoms.
+
 ```tsx
 // WRONG
 const [onHand, setOnHand] = useState(AsyncResult.isSuccess(stock) ? stock.value.onHand : 0)
