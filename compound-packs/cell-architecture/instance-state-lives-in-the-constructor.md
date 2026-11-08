@@ -7,11 +7,13 @@ applies_when:
 tags: [cell, state, module-scope, layer, request-context]
 ---
 
+Make each stateful capability a `Context.Service` whose implementation a Layer builds and the composition root provides once. This includes caches, memo tables, registries, counters, clients, connections, pools, formatters and lookup tables built at runtime, and request-scoped values. Follow (pack: cell-architecture, services-are-provided-once-at-the-composition-root.md), (pack: cell-architecture, layers-are-named-layer-and-layerConfig.md) and (pack: cell-architecture, scopes-close-at-the-run-edge.md).
+
 Module-level state is a top-level binding or module-retained closure whose binding, reachable properties, collection entries or captured data can change after module evaluation. Never declare top-level `let` or `var`, a mutable `Map`, `Set`, `WeakMap`, `WeakSet`, array, object, `Ref`, client or stateful class instance, or a lazy closure that retains a value. Weak keys do not change the lifetime rule.
 
 Module-level `const` may hold an immutable value, a pure function without mutable captures, or an inert Schema or Layer description. Deeply immutable means no reachable data or captured state can change through any retained reference; `readonly` and a shallow `Object.freeze` do not prove it. A function may build a fresh immutable table on each call without retaining it. A `Context.Service` key is an identity, not a service instance; a `Context.Reference` default retaining mutable state is not exempt.
 
-Create mutable state inside the owning cell's service, Layer, blueprint or handle constructor. Acquire and release connections, pools, clients and sockets in a scoped service or Layer. Read application settings from the feature configuration service; only library-adapter Layer options may receive configuration explicitly (pack: configuration, settings-reach-code-through-context.md).
+Build resources that need acquisition and release, such as clients, sockets and pools, with `Layer.effect` inside the scope so their release is bound to that scope. Read application settings from the feature configuration service; only library-adapter Layer options may receive configuration explicitly (pack: configuration, settings-reach-code-through-context.md).
 
 A cache is justified only by all three, in order: a stated production latency, throughput or cost budget; production telemetry or a production-representative load measurement showing the uncached path misses it; and a measurement showing the cached path meets it under the same load. A benchmark speedup alone, faster tests or CI, or “it is faster” is not evidence. Even then, the cache belongs to the cell's scoped service or `Ref`, with its lifetime bound to the scope, never to the module. For slow properties, see (pack: schema-modelling, diagnose-slow-properties-before-optimizing.md).
 
@@ -24,12 +26,16 @@ const byCaller = new WeakMap<object, string>()
 const userId = new AsyncLocalStorage<string>()
 const ownHandler = () => nextHandler(userId.getStore())
 
-// RIGHT: immutable declarations; use a scoped cache only after the production proof above
+// RIGHT: immutable declarations; the Layer builds one formatter map per service instance
 const labels = Object.freeze({ ok: 'ok' })
 const makeLabels = () => Object.freeze({ ok: 'ok' })
-const make = Effect.gen(function*() {
-  return yield* Ref.make(new Map<string, string>())
-})
+class ZoneFormatters extends Context.Service<ZoneFormatters, {
+  readonly format: (zone: string, instant: number) => string | undefined
+}>()('ZoneFormatters') {}
+const layer = Layer.effect(ZoneFormatters)(Effect.sync(() => {
+  const formats = new Map([['UTC', new Intl.DateTimeFormat('en', { timeZone: 'UTC' })]])
+  return ZoneFormatters.of({ format: (zone, instant) => formats.get(zone)?.format(instant) })
+}))
 
 // RIGHT only when lifetime, cleanup and request isolation are demonstrated:
 // Node.js v24.22.2, node:util inspect.custom(depth, opts, inspect) has no context slot:
