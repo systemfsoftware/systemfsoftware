@@ -1,8 +1,8 @@
 ---
-title: Wire Storybook file for file as this worked example does, with the control-primitives package, the preview, the I/O layer stand-in and its seed, the app's named fixture controls, the router stand-in, journeys with their steps, a presentational story and the stand-in's contract suite
+title: Wire Storybook file for file as this worked example does, with the control primitives, the preview, the I/O layer stand-in and its seed, the app's named fixture controls, the router stand-in, journeys with their steps, a presentational story and the stand-in's contract suite
 applies_when:
   - setting up Storybook in an app, or adding its first story or journey
-  - writing or changing .storybook/preview, a file in a __mocks__ folder, a story, a step file, the control-primitives package or the I/O layer stand-in's contract suite
+  - writing or changing .storybook/preview, a file in a __mocks__ folder, a story, a step file, the control primitives or the I/O layer stand-in's contract suite
   - unsure what a stand-in, its seed, a fixture control, a control primitive or the router stand-in looks like in code
   - deciding where a story's data comes from
 tags: [storybook, sb-mock, io, router, stand-in, seed, fixture-controls, control-primitives, contract-test, worked-example]
@@ -13,43 +13,32 @@ Applies to: every app with Storybook stories. Copy these files and rename `Order
 Who holds what:
 
 - Data: the I/O layer stand-in `src/io/__mocks__/layer.ts` declares the seeded records and builds a fresh world from them each time the app runtime builds it. Each story mounts a new registry, so each story starts on the same seed. A story chooses its data by naming a seeded record in step text, or by doing the person's actions in the real UI. No story, step or decorator hands the stand-in records or writes an app atom. Data the seed lacks is added to the seed.
-- Behaviour: control primitives (landing, fault, approval, record, `resetAll`) are mechanism only, in their own workspace package `packages/fixture-controls`, which imports nothing from any app. `src/io/__mocks__/fixture-controls.ts` names the app's controls from them. A control holds behaviour (a fault, a held landing) or one value the stand-in produced (the id it just minted), never the records a screen lists. It is not an I/O service.
+- Behaviour: control primitives (landing, fault, approval, record, `resetAll`) are mechanism only, in `src/io/__mocks__/control-primitives.ts` beside the stand-in; they move to a shared package only once a second app consumes them and that package has a non-test importer. `src/io/__mocks__/fixture-controls.ts` names the app's controls from them. A control holds behaviour (a fault, a held landing) or one value the stand-in produced (the id it just minted), never the records a screen lists. It is not an I/O service.
 - Props: a presentational component that reaches no I/O takes its data as `args`, built with the domain's own constructors.
 
 Two reset paths: `resetAll()` resets the controls; the new registry per story resets the world and atom state.
 
-## The control-primitives package
+## The control primitives, beside the stand-in
 
-```json
-// packages/fixture-controls/package.json
-{
-  "name": "@app/fixture-controls",
-  "private": true,
-  "type": "module",
-  "exports": { ".": { "import": "./src/index.ts", "types": "./src/index.ts" } },
-  "dependencies": { "effect": "catalog:" }
-}
-```
+`src/io/__mocks__/control-primitives.ts` holds the mechanism every named control is built from. It names no app noun and imports nothing else from the app. It stays here, beside the stand-in, until a second app consumes it; it then moves to a shared package only if that package has a non-test importer. It carries no test: its primitives are Effect's `Latch` and `Deferred`, and a control that leaks between stories fails a story, which is where it is caught.
 
 ```typescript
-// packages/fixture-controls/src/registry.ts: every control registers its reset; resetAll() runs them all
+// src/io/__mocks__/control-primitives.ts
+import { Deferred, Effect, Latch } from 'effect'
+
+// The registry: every control registers its reset when it is created; resetAll() runs them all.
 const controls = new Map<string, () => void>()
 
-export const defineControl = (name: string, reset: () => void): void => {
-  if (controls.has(name)) throw new Error(`fixture-controls: a control named "${name}" is already registered`)
+const defineControl = (name: string, reset: () => void): void => {
+  if (controls.has(name)) throw new Error(`control-primitives: a control named "${name}" is already registered`)
   controls.set(name, reset)
 }
 
 export const resetAll = (): void => {
   for (const reset of controls.values()) reset()
 }
-```
 
-```typescript
-// packages/fixture-controls/src/landing.ts: a write that lands in named phases, each holdable and awaitable
-import { Effect, Latch } from 'effect'
-import { defineControl } from './registry.js'
-
+// A write that lands in named phases, each holdable and awaitable.
 export interface Landing {
   readonly hold: (...phases: ReadonlyArray<string>) => void
   readonly release: (phase: string) => void
@@ -61,7 +50,7 @@ export const makeLanding = (name: string, phaseNames: ReadonlyArray<string>): La
   const phases = new Map(phaseNames.map((phase) => [phase, { latch: Latch.makeUnsafe(true), held: false }]))
   const phaseOf = (phase: string) => {
     const found = phases.get(phase)
-    if (found === undefined) throw new Error(`fixture-controls: no such phase "${phase}"`)
+    if (found === undefined) throw new Error(`control-primitives: no such phase "${phase}"`)
     return found
   }
   defineControl(`landing:${name}`, () => {
@@ -87,12 +76,8 @@ export const makeLanding = (name: string, phaseNames: ReadonlyArray<string>): La
     awaitPhase: (name) => Effect.suspend(() => phaseOf(name).latch.await),
   }
 }
-```
 
-```typescript
-// packages/fixture-controls/src/fault.ts: a boundary that can fault, always or once
-import { defineControl } from './registry.js'
-
+// A boundary that can fault, always or once.
 export interface BoundaryFault {
   readonly arm: () => void
   readonly armOnce: () => void
@@ -127,13 +112,8 @@ export const makeFault = (name: string): BoundaryFault => {
     },
   }
 }
-```
 
-```typescript
-// packages/fixture-controls/src/approval.ts: a question a person answers; the boundary awaits settle
-import { Deferred, Effect } from 'effect'
-import { defineControl } from './registry.js'
-
+// A question a person answers; the boundary awaits settle.
 export type ApprovalVerdict = 'granted' | 'declined'
 
 export interface HumanApproval {
@@ -166,12 +146,8 @@ export const makeApproval = (name: string): HumanApproval => {
     settle: Effect.suspend(() => pending !== null ? Deferred.await(pending) : Effect.succeed(verdict)),
   }
 }
-```
 
-```typescript
-// packages/fixture-controls/src/record.ts: one value the stand-in produced, restored to its creation value on reset or take
-import { defineControl } from './registry.js'
-
+// One value the stand-in produced, restored to its creation value on reset or take.
 export interface ValuedRecord<A> {
   readonly set: (value: A) => void
   readonly get: () => A
@@ -196,21 +172,6 @@ export const makeRecord = <A>(name: string, initial: A): ValuedRecord<A> => {
   }
 }
 ```
-
-```typescript
-// packages/fixture-controls/src/index.ts
-export { makeApproval } from './approval.js'
-export type { ApprovalVerdict, HumanApproval } from './approval.js'
-export { makeFault } from './fault.js'
-export type { BoundaryFault } from './fault.js'
-export { makeLanding } from './landing.js'
-export type { Landing } from './landing.js'
-export { makeRecord } from './record.js'
-export type { ValuedRecord } from './record.js'
-export { resetAll } from './registry.js'
-```
-
-The package holds no app noun and no test: its primitives are Effect's `Latch` and `Deferred`, and a control that leaks between stories fails a story, which is where it is caught.
 
 ## The app's production code, which stories run unchanged
 
@@ -386,7 +347,7 @@ export default definePreview({
 2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in and step files import it.
 
 ```typescript
-import { makeFault, makeLanding, makeRecord, resetAll } from '@app/fixture-controls'
+import { makeFault, makeLanding, makeRecord, resetAll } from './control-primitives'
 
 export { resetAll }
 
@@ -614,7 +575,7 @@ export const ShowsTheItem: StoryObj<typeof meta> = {
 }
 ```
 
-8. `tests/orders.contract.integration.test.ts`: the contract suite. It is required because every service the I/O layer stand-in provides is a port fake. It is its own unit and lands before the first story that uses the stand-in. It runs in the app's Node integration project, not in Storybook. It reaches both sides through the I/O module's own specifier: `vi.mock` with no factory loads the stand-in beside it, and `vi.importActual` of the same specifier loads the real module, so the test never imports from `__mocks__` and nothing on the real side is mocked. The real module runs in the test's process against the real backend, which `tests/__fixtures__/orders-backend.ts` starts in a container and whose URL it provides; the URL reaches the real module through `Config` (integration-testing pack). Each scenario reads only what it created through the port on both sides, and never compares the stand-in's seed with an empty real store. Every operation of the port appears in at least one scenario. The router stand-in is the real router, and the control-primitives package is mechanism, not a fake; neither needs a suite.
+8. `tests/orders.contract.integration.test.ts`: the contract suite. It is required because every service the I/O layer stand-in provides is a port fake. It is its own unit and lands before the first story that uses the stand-in. It runs in the app's Node integration project, not in Storybook. It reaches both sides through the I/O module's own specifier: `vi.mock` with no factory loads the stand-in beside it, and `vi.importActual` of the same specifier loads the real module, so the test never imports from `__mocks__` and nothing on the real side is mocked. The real module runs in the test's process against the real backend, which `tests/__fixtures__/orders-backend.ts` starts in a container and whose URL it provides; the URL reaches the real module through `Config` (integration-testing pack). Each scenario reads only what it created through the port on both sides, and never compares the stand-in's seed with an empty real store. Every operation of the port appears in at least one scenario. The router stand-in is the real router, and the control primitives are mechanism, not a fake; neither needs a suite.
 
 ```typescript
 import { vi } from 'vitest'
@@ -669,9 +630,11 @@ const withNoOrders: Decorator = (Story) => {
 export class FixtureControls
   extends Context.Service<FixtureControls, { readonly orders: Ref.Ref<ReadonlyArray<Order>> }>()('app/FixtureControls')
 {}
-// WRONG: control primitives defined inside the app, in src/io/__mocks__/fixture-controls.ts
-const controls = new Map<string, () => void>()
+// WRONG: the control primitives written into the app's named-controls module
+// src/io/__mocks__/fixture-controls.ts
 export const makeFault = (name: string) => {/* ... */}
+// WRONG: a shared package for the primitives, with one consuming app and only test importers
+import { makeFault } from '@app/fixture-controls'
 // WRONG: a control used as a data channel, holding the records a screen lists
 const orders = makeRecord<ReadonlyArray<Order>>('orders', [])
 // WRONG: the world kept in module scope, so one story's writes leak into the next

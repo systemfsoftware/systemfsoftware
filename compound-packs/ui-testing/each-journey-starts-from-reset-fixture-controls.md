@@ -7,7 +7,7 @@ applies_when:
 tags: [storybook, fixture-controls, fakes, lifecycle]
 ---
 
-Applies to: whoever writes or reviews a story, a step file or `.storybook/preview.tsx`. The app's fixture-controls module is `src/io/__mocks__/fixture-controls.ts`, beside the I/O layer stand-in. It names the app's controls and builds them from the primitives in the workspace package `packages/fixture-controls`, where every control registers itself when it is created and `resetAll()` resets every registered control (stories-get-io-from-stand-ins-beside-the-io-module.md; worked-example-preview-stand-ins-story-and-contract-suite.md shows both files whole).
+Applies to: whoever writes or reviews a story, a step file or `.storybook/preview.tsx`. The app's fixture-controls module is `src/io/__mocks__/fixture-controls.ts`, beside the I/O layer stand-in. It names the app's controls and builds them from the primitives beside it in `src/io/__mocks__/control-primitives.ts`, where every control registers itself when it is created and `resetAll()` resets every registered control (stories-get-io-from-stand-ins-beside-the-io-module.md; worked-example-preview-stand-ins-story-and-contract-suite.md shows both files whole).
 
 Call `resetAll()` in the first Given of every journey, so no control a previous story set is still in force. Never reset controls from a hand-written list.
 
@@ -32,8 +32,11 @@ const readOrders = Effect.gen(function*() {
   const controls = yield* FixtureControls
   return yield* Ref.get(controls.orders)
 })
-// WRONG: control primitives defined inside the app, in src/io/__mocks__/fixture-controls.ts
-export const makeLanding = (name: string, phases: ReadonlyArray<string>) => {/* ... */}
+// WRONG: the control primitives written into the app's named-controls module
+// src/io/__mocks__/fixture-controls.ts
+export const makeFault = (name: string) => {/* ... */}
+// WRONG: a shared package for the primitives, with one consuming app and only test importers
+import { makeFault } from '@app/fixture-controls'
 // RIGHT: the story's meta, for a fault read while the component mounts
 const meta = {
   component: OrdersPanel,

@@ -2,7 +2,7 @@
 title: The Storybook preview substitutes exactly two modules with sb.mock, the I/O layer and the router, each by a stand-in in a __mocks__ folder beside it; a story's data is the I/O layer stand-in's seed, fixture controls only steer behaviour, and nothing else is ever substituted
 applies_when:
   - a story's components reach I/O, a route or a Link
-  - writing or changing .storybook/preview, the I/O layer stand-in, the router stand-in, the app's fixture-controls module or the control-primitives package
+  - writing or changing .storybook/preview, the I/O layer stand-in, the router stand-in, the app's fixture-controls module or the control primitives
   - deciding whether a story may mock, fake, stub or substitute a module, write an atom, or use a fixture
   - deciding where a story's data comes from, or a story needs data the screen does not show yet
   - deciding where a Storybook stand-in or a fixture control goes
@@ -10,7 +10,7 @@ applies_when:
 tags: [storybook, sb-mock, io, router, stand-in, mocks-folder, fakes, fixtures, fixture-controls, seed, contract-test]
 ---
 
-Applies to: every app with Storybook stories, from its first story. It binds whoever writes or reviews `.storybook/preview.tsx`, any file in a `__mocks__` folder, the control-primitives package, a story or a step file. Paths below are relative to the app's package root, except `packages/fixture-controls`, which is relative to the workspace root. worked-example-preview-stand-ins-story-and-contract-suite.md in this pack shows every file named here, whole.
+Applies to: every app with Storybook stories, from its first story. It binds whoever writes or reviews `.storybook/preview.tsx`, any file in a `__mocks__` folder, the control primitives, a story or a step file. Paths below are relative to the app's package root. worked-example-preview-stand-ins-story-and-contract-suite.md in this pack shows every file named here, whole.
 
 `sb.mock` is required for exactly these two modules and forbidden for every other module:
 
@@ -24,12 +24,12 @@ Applies to: every app with Storybook stories, from its first story. It binds who
 - Data: a story's data is the I/O layer stand-in's seed. The stand-in declares one fixed set of seeded records as module constants and builds a fresh world from them each time the app runtime builds it. The runtime is built once per registry, and the preview mounts a new registry for each story, so every story starts on the same seeded world. A story chooses its data in two ways only: by naming a seeded record in step text (a capture default or `with:`), which a step finds the way a person would; or by doing the person's actions in the real UI, so the stand-in writes the new record into its world. Data a story needs that the seed lacks is added to the seed. The world lives inside the runtime, never in module scope.
 - Story-written state is forbidden: no story, step, decorator, loader or `beforeEach` hands the stand-in records, adds a fixture file, or writes an app atom. State a story wants that the stand-in would answer (no account, an unavailable service) is an I/O answer: it gets a named control in the fixture-controls module, set in the story's `beforeEach`, which the stand-in consults.
 - Presentational components that reach no I/O take their data as `args` (props), built with the domain's own constructors. Their stories need no stand-in data and no control.
-- Control primitives: the landing, fault, approval and record primitives and `resetAll()` live in their own workspace package, `packages/fixture-controls`, with its own `package.json`. It is mechanism only: it imports nothing from any app and names no app noun.
+- Control primitives: the landing, fault, approval and record primitives and `resetAll()` live beside the stand-in, in `src/io/__mocks__/control-primitives.ts`, apart from the app's named controls. They are mechanism only: they import nothing else from the app and name no app noun. They move to a shared package only once a second app consumes them, and only if that package has a non-test importer; never create a package whose only importers are tests or stories.
 - Fixture controls: `src/io/__mocks__/fixture-controls.ts` is a thin per-app module beside the I/O layer stand-in. It builds the app's own named controls from those primitives (`holdOrderLanding`, `setOrdersReadFault`, `notePlacedOrderId`) and re-exports `resetAll`. It is test-only steering for the stand-in, not an I/O service. A control holds behaviour (a fault, a held landing, a pending approval) or one value the stand-in produced (such as the id it just minted); it never holds the records a screen lists. It is imported only by the I/O layer stand-in and step files. The router stand-in holds no state.
 - Two reset paths: `resetAll()` resets the controls; the stand-in's world and atom state reset because each story mounts a new registry, which builds a new runtime and a new world. Never rely on `resetAll()` to clear data.
 - Nothing else is substituted, by `sb.mock`, `vi.mock`, a bundler or Storybook alias, or a subpath or imports-map redirect: no service, atom, hook, store, Layer, component or first-party client. Each runs its real code against the I/O layer stand-in.
 - Rendering: a story renders the real app component or a component, under the preview's router stand-in. It never renders a route component outside the router, imports nothing from the app entry, built output or `tests/`, and renders no iframe whose src is a route, build directory or URL.
-- Contract suite: every service the I/O layer stand-in provides is a port fake, so it runs in a contract suite at `tests/<port>.contract.integration.test.ts`, in the app's Node integration project, pairwise against the real adapter (testing pack: port-fakes-share-a-contract-suite.md). The suite reaches both sides through `src/io/layer.ts` and never imports from `__mocks__`. The suite is its own unit and lands before the first story that uses the stand-in. It is required and is never dropped as a low-value test: it is the only proof the stand-in answers as production does. The router stand-in is the real router, and the control-primitives package is mechanism, not a fake; neither has a contract suite.
+- Contract suite: every service the I/O layer stand-in provides is a port fake, so it runs in a contract suite at `tests/<port>.contract.integration.test.ts`, in the app's Node integration project, pairwise against the real adapter (testing pack: port-fakes-share-a-contract-suite.md). The suite reaches both sides through `src/io/layer.ts` and never imports from `__mocks__`. The suite is its own unit and lands before the first story that uses the stand-in. It is required and is never dropped as a low-value test: it is the only proof the stand-in answers as production does. The router stand-in is the real router, and the control primitives are mechanism, not a fake; neither has a contract suite.
 
 ```tsx
 // WRONG: a story pushes data into a fixture module
@@ -44,8 +44,11 @@ const withNoAccount: Decorator = (Story) => {
 export class FixtureControls
   extends Context.Service<FixtureControls, { readonly orders: Ref.Ref<ReadonlyArray<Order>> }>()('app/FixtureControls')
 {}
-// WRONG: control primitives defined inside the app, in src/io/__mocks__/fixture-controls.ts
+// WRONG: the control primitives written into the app's named-controls module
+// src/io/__mocks__/fixture-controls.ts
 export const makeFault = (name: string) => {/* ... */}
+// WRONG: a shared package for the primitives, with one consuming app and only test importers
+import { makeFault } from '@app/fixture-controls'
 // WRONG: a service is substituted, so its code never runs
 sb.mock(import('../src/features/orders/order.service.ts'))
 // WRONG: the router is faked instead of built from the real route tree
