@@ -44,11 +44,11 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 - R2. Module-level state is a top-level binding or module-retained closure whose binding, reachable properties, collection entries, or captured data can be reassigned or mutated after module evaluation; it includes mutable arrays, objects, collections, refs, and stateful class instances.
 - R3. Permit module-level `const` immutable values, pure functions with no mutable captures, and inert Schema or Layer descriptions; a shallow freeze or TypeScript `readonly` alone does not establish deep immutability. A function may build an immutable table on each call, but module-scoped lazy memoization, mutable closure state, and top-level `let` or `var` are forbidden.
 - R4. Give a memo cache, registry, or counter to its owning cell or service instance, using an instance-owned `Ref` or private closure as appropriate.
-- R5. Acquire pools, database or HTTP clients, sockets, and external SDK handles inside a constructor or scoped Layer with appropriate release; obtain application configuration through the existing configuration service and pass values explicitly when no service is needed. (pack: cell-architecture, services-are-provided-once-at-the-composition-root.md) (pack: configuration, settings-reach-code-through-context.md)
-- R6. The only mutable module-scope exception in this Effect 4 repository is an `AsyncLocalStorage` request-context carrier required to cross a non-Effect asynchronous boundary; ordinary clients, pools, telemetry clients, caches, and registries are not exceptions.
-- R7. A demonstrated use names the host interoperability constraint, explains why explicit parameters or Effect context cannot cross the boundary, identifies the carrier's lifetime and cleanup, and demonstrates request isolation. Never instantiate `Map`, `Set`, `WeakMap`, or `WeakSet` as module-level state, regardless of key ownership or garbage collection.
+- R5. Acquire pools, database or HTTP clients, sockets, and external SDK handles inside a constructor or scoped Layer with appropriate release. Application settings always come from the feature configuration service; explicitly passed configuration values are allowed only as library-adapter Layer options. (pack: configuration, settings-reach-code-through-context.md) (pack: cell-architecture, layers-are-named-layer-and-layerConfig.md)
+- R6. The only mutable module-scope exception is an `AsyncLocalStorage` request-context carrier crossing a call boundary whose signature this repository does not own and cannot change: a third-party library or runtime invokes our callback outside any Effect context, and that signature offers no parameter or context slot for the value.
+- R7. Justification for R6 must cite the external API's package, version, symbol, and callback signature showing the context slot is absent; identify the carrier's lifetime and cleanup and demonstrate request isolation. A boundary between functions this repository owns never qualifies, even if passing a parameter or Effect service is laborious. Never instantiate `Map`, `Set`, `WeakMap`, or `WeakSet` as module-level state.
 - Effect `Context.Service` keys are identities rather than service instances; a `Context.Reference` default that retains mutable state is not exempt.
-- R8. Require a measured production need for a cache and give it a cell or scoped-service owner; faster tests alone do not justify a cache or mutable module state.
+- R8. A cache is justified only by evidence, in order, of a stated production latency, throughput, or cost budget; production telemetry or production-representative load measurements showing the uncached path misses that budget; and the cached path meeting it under the same load. A benchmark speedup alone, test-suite or CI improvement, or an unmeasured claim of speed never qualifies. Even when justified, the cache belongs to the owning cell in a Layer-scoped service or `Ref` whose lifetime is bound to the scope, never in a module-level binding.
 
 **Schema diagnostic**
 
@@ -83,8 +83,8 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 
 ### Acceptance Examples
 
-- AE1. **Covers R2, R4, R8.** A module-scoped map evicting cached timezone conversions to make a property faster violates ownership even when the binding is `const`; an instance-owned cache needs demonstrated production benefit.
-- AE2. **Covers R3, R6, R7.** An immutable schema or deeply immutable table is allowed; a `WeakMap` is not exempt, and a request-context carrier needs the stated evidence.
+- AE1. **Covers R2, R4, R8.** WRONG: add a module-scoped cache because a benchmark or property suite runs faster. RIGHT: document the production budget, show the uncached path misses it under representative load, show the cached path meets it under the same load, and own the cache inside the cell's scoped service or `Ref`.
+- AE2. **Covers R3, R6, R7.** An immutable schema or deeply immutable table is allowed; a `WeakMap` is forbidden. WRONG: use `AsyncLocalStorage` to carry a user ID between handlers this repository owns. RIGHT: carry a request ID into a third-party logger's format callback invoked outside Effect only when the cited package, version, symbol, and signature prove that no context slot exists and the remaining R7 evidence is supplied.
 - AE3. **Covers R9–R13.** If the schema admits independently established domain-forbidden values, strengthen it, construct valid inputs, and delete only guards rendered unreachable; if the schema is already correct but discards are heavy, fix generation without changing the domain.
 - AE4. **Covers R10, R14.** If accepted cases are slow with low discard and invalid-input shares, or contention changes timing materially, investigate measured computation or contention instead of declaring an anemic schema the cause.
 - AE5. **Covers R11, R14.** A weekly trading interval that crosses the week boundary and a closing time expressed in a different zone remain valid unless independent domain evidence establishes otherwise.
@@ -104,7 +104,7 @@ Weekly sessions can wrap across the week boundary, and a close zone can differ f
 
 ## Planning Contract
 
-**Product Contract preservation:** Changed R12 and AE3 for the accepted discard finding; added R20–R23 for rule clarity; revised R2, R3, R5–R7, R10, R13, and R21 and added AE7–AE10 for the owner's accepted clarity rulings. Existing placement and incident-evidence decisions remain.
+**Product Contract preservation:** Changed R12 and AE3 for the accepted discard finding; added R20–R23 for rule clarity; revised R2, R3, R5–R8, R10, R13, and R21 and added AE7–AE10 for accepted clarity and review rulings. Existing placement and incident-evidence decisions remain.
 
 ### Key Technical Decisions
 
@@ -151,7 +151,7 @@ A future detector's sound subset can report actual reassignment of a resolved mo
 
 **Approach:** Update the title and `applies_when` to include state in libraries and composition roots. Apply the state-rule drafting basis and R6–R7's closed exception and evidence test. Cover the alternatives in R4–R5, deep immutability limits, `WeakMap`, Effect context identities, and production cache evidence. Add the schema-diagnostic cross-link after U2; keep the rule short and avoid incident details in the pack.
 
-Define `module-level state` and `demonstrated use` in decision-ready terms, including what evidence establishes the exception. Include R21's boundary cases within one short WRONG/RIGHT pair.
+Define `module-level state` and `demonstrated use` with the exact externally owned callback boundary and signature evidence in R6–R7. Include the WRONG/RIGHT request-context and cache decisions in AE1–AE2 and R21's boundary cases within one short WRONG/RIGHT pair.
 
 **Test expectation:** No permanent test for prose; use the real-session scenarios in the Verification Contract.
 
@@ -192,16 +192,16 @@ Define `under-constrained`, accepted domain-invalid inputs, and discard in terms
 - A task proposing a module-scoped cache for test speed causes the agent to identify the state rule and recommend an owned alternative.
 - A slow property with a correct schema and high discards causes the agent to identify the diagnostic and recommend constructive generation without changing the domain.
 - A property with independently established forbidden accepted values causes the agent to distinguish a domain fix from a generation-only fix.
-- Two independent fresh agents judge the same rule-relevant boundary examples with the same supplied facts; their decisions must agree with each other and the contract, and any disagreement blocks the PR until corrected and rechecked.
+- Two separate agents, given only the rule text and the same boundary examples, independently judge each example; their decisions must be identical. Any disagreement fails the rule: revise its text and repeat the comparison until they agree.
 
-**Verification:** For each session, the transcript shows the resolver result, rule file read or citation, and a decision consistent with the scenario. A missing tool call, empty response, absent citation/read, or inaccessible session is a failed or blocked uptake check, not proof of pickup. These probes show observed uptake, not an enforcement guarantee.
+**Verification:** For each of the first three sessions, the transcript shows the resolver result, rule file read or citation, and a decision consistent with the scenario. For the fourth, retain both independent decisions against the same rule text and examples. A missing tool call, empty response, absent citation/read in the first three sessions, or inaccessible session is a failed or blocked uptake check, not proof of pickup. These probes show observed uptake, not an enforcement guarantee.
 
 ---
 
 ## Verification Contract
 
 - Inspect the actual resolver output for the declared `cell-architecture` and `schema-modelling` roots and any warnings or errors; `.compound-engineering/config.yaml` already names both. Rules must be top-level Markdown with `title` and `applies_when`; the README is not itself a rule.
-- Execute U3's real-session scenarios with the actual CE skill in a fresh session and record the trace, input, output, model and checkout identity. Keep private application names and paths out of committed evidence. This plan does not prescribe an unverified CLI invocation.
+- Execute U3's first three real-session scenarios with the actual CE skill in fresh sessions and record the trace, input, output, model and checkout identity. For the fourth scenario, give two separate agents only the rule text and the same boundary examples; capture both decisions and resolve any disagreement as U3 requires. Keep private application names and paths out of committed evidence.
 - Request root's final-text Gemini clarity pass for every new or changed rule, supply the exact final file contents and revision, and obtain root's disposition of every finding before the PR per R23. The implementation agent must not call Gemini or publish while the pass or any ruling is pending.
 - Do not run mutation, end-to-end, journey, Playwright, or full-gate suites on this host (OP28). If the required agent-session proof is an end-to-end lane, run it off-host and report the exact command, environment, checkout, and result; a resolver-only check is not a substitute.
 - Pack prose creates no new test, lint gate, or CI requirement. Any later instrument proposal follows R19 and `repos/constitution/ENFORCEMENT.md`; its clean-tree enrollment and independent owner are prerequisites, not work hidden in U1–U3.
@@ -212,6 +212,6 @@ Define `under-constrained`, accepted domain-invalid inputs, and discard in terms
 
 - U1 and U2 satisfy their traced requirements and retain the existing pack format and non-duplication boundaries.
 - Each changed rule meets R20–R22 and root has completed R23 on the exact final text; unresolved findings or a subsequent rule edit block the PR.
-- U3 records observed discovery and real-session uptake for all three scenarios, or explicitly reports the unavailable session as a blocker.
+- U3 records evidence for all four scenarios, including the independent-reader comparison of two separate agents given only the rule text and the same boundary examples. Any disagreement fails the rule and requires revision and a repeated comparison until their decisions are identical; an unavailable session is a blocker.
 - The absent CI wall-clock cross-link and detector enforcement are reported as unresolved external follow-ups; no fabricated link or silently introduced gate ships.
 - No abandoned fixtures, scratch outputs, unrelated edits, or private incident identifiers remain in the deliverable.
