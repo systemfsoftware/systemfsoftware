@@ -9,7 +9,7 @@ tags: [testing, adapter, boundary, mocks, stand-in, third-party]
 
 Test a boundary adapter against a real resource that runs in a container, never on the host (the integration-testing pack says where IO may run): a database, broker or peer started per test, an embedded engine, or the platform's local runtime. A child process is never a test resource.
 
-Never pass a `vi.fn`, `vi.mock` or `vi.spyOn` stub, or a hand-built object (a type guard that admits one counts as a type assertion), where the code under test expects a platform driver, binding or runtime object.
+Never pass a `vi.fn`, `vi.mock` or `vi.spyOn` stub, or a hand-built object (a type guard that admits one counts as a type assertion), where the code under test expects a platform driver, binding or runtime object. A Storybook stand-in contract suite's factory-less `vi.mock` of the app's I/O module is not such a stub: it only picks our own stand-in for the stand-in side, and the real side runs unmocked (port-fakes-share-a-contract-suite.md).
 
 The adapter's cases are scenarios in the port's contract suite (port-fakes-share-a-contract-suite.md). Include an acceptance case (a live local peer answers and the port returns its value) and one refusal case per failure the port declares (an absent, closed or refusing peer makes the port fail with its declared tagged error, never report success).
 

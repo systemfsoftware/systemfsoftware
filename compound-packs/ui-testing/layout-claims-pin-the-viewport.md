@@ -5,7 +5,9 @@ applies_when:
 tags: [storybook, viewport, responsive]
 ---
 
-Set `globals.viewport` on the story or its meta to a key defined in the project's Storybook viewport options whenever a story asserts that something collapses, hides or reflows. An unpinned assertion runs at whatever size the runner's window has.
+Applies to: whoever writes or reviews a story that asserts layout at a screen size.
+
+Set `globals.viewport` on the story or its meta to a key defined in the viewport options of `.storybook/preview.tsx` (`parameters.viewport.options`) whenever a story asserts that something collapses, hides or reflows. An unpinned assertion runs at whatever size the runner's window has.
 
 Prove a claim that layout changes at a breakpoint with one story pinned below it and one above it; a story on one side only cannot tell a breakpoint from a layout that never changes.
 

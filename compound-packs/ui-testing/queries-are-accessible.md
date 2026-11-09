@@ -5,6 +5,8 @@ applies_when:
 tags: [storybook, accessibility, queries]
 ---
 
+Applies to: whoever writes or reviews a play function or step definition in a `*.stories.tsx` file.
+
 Find elements only with `getByRole` and an accessible name, `getByLabelText` or `getByText` (and their find and query variants), scoped with `within`. Never query by `getByTestId`, `querySelector`, a class name or a DOM path; give an element no accessible query finds an accessible name instead.
 
 Assert visibility, accessible text, value, focus or ARIA state, never a class name, a style or a markup-only attribute.
