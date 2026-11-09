@@ -22,7 +22,7 @@ Always/never prose a planner or reviewer can quote.
 
 - `title` and `applies_when` are required; a file without them is skipped. `tags` helps matching.
 - `applies_when` is matched semantically, so write situations in the words a task would use, one per line, not topic labels.
-- The body is short, prescriptive always/never prose, with at most a short WRONG/RIGHT example. Incident narratives, history and evidence stay out of it; subfolders are storage the resolver never reads, and git history holds the rest.
+- The body is short, prescriptive always/never prose, with at most a short WRONG/RIGHT example. A pack may add one worked-example rule file whose body is a whole, copyable set of files, so that no agent needs another repository to follow the pack. Incident narratives, history and evidence stay out of it; subfolders are storage the resolver never reads, and git history holds the rest.
 - Keep rules in one pack disjoint. Where two rules share a fix, merge them; a carve-out belongs in the broader rule's text too.
 - Configuration (a config value, an environment or Doppler variable, a workflow's shape, a version pin, an allowlist) gets no rule that demands a test, check or gate for it (testing pack: `configuration-gets-no-test-and-no-gate.md`).
 
@@ -41,7 +41,7 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 | `e2e-testing`         | Where end-to-end tests live                                                                |
 | `property-testing`    | What makes a property a real property                                                      |
 | `ui-state`            | Atoms, commands and derivations in React code                                              |
-| `ui-testing`          | Storybook journeys, stand-ins and queries                                                  |
+| `ui-testing`          | Storybook journeys, the preview's two stand-ins (I/O layer, router) and queries            |
 | `page-accessibility`  | Accessibility tests of a static or island site's built pages                               |
 | `design-system`       | Building and styling UI with Astryx                                                        |
 | `screen-content`      | What screens show and say                                                                  |
