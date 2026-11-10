@@ -44,16 +44,25 @@ Feature('The payment provider receives a signed charge request')
 Feature('Paying for an order')
 
 // WRONG (delete): a Given that builds nothing, and a When that injects a hand-built first-party service
-Given('the catalog holds two products')(() => Effect.void),
-When('the shopper searches for lamps')('found', () =>
-  search('lamps').pipe(Effect.provide(Layer.succeed(Catalog, Catalog.of({ products })))))
+Gherkin.Do.pipe(
+  Given('the catalog holds two products')(() => Effect.void),
+  When('the shopper searches for lamps')(
+    'found',
+    () => search('lamps').pipe(Effect.provide(Layer.succeed(Catalog, Catalog.of({ products })))),
+  ),
+)
 
 // WRONG (delete): a Feature over a pure function, with no world
 Feature('the price index is built from product files')
   .withScenarioLayer(Layer.empty)
-  .body(({ scenario }) => scenario('...', Gherkin.Do.pipe(
-    Given('a lamp priced at 40')(() => Effect.void),
-    When('the index is built')('index', () => Effect.sync(() => priceIndexOf(literalFiles))),
-    Then('the lamp is indexed')(({ index }, expect) => expect(index.lamp).toBeDefined()),
-  )))
+  .body(({ scenario }) =>
+    scenario(
+      '...',
+      Gherkin.Do.pipe(
+        Given('a lamp priced at 40')(() => Effect.void),
+        When('the index is built')('index', () => Effect.sync(() => priceIndexOf(literalFiles))),
+        Then('the lamp is indexed')(({ index }, expect) => expect(index.lamp).toBeDefined()),
+      ),
+    )
+  )
 ```
