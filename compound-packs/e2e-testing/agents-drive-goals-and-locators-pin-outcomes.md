@@ -17,9 +17,11 @@ Use `screen` for exact interactions and values, where the precise input is the p
 
 Take locators from what a person perceives: role, label, text. When the app has no accessible name for a control, add an `aria-label` or a heading to the app rather than fall back to a CSS class.
 
-Source: the e2e runner's own skill, `skills/e2e/references/writing-tests.md` and `agent.md` in the [`e2e`](https://www.npmjs.com/package/e2e) package ([tester-army/e2e](https://github.com/tester-army/e2e)). effect-e2e models this API (e2e-is-its-own-package-on-real-processes.md).
+The bar is the [`e2e`](https://www.npmjs.com/package/e2e) runner's own skill (`skills/e2e/references/writing-tests.md`, `agent.md`), which effect-e2e meets (e2e-is-its-own-package-on-real-processes.md).
 
 ```typescript
+import { expect, test } from '@systemfsoftware/effect-e2e/runner'
+
 // WRONG: three goals in one instruction, one recording, and a model judgment as the only check
 await agent.act('pick the sea-view double, add breakfast, and pay')
 await agent.assert('the booking looks confirmed')

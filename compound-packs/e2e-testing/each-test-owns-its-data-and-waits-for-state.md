@@ -16,9 +16,12 @@ Wait for the state, not a duration: no sleep, no fixed delay, no polling loop. U
 
 CI runs one retry, one worker and a read-only replay cache. A test that passes only on its retry is a flake. Find and fix its cause (shared data, a missing wait, a race in the app); never raise its retries or mark it skipped to make the run green. While debugging, run with retries off.
 
-Source: the e2e runner's own skill, `skills/e2e/SKILL.md` and `references/writing-tests.md` in the [`e2e`](https://www.npmjs.com/package/e2e) package.
+The bar is the [`e2e`](https://www.npmjs.com/package/e2e) runner's own skill (`skills/e2e/SKILL.md`, `references/writing-tests.md`), which effect-e2e meets (e2e-is-its-own-package-on-real-processes.md).
 
 ```typescript
+import { unique } from '@systemfsoftware/effect-e2e'
+import { expect, test } from '@systemfsoftware/effect-e2e/runner'
+
 // WRONG: shared fixed data, a fixed sleep, and a test that needs the one before it
 test('cancels the booking made above', async ({ app, screen }) => {
   await app.open('/bookings/grace-smith')
