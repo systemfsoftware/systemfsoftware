@@ -12,8 +12,11 @@ The recommendation below to mutate whole packages instead of a label-routed glob
 
 # A Label-Routed Rule Cannot Fail On The Case It Targets
 
-Decision: retire the role-suffix taxonomy. Route static analysis on keys the build derives, and
-aim mutation and property testing at a boundary a manifest enforces.
+Decision: retire the role-suffix taxonomy. The lint-rule half is now stated prescriptively by the
+lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md):
+a lint rule never selects what it applies to by a file's name or location. This document keeps the
+story and the mutation-aiming half: route static analysis on keys the build derives, and aim
+mutation and property testing at a boundary a manifest enforces.
 
 ## The argument
 

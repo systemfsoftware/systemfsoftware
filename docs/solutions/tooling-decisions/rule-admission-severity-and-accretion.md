@@ -22,6 +22,11 @@ _form_ of a justification is a ritual. This doc answers the three questions that
 what severity a rule should land at, whether a rule population can be too large, and what
 actually stops an agent from adding another worthless script.
 
+The shipping form is now stated prescriptively by the lint-hygiene pack rule
+(pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md): on at error over a
+clean tree, or off; no warn; no baseline. This document keeps the measurements, the false-positive
+arithmetic and the accretion mechanisms.
+
 ## Measured baseline for this repo
 
 Measured against `@systemfsoftware/oxlint-config-recommended` on 2026-09-25 (at first writing the figures were 128 rules, 125 deny, 3 allow, `correctness: deny`):
@@ -66,18 +71,17 @@ a config entry. Committing `warn` to measure is how a census becomes permanent.
 
 **Goal: "The fallout is 400 files. I cannot fix that in one change, so I need it
 non-blocking for now."**
-Here warn is not just dominated, it is the worst of the three options:
+Here warn is the worst option:
 
-| Option                                                 | Blocks new violations | Catalogues old ones | Shrinks monotonically |
-| ------------------------------------------------------ | --------------------- | ------------------- | --------------------- |
-| `error` + fix all now                                  | yes                   | n/a                 | n/a                   |
-| `error` + explicit dated baseline of current violators | **yes**               | **yes**             | **yes**               |
-| `warn`                                                 | **no**                | no                  | no                    |
+| Option                | Blocks new violations | Shrinks the population |
+| --------------------- | --------------------- | ---------------------- |
+| `error` + fix all now | yes                   | yes                    |
+| `warn`                | **no**                | no                     |
 
-`error` plus a baseline is what you actually wanted: new code is blocked today, the 400
-existing sites are enumerated as debt with a date, and the list can only get shorter
-because nothing new can enter it. Warn blocks nothing, so the population grows while you
-are "migrating."
+If the fallout cannot be fixed now, the rule stays off with the reason named until the tree is
+clean, then enrolls at error — never a baseline, never warn (pack: lint-hygiene,
+a-lint-rule-is-proposed-only-when-the-code-settles-it.md). Warn blocks nothing, so the population
+grows while you are "migrating."
 
 **Goal: "This check is a heuristic. It is genuinely advisory."**
 Then it should not ship as a lint rule. Above roughly 20% false positives a check is
@@ -90,10 +94,10 @@ committed config CI reads.
 
 ### The rule
 
-- **Never commit `warn` as a resting state.** It never fails a command here.
 - **To measure:** run the rule at deny on the CLI. Do not commit the severity.
-- **To migrate:** `error` plus an explicit, dated baseline. It dominates warn on all three axes.
-- **Genuinely advisory:** not a lint rule. Review, or editor-only.
+- **To migrate:** fix the tree; until then the rule is off with the reason named — never a
+  baseline, never warn (pack: lint-hygiene,
+  a-lint-rule-is-proposed-only-when-the-code-settles-it.md).
 - **Declined on purpose:** use `off` with the rule named. That records the decision, which is worth something. `warn` records nothing and implies a promotion that never comes.
 
 One nuance worth keeping: oxlint offers `--deny-warnings` and `--max-warnings=N`. Their
@@ -226,7 +230,7 @@ correctly assigned to a human.
 
 ## Where the original framing needed correcting
 
-- **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by `error`-plus-baseline on every axis, and in this repo it reports without failing any command. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
+- **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by the pack shipping form — error over a clean tree, or off — on every axis, and in this repo it reports without failing any command. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
 - **"Too many rules if the instruction count is 50"** — the inference does not hold. Lint rules cost no context tokens; 145 run here at deny (2026-09-25). The real ceilings are `N × p` and diagnostic volume.
 - **"Cargo-culted advice in the harness doctrine"** — right about the effect, wrong about the cause. The doctrine argues _against_ accretion. What drives accretion is that its earn test excludes gates, its escalation order's first step produces no artifact, and its scoring instrument improves when you add. Fix the instrument, not the prose.
 

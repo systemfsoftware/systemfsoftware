@@ -4,9 +4,11 @@ problem_type: architecture_pattern
 
 # An Escape Hatch Is An Unfalsified Hypothesis
 
-Decision: a prohibition ships no allowlist, no per-package disable and no filename exemption until
-the "these sites cannot comply" claim behind it has been falsified by a compiling probe. Run the
-probe first. Grant nothing a probe defeats.
+Decision: a prohibition ships no allowlist, no per-package disable and no filename exemption. The
+lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md)
+states the shipping form: no hatch, no baseline; a rule that needs one is a judgement. The probe
+below keeps its job with the polarity reversed: it decides whether a rule can hold on every
+instance, never whether an exemption may ship.
 
 ## The argument
 
@@ -68,18 +70,13 @@ Three ways a probe lies, all met in one session:
   through its exports map reads the built `.d.ts`, not the source: an unbuilt fix reads as red when
   it is green, and a removed export reads as green when it is broken. Build before believing either.
 
-## What this does not license
+## Narrowing the claim, not granting the site
 
-The conclusion is about _ungrounded_ exemptions, not all of them. A hatch whose population claim has
-been falsified is cheating; a hatch whose claim survives a probe is a documented boundary, and the
-honest form of it is a test that pins the boundary rather than a config key that hides it. When a
-prohibition genuinely cannot reach a shape — a grammatical rule cannot resolve `{ [T]: 'X' }` where
-`T` is a const, and a type-blind rule cannot resolve a mapped type — say so in a `valid` test case
-and narrow the rule's advertised claim to match. A rule whose message outruns its predicate fails
-from the other side (`REPO-A4`).
+When a prohibition genuinely cannot reach a shape — a grammatical rule cannot resolve `{ [T]: 'X' }`
+where `T` is a const, and a type-blind rule cannot resolve a mapped type — say so in a `valid` test
+case and narrow the rule's advertised claim to match. A rule whose message outruns its predicate
+fails from the other side (`REPO-A4`).
 
 Related: `label-routed-rules-are-unfalsifiable.md` (a rule keyed on an author's assertion never runs
-on the violation it targets — the same circularity, entered through routing instead of exemption),
-`a-prohibition-must-close-transitively.md`, and `../tooling-decisions/rule-admission-severity-and-accretion.md`
-(which prices `error` + dated baseline as the migration posture; this note is the constraint on when
-a baseline entry is honest).
+on the violation it targets — the same circularity, entered through routing instead of exemption)
+and `a-prohibition-must-close-transitively.md`.

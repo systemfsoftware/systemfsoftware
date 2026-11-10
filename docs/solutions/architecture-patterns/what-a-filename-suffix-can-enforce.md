@@ -23,11 +23,13 @@ tags:
 
 Keying rules on a filename suffix is cheap and effective: the name grants and denies a file its powers, and a checker can read the name without resolving anything. That cheapness invites overreach. A suffix looks like it can mean anything, so conventions accrete that the suffix cannot actually carry, and the rules written against them either cannot be implemented or quietly check something narrower than they claim.
 
+The lint-rule half of this document is superseded by (pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md): a lint rule never selects what it applies to by a file's name or location. The frame and decidability analysis below keeps its story for suffix-keyed conventions that are not lint rules.
+
 ## Guidance
 
 Two limits bound what a suffix can do, and both are structural rather than a matter of effort.
 
-**The suffix is a carrier in one frame only.** In the authoring frame — inside the repository, where the file is being written and the checker runs over the tree — the suffix is available and rules may key on it. In the consuming frame it is not: a stranger importing a published package sees exported symbols and types, not your filenames. The corollary is a hard constraint on design: _a constraint that must bind a stranger cannot ride the suffix._ It has to be carried by something that survives packaging — a type, a runtime check, an exported shape.
+**The suffix is a carrier in one frame only.** In the consuming frame it is not a carrier at all: a stranger importing a published package sees exported symbols and types, not your filenames. The corollary is a hard constraint on design: _a constraint that must bind a stranger cannot ride the suffix._ It has to be carried by something that survives packaging — a type, a runtime check, an exported shape. The authoring-frame permission is gone as well: the lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md) states that a lint rule never selects what it applies to by a file's name or location, so no lint rule keys on the suffix in any frame.
 
 **Only two kinds of meaning are enforceable.** A suffix that names a _semantic interior_ property — what the code means, whether the function is pure, whether the module is cohesive — cannot be verified; deciding non-trivial semantic properties of programs is undecidable in general, so no checker settles it. A suffix that names a _syntactic interior_ property is enforceable directly, by looking at the file. So the enforceable meanings available to a suffix are exactly:
 
