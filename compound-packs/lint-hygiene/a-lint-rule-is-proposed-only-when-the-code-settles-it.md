@@ -8,7 +8,7 @@ applies_when:
 tags: [lint, rules, review, prevention]
 ---
 
-A lint rule encodes a decision made once that holds for every case. A decision taken case by case is review's, never lint.
+A lint rule encodes a decision the code settles once: every occurrence it reports is wrong in every case it can reach. It never bans a practice merely because some uses are wrong; a decision that needs case-by-case judgment is review's, never lint.
 
 A type that makes the bad state unconstructable comes first. A rule may close a hole the compiler leaves open in such a type, and it reports only that hole: the bypass is named from the code, and the definition that owns the invariant is not a bypass.
 

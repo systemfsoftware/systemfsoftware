@@ -24,12 +24,13 @@ instance, never whether an exemption may ship.
    migration it excuses.
 4. The claim is also cheap to test. It asserts that no compliant form exists for a cohort, and
    "a compliant form exists" is decided by a compiler, not by argument.
-5. So the hatch is a hypothesis wearing a config key. Test it before granting it.
+5. So the hatch is a hypothesis wearing a config key. A probe decides whether the rule can hold on
+   every instance, never whether an exemption may ship.
 
 ## The probe
 
 One scratch file per prohibition, holding the proposed compliant form for **one representative of
-each cohort the hatch would cover**. Run the owning package's own `typecheck`. Read the exit code,
+each cohort claimed unable to comply. Run the owning package's own `typecheck`. Read the exit code,
 then delete the file.
 
 Measured on 2026-08-22 for a rule banning hand-written `_tag` members in type positions
