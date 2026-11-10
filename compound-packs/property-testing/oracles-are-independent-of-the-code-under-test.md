@@ -13,7 +13,11 @@ Write the oracle from the contract: a literal table of contract rows, an express
 
 Never use an output recorded from the current code (a snapshot), a shape-only check as the whole oracle (a member of the decision union, `Schema.is`, a preserved length, `Result.isSuccess`: an empty, constant or identity implementation passes it), a conjunct comparing two values the test computed itself, or a wrapper `(c) => subject(c)` as an `it.law.model` oracle.
 
+A mockery property is a replica by another route, and it is deleted or rewritten: a property whose oracle is a table that mirrors the subject's own (a tier ranking copied from the implementation), or whose subject reaches a first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))` or an object literal, so that the property checks the stub's answers instead of the decision.
+
 ```typescript
+// WRONG: the oracle restates the subject's ranking table
+const tierRank = { best: { frontier: 0, standard: 1, small: 2 } /* … copied from the decision module */ }
 // WRONG: expected bytes come from the size check and encoder decide itself uses
 import { bodyFitsCap, bodyUtf8Of } from '../admit-upload.workflow.js'
 // RIGHT: admitted bytes decode, through the platform's decoder, to the body that was built
