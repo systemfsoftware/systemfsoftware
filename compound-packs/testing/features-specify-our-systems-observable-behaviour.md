@@ -55,21 +55,24 @@ Feature('Paying for an order')
 // object literal, the state the Given names lives in an inline Ref no contract suite runs, and a .live reason
 // string excuses the empty world. Questions 2, 4 and 5 fail.
 const stubs = Layer.mergeAll(
-  Layer.succeed(AppVersions, { checkOut: (_, files) => Ref.set(held.files, files), releaseDraft: () => Effect.void }),
-  Layer.succeed(SaveRefusals, { keep: () => Effect.void }),
-  Layer.succeed(MemoryWrites, { write: () => Effect.void }),
-  Layer.succeed(MarketReads, { read: () => Effect.die(unreached) }),
+  Layer.succeed(Bookings, { hold: (_, room) => Ref.set(held.room, room), release: () => Effect.void }),
+  Layer.succeed(Notifications, { send: () => Effect.void }),
+  Layer.succeed(Loyalty, { award: () => Effect.void }),
+  Layer.succeed(Payments, { charge: () => Effect.die(unreached) }),
 )
-Feature('a follow-up starts from the saved version')
-  .live('the template loads through a real dynamic import')
+Feature('a guest reserves a room')
+  .live('the handler needs the real clock')
   .withScenarioLayer(Layer.empty)
   .body(({ scenario }) =>
     scenario(
-      'the save reaches the bundler',
+      'the reservation is confirmed',
       Gherkin.Do.pipe(
-        Given('an app whose saved version holds a changed screen')(() => Effect.void),
-        When('the agent saves')('built', () => tools.handle('save_version', input).pipe(Effect.provide(stubs))),
-        Then('the save reaches the bundler')(({ built }, expect) => expect(built.bundled).toBe(1)),
+        Given('a hotel with one free double room')(() => Effect.void),
+        When('the guest reserves it')(
+          'booked',
+          () => handlers.handle('reserve_room', input).pipe(Effect.provide(stubs)),
+        ),
+        Then('the reservation is confirmed')(({ booked }, expect) => expect(booked.confirmed).toBe(true)),
       ),
     )
   )
@@ -78,66 +81,62 @@ Feature('a follow-up starts from the saved version')
 // a config under a provider it passes in itself. Questions 1 and 2 fail, and configuration gets no test at all
 // (configuration-gets-no-test-and-no-gate.md).
 Gherkin.Do.pipe(
-  Given('every TRADES_ variable set, with 100 markets')(() => Effect.void),
-  When('the trade source reads its settings')(
+  Given('every HOTEL_ variable set, with 20 rooms')(() => Effect.void),
+  When('the reservation service reads its settings')(
     'config',
-    () => tradesConfig.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(settings)))),
+    () => hotelConfig.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(settings)))),
   ),
-  Then('each setting holds the value its variable carried')(({ config }, expect) => expect(config.markets).toBe(100)),
+  Then('each setting holds the value its variable carried')(({ config }, expect) => expect(config.rooms).toBe(20)),
 )
 
 // WRONG (delete), a pure function behind a Feature: literal fixture maps go straight into an internal function, in
 // an empty world. Questions 1, 2 and 5 fail.
-Feature('the docs index is built from the declarations the save installs')
+Feature('the price list is built from the rate files')
   .withScenarioLayer(Layer.empty)
   .body(({ scenario }) =>
     scenario(
-      'a package answers its version',
+      'a room type answers its nightly rate',
       Gherkin.Do.pipe(
-        Given('zod 4.6.7 whose exports name its types')(() => Effect.void),
-        When('the index is built')('index', () => Effect.sync(() => docsIndexOf({ types: literalFiles }))),
-        Then('the version is answered')(({ index }, expect) => expect(index.zod.version).toBe('4.6.7')),
+        Given('a deluxe room rated at 120 a night')(() => Effect.void),
+        When('the price list is built')('prices', () => Effect.sync(() => priceListOf({ rates: literalFiles }))),
+        Then('the rate is answered')(({ prices }, expect) => expect(prices.deluxe.nightly).toBe(120)),
       ),
     )
   )
 
-// RIGHT: the scenario layer is the real shells over the real database, with fakes only for third-party ports
-// (here the chain and the signer), each a Context.Tag with failure controls and read-back operations. The Given
-// writes the rows its text names, the When is the consumer's command through the shell's own entry, and the Thens
-// read only what that command returns. Concurrency is a scenario, run against the same real store. (The source
-// spec also had an And that read the ticket row straight from the database; that step fails question 3 and is cut.)
-feature('Invitation Ticket Claiming')
-  .withScenarioLayer(testLayer) // ClaimShell.Default and PoolShell over DBTest; only the chain and signer are fakes
-  .withScope({ db: DB, shell: ClaimShell })
+// RIGHT: the scenario layer is the real services over the real store, with a fake only for the third-party
+// payment provider, built as a service with failure controls and read-back operations and run in its port's
+// contract suite. The Given puts the room in place, the When is the guest's command through the service's own
+// entry, and the Thens read only what that command returns. Concurrency is its own scenario, against the same store.
+Feature('Reserving a room')
+  .withScenarioLayer(testLayer) // Reservations and Rooms over the test store; only the payment provider is a fake
+  .withScope({ rooms: Rooms, reservations: Reservations })
   .body(({ scenario, background, scope }) => {
-    background(cleanUp)
+    background(emptyTheHotel)
     scenario(
-      'Should_ClaimTicketAndReturnSignature_When_TicketAvailable',
+      'a guest reserves the last free room',
       scope.pipe(
-        Given('an available ticket in the Game pool')('ticket', ({ db }) =>
-          Effect.gen(function*() {
-            const ticket = yield* generateTestTicket
-            yield* insertAvailableTicket(db, { publicKey: ticket.publicKey }, { privateKey: ticket.privateKey })
-            return ticket
-          })),
-        When('claiming the ticket')(
+        Given('a hotel with one free double room')('room', ({ rooms }) => rooms.add({ kind: 'double' })),
+        When('Grace reserves a double room')(
           'result',
-          ({ shell }) => shell.execute(new ClaimCommand({ who: ALICE, dim: GAME })),
+          ({ reservations }) => reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })),
         ),
-        Then('claim returns a signature')(({ result }) => expect(result.signature).toBeDefined()),
-        And('no tickets remain in the pool')(({ result }) => expect(result.remaining).toBe(0)),
+        Then('the reservation is confirmed')(({ result }) => expect(result.status).toBe('confirmed')),
+        And('no double rooms remain')(({ result }) => expect(result.remaining).toBe(0)),
       ),
     )
     scenario(
-      'Should_AllowOneWinner_When_TwoConcurrentClaims',
+      'two guests race for the last room',
       scope.pipe(
-        Given('one available ticket')(({ db }) => insertOneAvailableTicket(db)),
-        When('two addresses claim concurrently')('results', ({ shell }) =>
+        Given('a hotel with one free double room')(({ rooms }) => rooms.add({ kind: 'double' })),
+        When('Grace and Henry reserve it at the same moment')('results', ({ reservations }) =>
           Effect.all([
-            shell.execute(new ClaimCommand({ who: ALICE, dim: GAME })).pipe(Effect.either),
-            shell.execute(new ClaimCommand({ who: BOB, dim: GAME })).pipe(Effect.either),
+            reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })).pipe(Effect.either),
+            reservations.execute(new Reserve({ guest: HENRY, kind: 'double' })).pipe(Effect.either),
           ], { concurrency: 2 })),
-        Then('exactly one claim succeeds')(({ results }) => expect(results.filter(Either.isRight).length).toBe(1)),
+        Then('exactly one of them gets the room')(({ results }) =>
+          expect(results.filter(Either.isRight).length).toBe(1)
+        ),
       ),
     )
   })
