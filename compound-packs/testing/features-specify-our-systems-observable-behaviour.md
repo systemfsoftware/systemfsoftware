@@ -26,9 +26,10 @@ Answer each question from the step bodies and the layers the Feature provides. A
 
 1. Does every When drive an entry the consumer uses (the published operation, the route, the command, the page), the same entry production runs?
 2. Does every Given body produce each fact its text claims? A Given whose body is `Effect.void`, or returns a constant and binds nothing, is a no. So is a Given whose state is actually injected later in the When.
-3. Does every Then read only what the consumer observes?
+3. Does every Then read only what the consumer observes: the entry's result or failure, or state read back through an operation the system offers? A Then that queries the database, a table or a store's internals directly is a no.
 4. Does every service the scenario reaches run its real layer, or a port fake that runs in that port's contract suite (port-fakes-share-a-contract-suite.md)? A first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape is a no.
 5. Does the scenario layer provide the world the Givens claim? `.withScenarioLayer(Layer.empty)` under Givens that claim stored state is a no.
+6. Is every step's text declarative: what happens, not how? Ask of each step "would this wording change if the implementation did?". A step naming an internal function, a layer, a tool's wire format, a file, an environment variable or a UI mechanic the consumer never meets is a no. Our own published interface may be named.
 
 Edge cases:
 
@@ -36,6 +37,13 @@ Edge cases:
 - A port fake that runs in its contract suite beside the real adapter passes question 4.
 - In a library package the published operation is the consumer's entry, so calling it directly passes question 1.
 - Retitling steps changes nothing: the verdict comes from the bodies.
+- A Given may write state straight into the store (rows in a test database, a seeded file); a Then may not read it back that way.
+
+Write scenarios the way Gherkin intends ([reference](https://cucumber.io/docs/gherkin/reference/), [better Gherkin](https://cucumber.io/docs/bdd/better-gherkin/)). These shape the Feature; they are not delete criteria:
+
+- Given puts the system in a known state before the consumer acts, and says nothing about the consumer's interaction. When is one event or action. Then is an outcome the consumer can observe.
+- An example illustrates one business rule in 3 to 5 steps. Group the examples of one rule under a Rule, and turn examples that differ only in values into a Scenario Outline with Examples rows.
+- A Background is at most 4 lines, uses vivid named actors and data instead of `user A` or `site 1`, and holds only context every scenario under it needs.
 
 ```typescript
 // WRONG: the subject is a vendor and its HTTP contract
@@ -96,7 +104,8 @@ Feature('the docs index is built from the declarations the save installs')
 // RIGHT: the scenario layer is the real shells over the real database, with fakes only for third-party ports
 // (here the chain and the signer), each a Context.Tag with failure controls and read-back operations. The Given
 // writes the rows its text names, the When is the consumer's command through the shell's own entry, and the Thens
-// read the result and read the stored state back. Concurrency is a scenario, run against the same real store.
+// read only what that command returns. Concurrency is a scenario, run against the same real store. (The source
+// spec also had an And that read the ticket row straight from the database; that step fails question 3 and is cut.)
 feature('Invitation Ticket Claiming')
   .withScenarioLayer(testLayer) // ClaimShell.Default and PoolShell over DBTest; only the chain and signer are fakes
   .withScope({ db: DB, shell: ClaimShell })
@@ -116,9 +125,7 @@ feature('Invitation Ticket Claiming')
           ({ shell }) => shell.execute(new ClaimCommand({ who: ALICE, dim: GAME })),
         ),
         Then('claim returns a signature')(({ result }) => expect(result.signature).toBeDefined()),
-        And('ticket is marked as claimed')(({ db, ticket }) =>
-          Effect.map(readTicket(db, ticket.publicKey), (row) => expect(row?.state).toBe('claimed'))
-        ),
+        And('no tickets remain in the pool')(({ result }) => expect(result.remaining).toBe(0)),
       ),
     )
     scenario(

@@ -14,7 +14,7 @@ A scenario has exactly one When. It performs the consumer's action through the e
 
 A scenario that breaks any sentence above is deleted, not patched. The rubric in features-specify-our-systems-observable-behaviour.md lists the checks a reviewer answers.
 
-Then reads only what the consumer observes: the entry's result, its reported failure, state read back through an operation the system offers, or, for an outbound effect, what our system sent through one of its own outbound ports, read in that port's terms through the fake's read operation. Never read a stand-in's wire-level record of a third party, and never assert a third party's or library's names or a protocol status code the consumer is not shown.
+Then reads only what the consumer observes: the entry's result, its reported failure, state read back through an operation the system offers, or, for an outbound effect, what our system sent through one of its own outbound ports, read in that port's terms through the fake's read operation. Never query the database, a table or a store's internals to check an outcome (a Given may write state there; a Then may not read it back that way). Never read a stand-in's wire-level record of a third party, and never assert a third party's or library's names or a protocol status code the consumer is not shown.
 
 A scenario outline's rows vary the input and expected outcome of one When; rows that change which unit the When calls are separate tests. Story journeys follow the ui-testing pack instead.
 
