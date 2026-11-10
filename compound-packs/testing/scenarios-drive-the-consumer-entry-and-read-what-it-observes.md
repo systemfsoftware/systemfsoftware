@@ -12,7 +12,7 @@ Given brings the system to the starting state through fixtures, the fake's param
 
 A scenario has exactly one When. It performs the consumer's action through the entry the consumer uses (the package's public operation, the port's operation for a contract suite, the CLI, the route), reaching the same entry production runs. A fixture that rebuilds part of that entry, or returns a value the entry does not return (a decoded settings object, an internal record), is not that entry. A When that calls a layer, decoder, schema, constructor or helper directly is a unit test dressed as a Feature, and it is deleted.
 
-A scenario that breaks any sentence above is deleted, not patched. The rubric in features-specify-our-systems-observable-behaviour.md lists the checks a reviewer answers.
+The rubric in features-specify-our-systems-observable-behaviour.md lists the checks a reviewer answers, and says when a scenario that breaks a sentence above is deleted, replaced or has its Then rewritten.
 
 Then reads only what the consumer observes: the entry's result, its reported failure, state read back through an operation the system offers, or, for an outbound effect, what our system sent through one of its own outbound ports, read in that port's terms through the fake's read operation. Never query the database, a table or a store's internals to check an outcome (a Given may write state there; a Then may not read it back that way). Never read a stand-in's wire-level record of a third party, and never assert a third party's or library's names or a protocol status code the consumer is not shown.
 

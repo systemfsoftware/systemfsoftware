@@ -13,7 +13,7 @@ Write the oracle from the contract: a literal table of contract rows, an express
 
 Never use an output recorded from the current code (a snapshot), a shape-only check as the whole oracle (a member of the decision union, `Schema.is`, a preserved length, `Result.isSuccess`: an empty, constant or identity implementation passes it), a conjunct comparing two values the test computed itself, or a wrapper `(c) => subject(c)` as an `it.law.model` oracle.
 
-A mockery property is a replica by another route, and it is deleted or rewritten: a property whose oracle is a table that mirrors the subject's own (a ranking copied from the implementation), or whose subject reaches a first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))` or an object literal, so that the property checks the stub's answers instead of the decision.
+A mockery property is a replica by another route, and it is deleted or rewritten: a property whose oracle is a table that mirrors the subject's own (a ranking copied from the implementation), or whose subject reaches a first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))` or an object literal, so that the property checks the stub's answers instead of the decision. A settings service (`<Feature>Config`) supplied with values is how tests provide settings (configuration pack) and is not mockery.
 
 ```typescript
 // WRONG: the oracle restates the subject's ranking table
