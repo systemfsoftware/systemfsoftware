@@ -22,12 +22,16 @@ Test: swap the third party for a competitor and the implementation for another t
 
 ## Rubric
 
-Answer each question from the step bodies and the layers the Feature provides. A single "no" means the Feature, or that scenario, is deleted.
+Answer each question per scenario, from the step bodies and the layers the Feature provides.
+
+- A Feature whose subject is an internal unit, a third party or configuration (question 1 fails for every scenario) proves no behaviour of ours: delete it with no replacement.
+- A scenario that fails question 2, 4, 5 or 6 is deleted. When its Then reads a consumer outcome, that behaviour is ours: the same change adds a scenario that passes the rubric, or an effect-e2e test when it needs real IO (failing-tests-are-fixed-not-weakened.md).
+- A Then that fails question 3 is rewritten to read the outcome through the system's own operations; the rest of the scenario stands.
 
 1. Does every When drive an entry the consumer uses (the published operation, the route, the command, the page), the same entry production runs?
 2. Does every Given body produce each fact its text claims? A Given whose body is `Effect.void`, or returns a constant and binds nothing, is a no. So is a Given whose state is actually injected later in the When.
-3. Does every Then read only what the consumer observes: the entry's result or failure, or state read back through an operation the system offers? A Then that queries the database, a table or a store's internals directly is a no.
-4. Does every service the scenario reaches run its real layer, or a port fake that runs in that port's contract suite (port-fakes-share-a-contract-suite.md)? A first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape is a no.
+3. Does every Then read only what the consumer observes: the entry's result or failure, state read back through an operation the system offers, or what our system sent through one of its own outbound ports, read in that port's terms through its contract-suite fake's read operation? A Then that queries the database, a table or a store's internals directly is a no.
+4. Does every service the scenario reaches run its real layer, or a port fake that runs in that port's contract suite (port-fakes-share-a-contract-suite.md)? A first-party service supplied with `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape is a no. A settings service (`<Feature>Config`) supplied with values is how tests provide settings (configuration pack: tests-supply-settings-and-never-mirror-them.md) and passes.
 5. Does the scenario layer provide the world the Givens claim? `.withScenarioLayer(Layer.empty)` under Givens that claim stored state is a no.
 6. Is every step's text declarative: what happens, not how? Ask of each step "would this wording change if the implementation did?". A step naming an internal function, a layer, a tool's wire format, a file, an environment variable or a UI mechanic the consumer never meets is a no. Our own published interface may be named.
 
@@ -72,7 +76,9 @@ Feature('a guest reserves a room')
           'booked',
           () => handlers.handle('reserve_room', input).pipe(Effect.provide(stubs)),
         ),
-        Then('the reservation is confirmed')(({ booked }, expect) => expect(booked.confirmed).toBe(true)),
+        Then('the reservation is confirmed')(({ booked }, expect) =>
+          expect(booked).toMatchObject({ status: 'confirmed' })
+        ),
       ),
     )
   )
@@ -107,7 +113,7 @@ Feature('the price list is built from the rate files')
 // RIGHT: the scenario layer is the real services over the real store, with a fake only for the third-party
 // payment provider, built as a service with failure controls and read-back operations and run in its port's
 // contract suite. The Given puts the room in place, the When is the guest's command through the service's own
-// entry, and the Thens read only what that command returns. Concurrency is its own scenario, against the same store.
+// entry, and one Then per observed state reads only what that command returns, with the expect the step receives. Concurrency is its own scenario, against the same store.
 Feature('Reserving a room')
   .withScenarioLayer(testLayer) // Reservations and Rooms over the test store; only the payment provider is a fake
   .withScope({ rooms: Rooms, reservations: Reservations })
@@ -121,8 +127,9 @@ Feature('Reserving a room')
           'result',
           ({ reservations }) => reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })),
         ),
-        Then('the reservation is confirmed')(({ result }) => expect(result.status).toBe('confirmed')),
-        And('no double rooms remain')(({ result }) => expect(result.remaining).toBe(0)),
+        Then('Grace gets the last double room')(({ result }, expect) =>
+          expect(result).toMatchObject({ status: 'confirmed', remaining: 0 })
+        ),
       ),
     )
     scenario(
@@ -134,8 +141,8 @@ Feature('Reserving a room')
             reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })).pipe(Effect.either),
             reservations.execute(new Reserve({ guest: HENRY, kind: 'double' })).pipe(Effect.either),
           ], { concurrency: 2 })),
-        Then('exactly one of them gets the room')(({ results }) =>
-          expect(results.filter(Either.isRight).length).toBe(1)
+        Then('exactly one of them gets the room')(({ results }, expect) =>
+          expect(results.map(Either.isRight).sort()).toEqual([false, true])
         ),
       ),
     )

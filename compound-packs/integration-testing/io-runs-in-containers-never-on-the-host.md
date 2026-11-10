@@ -13,10 +13,10 @@ Nothing runs on the host. A test never listens on a host port of its own, never 
 
 A behaviour that needs a real binary, a real server process or several services running together is not an integration test; it belongs to the e2e-testing pack.
 
-Any one of these marks a fake integration test, and the test is deleted. When the behaviour needs real IO, prefer an effect-e2e test in the E2E package (e2e-testing pack) over rebuilding the fake as an integration test:
+Any one of these marks a fake integration test, and the test is deleted. When it named a behaviour of ours, the same change replaces it (testing pack: failing-tests-are-fixed-not-weakened.md); when that behaviour needs real IO, prefer an effect-e2e test in the E2E package (e2e-testing pack) over rebuilding the fake as an integration test:
 
 - It does no IO at all: a Feature over pure functions or literal fixtures with an empty scenario layer, named integration.
-- It supplies a first-party service through `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape, instead of the real layer or a port fake that runs in that port's contract suite.
+- It supplies a first-party service through `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape, instead of the real layer or a port fake that runs in that port's contract suite. A settings service (`<Feature>Config`) supplied with values is how tests provide settings (configuration pack) and is not this smell.
 
 - It starts a child process, or writes an executable shim or replays a recorded capture of a third party through one.
 - It does IO on the host (temp directory, host port, a developer's running service).
