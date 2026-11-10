@@ -5,7 +5,7 @@ problem_type: architecture_pattern
 # An Escape Hatch Is An Unfalsified Hypothesis
 
 Decision: a prohibition ships no allowlist, no per-package disable and no filename exemption. The
-lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md)
+lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md)
 states the shipping form: no hatch, no baseline; a rule that needs one is a judgement. The probe
 below keeps its job with the polarity reversed: it decides whether a rule can hold on every
 instance, never whether an exemption may ship.
@@ -30,7 +30,7 @@ instance, never whether an exemption may ship.
 ## The probe
 
 One scratch file per prohibition, holding the proposed compliant form for **one representative of
-each cohort claimed unable to comply. Run the owning package's own `typecheck`. Read the exit code,
+each cohort claimed unable to comply**. Run the owning package's own `typecheck`. Read the exit code,
 then delete the file.
 
 Measured on 2026-08-22 for a rule banning hand-written `_tag` members in type positions

@@ -1,5 +1,5 @@
 ---
-title: A lint rule is proposed only when the code settles it
+title: A lint rule enforces a decision; it never makes one
 applies_when:
   - proposing a lint rule in a plan, a review finding or a learning
   - reviewing a change that adds, configures or removes a lint rule
@@ -8,7 +8,7 @@ applies_when:
 tags: [lint, rules, review, prevention]
 ---
 
-A lint rule encodes a decision the code settles once: every occurrence it reports is wrong in every case it can reach. It never bans a practice merely because some uses are wrong; a decision that needs case-by-case judgment is review's, never lint.
+A lint rule enforces a decision that is already made and recorded: this construct is never right here. It never makes that decision. When the answer depends on the case, or nobody has decided, the question is review's; a blanket ban on a practice that is sometimes right is refused.
 
 A type that makes the bad state unconstructable comes first. A rule may close a hole the compiler leaves open in such a type, and it reports only that hole: the bypass is named from the code, and the definition that owns the invariant is not a bypass.
 
@@ -24,6 +24,6 @@ Adding, weakening or removing a rule is the owner's call, and it lands apart fro
 
 Write "add a lint rule to prevent this" in a plan, a review finding or a learning only when the points above hold.
 
-WRONG: "Ban every config value that lacks a comment justifying it; keep an allowlist for the entries that cannot comply."
+WRONG: "Some uses of this pattern are mistakes, so ban the pattern and keep an allowlist for the uses that are fine."
 
-RIGHT: "A hand-built object skips the constructor's validation: report that literal at error, fix every site first, and land the rule in its own change."
+RIGHT: "The team decided this module is never imported from that layer, and it keeps happening: forbid the import at error, fix every site first, and land the rule in its own change."

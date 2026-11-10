@@ -23,7 +23,7 @@ what severity a rule should land at, whether a rule population can be too large,
 actually stops an agent from adding another worthless script.
 
 The shipping form is now stated prescriptively by the lint-hygiene pack rule
-(pack: lint-hygiene, a-lint-rule-is-proposed-only-when-the-code-settles-it.md): on at error over a
+(pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md): on at error over a
 clean tree, or off; no warn; no baseline. This document keeps the measurements, the false-positive
 arithmetic and the accretion mechanisms.
 
@@ -80,7 +80,7 @@ Here warn is the worst option:
 
 If the fallout cannot be fixed now, the rule stays off with the reason named until the tree is
 clean, then enrolls at error — never a baseline, never warn (pack: lint-hygiene,
-a-lint-rule-is-proposed-only-when-the-code-settles-it.md). Warn blocks nothing, so the population
+a-lint-rule-enforces-a-decision-it-never-makes-one.md). Warn blocks nothing, so the population
 grows while you are "migrating."
 
 **Goal: "This check is a heuristic. It is genuinely advisory."**
@@ -97,7 +97,7 @@ committed config CI reads.
 - **To measure:** run the rule at deny on the CLI. Do not commit the severity.
 - **To migrate:** fix the tree; until then the rule is off with the reason named — never a
   baseline, never warn (pack: lint-hygiene,
-  a-lint-rule-is-proposed-only-when-the-code-settles-it.md).
+  a-lint-rule-enforces-a-decision-it-never-makes-one.md).
 - **Declined on purpose:** use `off` with the rule named. That records the decision, which is worth something. `warn` records nothing and implies a promotion that never comes.
 
 One nuance worth keeping: oxlint offers `--deny-warnings` and `--max-warnings=N`. Their
@@ -230,7 +230,7 @@ correctly assigned to a human.
 
 ## Where the original framing needed correcting
 
-- **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by the pack shipping form — error over a clean tree, or off — on every axis, and in this repo it reports without failing any command. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
+- **"Warn is useless"** — right, and for a stronger reason than stated: warn is no better than off — it blocks nothing, shrinks nothing, and in this repo it reports without failing any command — and the pack shipping form is error over a clean tree, or off. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
 - **"Too many rules if the instruction count is 50"** — the inference does not hold. Lint rules cost no context tokens; 145 run here at deny (2026-09-25). The real ceilings are `N × p` and diagnostic volume.
 - **"Cargo-culted advice in the harness doctrine"** — right about the effect, wrong about the cause. The doctrine argues _against_ accretion. What drives accretion is that its earn test excludes gates, its escalation order's first step produces no artifact, and its scoring instrument improves when you add. Fix the instrument, not the prose.
 
