@@ -43,26 +43,97 @@ Feature('The payment provider receives a signed charge request')
 // RIGHT
 Feature('Paying for an order')
 
-// WRONG (delete): a Given that builds nothing, and a When that injects a hand-built first-party service
-Gherkin.Do.pipe(
-  Given('the catalog holds two products')(() => Effect.void),
-  When('the shopper searches for lamps')(
-    'found',
-    () => search('lamps').pipe(Effect.provide(Layer.succeed(Catalog, Catalog.of({ products })))),
-  ),
+// WRONG (delete), the stub wall: the When calls a real handler, but every first-party service it reaches is an
+// object literal, the state the Given names lives in an inline Ref no contract suite runs, and a .live reason
+// string excuses the empty world. Questions 2, 4 and 5 fail.
+const stubs = Layer.mergeAll(
+  Layer.succeed(AppVersions, { checkOut: (_, files) => Ref.set(held.files, files), releaseDraft: () => Effect.void }),
+  Layer.succeed(SaveRefusals, { keep: () => Effect.void }),
+  Layer.succeed(MemoryWrites, { write: () => Effect.void }),
+  Layer.succeed(MarketReads, { read: () => Effect.die(unreached) }),
 )
-
-// WRONG (delete): a Feature over a pure function, with no world
-Feature('the price index is built from product files')
+Feature('a follow-up starts from the saved version')
+  .live('the template loads through a real dynamic import')
   .withScenarioLayer(Layer.empty)
   .body(({ scenario }) =>
     scenario(
-      '...',
+      'the save reaches the bundler',
       Gherkin.Do.pipe(
-        Given('a lamp priced at 40')(() => Effect.void),
-        When('the index is built')('index', () => Effect.sync(() => priceIndexOf(literalFiles))),
-        Then('the lamp is indexed')(({ index }, expect) => expect(index.lamp).toBeDefined()),
+        Given('an app whose saved version holds a changed screen')(() => Effect.void),
+        When('the agent saves')('built', () => tools.handle('save_version', input).pipe(Effect.provide(stubs))),
+        Then('the save reaches the bundler')(({ built }, expect) => expect(built.bundled).toBe(1)),
       ),
     )
   )
+
+// WRONG (delete), configuration as a Feature: the Given claims an environment it never sets, and the When decodes
+// a config under a provider it passes in itself. Questions 1 and 2 fail, and configuration gets no test at all
+// (configuration-gets-no-test-and-no-gate.md).
+Gherkin.Do.pipe(
+  Given('every TRADES_ variable set, with 100 markets')(() => Effect.void),
+  When('the trade source reads its settings')(
+    'config',
+    () => tradesConfig.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(settings)))),
+  ),
+  Then('each setting holds the value its variable carried')(({ config }, expect) => expect(config.markets).toBe(100)),
+)
+
+// WRONG (delete), a pure function behind a Feature: literal fixture maps go straight into an internal function, in
+// an empty world. Questions 1, 2 and 5 fail.
+Feature('the docs index is built from the declarations the save installs')
+  .withScenarioLayer(Layer.empty)
+  .body(({ scenario }) =>
+    scenario(
+      'a package answers its version',
+      Gherkin.Do.pipe(
+        Given('zod 4.6.7 whose exports name its types')(() => Effect.void),
+        When('the index is built')('index', () => Effect.sync(() => docsIndexOf({ types: literalFiles }))),
+        Then('the version is answered')(({ index }, expect) => expect(index.zod.version).toBe('4.6.7')),
+      ),
+    )
+  )
+
+// RIGHT: the scenario layer is the real shells over the real database, with fakes only for third-party ports
+// (here the chain and the signer), each a Context.Tag with failure controls and read-back operations. The Given
+// writes the rows its text names, the When is the consumer's command through the shell's own entry, and the Thens
+// read the result and read the stored state back. Concurrency is a scenario, run against the same real store.
+feature('Invitation Ticket Claiming')
+  .withScenarioLayer(testLayer) // ClaimShell.Default and PoolShell over DBTest; only the chain and signer are fakes
+  .withScope({ db: DB, shell: ClaimShell })
+  .body(({ scenario, background, scope }) => {
+    background(cleanUp)
+    scenario(
+      'Should_ClaimTicketAndReturnSignature_When_TicketAvailable',
+      scope.pipe(
+        Given('an available ticket in the Game pool')('ticket', ({ db }) =>
+          Effect.gen(function*() {
+            const ticket = yield* generateTestTicket
+            yield* insertAvailableTicket(db, { publicKey: ticket.publicKey }, { privateKey: ticket.privateKey })
+            return ticket
+          })),
+        When('claiming the ticket')(
+          'result',
+          ({ shell }) => shell.execute(new ClaimCommand({ who: ALICE, dim: GAME })),
+        ),
+        Then('claim returns a signature')(({ result }) => expect(result.signature).toBeDefined()),
+        And('ticket is marked as claimed')(({ db, ticket }) =>
+          Effect.map(readTicket(db, ticket.publicKey), (row) => expect(row?.state).toBe('claimed'))
+        ),
+      ),
+    )
+    scenario(
+      'Should_AllowOneWinner_When_TwoConcurrentClaims',
+      scope.pipe(
+        Given('one available ticket')(({ db }) => insertOneAvailableTicket(db)),
+        When('two addresses claim concurrently')('results', ({ shell }) =>
+          Effect.all([
+            shell.execute(new ClaimCommand({ who: ALICE, dim: GAME })).pipe(Effect.either),
+            shell.execute(new ClaimCommand({ who: BOB, dim: GAME })).pipe(Effect.either),
+          ], { concurrency: 2 })),
+        Then('exactly one claim succeeds')(({ results }) => expect(results.filter(Either.isRight).length).toBe(1)),
+      ),
+    )
+  })
 ```
+
+Behaviour that needs the whole running system goes one level up instead: an effect-e2e test starts the shipped service and its dependencies (a compose environment or the platform's own dev server) and drives it through its public API or page, asserting only the response and what the API reads back.
