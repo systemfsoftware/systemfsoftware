@@ -29,7 +29,7 @@ The lint-rule half of this document is superseded by (pack: lint-hygiene, a-lint
 
 Two limits bound what a suffix can do, and both are structural rather than a matter of effort.
 
-**The suffix is a carrier in one frame only.** In the consuming frame it is not a carrier at all: a stranger importing a published package sees exported symbols and types, not your filenames. The corollary is a hard constraint on design: _a constraint that must bind a stranger cannot ride the suffix._ It has to be carried by something that survives packaging — a type, a runtime check, an exported shape. The authoring-frame permission is gone as well: the lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md) states that a lint rule never selects what it applies to by a file's name or location, so no lint rule keys on the suffix in any frame.
+**The suffix carries nothing a rule may key on.** In the consuming frame it is not a carrier at all: a stranger importing a published package sees exported symbols and types, not your filenames. The corollary is a hard constraint on design: _a constraint that must bind a stranger cannot ride the suffix._ It has to be carried by something that survives packaging — a type, a runtime check, an exported shape. The authoring-frame permission is gone as well: the lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md) states that a lint rule never selects what it applies to by a file's name or location, so no lint rule keys on the suffix in any frame.
 
 **Only two kinds of meaning are enforceable.** A suffix that names a _semantic interior_ property — what the code means, whether the function is pure, whether the module is cohesive — cannot be verified; deciding non-trivial semantic properties of programs is undecidable in general, so no checker settles it. A suffix that names a _syntactic interior_ property is enforceable directly, by looking at the file. So the enforceable meanings available to a suffix are exactly:
 
@@ -48,16 +48,15 @@ Ignoring the decidability limit produces something worse than an unimplementable
 
 ## When to Apply
 
-Before adding or extending a suffix-keyed convention:
+When a suffix, tag or path convention is proposed:
 
-- **Name the frame.** Must this bind only authors in this repository, or also consumers of a published artifact? If the latter, the suffix is the wrong carrier — pick one that survives packaging.
-- **Classify the meaning.** Is it an edge property, a depth-0 syntactic property, or a semantic claim? Only the first two can be gated.
+- **Key no rule on it.** Carry the property by what the code is: an import edge, a type, a runtime check or an exported shape. Those survive a rename and survive packaging; the suffix does neither.
 - **Match the message to the check.** State what was actually decided. "A forbidden token appears here" is honest; "this module is impure" is a claim a depth-0 check did not earn.
 - **Where the property is genuinely semantic**, stop pretending. Either move to an instrument that can see it — a test, a type, a runtime assertion — or record it as guidance and say it is unenforced.
 
 ## Examples
 
-**A suffix that cannot cross the boundary.** A convention requiring that files with a given suffix only be imported by certain other suffixes is enforceable in the tree by reading the import graph. The same convention is meaningless to a consumer who imports the package's entry point: the suffix is not in the published surface, so nothing constrains how the consumer composes what they receive. The constraint has to be re-expressed as a type or a separate entry point to survive.
+**A suffix that cannot cross the boundary.** A convention requiring that files with a given suffix only be imported by certain other suffixes was checked in the tree by reading the import graph. The same convention is meaningless to a consumer who imports the package's entry point: the suffix is not in the published surface, so nothing constrains how the consumer composes what they receive. The constraint has to be re-expressed as a type or a separate entry point to survive.
 
 **A message that outran its check.** A rule examining one file at depth 0 emitted a message asserting a property of the whole program. The check was sound about the token it found; the message described something the check could not decide, because deciding it would require following imports the rule never resolved. Filed as issue #139.
 
