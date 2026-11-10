@@ -24,9 +24,9 @@ Test: swap the third party for a competitor and the implementation for another t
 
 Answer each question per scenario, from the step bodies and the layers the Feature provides.
 
-- A Feature whose subject is an internal unit, a third party or configuration (question 1 fails for every scenario) proves no behaviour of ours: delete it with no replacement.
-- A scenario that fails question 1, 2, 4, 5 or 6 is deleted, and the rest of its Feature stands when those scenarios pass. When its Then reads a consumer outcome, that behaviour is ours: the same change adds a scenario that passes the rubric, or an effect-e2e test when it needs real IO; where effect-e2e cannot yet express that test, the change follows the waiting rule of the e2e-testing pack (failing-tests-are-fixed-not-weakened.md). A scenario whose When drives a unit and whose Then reads that unit's output has no consumer outcome, so it needs no replacement; a question-1 failure inside a Feature whose other scenarios pass is this case.
-- A Then that fails question 3 is rewritten to read the outcome through the system's own operations; the rest of the scenario stands. When the Then reads an inline stub's record, question 4 fails first and its verdict governs: rewriting the Then cannot make a stub no contract suite runs prove anything.
+- A Feature whose subject is an internal unit, a third party or configuration proves no behaviour of ours: delete it with no replacement. The verdict is the scenarios', not the title's: a third-party title alone fails no scenario's question 1 — such a Feature falls because its Whens drive no consumer entry or its Thens read only the third party's side — and a scenario whose Then reads a consumer outcome is judged by bullet 2 like any other.
+- A scenario that fails question 1, 2, 4, 5 or 6 is deleted, and the rest of its Feature stands when those scenarios pass. When its Then reads a consumer outcome, that behaviour is ours: the same change adds a scenario that passes the rubric, or an effect-e2e test when it needs real IO; where effect-e2e cannot yet express that test, the change follows the waiting rule of the e2e-testing pack (failing-tests-are-fixed-not-weakened.md). A scenario whose When drives a unit and whose Then reads that unit's output has no consumer outcome, so it needs no replacement.
+- A Then that fails question 3 is rewritten to read the outcome through the system's own operations; the rest of the scenario stands. When the Then reads an inline stub's record, question 4 fails first and its verdict governs: rewriting the Then cannot make a stub no contract suite runs prove anything. When the Then reads only a third party's wire format or a third party's stand-in's received requests, failing-tests-are-fixed-not-weakened.md governs instead and deletes the scenario with no replacement: how our adapter talks to a third party is the port's contract suite's proof, never the Feature's (adapters-run-against-real-local-resources.md).
 
 1. Does every When drive an entry the consumer uses (the published operation, the route, the command, the page), the same entry production runs?
 2. Does every Given body produce each fact its text claims? A Given whose body is `Effect.void`, or returns a constant and binds nothing, is a no. So is a Given whose state is actually injected later in the When.
@@ -113,7 +113,7 @@ Feature('the price list is built from the rate files')
 // RIGHT: the scenario layer is the real services over the real store, with a fake only for the third-party
 // payment provider, built as a service with failure controls and read-back operations and run in its port's
 // contract suite. The Given puts the room in place, the When is the guest's command through the service's own
-// entry, and one Then per observed state reads only what that command returns, with the expect the step receives. Concurrency is its own scenario, against the same store.
+// entry, and every observed state of the command is asserted in one Then, with the expect the step receives. Concurrency is its own scenario, against the same store.
 Feature('Reserving a room')
   .withScenarioLayer(testLayer) // Reservations and Rooms over the test store; only the payment provider is a fake
   .withScope({ rooms: Rooms, reservations: Reservations })
@@ -141,11 +141,11 @@ Feature('Reserving a room')
             reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })).pipe(Effect.result),
             reservations.execute(new Reserve({ guest: HENRY, kind: 'double' })).pipe(Effect.result),
           ], { concurrency: 2 })),
-        Then('exactly one of them gets the room')(({ results }, expect) =>
-          expect(results.map(Result.isSuccess).sort()).toEqual([false, true])
-        ),
-        And('the other is told no rooms are free')(({ results }, expect) =>
-          expect(results.filter(Result.isFailure)).toMatchObject([Result.fail({ _tag: 'NoRoomsFree' })])
+        Then('one guest gets the room and the other is told no rooms are free')(({ results }, expect) =>
+          expect({
+            granted: results.map(Result.isSuccess).sort(),
+            refused: results.filter(Result.isFailure),
+          }).toMatchObject({ granted: [false, true], refused: [Result.fail({ _tag: 'NoRoomsFree' })] })
         ),
       ),
     )
