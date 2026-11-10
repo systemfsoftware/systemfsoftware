@@ -21,7 +21,7 @@ Every port fake runs in one contract suite whose pairwise scenarios (`pairwiseFo
 
 A store port's suite asserts read-after-write and that a read changes nothing; it asserts a further law (independent keys, last-write-wins) only where the port's documentation promises it.
 
-Prove a fake's fidelity by running the same suite on the real adapter, never by re-deriving a third party's documentation into the fake. A contract suite is required and is never removed as a low-value test: its Then reads what the port's caller gets back from each side, which is our behaviour, unlike a scenario that reads a stand-in's received requests (failing-tests-are-fixed-not-weakened.md).
+Prove a fake's fidelity by running the same suite on the real adapter, never by re-deriving a third party's documentation into the fake. A contract suite is required and is never removed as a low-value test: its Then reads what the port's caller gets back from each side, which is our behaviour, unlike a scenario that reads a third party's stand-in's received requests or an inline stub's record no contract suite runs (failing-tests-are-fixed-not-weakened.md). A fake's read operations (what an outbound port was sent) are how a Feature's Then reads that outbound effect (testing pack: scenarios-drive-the-consumer-entry-and-read-what-it-observes.md).
 
 ```typescript
 // WRONG: src/messages.fake.ts, imported only by tests

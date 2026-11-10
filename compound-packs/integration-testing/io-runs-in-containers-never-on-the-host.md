@@ -13,7 +13,7 @@ Nothing runs on the host. A test never listens on a host port of its own, never 
 
 A behaviour that needs a real binary, a real server process or several services running together is not an integration test; it belongs to the e2e-testing pack.
 
-Any one of these marks a fake integration test, and the test is deleted. When it named a behaviour of ours, the same change replaces it (testing pack: failing-tests-are-fixed-not-weakened.md); when that behaviour needs real IO, prefer an effect-e2e test in the E2E package (e2e-testing pack) over rebuilding the fake as an integration test:
+Any one of these marks a fake integration test, and the test is deleted. When it named a behaviour of ours, the same change replaces it (testing pack: failing-tests-are-fixed-not-weakened.md); when that behaviour needs real IO, prefer an effect-e2e test in the E2E package (e2e-testing pack) over rebuilding the fake as an integration test, and where effect-e2e cannot yet express it the e2e-testing pack's waiting rule applies:
 
 - It does no IO at all: a Feature over pure functions or literal fixtures with an empty scenario layer, named integration.
 - It supplies a first-party service through `Layer.succeed(Service, Service.of({ ... }))`, an object literal or a partial shape, instead of the real layer or a port fake that runs in that port's contract suite. A settings service (`<Feature>Config`) supplied with values is how tests provide settings (configuration pack) and is not this smell.
@@ -21,7 +21,7 @@ Any one of these marks a fake integration test, and the test is deleted. When it
 - It starts a child process, or writes an executable shim or replays a recorded capture of a third party through one.
 - It does IO on the host (temp directory, host port, a developer's running service).
 - It replaces a driver, binding or client with a mock, spy, `vi.fn` or hand-built object.
-- Its Then reads what a stand-in received instead of what our caller gets back.
+- Its Then reads what a third party's stand-in received on the wire, or an inline stub's record that no contract suite runs, instead of what our caller gets back. What our system sent through one of its own outbound ports, read in the port's terms through a contract-suite fake's read operation, is not this smell.
 - Its subject is a third party's API or wire format, not our system's behaviour.
 - It is named live, real or end-to-end but runs nothing a person or caller would.
 - It was deleted with its test target and the package it covered stayed (testing pack: failing-tests-are-fixed-not-weakened.md).

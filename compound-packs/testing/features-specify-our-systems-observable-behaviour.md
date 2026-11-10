@@ -25,8 +25,8 @@ Test: swap the third party for a competitor and the implementation for another t
 Answer each question per scenario, from the step bodies and the layers the Feature provides.
 
 - A Feature whose subject is an internal unit, a third party or configuration (question 1 fails for every scenario) proves no behaviour of ours: delete it with no replacement.
-- A scenario that fails question 2, 4, 5 or 6 is deleted. When its Then reads a consumer outcome, that behaviour is ours: the same change adds a scenario that passes the rubric, or an effect-e2e test when it needs real IO (failing-tests-are-fixed-not-weakened.md).
-- A Then that fails question 3 is rewritten to read the outcome through the system's own operations; the rest of the scenario stands.
+- A scenario that fails question 1, 2, 4, 5 or 6 is deleted, and the rest of its Feature stands when those scenarios pass. When its Then reads a consumer outcome, that behaviour is ours: the same change adds a scenario that passes the rubric, or an effect-e2e test when it needs real IO; where effect-e2e cannot yet express that test, the change follows the waiting rule of the e2e-testing pack (failing-tests-are-fixed-not-weakened.md). A scenario whose When drives a unit and whose Then reads that unit's output has no consumer outcome, so it needs no replacement; a question-1 failure inside a Feature whose other scenarios pass is this case.
+- A Then that fails question 3 is rewritten to read the outcome through the system's own operations; the rest of the scenario stands. When the Then reads an inline stub's record, question 4 fails first and its verdict governs: rewriting the Then cannot make a stub no contract suite runs prove anything.
 
 1. Does every When drive an entry the consumer uses (the published operation, the route, the command, the page), the same entry production runs?
 2. Does every Given body produce each fact its text claims? A Given whose body is `Effect.void`, or returns a constant and binds nothing, is a no. So is a Given whose state is actually injected later in the When.
@@ -138,11 +138,14 @@ Feature('Reserving a room')
         Given('a hotel with one free double room')(({ rooms }) => rooms.add({ kind: 'double' })),
         When('Grace and Henry reserve it at the same moment')('results', ({ reservations }) =>
           Effect.all([
-            reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })).pipe(Effect.either),
-            reservations.execute(new Reserve({ guest: HENRY, kind: 'double' })).pipe(Effect.either),
+            reservations.execute(new Reserve({ guest: GRACE, kind: 'double' })).pipe(Effect.result),
+            reservations.execute(new Reserve({ guest: HENRY, kind: 'double' })).pipe(Effect.result),
           ], { concurrency: 2 })),
         Then('exactly one of them gets the room')(({ results }, expect) =>
-          expect(results.map(Either.isRight).sort()).toEqual([false, true])
+          expect(results.map(Result.isSuccess).sort()).toEqual([false, true])
+        ),
+        And('the other is told no rooms are free')(({ results }, expect) =>
+          expect(results.filter(Result.isFailure)).toMatchObject([Result.fail({ _tag: 'NoRoomsFree' })])
         ),
       ),
     )
