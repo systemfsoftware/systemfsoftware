@@ -28,6 +28,7 @@ await agent.assert('the booking looks confirmed')
 // RIGHT: one goal per act, each pinned by a locator; the exact value goes through screen
 await agent.act('choose the sea-view double room')
 await expect(screen.getByRole('heading', 'Sea-view double')).toBeVisible()
+// effect-e2e does not export locator actions yet: this line waits on that work (e2e-is-its-own-package-on-real-processes.md)
 await screen.getByLabel('Nights').fill('3')
 await agent.act('pay for the booking')
 await expect(screen.getByRole('status', 'Booking')).toHaveText('Confirmed')
