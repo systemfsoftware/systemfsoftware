@@ -25,7 +25,7 @@ const reasonScript = async (): Promise<string> => {
 }
 
 const MUTATION_REASONS =
-  'sfs-deps sfs-deps-missing\ninstall install-failed\nbuild build-failed\nmutation mutation-failed\n'
+  'devshell devshell-failed\ninstall install-failed\nbuild build-failed\nmutation mutation-failed\n'
 
 /** The reason code and next action the summary writes for a job whose steps ended with these outcomes. */
 const summarize = async (reasons: string, outcomes: Record<string, string>) => {
@@ -62,7 +62,7 @@ const summarize = async (reasons: string, outcomes: Record<string, string>) => {
 
 Deno.test('a listed step the backstop cancelled is reported as timed-out and named', async () => {
   const { reason, summary } = await summarize(MUTATION_REASONS, {
-    'sfs-deps': 'success',
+    'devshell': 'success',
     install: 'success',
     build: 'success',
     mutation: 'cancelled',

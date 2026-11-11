@@ -33,10 +33,5 @@ jobs:
             "name": "Workspace tarballs rebuild bit-for-bit",
             "installable": ".#packages.{system}.workspace-tarballs",
             "run": "nix build --rebuild .#packages.{system}.workspace-tarballs"
-          },
-          {
-            "name": "A consumer lockfile with a wrong integrity fails the store",
-            "installable": ".#sabotage.{system}.consumer-store-wrong-integrity",
-            "run": "if nix build .#sabotage.{system}.consumer-store-wrong-integrity 2>sabotage.log; then\n  echo \"the store built from a wrong integrity\" >&2\n  exit 1\nfi\ngrep -q ERR_PNPM_TARBALL_INTEGRITY sabotage.log"
           }
         ]

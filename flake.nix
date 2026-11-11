@@ -14,7 +14,7 @@
     # packs are compiled into it; this flake re-exports both variants.
     gritlint.url = "github:systemfsoftware/gritlint";
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/8cd6e83009531de040cd9c03e1370b4966fd2a12";
+      url = "github:systemfsoftware/pnpm-release-management/741c8c4334c261058dd4a3b2976c9f2e3796d523";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -38,24 +38,6 @@
         };
     in
     {
-      # A consumer's sandbox store: its lockfile's registry packages plus the
-      # named workspace tarballs, which its package.json depends on as
-      # `file:<dir>/<name>-<version>.tgz`.
-      lib.mkConsumerStore = { pkgs, src, packages, dir ? ".sfs-deps", lockFile ? src + "/pnpm-lock.yaml" }:
-        let
-          workspace = workspaceOf pkgs;
-          members = workspace.workspace-tarballs.members;
-          chosen = map (name:
-            lib.findFirst (member: member.attr == name)
-              (throw "lib.mkConsumerStore: no public workspace package named ${name}")
-              members) packages;
-        in
-        pnpm-release-management.lib.mkPnpmConsumerStore {
-          inherit pkgs src lockFile;
-          files.${dir} = pkgs.linkFarm "systemfsoftware-consumer-tarballs"
-            (map (member: { name = member.tarball; path = workspace.${member.attr}; }) chosen);
-        };
-
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
@@ -94,30 +76,6 @@
 
       checks = forEachSystem (pkgs: {
         test-timings = self.packages.${pkgs.stdenv.hostPlatform.system}.test-timings;
-        consumer-store = pkgs.callPackage ./nix/consumer-store-check.nix {
-          inherit (self.lib) mkConsumerStore;
-          workspace = workspaceOf pkgs;
-          package = "tsconfig";
-        };
-        consumer-load = pkgs.callPackage ./nix/consumer-load-check {
-          inherit (self.lib) mkConsumerStore;
-          workspace = workspaceOf pkgs;
-        };
-        schema-law-consumer = pkgs.callPackage ./nix/schema-law-consumer-check {
-          inherit (self.lib) mkConsumerStore;
-          workspace = workspaceOf pkgs;
-        };
-      });
-
-      # The consumer-store check against a lockfile that claims a wrong
-      # integrity: building it must fail.
-      sabotage = forEachSystem (pkgs: {
-        consumer-store-wrong-integrity = pkgs.callPackage ./nix/consumer-store-check.nix {
-          inherit (self.lib) mkConsumerStore;
-          workspace = workspaceOf pkgs;
-          package = "tsconfig";
-          integrity = "sha512-${lib.fixedWidthString 86 "A" ""}==";
-        };
       });
 
       devShells = forEachSystem (pkgs: {

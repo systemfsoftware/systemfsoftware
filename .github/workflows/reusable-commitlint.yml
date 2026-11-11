@@ -13,64 +13,17 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
-      sfs-deps-installable:
-        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
-        required: false
-        type: string
-        default: .#sfs-deps
     secrets:
       sfs-fetch-token:
-        description: GitHub token Nix fetches `github:` flake inputs with in the `sfs-deps` job, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
+        description: GitHub token Nix fetches `github:` flake inputs with in the dev-shell step, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
         required: false
 
 permissions:
   contents: read
 
 jobs:
-  # Its own job, so its cold build is measured separately from commitlint's.
-  sfs-deps:
-    name: sfs-deps · tarballs the lockfile names
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
-    outputs:
-      key: ${{ steps.produce.outputs.key }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - uses: $/.github/actions/sfs-fetch-auth
-        with:
-          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
-      - id: produce
-        uses: $/.github/actions/sfs-deps
-        with:
-          working-directory: ${{ inputs.working-directory }}
-          installable: ${{ inputs.sfs-deps-installable }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-      - if: failure()
-        uses: $/.github/actions/failure-summary
-        with:
-          job: sfs-deps
-          reasons: ""
-          steps: ${{ toJSON(steps) }}
-          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
-          working-directory: ${{ inputs.working-directory }}
-      - if: always()
-        uses: $/.github/actions/sfs-fetch-auth
-        with:
-          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
-          remove: true
-
   commitlint:
     name: lint PR commits
-    needs: sfs-deps
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: 5
@@ -84,13 +37,11 @@ jobs:
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - id: sfs-deps
-        uses: $/.github/actions/sfs-deps-restore
+      - id: devshell
+        uses: $/.github/actions/consumer-devshell
         with:
-          key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: install
         uses: $/.github/actions/install-deps
         with:
@@ -108,7 +59,7 @@ jobs:
         with:
           job: commitlint
           reasons: |
-            sfs-deps sfs-deps-missing
+            devshell devshell-failed
             install install-failed
             commitlint commit-message-invalid
           steps: ${{ toJSON(steps) }}
