@@ -109,7 +109,8 @@ The workspace pins `@effect/tsgo` at `^0.64.1`, and the issue asks for every cus
 - **Approach:**
   - Remove the three files and the three `index.ts` references; no flag, alias or deprecation path.
   - Regenerate the API report with `pnpm api:update` for the package.
-  - Intent: `major` on `@systemfsoftware/oxlint-plugin-cell-architecture` (a rule id consumers could name no longer exists); body states the removal and that stock `tsc` refuses `Context.GenericTag` under Effect 4.
+  - Intent one: `major` on `@systemfsoftware/oxlint-plugin-cell-architecture` (a rule id consumers could name no longer exists), `patch` on `oxlint-config-cell-architecture` and `oxlint-config-recommended` (their enabled set shrinks; nothing starts failing); body states the removal and that stock `tsc` refuses `Context.GenericTag` under Effect 4.
+  - Intent two: `patch` on the 16 packages that take the recommended preset as a devDependency, which re-hash when it rebuilds (precedent: `e2e-lane-rebuilt-dependents` in 60ee6fe964).
   - The PR body carries the evidence: the `tsc` run over the 10 fixtures (Appendix C, "tsc evidence").
 - **Test expectation:** none -- deletion; the evidence is the existing invalid fixtures run through stock `tsc`, plus the package build, `api:check`, lint and remaining RuleTester suites.
 - **Verification:** `tsc --noEmit` over the 10 fixtures exits non-zero with an error on every one; the plugin builds, its remaining tests pass, and the rule id appears nowhere outside point-in-time `docs/plans` records.
