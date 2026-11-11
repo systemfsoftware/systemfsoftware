@@ -17,7 +17,7 @@
     # packs are compiled into it; this flake re-exports both variants.
     gritlint.url = "github:systemfsoftware/gritlint";
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/741c8c4334c261058dd4a3b2976c9f2e3796d523";
+      url = "github:systemfsoftware/pnpm-release-management/7c976f10f0233a671caa340c5b20f9c2acaab433";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
