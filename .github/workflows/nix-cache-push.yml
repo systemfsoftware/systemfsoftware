@@ -40,10 +40,6 @@ env:
     test-timings
     bun
     gritlint
-    comment-checker
-    comment-checker-unwrapped
-    pnpm-store
-    mitmCache
 
 jobs:
   push:
@@ -60,6 +56,9 @@ jobs:
     environment: nix-cache-push
     timeout-minutes: 60
     steps:
+      - id: start
+        name: Record the job start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -89,17 +88,21 @@ jobs:
           SYSTEM: ${{ matrix.system }}
         run: |
           set -euo pipefail
-          read -ra attrs <<< "$PUSH_SET"
           : > "$RUNNER_TEMP/out-paths"
           : > "$RUNNER_TEMP/build-failures"
-          for attr in "${attrs[@]}"; do
-            if out=$(nix build --no-link --print-out-paths -L ".#packages.${SYSTEM}.${attr}"); then
+          build() {
+            if out=$(nix build --no-link --print-out-paths -L ".#$1"); then
               printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
             else
-              echo "packages.${SYSTEM}.${attr}" >> "$RUNNER_TEMP/build-failures"
-              echo "::error title=nix-build-failed::packages.${SYSTEM}.${attr} did not build"
+              echo "$1" >> "$RUNNER_TEMP/build-failures"
+              echo "::error title=nix-build-failed::$1 did not build"
             fi
+          }
+          read -ra attrs <<< "$PUSH_SET"
+          for attr in "${attrs[@]}"; do
+            build "packages.${SYSTEM}.${attr}"
           done
+          build "devShells.${SYSTEM}.default.inputDerivation"
 
       - name: Push the closures
         env:
@@ -108,37 +111,53 @@ jobs:
           set -euo pipefail
           : "${NIX_CACHE_PUSH_TOKEN:?NIX_CACHE_PUSH_TOKEN is not set}"
           store="${NIX_CACHE_URL/\/\//\/\/nix-cache:${NIX_CACHE_PUSH_TOKEN}@}?secret-key=${RUNNER_TEMP}/signing-key&want-mass-query=true&compression=zstd"
+          refused_413() { grep -q 'HTTP error 413' "$1"; }
+          reason_of() {
+            if refused_413 "$1"; then
+              echo "HTTP 413, the compressed NAR is over the cache's 100 MB request cap"
+              return
+            fi
+            local line
+            line=$(sed -n -e 's|://[^/@]*@|://|g' -e '/error: ./{s/^[[:space:]]*//;p;q}' "$1" | cut -c1-300)
+            echo "${line:-nix copy failed}"
+          }
           mapfile -t outs < "$RUNNER_TEMP/out-paths"
           if [ "${#outs[@]}" -eq 0 ]; then
-            echo "::error title=nix-cache-push::no package built, so nothing was pushed"
+            echo "::error title=nix-cache-push::nothing built, so nothing was pushed"
             exit 1
           fi
           failed=0
-          if ! nix copy --to "$store" "${outs[@]}" 2> "$RUNNER_TEMP/copy.err"; then
-            # One path can stop the bulk copy: a compressed NAR over the Worker's
-            # 100 MB request cap is refused with 413, and every path that refers
-            # to it is refused after it. Push path by path, references first, so
-            # each refused path is reported by name.
-            echo "::warning title=nix-cache-push::the bulk copy failed; pushing path by path"
-            closure=$(nix-store --query --requisites "${outs[@]}")
-            while read -r path; do
-              if ! nix copy --no-recursive --to "$store" "$path" 2> "$RUNNER_TEMP/copy.err"; then
-                failed=1
-                if grep -q 'HTTP error 413' "$RUNNER_TEMP/copy.err"; then
-                  reason="HTTP 413, the compressed NAR is over the cache's 100 MB request cap"
-                else
-                  reason=$(sed -n -e 's|://[^/@]*@|://|g' -e '/error: ./{s/^[[:space:]]*//;p;q}' "$RUNNER_TEMP/copy.err" | cut -c1-300)
-                  reason=${reason:-nix copy failed}
+          if ! nix copy --to "$store" "${outs[@]}" 2> "$RUNNER_TEMP/bulk.err"; then
+            failed=1
+            reason=$(reason_of "$RUNNER_TEMP/bulk.err")
+            if refused_413 "$RUNNER_TEMP/bulk.err"; then
+              # A compressed NAR over the Worker's 100 MB request cap is refused
+              # with 413, and every path that refers to it is refused after it.
+              # Push path by path, references first, so each refused path is
+              # reported by name.
+              echo "::warning title=nix-cache-push::the bulk copy was refused (${reason}); pushing path by path"
+              closure=$(nix-store --query --requisites "${outs[@]}")
+              while read -r path; do
+                if nix copy --no-recursive --to "$store" "$path" 2> "$RUNNER_TEMP/copy.err"; then
+                  continue
                 fi
+                reason=$(reason_of "$RUNNER_TEMP/copy.err")
                 echo "::error title=nix-cache-push::${path} was not pushed: ${reason}"
                 echo "- \`${path}\`: ${reason}" >> "$GITHUB_STEP_SUMMARY"
-              fi
-            done <<< "$closure"
+                if ! refused_413 "$RUNNER_TEMP/copy.err" && ! grep -q 'because the reference' "$RUNNER_TEMP/copy.err"; then
+                  echo "::error title=nix-cache-push::${path} failed for a reason other than 413 or a refused reference, so the path-by-path pass stopped"
+                  break
+                fi
+              done <<< "$closure"
+            else
+              echo "::error title=nix-cache-push::the bulk copy failed: ${reason}"
+              echo "The bulk copy failed, not with 413, so no path-by-path pass was tried: ${reason}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
           if [ -s "$RUNNER_TEMP/build-failures" ]; then
             failed=1
             {
-              echo "These packages did not build, so they were not pushed:"
+              echo "These did not build, so they were not pushed:"
               sed 's/^/- /' "$RUNNER_TEMP/build-failures"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -146,4 +165,12 @@ jobs:
 
       - name: Remove the signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err"
+        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/bulk.err" "$RUNNER_TEMP/copy.err"
+
+      - name: Record the job's wall time
+        if: always()
+        env:
+          START: ${{ steps.start.outputs.at }}
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          echo "nix cache push wall time (${SYSTEM}): $(( $(date +%s) - START ))s" >> "$GITHUB_STEP_SUMMARY"
