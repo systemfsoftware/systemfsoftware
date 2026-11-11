@@ -1,5 +1,8 @@
 name: Nix cache push
 
+# The org's package registry: every push to the default branch publishes the flake's workspace tarballs and its dev
+# shell inputs to nix.systemfsoftware.com, signed by nix-cache-1. Everything is built from the pushed commit's
+# github: reference, never from this checkout, so the pushed paths are the ones a consumer computes.
 on:
   push:
     branches: [main]
@@ -10,36 +13,6 @@ permissions:
 env:
   NIX_CACHE_URL: https://nix.systemfsoftware.com
   NIX_CACHE_PUBLIC_KEY: nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-  PUSH_SET: >-
-    conformance-spec
-    differential-spec
-    effect-cell-types
-    effect-gherkin-spec
-    effect-schema-discovery
-    effect-schema-law
-    effect-schema-recursion-budget
-    effect-schema-vite
-    effect-sim-kernel
-    effect-spec-runtime
-    oxlint-config-cell-architecture
-    oxlint-config-dmmf
-    oxlint-config-recommended
-    oxlint-config-rule-authoring
-    oxlint-plugin-cell-architecture
-    oxlint-plugin-dmmf-workflow
-    oxlint-plugin-effect-platform
-    oxlint-plugin-effect-schema
-    oxlint-plugin-test-discipline
-    stryker-config
-    tsconfig
-    tsdown-config
-    vitest
-    vitest-config
-    dprint
-    workspace-tarballs
-    test-timings
-    bun
-    gritlint
 
 jobs:
   push:
@@ -59,24 +32,24 @@ jobs:
       - id: start
         name: Record the job start
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
-      - name: The R2 push values are set
+
+      - name: The push values are set
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
+          NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
         run: |
           set -euo pipefail
           missing=0
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT; do
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT NIX_CACHE_SIGNING_KEY; do
             if [ -z "${!name}" ]; then
               echo "::error title=nix-cache-push::${name} is not set in the nix-cache-push environment, so nothing was built or pushed"
               missing=1
             fi
           done
           exit "$missing"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
+
       - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c
         with:
           extra_nix_config: |
@@ -89,37 +62,40 @@ jobs:
           NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
         run: |
           set -euo pipefail
-          : "${NIX_CACHE_SIGNING_KEY:?NIX_CACHE_SIGNING_KEY is not set}"
           umask 077
           printf '%s' "$NIX_CACHE_SIGNING_KEY" > "$RUNNER_TEMP/signing-key"
+          chmod 600 "$RUNNER_TEMP/signing-key"
           derived=$(nix --extra-experimental-features nix-command key convert-secret-to-public < "$RUNNER_TEMP/signing-key")
           if [ "$derived" != "$NIX_CACHE_PUBLIC_KEY" ]; then
             echo "::error title=nix-cache-key::NIX_CACHE_SIGNING_KEY does not derive the cache's public key; nothing was pushed"
             exit 1
           fi
 
-      - name: Build the push set
+      - name: Build the push set from the pushed commit
         env:
           SYSTEM: ${{ matrix.system }}
+          FLAKE: github:${{ github.repository }}/${{ github.sha }}
         run: |
           set -euo pipefail
           : > "$RUNNER_TEMP/out-paths"
           : > "$RUNNER_TEMP/build-failures"
+          # The push set is what workspace-tarballs names as its members, plus workspace-tarballs itself.
+          attrs=$(nix eval --raw "$FLAKE#packages.$SYSTEM.workspace-tarballs" --apply \
+            'p: builtins.concatStringsSep "\n" ([ "workspace-tarballs" ] ++ map (m: m.attr) p.members)')
           build() {
-            if out=$(nix build --no-link --print-out-paths -L ".#$1"); then
+            if out=$(nix build --no-link --print-out-paths -L "$FLAKE#$1"); then
               printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
             else
               echo "$1" >> "$RUNNER_TEMP/build-failures"
               echo "::error title=nix-build-failed::$1 did not build"
             fi
           }
-          read -ra attrs <<< "$PUSH_SET"
-          for attr in "${attrs[@]}"; do
-            build "packages.${SYSTEM}.${attr}"
-          done
-          build "devShells.${SYSTEM}.default.inputDerivation"
+          while IFS= read -r attr; do
+            build "packages.$SYSTEM.$attr"
+          done <<< "$attrs"
+          build "devShells.$SYSTEM.default.inputDerivation"
 
-      - name: Push the closures
+      - name: Push the closures and check the cache serves them
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -139,6 +115,18 @@ jobs:
             echo "::error title=nix-cache-push::the push failed: ${reason:-nix copy failed}"
             echo "The push failed: ${reason:-nix copy failed}" >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ "$failed" -eq 0 ]; then
+            for p in "${outs[@]}"; do
+              hash=$(basename "$p")
+              hash=${hash%%-*}
+              status=$(curl -sS -o "$RUNNER_TEMP/narinfo" -w '%{http_code}' "$NIX_CACHE_URL/$hash.narinfo" || true)
+              if [ "$status" != "200" ] || ! grep -q '^Sig: nix-cache-1:' "$RUNNER_TEMP/narinfo"; then
+                failed=1
+                echo "::error title=nix-cache-verify::$p is not served as signed by nix-cache-1 (HTTP $status)"
+                echo "Not served as signed by nix-cache-1 (HTTP $status): $p" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            done
+          fi
           if [ -s "$RUNNER_TEMP/build-failures" ]; then
             failed=1
             {
@@ -150,7 +138,7 @@ jobs:
 
       - name: Remove the signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err"
+        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err" "$RUNNER_TEMP/narinfo"
 
       - name: Record the job's wall time
         if: always()
