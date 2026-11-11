@@ -32,6 +32,11 @@ runs:
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'static'
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'static'
     - name: dprint from the flake
       if: inputs.lane == 'static'
@@ -81,6 +86,11 @@ runs:
     - uses: ./.github/actions/install-deps
       if: inputs.lane == 'layers'
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'layers'
     - name: bun from the flake
       if: inputs.lane == 'layers'
@@ -88,12 +98,22 @@ runs:
       run: echo "$(nix build --no-link --print-out-paths .#bun)/bin" >> "$GITHUB_PATH"
 
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'docs'
     - name: Commit graph for single-plan, after the depth-1 fetch (commits only, trees on demand)
       if: inputs.lane == 'docs'
       shell: bash -e {0}
       run: git fetch --no-tags --filter=tree:0 --unshallow origin +refs/heads/main:refs/remotes/origin/main
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'gritlint'
 
     # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
@@ -211,6 +231,11 @@ runs:
     - uses: ./.github/actions/grant-kvm
       if: inputs.lane == 'affected'
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'affected'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'affected'
@@ -263,6 +288,11 @@ runs:
     - uses: ./.github/actions/grant-kvm
       if: inputs.lane == 'test'
     - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+          fallback = true
       if: inputs.lane == 'test'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'test'
