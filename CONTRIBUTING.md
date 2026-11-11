@@ -45,17 +45,8 @@ workflow reads repository state and picks a phase:
   Release PR (`changeset-release/main`).
 - **none**: nothing to do.
 
-### Distribution — Nix flakes from git, no registry
+### Distribution: nix.systemfsoftware.com is the package registry
 
-These packages are **not published to any npm registry**. Distribution is this
-repository's **Nix flake outputs**, consumed directly from a git ref: a consumer
-pins the flake input by its commit `rev` + `narHash` in `flake.lock` (a PR
-snapshot pins the head rev, a stable release pins the release tag), and runs all
-dependency code — install, build, test, dev, CLIs — inside a deny-by-default
-sandbox (bubblewrap on Linux).
+nix.systemfsoftware.com is the package registry for `@systemfsoftware` packages: producers push their package tarballs there from `main`, consumers take them through flake inputs, and nothing is published to npm.
 
-A `<pkg>@vX.Y.Z` git tag is the durable record that a version shipped: the
-release set is exactly the publishable workspace versions that carry no such tag
-yet. A version whose tag already exists is skipped, so a release interrupted
-before tagging resumes on the next push to `main`. There is **no npm token, no
-OIDC trusted publishing, and no registry** anywhere in the release path.
+A `<pkg>@vX.Y.Z` git tag is the durable record that a version shipped: the release set is exactly the publishable workspace versions that carry no such tag yet. A version whose tag already exists is skipped, so a release interrupted before tagging resumes on the next push to `main`.

@@ -46,10 +46,10 @@ Large language models generate code with subtle integration traps: mocks on inte
 
 ## Quick Start
 
-Install the cell runtime and peer dependencies:
+`@systemfsoftware/effect-cell-types` is not on npm: nix.systemfsoftware.com is the package registry for `@systemfsoftware` packages. Add this repository as a flake input and take its tarballs through the consumer route in [pnpm-release-management](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix), then add the peer dependency:
 
 ```bash
-pnpm add @systemfsoftware/effect-cell-types 'effect@^4'
+pnpm add 'effect@^4'
 ```
 
 ### 1. Declare the Pure Decision Workflow

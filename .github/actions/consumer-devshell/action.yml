@@ -1,0 +1,58 @@
+name: Lay the consumer's dev-shell tarballs
+description: >-
+  When the working directory's pnpm-lock.yaml names `file:.deps/` tarballs, enters the flake's default dev shell once,
+  so its shellHook lays `.deps/` from nix.systemfsoftware.com, the package registry for `@systemfsoftware` packages.
+  A lockfile that names none runs nothing.
+inputs:
+  working-directory:
+    description: The pnpm workspace root, relative to the repository root; its flake's default dev shell is entered here
+    required: false
+    default: .
+  sfs-fetch-token:
+    description: GitHub token with read access to private repositories the flake's `github:` inputs name; pass the caller's `sfs-fetch-token` secret
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - id: named
+      name: Tarballs the lockfile names
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if grep -q 'file:\.deps/' pnpm-lock.yaml; then echo named=true; else echo named=false; fi >> "$GITHUB_OUTPUT"
+    - id: nix
+      name: Nix already on the runner
+      if: steps.named.outputs.named == 'true'
+      shell: bash
+      run: |
+        if command -v nix > /dev/null; then echo present=true; else echo present=false; fi >> "$GITHUB_OUTPUT"
+    - id: install-nix
+      if: steps.named.outputs.named == 'true' && steps.nix.outputs.present != 'true'
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+    - id: token
+      if: steps.named.outputs.named == 'true'
+      uses: $/.github/actions/sfs-fetch-auth
+      with:
+        sfs-fetch-token: ${{ inputs.sfs-fetch-token }}
+    - id: devshell
+      name: The dev shell lays the tarballs
+      if: steps.named.outputs.named == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        nix develop --command true
+        if ! ls .deps/*.tgz > /dev/null 2>&1; then
+          echo "::error title=deps-missing::the dev shell laid no .deps/*.tgz; the flake's shellHook must lay them from the producer flake inputs"
+          exit 1
+        fi
+    - name: Drop the fetch token from the Nix config
+      if: always() && steps.named.outputs.named == 'true'
+      uses: $/.github/actions/sfs-fetch-auth
+      with:
+        sfs-fetch-token: ${{ inputs.sfs-fetch-token }}
+        remove: "true"

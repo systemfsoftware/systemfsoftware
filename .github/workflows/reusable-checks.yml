@@ -137,24 +137,12 @@ on:
         required: false
         type: string
         default: ""
-      sfs-deps-installable:
-        description: Flake installable, evaluated in `working-directory`, whose output is the `.tgz` files pnpm-lock.yaml names under `file:.sfs-deps/`. Built at most once per call and cached under the recorded integrities; unused when the lockfile names no such tarball
-        required: false
-        type: string
-        default: .#sfs-deps
-      sfs-deps-runs-on:
-        description: JSON runner labels for the `sfs-deps` producer job; empty uses `runs-on`. A cold producer builds the flake installable, so a caller with small default runners can give it a larger machine without moving plan, classify and the gate
-        required: false
-        type: string
-        default: ""
       single-job:
         description: >-
           One job for a run with one lint lane and no planned tests. The job that carries `gate-name` checks out once and
-          runs, as steps, the diff classifier, the `.sfs-deps` restore, the plan phase, the lane and the 'Every lane passed'
-          result; classify, plan, lanes, test and timings are skipped, so a pull request boots two runners (the
-          producer's and this one) instead of six. `lanes` must name exactly one well-formed lane (a lane's `runs-on`
-          sizes the job, its `node-options` apply to it) and `gate-lane` is ignored. The `.sfs-deps` producer stays its
-          own job, since it alone holds the private-repo fetch token. The plan phase (the hook's, then the planner) runs
+          runs, as steps, the diff classifier, the dev-shell step, the plan phase, the lane and the 'Every lane passed'
+          result; classify, plan, lanes, test and timings are skipped, so a pull request boots one runner instead of six. `lanes` must name exactly one well-formed lane (a lane's `runs-on`
+          sizes the job, its `node-options` apply to it) and `gate-lane` is ignored. The dev-shell step is the only step that reads the private-repo fetch token. The plan phase (the hook's, then the planner) runs
           in the job, and the job fails if it schedules any test job, so tests are never dropped; the timing record is
           read for the plan but not written, and a docs-only diff plans `[]` without running the planner. A caller sets it
           per event (true on a pull request, say) and keeps the full fan-out for runs that plan tests
@@ -169,7 +157,7 @@ on:
         description: Remote Turbo cache token
         required: false
       sfs-fetch-token:
-        description: GitHub token Nix fetches `github:` flake inputs with in the `sfs-deps` job, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
+        description: GitHub token Nix fetches `github:` flake inputs with in the dev-shell step, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
         required: false
 
 permissions:
@@ -182,7 +170,7 @@ env:
 jobs:
   classify:
     name: classify · docs-only or full
-    # single-job: the `check` job classifies in its own steps. plan, sfs-deps, lanes, test and timings all need
+    # single-job: the `check` job classifies in its own steps. plan, lanes, test and timings all need
     # classify, so each of them skips with it.
     if: ${{ !inputs.single-job }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
@@ -190,7 +178,6 @@ jobs:
     outputs:
       scope: ${{ steps.diff.outputs.scope }}
       lanes: ${{ steps.lanes.outputs.lanes }}
-      sfs-deps-none: ${{ steps.demand.outcome == 'success' && steps.demand.outputs.key == '' }}
     steps:
       - id: diff
         uses: $/.github/actions/classify-diff
@@ -210,24 +197,6 @@ jobs:
             filter='[.[] | . + {phase: .id}]'
           fi
           echo "lanes=$(jq -c "$filter" <<< "$LANES")" >> "$GITHUB_OUTPUT"
-      # A docs-only diff still runs the sfs-deps producer when the lockfile names .sfs-deps/ tarballs, since the
-      # built-in docs phase installs. Any doubt (no tools, no lockfile, a refused lockfile) leaves it running.
-      - name: The lockfile alone, on a docs-only diff
-        if: steps.diff.outputs.scope == 'docs-only'
-        continue-on-error: true
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: .sfs-lockfile
-          persist-credentials: false
-          sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/pnpm-lock.yaml', inputs.working-directory) || '/pnpm-lock.yaml' }}
-          sparse-checkout-cone-mode: false
-      - id: demand
-        name: Tarballs the lockfile names
-        if: steps.diff.outputs.scope == 'docs-only'
-        continue-on-error: true
-        env:
-          WORKING_DIRECTORY: ${{ inputs.working-directory }}
-        run: sfs-deps key --working-directory ".sfs-lockfile/$WORKING_DIRECTORY"
       - if: failure()
         uses: $/.github/actions/failure-summary
         with:
@@ -240,8 +209,8 @@ jobs:
 
   plan:
     name: plan · test jobs from recorded timings
-    needs: [classify, sfs-deps]
-    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' }}
+    needs: [classify]
+    if: ${{ !cancelled() && needs.classify.result == 'success' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.plan-timeout-minutes }}
     defaults: &defaults
@@ -267,14 +236,12 @@ jobs:
           TOKEN: ${{ secrets.turbo-token }}
         run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
       # Before the hook-or-built-in routing, so a hook's own install finds the tarballs in place.
-      - &sfs-deps
-        id: sfs-deps
-        uses: $/.github/actions/sfs-deps-restore
+      - &devshell
+        id: devshell
+        uses: $/.github/actions/consumer-devshell
         with:
-          key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - &mode
         id: mode
         name: Lane hook or built-in lanes
@@ -391,53 +358,17 @@ jobs:
           job: plan
           reasons: |
             hook hook-failed
-            sfs-deps sfs-deps-missing
+            devshell devshell-failed
             builtin plan-failed
             plan plan-failed
           steps: ${{ toJSON(steps) }}
           reproduce: ${{ steps.mode.outputs.source == 'built-in' && inputs.timings == 'test-timings' && format('nix run github:{0}/{1}#test-timings -- plan', job.workflow_repository, job.workflow_sha) || format('{0} plan', inputs.timings) }}
           working-directory: ${{ inputs.working-directory }}
 
-  sfs-deps:
-    name: sfs-deps · tarballs the lockfile names
-    needs: classify
-    # single-job: classify is skipped, so the job runs on its own and the lane job only restores what it produced.
-    if: ${{ !cancelled() && (inputs.single-job || (needs.classify.result == 'success' && (needs.classify.outputs.scope != 'docs-only' || needs.classify.outputs.sfs-deps-none != 'true'))) }}
-    runs-on: ${{ fromJSON(inputs.sfs-deps-runs-on || inputs.runs-on) }}
-    timeout-minutes: 60
-    defaults: *defaults
-    outputs:
-      key: ${{ steps.produce.outputs.key }}
-    steps:
-      - *checkout
-      - uses: $/.github/actions/sfs-fetch-auth
-        with:
-          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
-      - id: produce
-        uses: $/.github/actions/sfs-deps
-        with:
-          working-directory: ${{ inputs.working-directory }}
-          installable: ${{ inputs.sfs-deps-installable }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-      - if: failure()
-        uses: $/.github/actions/failure-summary
-        with:
-          job: sfs-deps
-          reasons: ""
-          steps: ${{ toJSON(steps) }}
-          reproduce: nix build -L ${{ inputs.sfs-deps-installable }}
-          working-directory: ${{ inputs.working-directory }}
-      - if: always()
-        uses: $/.github/actions/sfs-fetch-auth
-        with:
-          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
-          remove: true
-
   lanes:
     name: ${{ matrix.lane.name }}
-    needs: [classify, sfs-deps]
-    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.sfs-deps.result != 'failure' && needs.classify.outputs.lanes != '[]' }}
+    needs: [classify]
+    if: ${{ !cancelled() && needs.classify.result == 'success' && needs.classify.outputs.lanes != '[]' }}
     runs-on: ${{ matrix.lane.runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ matrix.lane.timeout-minutes }}
     defaults: *defaults
@@ -456,7 +387,7 @@ jobs:
           sparse-checkout: ${{ inputs.working-directory != '.' && format('/{0}/', inputs.working-directory) || '' }}
           sparse-checkout-cone-mode: false
       - *turbo
-      - *sfs-deps
+      - *devshell
       - *mode
       - id: hook
         uses: ./.github/actions/checks-lane
@@ -488,7 +419,7 @@ jobs:
           job: lane-${{ matrix.lane.id }}
           reasons: |
             hook hook-failed
-            sfs-deps sfs-deps-missing
+            devshell devshell-failed
             builtin lane-failed
             run lane-failed
           steps: ${{ toJSON(steps) }}
@@ -497,7 +428,7 @@ jobs:
 
   test:
     name: test · ${{ matrix.job.name }}
-    needs: [classify, plan, sfs-deps]
+    needs: [classify, plan]
     if: needs.classify.outputs.scope != 'docs-only' && needs.plan.outputs.jobs != '[]'
     runs-on: ${{ fromJSON(inputs.test-runs-on || inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -511,7 +442,7 @@ jobs:
     steps:
       - *checkout
       - *turbo
-      - *sfs-deps
+      - *devshell
       - *mode
       - id: hook
         uses: ./.github/actions/checks-lane
@@ -599,7 +530,7 @@ jobs:
           job: test-${{ matrix.job.id }}
           reasons: |
             hook hook-failed
-            sfs-deps sfs-deps-missing
+            devshell devshell-failed
             builtin build-failed
             test test-failed
             shard test-failed
@@ -693,7 +624,7 @@ jobs:
 
   check:
     name: ${{ inputs.gate-name }}
-    needs: [classify, sfs-deps, plan, lanes, test]
+    needs: [classify, plan, lanes, test]
     if: ${{ always() }}
     # single-job: this job is the lane's box (its `runs-on`, else the test jobs' labels) and gets its timeout.
     runs-on: ${{ inputs.single-job && (fromJSON(inputs.lanes)[0].runs-on || fromJSON(inputs.test-runs-on || inputs.runs-on)) || fromJSON(inputs.runs-on) }}
@@ -703,8 +634,7 @@ jobs:
       test-jobs: ${{ steps.single-plan.outputs.jobs }}
     steps:
       # Single-job mode. The steps run in the order the jobs ran, on one checkout. They stay in this job so there is one
-      # job id and one check run named `gate-name`, which a ruleset or Mergify may require. The sfs-deps producer is
-      # not among them: it holds the private-repo fetch token, so it stays its own job, and this job only restores.
+      # job id and one check run named `gate-name`, which a ruleset or Mergify may require. The dev-shell step is the only one that reads the private-repo fetch token.
       - name: One lane
         if: inputs.single-job
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -751,27 +681,12 @@ jobs:
           API: ${{ secrets.turbo-api }}
           TOKEN: ${{ secrets.turbo-token }}
         run: printf 'TURBO_TEAM=%s\nTURBO_API=%s\nTURBO_TOKEN=%s\n' "$TEAM" "$API" "$TOKEN" >> "$GITHUB_ENV"
-      # The sfs-deps job produced the tarballs under the fetch token; this job never holds it.
-      - id: single-producer
-        name: The producer job passed
+      - id: single-devshell
         if: inputs.single-job
-        env:
-          PRODUCER: ${{ needs.sfs-deps.result }}
-        run: |
-          if [ "$PRODUCER" != success ]; then
-            mkdir -p "$RUNNER_TEMP/sfs-logs"
-            echo sfs-deps-missing > "$RUNNER_TEMP/sfs-reason"
-            echo "::error title=sfs-deps-missing::the sfs-deps job finished $PRODUCER, so the tarballs the lockfile names are not in the cache"
-            exit 1
-          fi
-      - id: single-restore
-        if: inputs.single-job
-        uses: $/.github/actions/sfs-deps-restore
+        uses: $/.github/actions/consumer-devshell
         with:
-          key: ${{ needs.sfs-deps.outputs.key }}
           working-directory: ${{ inputs.working-directory }}
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: single-mode
         name: Lane hook or built-in lanes
         if: inputs.single-job
@@ -932,8 +847,7 @@ jobs:
           reasons: |
             single-diff classify-failed
             single-lane classify-failed
-            single-producer sfs-deps-missing
-            single-restore sfs-deps-missing
+            single-devshell devshell-failed
             single-hook-plan hook-failed
             single-builtin-plan plan-failed
             single-plan plan-failed
@@ -951,19 +865,16 @@ jobs:
         env:
           CLASSIFY: ${{ needs.classify.result }}
           SCOPE: ${{ needs.classify.outputs.scope }}
-          SFS_DEPS: ${{ needs.sfs-deps.result }}
           PLAN: ${{ needs.plan.result }}
           LANES: ${{ needs.lanes.result }}
           TEST: ${{ needs.test.result }}
           NO_LANES: ${{ needs.classify.outputs.lanes == '[]' }}
-          NO_SFS_DEPS: ${{ needs.classify.outputs.sfs-deps-none }}
           NO_JOBS: ${{ needs.plan.outputs.jobs == '[]' }}
         run: |
-          echo "classify=$CLASSIFY scope=$SCOPE sfs-deps=$SFS_DEPS (none named: $NO_SFS_DEPS) plan=$PLAN lanes=$LANES test=$TEST"
+          echo "classify=$CLASSIFY scope=$SCOPE plan=$PLAN lanes=$LANES test=$TEST"
           docs=false
           [ "$SCOPE" = docs-only ] && docs=true
           [ "$CLASSIFY" = success ] &&
-            { [ "$SFS_DEPS" = success ] || { [ "$docs" = true ] && [ "$NO_SFS_DEPS" = true ] && [ "$SFS_DEPS" = skipped ]; }; } &&
             [ "$PLAN" = success ] &&
             { [ "$LANES" = success ] || { [ "$NO_LANES" = true ] && [ "$LANES" = skipped ]; }; } &&
             { [ "$TEST" = success ] || { { [ "$NO_JOBS" = true ] || [ "$docs" = true ]; } && [ "$TEST" = skipped ]; }; }

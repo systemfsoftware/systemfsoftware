@@ -1,9 +1,0 @@
-{
-  "$schema": "https://turbo.build/schema.json",
-  "extends": ["//"],
-  "tasks": {
-    "test": {
-      "env": ["GITHUB_RUN_ID"]
-    }
-  }
-}

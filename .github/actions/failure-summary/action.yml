@@ -68,10 +68,7 @@ runs:
           mutation-on-pull-request) next='Run mutation on a push to the default branch or a manual dispatch, never on a pull request.' ;;
           mutation-failed) next='Read the mutation summary of the named package and kill or justify its survivors.' ;;
           mutation-merge-failed) next='Run the reproduce command; a mutation part is missing or malformed.' ;;
-          sfs-deps-lockfile-invalid) next='Read the sfs-deps key log: pnpm-lock.yaml is unreadable, or names one `.sfs-deps/` tarball with two integrities; run `pnpm install` and commit pnpm-lock.yaml.' ;;
-          sfs-deps-build-failed) next='Run the reproduce command with `-L` and fix the failing derivation of the `.sfs-deps/` installable.' ;;
-          sfs-deps-mismatch) next='Read the sfs-deps verify log. In the sfs-deps job, the installable does not build the bytes pnpm-lock.yaml records: rebuild `.sfs-deps/` from the flake, run `pnpm install`, and commit pnpm-lock.yaml, or move the flake pin back. In an installing job, the cache entry under the key holds other bytes than the lockfile records: delete that cache entry and re-run.' ;;
-          sfs-deps-missing) next='Read the restore step log of this job: no entry existed under the key (open the `sfs-deps` job of this run; it did not save the tarballs), or the cache service refused the restore (re-run the job).' ;;
+          devshell-failed) next='Read the consumer-devshell step log: `nix develop` failed, or its shellHook laid no `.deps/*.tgz`. Run the reproduce command, then fix the flake producer inputs or the shellHook.' ;;
           sfs-fetch-auth-failed) next='Read the sfs-fetch-auth step log: it could not write or remove the sfs-fetch-token line in the user Nix config it names. Check that the runner user has a writable HOME, or point `XDG_CONFIG_HOME` or `NIX_CONFIG_HOME` at a writable directory.' ;;
           timed-out) next="The job's \`timeout-minutes\` backstop or a cancellation stopped ${failed:-a step with no id} before it finished. Run the reproduce command to see where it hangs or how long it takes, then make it finish inside the backstop." ;;
           *) reason=unclassified
