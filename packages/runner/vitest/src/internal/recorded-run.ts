@@ -16,8 +16,8 @@ import * as Option from 'effect/Option'
 import type * as Tracer from 'effect/Tracer'
 import type * as V from 'vitest'
 import { TestRunner } from 'vitest'
-import { Asserted, type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
-import { refusingUnyielded } from './driver.js'
+import { Asserted, type Checks, checksFor, type Ledger, makeLedger } from '../kernel/checks.js'
+import { refusingUnyielded } from '../kernel/driver.js'
 import { type FailureRecord, renderFailureRecord, type TestIdentity, testIdentityOf } from './failure-record.js'
 import { type ProvidedCheckDefaults, providedCheckDefaults } from './property/defaults.js'
 import type * as Engine from './property/engine.js'
@@ -74,7 +74,7 @@ const runRecorded = <A, E>(
   ctx: V.TestContext,
   program: RecordedRun<A, E>,
 ): Promise<FailureRecord | undefined> => {
-  const ledger = makeLedger(ctx)
+  const ledger = makeLedger({ ctx })
   const recorder = createSpanRecorder()
   return Effect.runPromiseExit(
     provideRun(Effect.tap(program(checksFor(ledger)), () => refusingUnyielded(ledger)), ledger, ctx).pipe(

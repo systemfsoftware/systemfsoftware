@@ -54,6 +54,7 @@ interface GuardState {
   depth: number
   installed: boolean
   extendPatched: boolean
+  refusal: string
 }
 
 const isCallable = (value: Opaque): value is AnyCall => typeof value === 'function'
@@ -70,14 +71,19 @@ const stateKey = Symbol.for('@systemfsoftware/vitest/guard')
 const wrappedKey = Symbol.for('@systemfsoftware/vitest/guard/wrapped')
 
 const createState = (): GuardState => {
-  const created: GuardState = { depth: 0, installed: false, extendPatched: false }
+  const created: GuardState = { depth: 0, installed: false, extendPatched: false, refusal: refuseRawExpect }
   Reflect.set(globalThis, stateKey, created)
   return created
 }
 
+const withRefusal = (existing: GuardState): GuardState => {
+  if (typeof Reflect.get(existing, 'refusal') !== 'string') existing.refusal = refuseRawExpect
+  return existing
+}
+
 const stateOf = (): GuardState => {
   const existing: Opaque = Reflect.get(globalThis, stateKey)
-  return isGuardState(existing) ? existing : createState()
+  return isGuardState(existing) ? withRefusal(existing) : createState()
 }
 
 const state = stateOf()
@@ -89,7 +95,7 @@ const isUnwrapped = (value: Opaque): value is AnyCall => isCallable(value) && !i
 const authorized = (): boolean => state.depth > 0
 
 const refuse = (): never => {
-  throw refusalOf(refuseRawExpect)
+  throw refusalOf(state.refusal)
 }
 
 const close = (): void => {
@@ -99,7 +105,6 @@ const close = (): void => {
 const closeWhenSettled = (outcome: Opaque): void =>
   Predicate.isPromiseLike(outcome) ? void Promise.resolve(outcome).then(close, close) : close()
 
-/** @internal */
 export const authorize = <A>(run: () => A): A => {
   state.depth += 1
   try {
@@ -112,20 +117,16 @@ export const authorize = <A>(run: () => A): A => {
   }
 }
 
-/** @internal */
 export const markTask = (task: Task): void => {
   task.meta.effectVitestMarked = true
 }
 
-/** @internal */
 export const isMarked = (task: Task): boolean => task.meta.effectVitestMarked === true
 
 /**
  * The timeout for a hook that is synchronous and in memory. A deadline cannot stop such a hook hanging: the timer
  * only fires after it returns. Vitest still compares wall time on return, so a busy host would fail a file or test
  * with a hook timeout while nothing waited. Timeout 0 registers the hook without a deadline.
- *
- * @internal
  */
 export const UNTIMED_HOOK = 0
 
@@ -201,10 +202,14 @@ const patchExtend = (): void => {
   wrapExtend()
 }
 
-/** @internal */
-export const installGuard = (): void => {
-  if (state.installed) return
+const refuseDifferentText = (refusal: string): void => {
+  if (state.refusal !== refusal) throw new Error('the guard is already installed with a different refusal text')
+}
+
+export const installGuard = (refusal: string): void => {
+  if (state.installed) return refuseDifferentText(refusal)
   state.installed = true
+  state.refusal = refusal
   guardPrototype()
   patchExtend()
 }

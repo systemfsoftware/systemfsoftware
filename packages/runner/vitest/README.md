@@ -346,6 +346,32 @@ export const TaskRef = Context.Reference<{ annotate?: (message: string) => void 
 
 There is no `owned`, no `recordAssertion` and no `@systemfsoftware/vitest/utils`: a library reports through the caller's check, and the one-check rule is what keeps a verdict a verdict.
 
+### The refusal kernel
+
+A library that registers its own tests, with steps and checks of its own, refuses slop with the fork's mechanism through `@systemfsoftware/vitest/kernel`. The fork's refusals are a floor: a library can reword a refusal and add refusals of its own, and it cannot remove one, narrow one, mint a check that cannot fail, or admit a second check on one observed state.
+
+```ts
+import { drive, expectFor, installGuard, makeLedger } from '@systemfsoftware/vitest/kernel'
+
+installGuard('✗ an expect imported from vitest ran; take it from the test callback.')
+
+const ledger = makeLedger({
+  ctx,
+  tables: { refused: { toBeCloseTo: '✗ say the value: toEqual(expected).' } },
+  piecewise: '✗ a second check on the same state. Read the facts together and check once.',
+})
+const expect = expectFor({ ledger, subjects: [locatorSubject] })
+
+await Effect.runPromise(drive({ body, args: [], ledger, interpreter: myInterpreter }))
+```
+
+- `makeLedger` is the only way to get a `Ledger`, and `expectFor` and `drive` refuse any other object. It counts one check per observed state for every consumer, and resolves the library's `tables` over the fork's own. `piecewise` and `vacuous` reword the refusal of a second check on one state and of a check that asserts nothing.
+- `tables` (`refused`, `negated`, `needed`, `boolean`) are rows laid over the fork's: a row rewords a refusal the fork already has, or names a matcher the library also refuses. `refused` rows apply to `.not` too unless `negated` words them otherwise, and `needed` rewords only `toThrow`, `toThrowError`, `toSatisfy` and `toMatchObject`. No row removes one: the weak value matchers, `.resolves`, `.rejects`, `expect.anything`, `expect.soft`, `expect.poll`, `toMatchObject({})` and `toThrow()` stay refused. A name that is not a `to...` matcher (`toString`, a typo) is absent.
+- A `Subject` is a check surface for a value of the library's own: `matches(actual)` and `checks(actual, mint)`. Subjects are tried in the order listed after the boolean refusal, the first match wins, and `expect(actual)` types as an overload per subject. `mint(judgement)` is the only way to build a check: the ledger hands the judgement a `make` that runs the same tables and boolean refusal, allows one matcher call, and refuses a judgement that calls none. `make` is typed as vitest's assertion, so a weak matcher inside a judgement is refused at run time, not by the compiler.
+- `drive` steps a body through an `Interpreter`: `interpret` admits and runs a yielded value, `resets` says whether a step may open a new observed state, and `refusals` rewords the texts for an unadmitted value, a check written and never yielded, and a body that yielded no check. A step opens a new state only when it judged no check, whatever `resets` says, so a check wrapped in an Effect still holds its window. The default interpreter runs any Effect and resets on every step, as the fork's lanes do.
+- `Gate`, `RequirementOf` and `BodyRefusal` refuse a body at its test name at compile time, with the texts the library passes; texts typed as plain `string` leave no name that compiles. A library whose steps are `Handle`s keeps a yielded `Effect.sleep` from being a step: a handle is not an Effect, so the union of a body's yields does not collapse to the widest `Effect`. `makeHandle` takes the Effect the handle runs as `effect` and reads the handle's requirement from it, so only a step built on a check carries `Asserted`.
+- `installGuard`, `markTask` and `isMarked` refuse a raw `expect` and a test the library did not register. A second `installGuard` with a different text throws. A check unyielded on a Handle-based body is not seen by `@effect/language-service`'s `floatingEffect` diagnostic, which keys on a discarded Effect; the ledger refuses it at run time instead.
+
 ## Compatibility with @effect/vitest
 
 This is a fork of the surface, not a superset of it. What changed:

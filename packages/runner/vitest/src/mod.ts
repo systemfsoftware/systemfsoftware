@@ -11,22 +11,14 @@ import type * as Effect from 'effect/Effect'
 import type * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import * as V from 'vitest'
-import type { Asserted, Check, Checks, Expect } from './internal/checks.js'
 import { checkDefaultsKey, type ProvidedCheckDefaults } from './internal/property/defaults.js'
 import type * as Engine from './internal/property/engine.js'
 import type * as Property from './internal/property/kinds.js'
-import type {
-  EffectLaneRefusal,
-  NoCheckRefusal,
-  RefuseAsyncBody,
-  RefuseEffectBody,
-  RefuseSyncBody,
-  ScopedLaneRefusal,
-  ScopedLiveLaneRefusal,
-  UnprovidedRefusal,
-} from './internal/refusals.js'
 import * as internal from './internal/runner.js'
 import * as testContextInternal from './internal/test-context.js'
+import type { Asserted, Check, Checks, Expect } from './kernel/checks.js'
+import type * as Kernel from './kernel/gate.js'
+import type { EffectLaneRefusal, ScopedLaneRefusal, ScopedLiveLaneRefusal } from './kernel/refusals.js'
 
 declare module 'vitest' {
   interface ProvidedContext {
@@ -90,9 +82,7 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export type Unresolved<Eff, Sentinel = unknown> = [Eff] extends [never] ? false
-    : [Sentinel] extends [Eff] ? true
-    : false
+  export type Unresolved<Eff, Sentinel = unknown> = Kernel.Unresolved<Eff, Sentinel>
 
   /**
    * The requirement a body's yields impose on the run.
@@ -106,10 +96,7 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export type RequirementOf<Eff> = [Eff] extends [never] ? never
-    : [Eff] extends [Effect.Effect<infer _A, infer _E, infer R>] ? R
-    : Unresolved<Eff> extends true ? Asserted
-    : never
+  export type RequirementOf<Eff> = Kernel.ForkRequirementOf<Eff>
 
   /**
    * What a lane provides besides its block's layer: the scope the body runs in, and the checks it yields.
@@ -125,9 +112,7 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export type Gate<R, Provided = never> = [R] extends [Asserted | Provided]
-    ? [Asserted] extends [R] ? string : NoCheckRefusal
-    : UnprovidedRefusal
+  export type Gate<R, Provided = never> = Kernel.Gate<R, Provided>
 
   /**
    * A body that is not the generator itself, as a parameter union: the error prints the rewrite (KTD3). A sync
@@ -136,7 +121,7 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export type BodyRefusal = RefuseSyncBody | RefuseAsyncBody | RefuseEffectBody
+  export type BodyRefusal = Kernel.BodyRefusal
 
   /**
    * A registration's options: Vitest's own, plus `rerun` — the body the leak-check second run runs in place of
