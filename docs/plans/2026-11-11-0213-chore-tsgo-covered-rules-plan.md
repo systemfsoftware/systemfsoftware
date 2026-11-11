@@ -12,17 +12,17 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** no mistake in this repository is graded twice by two tools that can drift apart, and `@effect/tsgo` is current.
-- **Means:** bump `@effect/tsgo` to the latest release in its own PR, then delete each plugin rule whose invalid fixtures tsgo reports in full, one PR apart from the bump (KTD2, KTD3). The fixture run found no such rule, so the series is the bump alone (KTD3).
-- **Authority:** Linear SYS-1284, "When a rule is deleted" and "Done when"; `compound-packs/lint-hygiene/a-lint-rule-enforces-a-decision-it-never-makes-one.md`; `packages/oxlint-plugin/AGENTS.md`.
-- **Stop conditions:** the bump PR is green and merged by a human; the report below is the deliverable for the rest of the issue. No rule is deleted by this plan.
+- **Means:** bump `@effect/tsgo` to the latest release in its own PR, then delete the one rule whose invalid fixtures another instrument already refuses in full, in a second PR apart from the bump (KTD3, U2).
+- **Authority:** Linear SYS-1284, "When a rule is deleted" and "Done when"; the owner ruling that the deletion bar is "another instrument already refuses every invalid case"; `compound-packs/lint-hygiene/a-lint-rule-enforces-a-decision-it-never-makes-one.md`; `packages/oxlint-plugin/AGENTS.md`.
+- **Stop conditions:** PR1 (the bump) and PR2 (deleting `no-context-generic-tag`) are green and merged by a human, PR1 first. PR1 deletes nothing; the other nine tsgo-paired rules stay whole.
 - **Execution profile:** dependency bump plus config; scoped local checks, CI for the rest (root `AGENTS.md` OP28).
-- **Finishes and ships:** the ce-work executor opens PR1; a human merges it.
+- **Finishes and ships:** the executor opens PR1 and PR2; a human merges PR1 first.
 
 ## Product Contract
 
 ### Summary
 
-`@effect/tsgo` 0.67.7 (2026-11-10, still the registry's `latest`) adds one diagnostic over 0.64.1 and changes no default severity. Fed the invalid fixtures of all 76 plugin rules through the patched oxlint with this repository's recommended preset, tsgo reports every case of none of them. Ten rules have a tsgo counterpart; it reports some of their cases or none, never all. The other 66 concern things tsgo has no diagnostic for. The deletion list is empty. The bump needs oxlint `~1.93.0` and one new line in each of two tsconfig presets, and leaves the tree clean.
+`@effect/tsgo` 0.67.7 (2026-11-10, still the registry's `latest`) adds one diagnostic over 0.64.1 and changes no default severity. Fed the invalid fixtures of all 76 plugin rules through the patched oxlint with this repository's recommended preset, tsgo reports every case of none of them. Ten rules have a tsgo counterpart; it reports some of their cases or none, never all. The other 66 concern things tsgo has no diagnostic for. By owner ruling the bar is that another instrument already refuses every invalid case, and stock `tsc` refuses all 10 invalid fixtures of `no-context-generic-tag` (Effect 4.1.2 removed `Context.GenericTag`), so that rule is deleted in its own PR. The nine other paired rules stay whole. The bump needs oxlint `~1.93.0` and one new line in each of two tsconfig presets, and leaves the tree clean.
 
 ### Problem Frame
 
@@ -45,7 +45,7 @@ The workspace pins `@effect/tsgo` at `^0.64.1`, and the issue asks for every cus
 
 **Deletions**
 
-- R8. A deletion PR removes the rule, its tests, its docs and its preset entry together, lands apart from the bump, and ships a changeset at the bump its public surface needs. No rule qualifies today.
+- R8. A deletion PR removes the rule, its tests, its docs and its preset entry together, lands apart from the bump, and ships a changeset at the bump its public surface needs. `no-context-generic-tag` is the one rule that qualifies (KTD3).
 
 ### Scope Boundaries
 
@@ -61,7 +61,7 @@ The workspace pins `@effect/tsgo` at `^0.64.1`, and the issue asks for every cus
 
 - KTD1. **The oxlint recommended preset is the bar; the ceiling run is the proof it cannot be beaten.** The preset (`promoteWarnToError` over tsgo's correctness and recommended sets, plus eleven explicit `error` entries) leaves many diagnostics off. The ceiling config turns all 147 on at error. A rule that no paired diagnostic covers even at ceiling cannot be covered by any configuration, including the `packages/toolchain/tsconfig` channel. Governs R5.
 - KTD2. **Pairing is by mistake, then measured.** A pair needs a tsgo diagnostic whose description names the same construct. Raw "any tsgo diagnostic fired on the fixture" is recorded but never counts: `schemaClassMissingBrand` fires on 44/44 `make-body-purity` bodies and on every `dmmf-workflow` fixture that extends `Schema.Class`, and none of that is the rule's mistake. Governs R5.
-- KTD3. **Zero deletions is the result, not a gap.** The best pair, `no-io-module-in-source-test` against `nodeBuiltinImport`, covers 4 of 5 cases and misses the `effect/FileSystem` binding. The issue says a rule covered on some cases stays whole. Governs R5, R8.
+- KTD3. **One deletion, on the owner's bar.** Under the issue's literal bar (a tsgo diagnostic reports every invalid case) nothing qualifies: the best pair, `no-io-module-in-source-test` against `nodeBuiltinImport`, covers 4 of 5 and misses the `effect/FileSystem` binding. The owner ruled that the bar is that another instrument already refuses every invalid case, because a compiler refusal is stronger than a lint rule. Stock `tsc` 7.0.2 reports TS2339 or TS2304 on all 10 invalid fixtures of `no-context-generic-tag`, since Effect 4.1.2 has no `Context.GenericTag`, so the rule goes. The other nine paired rules stay whole. (session-settled: user-directed — chosen over keeping the rule under the tsgo-only bar: a compiler refusal is stronger than a lint rule.) Governs R5, R8.
 - KTD4. **The bump moves oxlint with it.** `@effect/tsgo` 0.67.7 supports oxlint 1.89.0 and 1.91.0 to 1.93.0 only (the message `effect-tsgo patch` prints; `_packages/tsgo/upstream.json` in the Effect-TS/tsgo repository). The repo's `~1.90.0` is outside that set: the patch is refused, and every package's `oxlint` then fails with `Unknown plugin: 'effecttsgo'`. 1.93.0 is the newest supported release. `oxlint-tsgolint` 7.0.2005 stays; the patch accepts it. Governs R2.
 - KTD5. **The new diagnostic is listed in both tsconfig presets.** `packages/toolchain/tsconfig/effect.json` states that every diagnostic is listed so none falls back to its upstream default. `matchToResultOrOption` defaults to `suggestion`, so it is set to `error` in `effect.json` and `effect-entrypoint.json`. In the oxlint channel it is already at error through `promoteWarnToError`: `oxlint --print-config` in `effect-cell-types` shows `effecttsgo/match-to-result-or-option` as `deny`. Governs R3.
 - KTD6. **The scratch tooling is not committed.** The three scripts live in Appendix C so the run is reproducible without adding code, a test or a gate to the tree (the issue forbids new tests; root `AGENTS.md` GATE1 puts a new gate behind owner sign-off).
@@ -100,9 +100,19 @@ The workspace pins `@effect/tsgo` at `^0.64.1`, and the issue asks for every cus
 - **Test expectation:** none -- dependency and config change; the existing plugin RuleTester suites, `lint`, `lint:tsgo` and `typecheck` are the proof.
 - **Verification:** the tree is clean at the new versions (Verification Contract, "Bump measured").
 
-### Deletion units: none
+### U2. Delete `no-context-generic-tag`
 
-No rule meets the bar, so no deletion unit is planned. When a later tsgo release makes one qualify, its PR removes together, per `packages/oxlint-plugin/AGENTS.md` boundaries: `src/rules/<rule>.ts`, `<rule>.config.ts`, `__tests__/<rule>.test.ts`, the rule's entries in the plugin `src/index.ts`, any preset entry, any README or doc that names the rule, and the `etc/*.api.md` report if the exported surface moves (`pnpm api:update`); with a `major` intent. Nothing in this PR set depends on it.
+- **Goal:** R8 for the one qualifying rule, in a PR apart from U1.
+- **Requirements:** R8, R5.
+- **Dependencies:** none in code; the PR branches from `main` and is merged after PR1, as the issue requires.
+- **Files:** delete `packages/oxlint-plugin/oxlint-plugin-cell-architecture/src/rules/no-context-generic-tag.ts`, `no-context-generic-tag.config.ts` and `src/rules/__tests__/no-context-generic-tag.test.ts`. Edit `src/index.ts` (import, `recommendedRules` entry, `rules` entry), `README.md` (the rule's rows), `etc/oxlint-plugin-cell-architecture.api.md`, and add `.changeset/<intent>.md`.
+- **Approach:**
+  - Remove the three files and the three `index.ts` references; no flag, alias or deprecation path.
+  - Regenerate the API report with `pnpm api:update` for the package.
+  - Intent: `major` on `@systemfsoftware/oxlint-plugin-cell-architecture` (a rule id consumers could name no longer exists); body states the removal and that stock `tsc` refuses `Context.GenericTag` under Effect 4.
+  - The PR body carries the evidence: the `tsc` run over the 10 fixtures (Appendix C, "tsc evidence").
+- **Test expectation:** none -- deletion; the evidence is the existing invalid fixtures run through stock `tsc`, plus the package build, `api:check`, lint and remaining RuleTester suites.
+- **Verification:** `tsc --noEmit` over the 10 fixtures exits non-zero with an error on every one; the plugin builds, its remaining tests pass, and the rule id appears nowhere outside point-in-time `docs/plans` records.
 
 ## Verification Contract
 
@@ -123,13 +133,13 @@ No rule meets the bar, so no deletion unit is planned. When a later tsgo release
 ## Definition of Done
 
 - PR1 is merged by a human with @effect/tsgo 0.67.7, oxlint ~1.93.0 and a clean tree; new diagnostic at error in both channels.
-- The Appendix tables are the report: 76 rules, 0 delete, 10 keep, 66 unrelated; the run is reproducible from Appendix C.
-- No rule, test, doc or preset entry is removed; no scratch file, worktree or lockfile edit from the fixture run remains in the diff.
+- PR2 is merged after PR1 and removes `no-context-generic-tag`, its tests, docs and preset entry together.
+- The Appendix tables are the report: 76 rules, 1 delete, 9 keep, 66 unrelated; the run is reproducible from Appendix C.
+- PR1 removes no rule, test, doc or preset entry; no scratch file, worktree or lockfile edit from the fixture run remains in either diff.
 
 ## Open Questions
 
-- Deferred, owner: `no-context-generic-tag` is fully reported by stock `tsc` (TS2339/TS2304 on all 10 fixtures) because Effect 4.1.2 has no `Context.GenericTag`. That is a compiler error, not an `@effect/tsgo` diagnostic, so this issue keeps the rule. Whether to retire it on compiler evidence is a separate owner decision.
-- Deferred, review: the changeset levels in U1.
+- Deferred, review: the changeset levels in U1 and U2.
 
 ---
 
@@ -200,6 +210,14 @@ git checkout pnpm-lock.yaml && rm -rf packages/zz-fixture-run    # leave the tre
 ```
 
 `analyze.ts` prints one tab-separated row per rule: plugin, rule, invalid fixtures, paired coverage under the preset, paired coverage at ceiling, fixtures with any `effecttsgo` hit (incidental), relocated fixtures. Running it at 0.64.1 and at 0.67.7 gave identical output. To see one case, open `cases/<id>/` and `manifest.json`. Four fixtures carry a random temp-directory name in their filename, so those four paths differ between runs; the counts do not.
+
+**tsc evidence (U2).** The scaffold package's `tsconfig.json` already includes `cases/**`, so stock `tsc` runs over every fixture. With the compiler unpatched (`pnpm exec effect-tsgo unpatch`) and Effect 4.1.2 installed:
+
+```bash
+cd packages/zz-fixture-run && pnpm exec tsc --noEmit -p tsconfig.json | grep -E '^cases/(0089|009[0-8])/'
+```
+
+Every one of the 10 `no-context-generic-tag` cases (ids from `manifest.json`, `rule` equal to the rule) gets an error: TS2339 `Property 'GenericTag' does not exist on type 'typeof import(".../effect/dist/Context")'` where the fixture reads `Context.GenericTag`, and TS2304 `Cannot find name 'GenericTag'` where it names the type or binding bare (cases 0093, 0094, 0095). Cases 0094 and 0095 carry only the bare name, and tsc refuses them too.
 
 **`$SCRATCH/pairs.json`** (diagnostic ids are the oxlint `effecttsgo/*` names; a rule absent here has no pair)
 
@@ -527,7 +545,7 @@ for (const r of [...rows.values()].sort((a, b) => (a.plugin + a.rule).localeComp
 
 ## Appendix D. Report: every custom rule
 
-76 registered rules in five plugins: **0 delete, 10 keep, 66 unrelated**. 1198 invalid fixtures. (The 171 `.ts` files directly under the plugins' `src/rules/` directories are these 76 rule modules, their `.config.ts` option modules and shared helpers.) "Preset" is paired coverage under `oxlint-config-recommended`; "Ceiling" is the same with all 147 diagnostics at error. The Evidence column states the misses for a keep and the incidental hits that were rejected for an unrelated.
+76 registered rules in five plugins: **1 delete, 9 keep, 66 unrelated**. 1198 invalid fixtures. (The 171 `.ts` files directly under the plugins' `src/rules/` directories are these 76 rule modules, their `.config.ts` option modules and shared helpers.) "Preset" is paired coverage under `oxlint-config-recommended`; "Ceiling" is the same with all 147 diagnostics at error. The Evidence column states the misses for a keep and the incidental hits that were rejected for an unrelated.
 
 | Plugin            | Rule                                    | What it reports                                                                                          | Invalid | Class     | Paired tsgo diagnostic                                                                                                                    | Preset | Ceiling | Evidence                                                                                                                                                                                                                                                                                                        |
 | ----------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -544,7 +562,7 @@ for (const r of [...rows.values()].sort((a, b) => (a.plugin + a.rule).localeComp
 | cell-architecture | `kind-record-minted-by-kind`            | Blueprint and handle files mint records only through the kind                                            | 3       | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern.                                                                                                                                                                                                                                                                        |
 | cell-architecture | `kind-typeid-by-symbol-for`             | A *.blueprint.ts / *.handle.ts file exports its TypeId declared as Symbol.for('<literal>') and…          | 6       | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern.                                                                                                                                                                                                                                                                        |
 | cell-architecture | `no-bodyless-status-assertion`          | Forbids asserting an HTTP response status without surfacing the response body on failure                 | 5       | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern.                                                                                                                                                                                                                                                                        |
-| cell-architecture | `no-context-generic-tag`                | Ban Context.GenericTag - a v4 service is declared with Context.Service                                   | 10      | keep      | outdatedApi (Effect v4 API database)                                                                                                      | 0/10   | 0/10    | The database has no `GenericTag` entry. Stock `tsc` reports all 10 fixtures (TS2339/TS2304) because Effect 4.1.2 removed `Context.GenericTag`; that is the compiler, not an `@effect/tsgo` diagnostic, so the rule stays under this issue (see Open Questions).                                                 |
+| cell-architecture | `no-context-generic-tag`                | Ban Context.GenericTag - a v4 service is declared with Context.Service                                   | 10      | delete    | stock `tsc` (TS2339, TS2304); no tsgo diagnostic                                                                                          | 0/10   | 0/10    | Owner ruling: another instrument already refuses every invalid case. Stock `tsc` reports all 10 fixtures because Effect 4.1.2 removed `Context.GenericTag`. tsgo `outdatedApi` has no `GenericTag` entry (0/10).                                                                                                |
 | cell-architecture | `no-direct-tag-access`                  | Ban direct _tag access                                                                                   | 11      | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern.                                                                                                                                                                                                                                                                        |
 | cell-architecture | `no-either-tag-assertions`              | Ban Either _tag assertions in test files                                                                 | 44      | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern.                                                                                                                                                                                                                                                                        |
 | cell-architecture | `sandwich-shell-is-straight-line`       | Refuse control flow, dispatcher calls, Match pipelines, and clock reads inside the read and write…       | 28      | unrelated | -                                                                                                                                         | -      | -       | No tsgo diagnostic reports this concern. Incidental hits on fixture boilerplate only: match-effect-to-match 2.                                                                                                                                                                                                  |
@@ -610,4 +628,6 @@ for (const r of [...rows.values()].sort((a, b) => (a.plugin + a.rule).localeComp
 
 ### Deleted rules
 
-None. A rule is deleted only when every invalid fixture is reported at error under the recommended preset; the best candidate, `no-io-module-in-source-test`, reports 4 of 5.
+- `no-context-generic-tag` (`oxlint-plugin-cell-architecture`): all 10 invalid fixtures are refused by stock `tsc` 7.0.2 with TS2339 or TS2304 (Appendix C, tsc evidence). Deleted by U2 under the owner's bar; no tsgo diagnostic replaces it.
+
+Under the issue's literal bar (a tsgo diagnostic) no rule qualifies; the best candidate, `no-io-module-in-source-test`, reports 4 of 5 and stays.
