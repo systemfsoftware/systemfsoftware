@@ -7,16 +7,22 @@
  * - anything else opens a new observed state and then runs, which is what makes a second check on one state a
  *   second check in one window (R5), and a check inside a loop the same window as its siblings.
  *
+ * What counts as a runnable step, and whether it opens a new observed state, is the {@link Interpreter}'s: the fork's
+ * lanes run any Effect, and a library that yields its own handles admits only those.
+ *
  * The steps run in the same fiber as the test, so layers, virtual time, concurrency, the second run and scope
  * finalizers keep working through the runner unchanged. A step that fails, and the test being interrupted, both
  * return the generator: its `finally` blocks run and the steps after it never start (R8). When the body returns,
  * the gate refuses what the body wrote and never judged, then a body that judged nothing at all (R4).
+ *
+ * @since 4.1.0
  */
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as Function from 'effect/Function'
 import { Asserted, isCheck, type Ledger } from './checks.js'
 import { noCheckRefusal, refusalOf, refuseUnyielded } from './refusals.js'
+
+type Opaque<A = unknown> = A
 
 /**
  * The generator a test body hands over: `function* ({ expect }) { ... }`, or `function* (row, { expect })` per
@@ -27,101 +33,118 @@ import { noCheckRefusal, refusalOf, refuseUnyielded } from './refusals.js'
  */
 export type Body<Arg = never, Y = never, Done = never> = (...args: ReadonlyArray<Arg>) => Iterator<Y, Done, undefined>
 
-/** A body's iterator: every `next` hands back the value the body yielded, and the first has nothing to feed it. */
 type Steps<Y, Done> = Iterator<Y, Done, undefined>
 
-/**
- * A value the body yielded, as the driver runs it. What a body needs of its environment belongs to the layer the
- * runner provides around this whole Effect, so the driver erases the channels here, exactly as the runner erases
- * a body's own (`outputIsEffect` in `runner.ts`): the layer block is where a requirement is checked, and a body
- * that needs a service nothing provides is refused by the runner at run time (R9).
- */
-const isRunnable = (value: unknown): value is Effect.Effect<never, never, never> => Effect.isEffect(value)
+/** @internal */
+export type Runnable = Effect.Effect<never, never, never>
 
-/** A body that yielded something the driver cannot run ran nothing, so nothing in the test could fail. */
+/** @internal */
+export const isRunnable = (value: unknown): value is Runnable => Effect.isEffect(value)
+
+/**
+ * Which yielded values the driver admits and runs, what opens a new observed state, and the texts it refuses with.
+ *
+ * @internal
+ */
+export interface Interpreter {
+  readonly interpret: (value: Opaque) => Runnable | undefined
+  readonly resets: (value: Opaque) => boolean
+  readonly refusals: {
+    readonly unsteppable: string
+    readonly unyielded: string
+    readonly noCheck: string
+  }
+}
+
 const refuseUnsteppable = '✗ the body yielded a value that is not an Effect. Yield the Effect itself, or a check: ' +
   'yield* expect(actual).toEqual(expected).'
 
-/**
- * A yielded Effect: a branded check judges itself, and anything else opens a new observed state before it runs,
- * which is what resets the ledger's one-check window (R5).
- */
-const runEffect = (value: Effect.Effect<never, never, never>, ledger: Ledger): Effect.Effect<never, never, never> =>
-  isCheck(value) ? value : Effect.andThen(Effect.sync(() => ledger.asserted.step()), value)
-
-/** One step: anything the driver cannot run is refused, because then no step of the test ran at all. */
-const runStep = <Y>(value: Y, ledger: Ledger): Effect.Effect<never, never, never> =>
-  isRunnable(value) ? runEffect(value, ledger) : Effect.die(refusalOf(refuseUnsteppable))
-
-/** Steps the iterator to its end, feeding each yielded Effect's result back into the body. */
-const stepThrough = <Y, Done>(steps: Steps<Y, Done>, ledger: Ledger, input: undefined): Effect.Effect<void> =>
-  Effect.suspend(() => {
-    const state = steps.next(input)
-    if (state.done === true) return Effect.void
-    return Effect.flatMap(runStep(state.value, ledger), (value) => stepThrough(steps, ledger, value))
-  })
-
-/**
- * After the body returns: a check written and never yielded is refused first, then a body that judged none.
- * Both carry the same text the refusal carries on its compile channel, branded by `refusalOf` so the runner's
- * second run re-throws them as the refusals they are.
- */
-const gate = (ledger: Ledger): Effect.Effect<void> => Effect.andThen(refusingUnyielded(ledger), judgedNone(ledger))
-
 /** @internal */
-export const refusingUnyielded = (ledger: Ledger): Effect.Effect<void> =>
-  Effect.suspend(() => ledger.unyielded() > 0 ? refuse(refuseUnyielded) : Effect.void)
-
-const judgedNone = (ledger: Ledger): Effect.Effect<void> =>
-  Effect.suspend(() => ledger.judged() === 0 ? refuse(noCheckRefusal) : Effect.void)
+export const defaultInterpreter: Interpreter = {
+  interpret: (value) => isRunnable(value) ? value : undefined,
+  resets: () => true,
+  refusals: { unsteppable: refuseUnsteppable, unyielded: refuseUnyielded, noCheck: noCheckRefusal },
+}
 
 const refuse = (text: string): Effect.Effect<never> => Effect.die(refusalOf(text))
 
-/**
- * A failure or an interruption returns the generator, so its `finally` blocks run and the step after the failed
- * check never does (R8).
- */
+const opensState = (ledger: Ledger, effect: Runnable): Runnable =>
+  Effect.andThen(Effect.sync(() => ledger.asserted.step()), effect)
+
+const resetsBefore = (value: Opaque, effect: Runnable, interpreter: Interpreter): boolean =>
+  !isCheck(effect) && interpreter.resets(value)
+
+const admitted = (value: Opaque, effect: Runnable, ledger: Ledger, interpreter: Interpreter): Runnable =>
+  resetsBefore(value, effect, interpreter) ? opensState(ledger, effect) : effect
+
+const runnable = (value: Opaque, ledger: Ledger, interpreter: Interpreter): Runnable => {
+  const effect = interpreter.interpret(value)
+  return effect === undefined ? refuse(interpreter.refusals.unsteppable) : admitted(value, effect, ledger, interpreter)
+}
+
+const stepThrough = <Y, Done>(
+  steps: Steps<Y, Done>,
+  ledger: Ledger,
+  interpreter: Interpreter,
+  input: undefined,
+): Effect.Effect<void> =>
+  Effect.suspend(() => {
+    const state = steps.next(input)
+    if (state.done === true) return Effect.void
+    return Effect.flatMap(
+      runnable(state.value, ledger, interpreter),
+      (value) => stepThrough(steps, ledger, interpreter, value),
+    )
+  })
+
+const judgedNone = (ledger: Ledger, text: string): Effect.Effect<void> =>
+  Effect.suspend(() => ledger.judged() === 0 ? refuse(text) : Effect.void)
+
+const unyielded = (ledger: Ledger, text: string): Effect.Effect<void> =>
+  Effect.suspend(() => ledger.unyielded() > 0 ? refuse(text) : Effect.void)
+
+/** @internal */
+export const refusingUnyielded = (ledger: Ledger): Effect.Effect<void> => unyielded(ledger, refuseUnyielded)
+
+const gate = (ledger: Ledger, interpreter: Interpreter): Effect.Effect<void> =>
+  Effect.andThen(unyielded(ledger, interpreter.refusals.unyielded), judgedNone(ledger, interpreter.refusals.noCheck))
+
 const unwind = <Y, Done>(steps: Steps<Y, Done>): Effect.Effect<void> =>
   Effect.sync(() => {
     steps.return?.(undefined)
   })
 
+/** @internal */
+export interface DriveInput<Arg, Y, Done> {
+  readonly body: Body<Arg, Y, Done>
+  readonly args: ReadonlyArray<Arg>
+  readonly ledger: Ledger
+  readonly interpreter?: Interpreter
+}
+
 const driveBody = <Arg, Y, Done>(
-  body: Body<Arg, Y, Done>,
-  args: ReadonlyArray<Arg>,
-  ledger: Ledger,
+  { args, body, ledger }: DriveInput<Arg, Y, Done>,
+  interpreter: Interpreter,
 ): Effect.Effect<void, never, never> =>
   Effect.suspend(() => {
     const steps = body(...args)
     return Effect.onExit(
-      Effect.flatMap(stepThrough(steps, ledger, undefined), () => gate(ledger)),
+      Effect.flatMap(stepThrough(steps, ledger, interpreter, undefined), () => gate(ledger, interpreter)),
       (exit) => Exit.isSuccess(exit) ? Effect.void : unwind(steps),
     )
   })
 
-/** The body's steps, with this test's ledger provided as the `Asserted` every check in it reaches for. */
-const driven = <Arg, Y, Done>(
-  body: Body<Arg, Y, Done>,
-  args: ReadonlyArray<Arg>,
-  ledger: Ledger,
-): Effect.Effect<void, never, never> => Effect.provideService(driveBody(body, args, ledger), Asserted, ledger.asserted)
-
-type Drive = {
-  <Arg = never, Y = never, Done = never>(
-    body: Body<Arg, Y, Done>,
-    args: ReadonlyArray<Arg>,
-    ledger: Ledger,
-  ): Effect.Effect<void, never, never>
-  <Arg = never, Y = never, Done = never>(
-    args: ReadonlyArray<Arg>,
-    ledger: Ledger,
-  ): (body: Body<Arg, Y, Done>) => Effect.Effect<void, never, never>
-}
-
 /**
- * Runs one test's body: `body` called with `args`, stepped against `ledger`, with the ledger's `asserted`
- * provided as `Asserted` so every check in the body — including one yielded inside a forked fiber — reaches it.
+ * Runs one test's body: `body` called with `args`, stepped against `ledger`, with the ledger's `asserted` provided
+ * as `Asserted` so every check in the body — including one yielded inside a forked fiber — reaches it.
  *
  * @internal
  */
-export const drive: Drive = Function.dual(3, driven)
+export const drive = <Arg = never, Y = never, Done = never>(
+  input: DriveInput<Arg, Y, Done>,
+): Effect.Effect<void, never, never> =>
+  Effect.provideService(
+    driveBody(input, input.interpreter ?? defaultInterpreter),
+    Asserted,
+    input.ledger.asserted,
+  )

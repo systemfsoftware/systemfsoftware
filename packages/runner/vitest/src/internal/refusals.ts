@@ -235,3 +235,53 @@ export const refuseRawIt = "✗ this test was registered with vitest's it; impor
 
 /** @internal */
 export type refuseRawIt = typeof refuseRawIt
+
+/**
+ * The vocabulary of the check surface as data: which matchers are refused and with what text. The fork passes
+ * {@link forkTables}; a library that consumes the kernel passes its own, so an answer to "is this matcher weak?"
+ * is a row of a table, not a change to the kernel.
+ *
+ * - `refused` and `negated` name matchers (`to...`) whose call is refused, and `expect.<static>` / `.resolves` /
+ *   `.rejects` reads that are refused: `anything`, `poll`, `soft`, `resolves`, `rejects`. A static a table does
+ *   not refuse is available (`anything`) or supplied by the consumer (`poll`, `soft`).
+ * - `needed` names the matchers whose empty call is refused: `toThrow`, `toThrowError`, `toSatisfy`,
+ *   `toMatchObject`. A matcher a table omits accepts any call.
+ * - `boolean` is the text of `expect(<boolean>)`.
+ *
+ * @internal
+ */
+export interface Tables {
+  readonly refused: { readonly [matcher: string]: string }
+  readonly negated: { readonly [matcher: string]: string }
+  readonly needed: { readonly [matcher: string]: string }
+  readonly boolean: string
+}
+
+/** @internal */
+export const forkTables = {
+  refused: refusedText,
+  negated: negatedText,
+  needed: neededText,
+  boolean: booleanRefusal,
+} as const satisfies Tables
+
+/** @internal */
+export type ForkTables = typeof forkTables
+
+/** @internal */
+export interface GateTexts {
+  readonly noCheck: string
+  readonly unprovided: string
+  readonly syncBody: string
+  readonly asyncBody: string
+  readonly effectBody: string
+}
+
+/** @internal */
+export interface ForkGateTexts extends GateTexts {
+  readonly noCheck: NoCheckRefusal
+  readonly unprovided: UnprovidedRefusal
+  readonly syncBody: RefuseSyncBody
+  readonly asyncBody: RefuseAsyncBody
+  readonly effectBody: RefuseEffectBody
+}

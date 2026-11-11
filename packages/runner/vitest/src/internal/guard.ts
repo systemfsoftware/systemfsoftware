@@ -54,6 +54,7 @@ interface GuardState {
   depth: number
   installed: boolean
   extendPatched: boolean
+  refusal: string
 }
 
 const isCallable = (value: Opaque): value is AnyCall => typeof value === 'function'
@@ -70,7 +71,7 @@ const stateKey = Symbol.for('@systemfsoftware/vitest/guard')
 const wrappedKey = Symbol.for('@systemfsoftware/vitest/guard/wrapped')
 
 const createState = (): GuardState => {
-  const created: GuardState = { depth: 0, installed: false, extendPatched: false }
+  const created: GuardState = { depth: 0, installed: false, extendPatched: false, refusal: refuseRawExpect }
   Reflect.set(globalThis, stateKey, created)
   return created
 }
@@ -89,7 +90,7 @@ const isUnwrapped = (value: Opaque): value is AnyCall => isCallable(value) && !i
 const authorized = (): boolean => state.depth > 0
 
 const refuse = (): never => {
-  throw refusalOf(refuseRawExpect)
+  throw refusalOf(state.refusal)
 }
 
 const close = (): void => {
@@ -202,9 +203,10 @@ const patchExtend = (): void => {
 }
 
 /** @internal */
-export const installGuard = (): void => {
+export const installGuard = (refusal: string): void => {
   if (state.installed) return
   state.installed = true
+  state.refusal = refusal
   guardPrototype()
   patchExtend()
 }

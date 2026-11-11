@@ -74,7 +74,7 @@ const runRecorded = <A, E>(
   ctx: V.TestContext,
   program: RecordedRun<A, E>,
 ): Promise<FailureRecord | undefined> => {
-  const ledger = makeLedger(ctx)
+  const ledger = makeLedger({ ctx })
   const recorder = createSpanRecorder()
   return Effect.runPromiseExit(
     provideRun(Effect.tap(program(checksFor(ledger)), () => refusingUnyielded(ledger)), ledger, ctx).pipe(

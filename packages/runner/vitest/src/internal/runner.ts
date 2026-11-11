@@ -392,8 +392,8 @@ const runLaned = <R>(
   env: RunEnv,
   body: LaneBody,
 ): Promise<void> => {
-  const ledger = makeLedger(ctx)
-  return runRecorded(mapEffect(bindRun(drive(bodyOf(ledger, body), [], ledger), ctx), env), ctx, env)
+  const ledger = makeLedger({ ctx })
+  return runRecorded(mapEffect(bindRun(drive({ body: bodyOf(ledger, body), args: [], ledger }), ctx), env), ctx, env)
 }
 
 const outcomeOf = (promise: Promise<void>): Promise<Error | undefined> =>

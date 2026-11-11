@@ -346,6 +346,29 @@ export const TaskRef = Context.Reference<{ annotate?: (message: string) => void 
 
 There is no `owned`, no `recordAssertion` and no `@systemfsoftware/vitest/utils`: a library reports through the caller's check, and the one-check rule is what keeps a verdict a verdict.
 
+### The refusal kernel
+
+A library that registers its own tests, with steps and checks of its own, refuses slop with the fork's mechanism through `@systemfsoftware/vitest/kernel`. The kernel is the ledger that counts checks per observed state, the generator driver, the check minter and the guard. Every refusal is data the library passes in, so a library states its own rewrite texts without a second copy of the mechanism:
+
+```ts
+import { drive, expectFor, forkTables, installGuard, makeLedger, refusedText } from '@systemfsoftware/vitest/kernel'
+
+installGuard('✗ an expect imported from vitest ran; take it from the test callback.')
+
+const { toBeTruthy: _accepted, ...refused } = refusedText
+const ledger = makeLedger({ ctx, limits: { default: 1, kinds: { locator: 'unbounded' } } })
+const expect = expectFor({ written: ledger.written, tables: { ...forkTables, refused }, subjects: [locatorSubject] })
+
+await Effect.runPromise(drive({ body, args: [], ledger, interpreter: myInterpreter }))
+```
+
+- `Tables` (`refused`, `negated`, `needed`, `boolean`) lists which matchers are refused and with what text; a matcher a table omits is accepted, and a static a table omits (`anything`, `poll`, `soft`) is available or supplied through `statics`. The fork's own lanes pass `forkTables`.
+- A `Subject` is a check surface for a value of the library's own: `matches(actual)` and `checks(actual, mint)`. Subjects are tried in the order listed, the first match wins, and `expect(actual)` types as an overload per subject.
+- `makeLedger` takes `limits`: how many checks one observed state admits, per check kind, with `unbounded` allowed and `default` for any other kind. The fork's rule is one.
+- `drive` steps a body through an `Interpreter`: `interpret` admits and runs a yielded value, `resets` says whether a step opens a new observed state, and `refusals` carries the texts for an unadmitted value, a check written and never yielded, and a body that yielded no check. The default interpreter runs any Effect and resets on every step, as the fork's lanes do.
+- `Gate`, `RequirementOf` and `BodyRefusal` refuse a body at its test name at compile time, with the texts the library passes. A library whose steps are `Handle`s (built with `makeHandle`) keeps a yielded `Effect.sleep` from being a step: a handle is not an Effect, so the union of a body's yields does not collapse to the widest `Effect`, and its requirement is read like an Effect's.
+- `installGuard`, `markTask` and `isMarked` refuse a raw `expect` and a test the library did not register. A check unyielded on a Handle-based body is not seen by `@effect/language-service`'s `floatingEffect` diagnostic, which keys on a discarded Effect; the ledger refuses it at run time instead.
+
 ## Compatibility with @effect/vitest
 
 This is a fork of the surface, not a superset of it. What changed:
