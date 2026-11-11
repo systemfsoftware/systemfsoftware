@@ -46,4 +46,5 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 | `design-system`       | Building and styling UI with Astryx                                                        |
 | `screen-content`      | What screens show and say                                                                  |
 | `ci-workflows`        | What a CI check is for                                                                     |
+| `lint-hygiene`        | When a lint rule may be proposed, and the shape it ships in                                |
 | `public-repository`   | What a public repository never publishes                                                   |
