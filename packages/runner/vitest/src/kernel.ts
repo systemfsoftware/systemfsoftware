@@ -6,7 +6,7 @@
  * library passes in:
  * - {@link expectFor} builds a test's `expect` from {@link Tables} (which matchers are refused and with what text)
  *   and {@link Subject}s (check surfaces for the library's own values);
- * - {@link makeLedger} counts checks per observed state and per check kind, with {@link LedgerOptions};
+ * - {@link makeLedger} admits one check per observed state, with the refusal text in {@link LedgerOptions};
  * - {@link drive} steps a body through an {@link Interpreter}: which yielded values run, and which open a new
  *   observed state;
  * - {@link Gate}, {@link RequirementOf} and {@link BodyRefusal} refuse a body at its test name at compile time,
@@ -31,7 +31,6 @@ export {
   type Ledger,
   type LedgerInput,
   type LedgerOptions,
-  type Limit,
   type MakeAssertion,
   makeLedger,
   type Matchers,
@@ -42,8 +41,6 @@ export {
   type Positive,
   type Shapes,
   type Subject,
-  valueKind,
-  type WindowLimits,
 } from './internal/checks.js'
 export {
   type Body,

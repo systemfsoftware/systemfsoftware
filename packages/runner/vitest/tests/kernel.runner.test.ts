@@ -59,7 +59,7 @@ const interpreter: Interpreter = {
 const locatorSubject: Subject<Locator, { readonly toHaveText: (expected: string) => Step }> = {
   matches: (actual): actual is Locator => Predicate.hasProperty(actual, 'text'),
   checks: (actual: Locator, mint: Mint) => ({
-    toHaveText: (expected: string) => observe(mint('locator', (make) => make(actual.text).toBe(expected))),
+    toHaveText: (expected: string) => observe(mint((make) => make(actual.text).toBe(expected))),
   }),
 }
 
@@ -148,50 +148,26 @@ it('Should_UseTheFirstListedSubject_When_TwoSubjectsMatch', function*({ expect }
   yield* expect(consumer('text').which).toEqual('first')
 })
 
-it('Should_AdmitTwoAndRefuseTheThird_When_WindowLimitIsTwo', function*({ expect }) {
-  const result = yield* settle({ limits: { default: 2 } }, function*(ledger) {
-    const consumer = expectFor({ written: ledger.written, subjects: [locatorSubject] })
-    yield* consumer(locator('a')).toHaveText('a')
-    yield* consumer(locator('b')).toHaveText('b')
-    yield* consumer(locator('c')).toHaveText('c')
-  })
-  yield* expect(result).toEqual({ passed: false, message: refusePiecewise, judged: 3 })
+it('Should_RefuseSoftAndPoll_When_ConsumerTableOmitsThem', function*({ expect }) {
+  const omitting = expectFor({ written: () => undefined, tables: { ...forkTables, refused: {} } })
+  yield* expect(() => omitting.soft).toThrow(refusedText.soft)
+  yield* Effect.void
+  yield* expect(() => omitting.poll).toThrow(refusedText.poll)
 })
 
-it('Should_AdmitEveryCheck_When_WindowLimitIsUnbounded', function*({ expect }) {
-  const result = yield* settle({ limits: { default: 'unbounded' } }, function*(ledger) {
-    const consumer = expectFor({ written: ledger.written, subjects: [locatorSubject] })
-    yield* consumer(locator('a')).toHaveText('a')
-    yield* consumer(locator('b')).toHaveText('b')
-    yield* consumer(locator('c')).toHaveText('c')
-    yield* consumer(locator('d')).toHaveText('d')
+it('Should_ReplaceOnlyTheWording_When_ConsumerTableTextsPoll', function*({ expect }) {
+  const rewording = expectFor({
+    written: () => undefined,
+    tables: { ...forkTables, refused: { poll: 'consumer: use a locator check with a timeout' } },
   })
-  yield* expect(result).toEqual({ passed: true, message: '', judged: 4 })
-})
-
-it('Should_RefuseTheSecondValueCheck_When_OnlyLocatorChecksAreUnbounded', function*({ expect }) {
-  const limits: LedgerOptions = { limits: { default: 1, kinds: { locator: 'unbounded' } } }
-  const locators = yield* settle(limits, function*(ledger) {
-    const consumer = expectFor({ written: ledger.written, subjects: [locatorSubject] })
-    yield* consumer(locator('a')).toHaveText('a')
-    yield* consumer(locator('b')).toHaveText('b')
-    yield* consumer(locator('c')).toHaveText('c')
-  })
-  const values = yield* settle(limits, function*(ledger) {
-    yield* observe(mintCheck({ written: ledger.written, kind: 'value', judgement: () => undefined }))
-    yield* observe(mintCheck({ written: ledger.written, kind: 'value', judgement: () => undefined }))
-  })
-  yield* expect({ locators, valueMessage: values.message }).toEqual({
-    locators: { passed: true, message: '', judged: 3 },
-    valueMessage: refusePiecewise,
-  })
+  yield* expect(() => rewording.poll).toThrow('consumer: use a locator check with a timeout')
 })
 
 it('Should_ReachTheLedger_When_CheckIsYieldedInForkedFiber', function*({ expect }) {
   const result = yield* settle({}, function*(ledger) {
     yield* act(
       Effect.gen(function*() {
-        const check = mintCheck({ written: ledger.written, kind: 'locator', judgement: () => undefined })
+        const check = mintCheck({ written: ledger.written, judgement: () => undefined })
         const fiber = yield* Effect.forkChild(check)
         yield* Fiber.join(fiber)
       }),

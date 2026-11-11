@@ -8,9 +8,8 @@
  * - A check run outside a test has nothing providing `Asserted`: a type error.
  *
  * The vocabulary is data. {@link Tables} says which matchers are refused and with what text, {@link Subject}s add
- * check surfaces for values of their own, and {@link LedgerOptions} says how many checks of each kind one observed
- * state admits. The fork passes its own tables and one check per state; a library that consumes the kernel passes
- * its own.
+ * check surfaces for values of their own. Every consumer admits one check per observed state, and `soft` and `poll`
+ * stay refused whatever a table says. The fork passes its own tables; a library that consumes the kernel passes its own.
  *
  * @since 4.0.0
  */
@@ -21,7 +20,7 @@ import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
 import { callFrame, withRaisingFrame } from './call-site.js'
 import { authorize } from './guard.js'
-import { type ForkTables, forkTables, refusalOf, refusePiecewise, type Tables } from './refusals.js'
+import { type ForkTables, forkTables, refusalOf, refusedText, refusePiecewise, type Tables } from './refusals.js'
 
 /** An opaque runtime value: the fork does not read it, only hands it back. */
 type Opaque<A = unknown> = A
@@ -34,17 +33,14 @@ export type MakeAssertion = <A>(actual: A, message?: string) => Assertion<A>
 /** @internal */
 export type Judgement = (make: MakeAssertion) => Opaque
 
-/** @internal */
-export const valueKind = 'value'
-
 /**
- * The service a check needs. `judge` counts the check against its kind's limit and throws the piecewise refusal when
- * the window already holds as many as it admits; `step` opens a new observed state.
+ * The service a check needs. `judge` throws the piecewise refusal when the window already holds a check; `step` opens
+ * a new observed state.
  *
  * @internal
  */
 export interface AssertedShape {
-  readonly judge: (judgement: Judgement, kind?: string) => Opaque
+  readonly judge: (judgement: Judgement) => Opaque
   readonly step: () => void
 }
 
@@ -96,7 +92,13 @@ type NeededName = keyof NeededArgs<Opaque>
 
 type ReadName = 'resolves' | 'rejects'
 
-type StaticName = 'anything' | 'poll' | 'soft'
+type RefusedStaticName = 'poll' | 'soft'
+
+type RefusedStatics<T extends Tables> = RefusedStaticName | Extract<'anything', keyof T['refused']>
+
+type StaticText<T extends Tables, K extends 'anything' | RefusedStaticName> = K extends keyof T['refused']
+  ? T['refused'][K]
+  : ForkTables['refused'][K]
 
 type Refused<T extends Tables> = Extract<keyof T['refused'], MatcherName>
 
@@ -154,14 +156,14 @@ type AnythingOf<T extends Tables> = 'anything' extends keyof T['refused'] ? Opaq
 
 /**
  * The asymmetric matchers that name what a value must be, the same matchers negated, and the statics a table
- * refuses by name. A static the table leaves out is not refused: `anything` is vitest's own, and `poll` and
- * `soft` are the consumer's to supply.
+ * refuses by name. `anything` is vitest's own when the table leaves it out, and `poll` and `soft` are refused
+ * whatever a table says.
  *
  * @internal
  */
 export type Shapes<T extends Tables = ForkTables> =
   & Statics
-  & { readonly [K in Extract<keyof T['refused'], StaticName>]: StaticRefusal<T['refused'][K]> }
+  & { readonly [K in RefusedStatics<T>]: StaticRefusal<StaticText<T, K>> }
   & AnythingOf<T>
 
 /**
@@ -182,7 +184,7 @@ export interface AnySubject {
 }
 
 /** @internal */
-export type Mint = (kind: string, judgement: Judgement) => Check
+export type Mint = (judgement: Judgement) => Check
 
 type SubjectCall<Subj> = Subj extends {
   readonly matches: (actual: Opaque) => actual is infer A
@@ -214,17 +216,7 @@ export interface Checks<T extends Tables = ForkTables, S extends ReadonlyArray<A
 }
 
 /** @internal */
-export type Limit = number | 'unbounded'
-
-/** @internal */
-export interface WindowLimits {
-  readonly default: Limit
-  readonly kinds?: Readonly<Record<string, Limit>>
-}
-
-/** @internal */
 export interface LedgerOptions {
-  readonly limits?: WindowLimits
   readonly piecewise?: string
 }
 
@@ -254,16 +246,15 @@ const settled = (outcome: Opaque): Effect.Effect<void> =>
 /** @internal */
 export interface MintInput {
   readonly written: (j: Judgement) => void
-  readonly kind: string
   readonly judgement: Judgement
 }
 
 /** @internal */
-export const mintCheck = ({ judgement, kind, written }: MintInput): Check => {
+export const mintCheck = ({ judgement, written }: MintInput): Check => {
   written(judgement)
   const check: Check = Effect.gen(function*() {
     const asserted = yield* Asserted
-    yield* settled(asserted.judge(judgement, kind))
+    yield* settled(asserted.judge(judgement))
   })
   branded.add(check)
   return check
@@ -365,7 +356,7 @@ const judgementOf = (view: View, property: string, args: ReadonlyArray<Opaque>):
   framedJudgement((make) => judgedBy(view, property, args, make), view.site)
 
 const judgedCheck = (view: View, property: string, args: ReadonlyArray<Opaque>): Check =>
-  mintCheck({ written: view.written, kind: valueKind, judgement: judgementOf(view, property, args) })
+  mintCheck({ written: view.written, judgement: judgementOf(view, property, args) })
 
 const genericMember = (view: View, property: string): (...args: ReadonlyArray<Opaque>) => Check => (...args) =>
   judgedCheck(view, property, args)
@@ -427,8 +418,8 @@ const matcherView = (view: View): object => new Proxy({}, viewHandler(view))
 const subjectOf = (subjects: ReadonlyArray<AnySubject>, actual: Opaque): AnySubject | undefined =>
   subjects.find((subject) => subject.matches(actual))
 
-const mintFor = (written: (j: Judgement) => void, site: string | undefined): Mint => (kind, judgement) =>
-  mintCheck({ written, kind, judgement: framedJudgement(judgement, site) })
+const mintFor = (written: (j: Judgement) => void, site: string | undefined): Mint => (judgement) =>
+  mintCheck({ written, judgement: framedJudgement(judgement, site) })
 
 const refuseBoolean = (tables: Tables, actual: Opaque): void => {
   if (refuseBooleanActual(actual)) throw refusalOf(tables.boolean)
@@ -484,20 +475,17 @@ const shapes: Statics = {
   not: notShapes,
 }
 
-const staticNames: ReadonlyArray<StaticName> = ['anything', 'poll', 'soft']
+const refusedStatics: ReadonlyArray<RefusedStaticName> = ['poll', 'soft']
 
-const availableStatic = (target: object, name: StaticName): void => {
-  if (name === 'anything') Object.defineProperty(target, name, { value: V.expect.anything, enumerable: true })
-}
-
-const refusedStatic = (target: object, name: StaticName, text: string): void => {
+const defineRefused = (target: object, tables: Tables, name: RefusedStaticName): void => {
+  const text = textIn(tables.refused, name) ?? refusedText[name]
   Object.defineProperty(target, name, { get: refusing(text) })
 }
 
-const defineStatic = (target: object, tables: Tables, name: StaticName): void => {
-  const text = textIn(tables.refused, name)
-  if (text === undefined) availableStatic(target, name)
-  else refusedStatic(target, name, text)
+const defineAnything = (target: object, tables: Tables): void => {
+  const text = textIn(tables.refused, 'anything')
+  const descriptor = text === undefined ? { value: V.expect.anything, enumerable: true } : { get: refusing(text) }
+  Object.defineProperty(target, 'anything', descriptor)
 }
 
 const unreachableTarget = (): ExpectCall<Tables> => () => {
@@ -505,11 +493,10 @@ const unreachableTarget = (): ExpectCall<Tables> => () => {
 }
 
 /** @internal */
-export interface ExpectOptions<T extends Tables, S extends ReadonlyArray<AnySubject>, E extends object> {
+export interface ExpectOptions<T extends Tables, S extends ReadonlyArray<AnySubject>> {
   readonly written: (j: Judgement) => void
   readonly tables?: T
   readonly subjects?: S
-  readonly statics?: E
 }
 
 const tablesOf = (options: { readonly tables?: Tables }): Tables => options.tables ?? forkTables
@@ -517,9 +504,10 @@ const tablesOf = (options: { readonly tables?: Tables }): Tables => options.tabl
 const subjectsOfOptions = (options: { readonly subjects?: ReadonlyArray<AnySubject> }): ReadonlyArray<AnySubject> =>
   options.subjects ?? []
 
-const baseFor = (options: { readonly statics?: object }, tables: Tables): object => {
-  const base = Object.assign(unreachableTarget(), shapes, options.statics)
-  for (const name of staticNames) defineStatic(base, tables, name)
+const baseFor = (tables: Tables): object => {
+  const base = Object.assign(unreachableTarget(), shapes)
+  defineAnything(base, tables)
+  for (const name of refusedStatics) defineRefused(base, tables, name)
   return base
 }
 
@@ -528,12 +516,11 @@ const proxyFor = (
     readonly written: (j: Judgement) => void
     readonly tables?: Tables
     readonly subjects?: ReadonlyArray<AnySubject>
-    readonly statics?: object
   },
 ): object => {
   const tables = tablesOf(options)
   const subjects = subjectsOfOptions(options)
-  return new Proxy(baseFor(options, tables), {
+  return new Proxy(baseFor(tables), {
     apply: (_target, _thisArgument, argumentList) => assertionView(options.written, tables, subjects, argumentList),
   })
 }
@@ -549,44 +536,26 @@ const expectOf = <X extends object>(proxy: object): X => {
 export const expectFor = <
   T extends Tables = ForkTables,
   const S extends ReadonlyArray<AnySubject> = readonly [],
-  E extends object = Record<never, never>,
 >(
-  options: ExpectOptions<T, S, E>,
-): Expect<T, S> & E => expectOf(proxyFor(options))
-
-const kindOf = (kind: string | undefined): string => kind ?? valueKind
-
-const kindLimit = (limits: WindowLimits, kind: string): Limit | undefined => limits.kinds?.[kind]
-
-const limitOf = (limits: WindowLimits, kind: string): Limit => kindLimit(limits, kind) ?? limits.default
-
-const exceeds = (count: number, limit: Limit): boolean => limit !== 'unbounded' && count > limit
-
-const refuseOver = (count: number, limit: Limit, text: string): void => {
-  if (exceeds(count, limit)) throw refusalOf(text)
-}
-
-const oneCheckPerState: WindowLimits = { default: 1 }
-
-const limitsOf = (options: LedgerOptions): WindowLimits => options.limits ?? oneCheckPerState
+  options: ExpectOptions<T, S>,
+): Expect<T, S> => expectOf(proxyFor(options))
 
 const piecewiseOf = (options: LedgerOptions): string => options.piecewise ?? refusePiecewise
 
 interface Window {
-  readonly count: (kind: string) => number
+  readonly count: () => number
   readonly clear: () => void
 }
 
 const makeWindow = (): Window => {
-  const since = new Map<string, number>()
+  const state = { since: 0 }
   return {
-    count: (kind) => {
-      const next = (since.get(kind) ?? 0) + 1
-      since.set(kind, next)
-      return next
+    count: () => {
+      state.since += 1
+      return state.since
     },
     clear: () => {
-      since.clear()
+      state.since = 0
     },
   }
 }
@@ -595,7 +564,6 @@ interface LedgerState {
   readonly pending: Set<Judgement>
   readonly counter: { judged: number }
   readonly window: Window
-  readonly limits: WindowLimits
   readonly piecewise: string
 }
 
@@ -603,15 +571,17 @@ const stateOf = (options: LedgerOptions): LedgerState => ({
   pending: new Set(),
   counter: { judged: 0 },
   window: makeWindow(),
-  limits: limitsOf(options),
   piecewise: piecewiseOf(options),
 })
 
-const judging = (state: LedgerState, hard: MakeAssertion): AssertedShape['judge'] => (judgement, kind) => {
+const refuseOver = (count: number, text: string): void => {
+  if (count > 1) throw refusalOf(text)
+}
+
+const judging = (state: LedgerState, hard: MakeAssertion): AssertedShape['judge'] => (judgement) => {
   state.pending.delete(judgement)
   state.counter.judged += 1
-  const named = kindOf(kind)
-  refuseOver(state.window.count(named), limitOf(state.limits, named), state.piecewise)
+  refuseOver(state.window.count(), state.piecewise)
   return authorize(() => judgement(hard))
 }
 
