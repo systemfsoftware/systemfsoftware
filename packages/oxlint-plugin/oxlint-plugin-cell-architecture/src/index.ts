@@ -12,7 +12,6 @@ import { kindRecordMintedByKind } from './rules/kind-record-minted-by-kind.js'
 import { kindTypeIdBySymbolFor } from './rules/kind-typeid-by-symbol-for.js'
 import { mediumOwnsNoRecovery } from './rules/medium-owns-no-recovery.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
-import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { sandwichShellIsStraightLine } from './rules/sandwich-shell-is-straight-line.js'
@@ -35,7 +34,6 @@ const recommendedRules = {
   [rule('kind-record-minted-by-kind')]: 'error',
   [rule('kind-typeid-by-symbol-for')]: 'error',
   [rule('no-bodyless-status-assertion')]: 'error',
-  [rule('no-context-generic-tag')]: 'error',
   [rule('no-direct-tag-access')]: 'error',
   [rule('no-either-tag-assertions')]: 'error',
   [rule('sandwich-shell-is-straight-line')]: 'error',
@@ -60,7 +58,6 @@ export default {
     'kind-record-minted-by-kind': kindRecordMintedByKind,
     'kind-typeid-by-symbol-for': kindTypeIdBySymbolFor,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
-    'no-context-generic-tag': noContextGenericTag,
     'no-direct-tag-access': noDirectTagAccess,
     'no-either-tag-assertions': noEitherTagAssertions,
     'sandwich-shell-is-straight-line': sandwichShellIsStraightLine,
