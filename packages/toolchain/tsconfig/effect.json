@@ -92,6 +92,7 @@
           "effectMapVoid": "error",
           "effectSucceedWithVoid": "error",
           "flatMapToMap": "error",
+          "matchToResultOrOption": "error",
           "multipleCatchTag": "error",
           "nestedEffectGenYield": "error",
           "outdatedApi": "error",

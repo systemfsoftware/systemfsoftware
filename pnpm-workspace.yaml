@@ -18,7 +18,7 @@ catalog:
   "@effect/platform-node-shared": ^4.1.2
   effect: ^4.1.2
   "@effect/sql-pglite": ^4.1.2
-  "@effect/tsgo": ^0.64.1
+  "@effect/tsgo": ^0.67.7
   "@effect/opentelemetry": ^4.1.2
   "@opentelemetry/sdk-trace-base": ^2.12.0
   "@opentelemetry/api": ^1.9.0
@@ -63,8 +63,8 @@ catalogs:
   peers:
     effect: ^4.1.2
   oxlint:
-    oxlint: ~1.90.0
-    "@oxlint/plugins": ~1.90.0
+    oxlint: ~1.93.0
+    "@oxlint/plugins": ~1.93.0
     oxlint-tsgolint: 7.0.2005
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
