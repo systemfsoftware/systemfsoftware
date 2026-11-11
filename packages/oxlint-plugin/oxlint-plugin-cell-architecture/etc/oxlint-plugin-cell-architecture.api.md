@@ -25,7 +25,6 @@ const _default: {
         'kind-record-minted-by-kind': Rule;
         'kind-typeid-by-symbol-for': Rule;
         'no-bodyless-status-assertion': Rule;
-        'no-context-generic-tag': Rule;
         'no-direct-tag-access': Rule;
         'no-either-tag-assertions': Rule;
         'sandwich-shell-is-straight-line': Rule;
