@@ -59,6 +59,21 @@ jobs:
       - id: start
         name: Record the job start
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - name: The R2 push values are set
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=nix-cache-push::${name} is not set in the nix-cache-push environment, so nothing was built or pushed"
+              missing=1
+            fi
+          done
+          exit "$missing"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -111,9 +126,6 @@ jobs:
           NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
         run: |
           set -euo pipefail
-          : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is not set}"
-          : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is not set}"
-          : "${NIX_CACHE_R2_ENDPOINT:?NIX_CACHE_R2_ENDPOINT is not set}"
           echo "::add-mask::${NIX_CACHE_R2_ENDPOINT#https://}"
           mapfile -t outs < "$RUNNER_TEMP/out-paths"
           if [ "${#outs[@]}" -eq 0 ]; then
