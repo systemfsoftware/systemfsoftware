@@ -7,13 +7,39 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
-
 env:
   NIX_CACHE_URL: https://nix.systemfsoftware.com
   NIX_CACHE_PUBLIC_KEY: nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+  PUSH_SET: >-
+    conformance-spec
+    differential-spec
+    effect-cell-types
+    effect-gherkin-spec
+    effect-schema-discovery
+    effect-schema-law
+    effect-schema-recursion-budget
+    effect-schema-vite
+    effect-sim-kernel
+    effect-spec-runtime
+    oxlint-config-cell-architecture
+    oxlint-config-dmmf
+    oxlint-config-recommended
+    oxlint-config-rule-authoring
+    oxlint-plugin-cell-architecture
+    oxlint-plugin-dmmf-workflow
+    oxlint-plugin-effect-platform
+    oxlint-plugin-effect-schema
+    oxlint-plugin-test-discipline
+    stryker-config
+    tsconfig
+    tsdown-config
+    vitest
+    vitest-config
+    dprint
+    workspace-tarballs
+    test-timings
+    bun
+    gritlint
 
 jobs:
   push:
@@ -54,22 +80,22 @@ jobs:
             exit 1
           fi
 
-      - name: Build every package
+      - name: Build the push set
         env:
           SYSTEM: ${{ matrix.system }}
         run: |
           set -euo pipefail
-          attrs=$(nix eval --json ".#packages.${SYSTEM}" --apply 'ps: builtins.filter (n: ((builtins.getAttr n ps).type or "") == "derivation") (builtins.attrNames ps)' | jq -r '.[]')
+          read -ra attrs <<< "$PUSH_SET"
           : > "$RUNNER_TEMP/out-paths"
           : > "$RUNNER_TEMP/build-failures"
-          while read -r attr; do
+          for attr in "${attrs[@]}"; do
             if out=$(nix build --no-link --print-out-paths -L ".#packages.${SYSTEM}.${attr}"); then
               printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
             else
               echo "packages.${SYSTEM}.${attr}" >> "$RUNNER_TEMP/build-failures"
               echo "::error title=nix-build-failed::packages.${SYSTEM}.${attr} did not build"
             fi
-          done <<< "$attrs"
+          done
 
       - name: Push the closures
         env:
@@ -90,14 +116,20 @@ jobs:
             # to it is refused after it. Push path by path, references first, so
             # each refused path is reported by name.
             echo "::warning title=nix-cache-push::the bulk copy failed; pushing path by path"
+            closure=$(nix-store --query --requisites "${outs[@]}")
             while read -r path; do
               if ! nix copy --no-recursive --to "$store" "$path" 2> "$RUNNER_TEMP/copy.err"; then
                 failed=1
-                reason=$(tail -n 1 "$RUNNER_TEMP/copy.err" | sed 's|://[^/@]*@|://|g')
+                if grep -q 'HTTP error 413' "$RUNNER_TEMP/copy.err"; then
+                  reason="HTTP 413, the compressed NAR is over the cache's 100 MB request cap"
+                else
+                  reason=$(sed -n -e 's|://[^/@]*@|://|g' -e '/error: ./{s/^[[:space:]]*//;p;q}' "$RUNNER_TEMP/copy.err" | cut -c1-300)
+                  reason=${reason:-nix copy failed}
+                fi
                 echo "::error title=nix-cache-push::${path} was not pushed: ${reason}"
                 echo "- \`${path}\`: ${reason}" >> "$GITHUB_STEP_SUMMARY"
               fi
-            done < <(nix-store --query --requisites "${outs[@]}")
+            done <<< "$closure"
           fi
           if [ -s "$RUNNER_TEMP/build-failures" ]; then
             failed=1
