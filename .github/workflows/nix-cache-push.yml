@@ -79,9 +79,10 @@ jobs:
           set -euo pipefail
           : > "$RUNNER_TEMP/out-paths"
           : > "$RUNNER_TEMP/build-failures"
-          # The push set is what workspace-tarballs names as its members, plus workspace-tarballs itself.
+          # The push set is workspace-tarballs and the members it names, plus gritlint and test-timings: the cache serves
+          # them today and consumers' dev shells rely on them.
           attrs=$(nix eval --raw "$FLAKE#packages.$SYSTEM.workspace-tarballs" --apply \
-            'p: builtins.concatStringsSep "\n" ([ "workspace-tarballs" ] ++ map (m: m.attr) p.members)')
+            'p: builtins.concatStringsSep "\n" ([ "workspace-tarballs" "gritlint" "test-timings" ] ++ map (m: m.attr) p.members)')
           build() {
             if out=$(nix build --no-link --print-out-paths -L "$FLAKE#$1"); then
               printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
