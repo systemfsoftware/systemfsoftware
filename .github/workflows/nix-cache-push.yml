@@ -106,53 +106,26 @@ jobs:
 
       - name: Push the closures
         env:
-          NIX_CACHE_PUSH_TOKEN: ${{ secrets.NIX_CACHE_PUSH_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
         run: |
           set -euo pipefail
-          : "${NIX_CACHE_PUSH_TOKEN:?NIX_CACHE_PUSH_TOKEN is not set}"
-          store="${NIX_CACHE_URL/\/\//\/\/nix-cache:${NIX_CACHE_PUSH_TOKEN}@}?secret-key=${RUNNER_TEMP}/signing-key&want-mass-query=true&compression=zstd"
-          refused_413() { grep -q 'HTTP error 413' "$1"; }
-          reason_of() {
-            if refused_413 "$1"; then
-              echo "HTTP 413, the compressed NAR is over the cache's 100 MB request cap"
-              return
-            fi
-            local line
-            line=$(sed -n -e 's|://[^/@]*@|://|g' -e '/error: ./{s/^[[:space:]]*//;p;q}' "$1" | cut -c1-300)
-            echo "${line:-nix copy failed}"
-          }
+          : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is not set}"
+          : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is not set}"
+          : "${NIX_CACHE_R2_ENDPOINT:?NIX_CACHE_R2_ENDPOINT is not set}"
+          echo "::add-mask::${NIX_CACHE_R2_ENDPOINT#https://}"
           mapfile -t outs < "$RUNNER_TEMP/out-paths"
           if [ "${#outs[@]}" -eq 0 ]; then
             echo "::error title=nix-cache-push::nothing built, so nothing was pushed"
             exit 1
           fi
           failed=0
-          if ! nix copy --to "$store" "${outs[@]}" 2> "$RUNNER_TEMP/bulk.err"; then
+          if ! nix copy --to "s3://systemfsoftware-nix-cache?endpoint=${NIX_CACHE_R2_ENDPOINT#https://}&region=auto&scheme=https&compression=zstd&multipart-upload=true&secret-key=${RUNNER_TEMP}/signing-key" "${outs[@]}" 2> "$RUNNER_TEMP/copy.err"; then
             failed=1
-            reason=$(reason_of "$RUNNER_TEMP/bulk.err")
-            if refused_413 "$RUNNER_TEMP/bulk.err"; then
-              # A compressed NAR over the Worker's 100 MB request cap is refused
-              # with 413, and every path that refers to it is refused after it.
-              # Push path by path, references first, so each refused path is
-              # reported by name.
-              echo "::warning title=nix-cache-push::the bulk copy was refused (${reason}); pushing path by path"
-              closure=$(nix-store --query --requisites "${outs[@]}")
-              while read -r path; do
-                if nix copy --no-recursive --to "$store" "$path" 2> "$RUNNER_TEMP/copy.err"; then
-                  continue
-                fi
-                reason=$(reason_of "$RUNNER_TEMP/copy.err")
-                echo "::error title=nix-cache-push::${path} was not pushed: ${reason}"
-                echo "- \`${path}\`: ${reason}" >> "$GITHUB_STEP_SUMMARY"
-                if ! refused_413 "$RUNNER_TEMP/copy.err" && ! grep -q 'because the reference' "$RUNNER_TEMP/copy.err"; then
-                  echo "::error title=nix-cache-push::${path} failed for a reason other than 413 or a refused reference, so the path-by-path pass stopped"
-                  break
-                fi
-              done <<< "$closure"
-            else
-              echo "::error title=nix-cache-push::the bulk copy failed: ${reason}"
-              echo "The bulk copy failed, not with 413, so no path-by-path pass was tried: ${reason}" >> "$GITHUB_STEP_SUMMARY"
-            fi
+            reason=$(sed -n '/error: ./{s/^[[:space:]]*//;p;q}' "$RUNNER_TEMP/copy.err" | cut -c1-300)
+            echo "::error title=nix-cache-push::the push failed: ${reason:-nix copy failed}"
+            echo "The push failed: ${reason:-nix copy failed}" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -s "$RUNNER_TEMP/build-failures" ]; then
             failed=1
@@ -165,7 +138,7 @@ jobs:
 
       - name: Remove the signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/bulk.err" "$RUNNER_TEMP/copy.err"
+        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err"
 
       - name: Record the job's wall time
         if: always()
