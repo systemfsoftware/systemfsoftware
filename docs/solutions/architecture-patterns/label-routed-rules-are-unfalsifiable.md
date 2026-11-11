@@ -12,8 +12,11 @@ The recommendation below to mutate whole packages instead of a label-routed glob
 
 # A Label-Routed Rule Cannot Fail On The Case It Targets
 
-Decision: retire the role-suffix taxonomy. Route static analysis on keys the build derives, and
-aim mutation and property testing at a boundary a manifest enforces.
+Decision: retire the role-suffix taxonomy. The lint-rule half is now stated prescriptively by the
+lint-hygiene pack rule (pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md):
+a lint rule never selects what it applies to by a file's name or location. This document keeps the
+story and the mutation-aiming half: route static analysis on keys the build derives, and aim
+mutation and property testing at a boundary a manifest enforces.
 
 ## The argument
 
@@ -53,9 +56,8 @@ Two files, byte-identical content, differing only in suffix, each holding
 `Effect.runSync(Effect.sync(() => Date.now()))`: the suffix-keyed purity rule fires on the file named
 for a cell role and stays silent on the other, so the purity rule evaporates on rename. The rule that
 held both selects on an import edge — `no-date-now-in-effect`, since succeeded by `no-unported-time-source` in
-`@systemfsoftware/oxlint-plugin-effect-platform`, reads `ImportDeclaration` and touches the filename only to
-exclude tests and registered port files. One repo, one runner, two selection strategies, and only one
-survives a rename.
+`@systemfsoftware/oxlint-plugin-effect-platform`, reads `ImportDeclaration`. One repo, one runner, two selection strategies, and only one survives a
+rename.
 
 The manifest boundary holds the same way. A package whose manifest does not declare `effect` cannot
 import it: `TS2307: Cannot find module 'effect'`, from the type checker, at the first import. The
