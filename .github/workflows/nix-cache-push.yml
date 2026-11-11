@@ -40,6 +40,10 @@ env:
     test-timings
     bun
     gritlint
+    comment-checker
+    comment-checker-unwrapped
+    pnpm-store
+    mitmCache
 
 jobs:
   push:
