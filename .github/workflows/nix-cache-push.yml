@@ -1,8 +1,5 @@
 name: Nix cache push
 
-# The org's package registry: every push to the default branch publishes the flake's workspace tarballs and its dev
-# shell inputs to nix.systemfsoftware.com, signed by nix-cache-1. Everything is built from the pushed commit's
-# github: reference, never from this checkout, so the pushed paths are the ones a consumer computes.
 on:
   push:
     branches: [main]
@@ -13,6 +10,11 @@ permissions:
 env:
   NIX_CACHE_URL: https://nix.systemfsoftware.com
   NIX_CACHE_PUBLIC_KEY: nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+  EXTRA_OUTPUTS: >-
+    bun
+    dprint
+    gritlint
+    test-timings
 
 jobs:
   push:
@@ -32,27 +34,25 @@ jobs:
       - id: start
         name: Record the job start
         run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
-
-      - name: The push values are set
+      - name: The R2 push values are set
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
-          NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
         run: |
           set -euo pipefail
           missing=0
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT NIX_CACHE_SIGNING_KEY; do
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT; do
             if [ -z "${!name}" ]; then
               echo "::error title=nix-cache-push::${name} is not set in the nix-cache-push environment, so nothing was built or pushed"
               missing=1
             fi
           done
           exit "$missing"
-
       - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c
         with:
           extra_nix_config: |
+            access-tokens = github.com=${{ github.token }}
             extra-substituters = ${{ env.NIX_CACHE_URL }}
             extra-trusted-public-keys = ${{ env.NIX_CACHE_PUBLIC_KEY }}
             fallback = true
@@ -62,9 +62,9 @@ jobs:
           NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          : "${NIX_CACHE_SIGNING_KEY:?NIX_CACHE_SIGNING_KEY is not set}"
           umask 077
           printf '%s' "$NIX_CACHE_SIGNING_KEY" > "$RUNNER_TEMP/signing-key"
-          chmod 600 "$RUNNER_TEMP/signing-key"
           derived=$(nix --extra-experimental-features nix-command key convert-secret-to-public < "$RUNNER_TEMP/signing-key")
           if [ "$derived" != "$NIX_CACHE_PUBLIC_KEY" ]; then
             echo "::error title=nix-cache-key::NIX_CACHE_SIGNING_KEY does not derive the cache's public key; nothing was pushed"
@@ -74,27 +74,27 @@ jobs:
       - name: Build the push set from the pushed commit
         env:
           SYSTEM: ${{ matrix.system }}
-          FLAKE: github:${{ github.repository }}/${{ github.sha }}
         run: |
           set -euo pipefail
+          pinned="github:${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+          members_json=$(nix eval --json "${pinned}#packages.${SYSTEM}.workspace-tarballs.members" --apply 'map (m: m.attr)')
+          mapfile -t members < <(jq -r '.[]' <<< "$members_json")
+          read -ra extras <<< "$EXTRA_OUTPUTS"
+          mapfile -t attrs < <(printf '%s\n' workspace-tarballs "${members[@]}" "${extras[@]}" | awk '!seen[$0]++')
           : > "$RUNNER_TEMP/out-paths"
           : > "$RUNNER_TEMP/build-failures"
-          # The push set is workspace-tarballs and the members it names, plus gritlint and test-timings: the cache serves
-          # them today and consumers' dev shells rely on them.
-          attrs=$(nix eval --raw "$FLAKE#packages.$SYSTEM.workspace-tarballs" --apply \
-            'p: builtins.concatStringsSep "\n" ([ "workspace-tarballs" "gritlint" "test-timings" ] ++ map (m: m.attr) p.members)')
           build() {
-            if out=$(nix build --no-link --print-out-paths -L "$FLAKE#$1"); then
+            if out=$(nix build --no-link --print-out-paths -L "${pinned}#$1"); then
               printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
             else
               echo "$1" >> "$RUNNER_TEMP/build-failures"
               echo "::error title=nix-build-failed::$1 did not build"
             fi
           }
-          while IFS= read -r attr; do
-            build "packages.$SYSTEM.$attr"
-          done <<< "$attrs"
-          build "devShells.$SYSTEM.default.inputDerivation"
+          for attr in "${attrs[@]}"; do
+            build "packages.${SYSTEM}.${attr}"
+          done
+          build "devShells.${SYSTEM}.default.inputDerivation"
 
       - name: Push the closures and check the cache serves them
         env:
@@ -109,24 +109,41 @@ jobs:
             echo "::error title=nix-cache-push::nothing built, so nothing was pushed"
             exit 1
           fi
+          cat > "$RUNNER_TEMP/check-served.sh" << 'EOF'
+          path=$1
+          name=${path##*/}
+          body=$(mktemp)
+          code=$(curl -sS -m 30 --retry 2 -o "$body" -w "%{http_code}" "$NIX_CACHE_URL/${name%%-*}.narinfo" 2> /dev/null) || code=unreachable
+          if [ "$code" != 200 ]; then
+            echo "$path: HTTP $code" >> "$MISSES"
+          elif ! grep -q "^Sig: nix-cache-1:" "$body"; then
+            echo "$path: no signature from nix-cache-1" >> "$MISSES"
+          fi
+          rm -f "$body"
+          EOF
           failed=0
-          if ! nix copy --to "s3://systemfsoftware-nix-cache?endpoint=${NIX_CACHE_R2_ENDPOINT#https://}&region=auto&scheme=https&compression=zstd&multipart-upload=true&secret-key=${RUNNER_TEMP}/signing-key" "${outs[@]}" 2> "$RUNNER_TEMP/copy.err"; then
+          if nix copy --to "s3://systemfsoftware-nix-cache?endpoint=${NIX_CACHE_R2_ENDPOINT#https://}&region=auto&scheme=https&compression=zstd&multipart-upload=true&secret-key=${RUNNER_TEMP}/signing-key" "${outs[@]}" 2> "$RUNNER_TEMP/copy.err"; then
+            export NIX_CACHE_URL MISSES="$RUNNER_TEMP/cache-misses"
+            : > "$MISSES"
+            nix-store --query --requisites "${outs[@]}" > "$RUNNER_TEMP/pushed-paths"
+            xargs -P 16 -n 1 bash "$RUNNER_TEMP/check-served.sh" < "$RUNNER_TEMP/pushed-paths"
+            if [ -s "$MISSES" ]; then
+              failed=1
+              head -n 10 "$MISSES" | while read -r miss; do
+                echo "::error title=nix-cache-verify::${miss}"
+              done
+              {
+                echo "The cache does not serve, or has not signed, these pushed paths:"
+                sed 's/^/- /' "$MISSES"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Every one of the $(wc -l < "$RUNNER_TEMP/pushed-paths") pushed paths is served with a nix-cache-1 signature." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
             failed=1
             reason=$(sed -n '/error: ./{s/^[[:space:]]*//;p;q}' "$RUNNER_TEMP/copy.err" | cut -c1-300)
             echo "::error title=nix-cache-push::the push failed: ${reason:-nix copy failed}"
             echo "The push failed: ${reason:-nix copy failed}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ "$failed" -eq 0 ]; then
-            for p in "${outs[@]}"; do
-              hash=$(basename "$p")
-              hash=${hash%%-*}
-              status=$(curl -sS -o "$RUNNER_TEMP/narinfo" -w '%{http_code}' "$NIX_CACHE_URL/$hash.narinfo" || true)
-              if [ "$status" != "200" ] || ! grep -q '^Sig: nix-cache-1:' "$RUNNER_TEMP/narinfo"; then
-                failed=1
-                echo "::error title=nix-cache-verify::$p is not served as signed by nix-cache-1 (HTTP $status)"
-                echo "Not served as signed by nix-cache-1 (HTTP $status): $p" >> "$GITHUB_STEP_SUMMARY"
-              fi
-            done
           fi
           if [ -s "$RUNNER_TEMP/build-failures" ]; then
             failed=1
@@ -139,7 +156,7 @@ jobs:
 
       - name: Remove the signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err" "$RUNNER_TEMP/narinfo"
+        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err"
 
       - name: Record the job's wall time
         if: always()

@@ -145,9 +145,8 @@ exit=0
 
 - `nix/comment-checker-sandbox.nix` — the wrapper carrying the guard in both
   platform branches
-- `nix/comment-checker.nix` — the fixed-output fetch of the binary the sandbox
-  runs; `autoPatchelfHook` is what frees the Linux branch from binding
-  `/usr`, `/etc` and `/lib`
+- `flake.nix` — the binary the sandbox runs is the `comment-checker` input's
+  own source build, substituted from nix.systemfsoftware.com
 - The same wrapper mounts no `/proc`: mounting procfs inside a new pid
   namespace is refused on hosts that forbid it, and the hook needs no procfs.
   Recorded in the file's own comment next to the bwrap invocation.

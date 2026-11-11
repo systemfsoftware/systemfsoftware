@@ -9,13 +9,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # The release manifest (`nix/release-hashes.json`) rides in this input, so
-    # `nix flake update comment-checker` moves the version and every per-target
-    # digest together — no hash pinned in this repo.
-    comment-checker = {
-      url = "github:systemfsoftware/comment-checker";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # comment-checker's own flake builds the binary from source and pushes it to
+    # nix.systemfsoftware.com. Its nixpkgs stays its own so the derivation is
+    # the one it pushed, substituted rather than compiled here.
+    comment-checker.url = "github:systemfsoftware/comment-checker";
     # gritlint's own repository builds and gates the binary, and its rule
     # packs are compiled into it; this flake re-exports both variants.
     gritlint.url = "github:systemfsoftware/gritlint";
@@ -47,9 +44,7 @@
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
-          unwrapped = pkgs.callPackage ./nix/comment-checker.nix {
-            hashes = "${comment-checker}/nix/release-hashes.json";
-          };
+          unwrapped = comment-checker.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker;
           sandboxed = pkgs.callPackage ./nix/comment-checker-sandbox.nix {
             comment-checker = unwrapped;
           };
