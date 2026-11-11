@@ -26,7 +26,9 @@ jobs:
     name: lint PR commits
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    timeout-minutes: 5
+    # The job lays a consumer's `.deps/` through `nix develop` before it installs; on a cold runner a large dev
+    # shell's substitution alone outlasts five minutes (npm-package#8 and effect-microvm#9 were cancelled mid-download).
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
