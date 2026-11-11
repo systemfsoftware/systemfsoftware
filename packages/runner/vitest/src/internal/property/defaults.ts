@@ -5,6 +5,7 @@
  */
 import type * as Arbitrary from 'effect/Arbitrary'
 import { inject } from 'vitest'
+import { providedBudgetOf } from './tiers.js'
 
 /** @internal The `test.provide` key the shared config fills with this run's tier's check options. */
 export const checkDefaultsKey = '@systemfsoftware/vitest:property-check'
@@ -23,5 +24,9 @@ export interface PropertyBudget extends Omit<Arbitrary.CheckOptions, 'replay'> {
 /** @internal The check options a run supplies as its property default (KTD4). */
 export type ProvidedCheckDefaults = PropertyBudget
 
-/** @internal The configured property-check defaults, or `undefined` when the run provided none. */
-export const providedCheckDefaults = (): ProvidedCheckDefaults | undefined => inject(checkDefaultsKey)
+/**
+ * @internal The property-check defaults a run provided through `test.provide`, else the tier's budget for this
+ * process's environment, read from the same table the setup entry uses.
+ */
+export const providedCheckDefaults = (): ProvidedCheckDefaults =>
+  inject(checkDefaultsKey) ?? providedBudgetOf(process.env)

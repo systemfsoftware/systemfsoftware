@@ -10,12 +10,12 @@ import { exists, firstExisting, readJson } from './files.js'
 /** @typedef {NonNullable<TestConfig['projects']>} Projects */
 /**
  * What one config load reads from disk about its own package: the exemption table entry that decides
- * where the guard applies, the guard setup files its projects take, and the name and workspace root the
+ * where the guard applies, the fork setup files (guard and property defaults) its projects take, and the name and workspace root the
  * fork's provided context carries.
  *
  * @typedef {{
  *   readonly exemption: { readonly projects: readonly string[] | '*', readonly registrar: string } | undefined,
- *   readonly guardSetupFiles: ReadonlyArray<string>,
+ *   readonly forkSetupFiles: ReadonlyArray<string>,
  *   readonly name: string,
  *   readonly root: string,
  * }} PackageFacts
@@ -77,7 +77,7 @@ const guardExemptions = {
 }
 
 /**
- * The setup file that installs the guard, as an absolute path. The fork is looked up only where pnpm
+ * A setup file the fork exports (`./guard`, `./property-defaults`), as an absolute path. The fork is looked up only where pnpm
  * links a package's declared dependencies, `<package>/node_modules/<fork>`: Node resolution is not
  * used because pnpm's bin shims put the whole virtual store on `NODE_PATH`, so it finds the fork from
  * a package that never declared it. Vitest reads a setup-file specifier without the project's resolve
@@ -88,10 +88,11 @@ const guardExemptions = {
  *
  * @param {string} cwd
  * @param {string} name
+ * @param {string} subpath the fork export, `./guard` or `./property-defaults`
  * @returns {Promise<string>}
  */
-const guardSetupFile = async (cwd, name) => {
-  if (name === forkPackage) return join(cwd, 'src', 'guard.ts')
+const forkSetupFile = async (cwd, name, subpath) => {
+  if (name === forkPackage) return join(cwd, 'src', `${subpath.slice(2)}.ts`)
   const refuse = (/** @type {string} */ what) =>
     new Error(
       `[@systemfsoftware/vitest-config] ${name} ${what}, so its tests would run without the KTD8 guard. ` +
@@ -103,13 +104,13 @@ const guardSetupFile = async (cwd, name) => {
   const manifestPath = join(forkDir, 'package.json')
   if (!(await exists(manifestPath))) throw refuse(`has no "${forkPackage}" linked in its own node_modules`)
   const exportsField = Reflect.get(Object(await readJson(manifestPath)), 'exports')
-  const guardEntry = Reflect.get(Object(exportsField), './guard')
+  const entry = Reflect.get(Object(exportsField), subpath)
   const found = await firstExisting(
-    [stringField(guardEntry, sourceCondition), stringField(guardEntry, 'default')]
-      .filter((entry) => entry.length > 0)
-      .map((entry) => join(forkDir, entry)),
+    [stringField(entry, sourceCondition), stringField(entry, 'default')]
+      .filter((file) => file.length > 0)
+      .map((file) => join(forkDir, file)),
   )
-  if (found === undefined) throw refuse(`links a "${forkPackage}" whose "./guard" export has no file on disk`)
+  if (found === undefined) throw refuse(`links a "${forkPackage}" whose "${subpath}" export has no file on disk`)
   return realpath(found)
 }
 
@@ -124,9 +125,11 @@ const guardSetupFile = async (cwd, name) => {
 const packageFacts = async (cwd) => {
   const name = stringField(await readJson(join(cwd, 'package.json')), 'name')
   const exemption = guardExemptions[name]
-  const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
+  const forkFiles = exemption?.projects === '*'
+    ? []
+    : [await forkSetupFile(cwd, name, './guard'), await forkSetupFile(cwd, name, './property-defaults')]
   const root = await workspaceRoot(cwd)
-  return { exemption, guardSetupFiles: guardFiles, name, root }
+  return { exemption, forkSetupFiles: forkFiles, name, root }
 }
 
 /**
@@ -182,10 +185,10 @@ const withProvide = (test, facts) => ({ ...test, provide: { ...test?.provide, ..
  */
 const withSetupFiles = (test, guard, facts) => {
   const own = (test?.setupFiles === undefined ? [] : [test.setupFiles].flat())
-    .filter((file) => guard || !facts.guardSetupFiles.includes(file))
+    .filter((file) => guard || !facts.forkSetupFiles.includes(file))
   return {
     ...test,
-    setupFiles: [...new Set([...own, ...(guard ? facts.guardSetupFiles : [])])],
+    setupFiles: [...new Set([...own, ...(guard ? facts.forkSetupFiles : [])])],
   }
 }
 
@@ -255,20 +258,11 @@ const isAgent = process.env['AGENT'] !== undefined
 
 // Presence, not equality: GitHub Actions writes "true" and the agent shell
 // writes "1", so testing against either value classifies the other as local.
-export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
+// The same rule the fork's run-count table applies: any value except unset, empty, `false` and `0`.
+const ciValue = process.env['CI']
+export const isCI = !isAgent && ciValue !== undefined && !['', 'false', '0'].includes(ciValue)
 
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
-
-// One tier table decides how many draws every property gets: a Stryker worker wants fast mutant runs,
-// CI wants the thorough tier, and a local run sits between them. The fork merges this over its own
-// `runs: 100` unless a property sets its own.
-const isMutationWorker = process.env['STRYKER_MUTATOR_WORKER'] !== undefined
-
-const propertyRuns = isMutationWorker ? 30 : isCI ? 1000 : 100
-
-// The fork reads these under `inject`; the key is its published `ProvidedContext` key. CI and Stryker workers
-// never write the fork's seed store: a CI checkout is discarded, and a mutation worker fails on purpose.
-const propertyCheckDefaults = isMutationWorker || isCI ? { runs: propertyRuns, record: false } : { runs: propertyRuns }
 
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
@@ -304,7 +298,6 @@ export const sharedConfig = {
     testTimeout: sharedTestTimeout,
     silent: isAgent || isCI ? 'passed-only' : false,
     ...(isCI ? { reporters: ['agent', 'github-actions'] } : {}),
-    provide: { '@systemfsoftware/vitest:property-check': propertyCheckDefaults },
     ...(isAgent ? { bail: 1 } : {}),
     coverage: {
       enabled: process.env['COVERAGE'] === 'true',
