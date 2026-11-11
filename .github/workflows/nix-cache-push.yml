@@ -1,0 +1,161 @@
+name: Nix cache push
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  NIX_CACHE_URL: https://nix.systemfsoftware.com
+  NIX_CACHE_PUBLIC_KEY: nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+  PUSH_SET: >-
+    conformance-spec
+    differential-spec
+    effect-cell-types
+    effect-gherkin-spec
+    effect-schema-discovery
+    effect-schema-law
+    effect-schema-recursion-budget
+    effect-schema-vite
+    effect-sim-kernel
+    effect-spec-runtime
+    oxlint-config-cell-architecture
+    oxlint-config-dmmf
+    oxlint-config-recommended
+    oxlint-config-rule-authoring
+    oxlint-plugin-cell-architecture
+    oxlint-plugin-dmmf-workflow
+    oxlint-plugin-effect-platform
+    oxlint-plugin-effect-schema
+    oxlint-plugin-test-discipline
+    stryker-config
+    tsconfig
+    tsdown-config
+    vitest
+    vitest-config
+    dprint
+    workspace-tarballs
+    test-timings
+    bun
+    gritlint
+
+jobs:
+  push:
+    name: push · ${{ matrix.system }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    environment: nix-cache-push
+    timeout-minutes: 60
+    steps:
+      - id: start
+        name: Record the job start
+        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - name: The R2 push values are set
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY NIX_CACHE_R2_ENDPOINT; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=nix-cache-push::${name} is not set in the nix-cache-push environment, so nothing was built or pushed"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.NIX_CACHE_URL }}
+            extra-trusted-public-keys = ${{ env.NIX_CACHE_PUBLIC_KEY }}
+            fallback = true
+
+      - name: The signing key is the cache's key
+        env:
+          NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          : "${NIX_CACHE_SIGNING_KEY:?NIX_CACHE_SIGNING_KEY is not set}"
+          umask 077
+          printf '%s' "$NIX_CACHE_SIGNING_KEY" > "$RUNNER_TEMP/signing-key"
+          derived=$(nix --extra-experimental-features nix-command key convert-secret-to-public < "$RUNNER_TEMP/signing-key")
+          if [ "$derived" != "$NIX_CACHE_PUBLIC_KEY" ]; then
+            echo "::error title=nix-cache-key::NIX_CACHE_SIGNING_KEY does not derive the cache's public key; nothing was pushed"
+            exit 1
+          fi
+
+      - name: Build the push set
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/out-paths"
+          : > "$RUNNER_TEMP/build-failures"
+          build() {
+            if out=$(nix build --no-link --print-out-paths -L ".#$1"); then
+              printf '%s\n' "$out" >> "$RUNNER_TEMP/out-paths"
+            else
+              echo "$1" >> "$RUNNER_TEMP/build-failures"
+              echo "::error title=nix-build-failed::$1 did not build"
+            fi
+          }
+          read -ra attrs <<< "$PUSH_SET"
+          for attr in "${attrs[@]}"; do
+            build "packages.${SYSTEM}.${attr}"
+          done
+          build "devShells.${SYSTEM}.default.inputDerivation"
+
+      - name: Push the closures
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NIX_CACHE_R2_ENDPOINT: ${{ secrets.NIX_CACHE_R2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${NIX_CACHE_R2_ENDPOINT#https://}"
+          mapfile -t outs < "$RUNNER_TEMP/out-paths"
+          if [ "${#outs[@]}" -eq 0 ]; then
+            echo "::error title=nix-cache-push::nothing built, so nothing was pushed"
+            exit 1
+          fi
+          failed=0
+          if ! nix copy --to "s3://systemfsoftware-nix-cache?endpoint=${NIX_CACHE_R2_ENDPOINT#https://}&region=auto&scheme=https&compression=zstd&multipart-upload=true&secret-key=${RUNNER_TEMP}/signing-key" "${outs[@]}" 2> "$RUNNER_TEMP/copy.err"; then
+            failed=1
+            reason=$(sed -n '/error: ./{s/^[[:space:]]*//;p;q}' "$RUNNER_TEMP/copy.err" | cut -c1-300)
+            echo "::error title=nix-cache-push::the push failed: ${reason:-nix copy failed}"
+            echo "The push failed: ${reason:-nix copy failed}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -s "$RUNNER_TEMP/build-failures" ]; then
+            failed=1
+            {
+              echo "These did not build, so they were not pushed:"
+              sed 's/^/- /' "$RUNNER_TEMP/build-failures"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$failed"
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/signing-key" "$RUNNER_TEMP/copy.err"
+
+      - name: Record the job's wall time
+        if: always()
+        env:
+          START: ${{ steps.start.outputs.at }}
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          echo "nix cache push wall time (${SYSTEM}): $(( $(date +%s) - START ))s" >> "$GITHUB_STEP_SUMMARY"
