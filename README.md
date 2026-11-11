@@ -275,13 +275,14 @@ pnpm add 'effect@^4'
 
 ### Test and build tooling
 
-| Package                                                                | What it is                                                 |
-| :--------------------------------------------------------------------- | :--------------------------------------------------------- |
-| [`@systemfsoftware/vitest`](packages/runner/vitest)                    | Fork of `@effect/vitest` whose defaults suit Effect tests. |
-| [`@systemfsoftware/tsconfig`](packages/toolchain/tsconfig)             | Shared TypeScript base configs.                            |
-| [`@systemfsoftware/vitest-config`](packages/toolchain/vitest-config)   | Shared Vitest configuration.                               |
-| [`@systemfsoftware/tsdown-config`](packages/toolchain/tsdown-config)   | Shared tsdown build configuration.                         |
-| [`@systemfsoftware/stryker-config`](packages/toolchain/stryker-config) | Shared Stryker mutation-testing configuration.             |
+| Package                                                                               | What it is                                                                                  |
+| :------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------ |
+| [`@systemfsoftware/vitest`](packages/runner/vitest)                                   | Fork of `@effect/vitest` whose defaults suit Effect tests.                                  |
+| [`@systemfsoftware/tsconfig`](packages/toolchain/tsconfig)                            | Shared TypeScript base configs.                                                             |
+| [`@systemfsoftware/vitest-config`](packages/toolchain/vitest-config)                  | Shared Vitest configuration.                                                                |
+| [`@systemfsoftware/tsdown-config`](packages/toolchain/tsdown-config)                  | Shared tsdown build configuration.                                                          |
+| [`@systemfsoftware/stryker-config`](packages/toolchain/stryker-config)                | Shared Stryker mutation-testing configuration.                                              |
+| [`@systemfsoftware/omp-typescript-discipline`](omp/plugins/omp-typescript-discipline) | OMP plugin that enforces project references for tooling files and pure tsconfig boundaries. |
 
 ### Oxlint rules and presets
 
@@ -364,10 +365,6 @@ The other packs under [`compound-packs/`](compound-packs) cover configuration, U
 ## Contributing
 
 Local setup, Nix flakes, the commit convention and the pre-delivery check are in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Credits
-
-effect-e2e rebuilds [TesterArmy's e2e](https://github.com/tester-army/e2e) (commit `72abddd`, npm `e2e` 0.21.2, Apache-2.0). See [NOTICE](NOTICE).
 
 ## License
 
