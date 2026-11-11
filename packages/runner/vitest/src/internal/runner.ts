@@ -27,17 +27,9 @@ import * as TestClock from 'effect/testing/TestClock'
 import * as TestConsole from 'effect/testing/TestConsole'
 import * as V from 'vitest'
 import { testIdentityOf, throwFailureRecord } from '../failure.js'
-import type * as Vitest from '../mod.js'
-import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
-import { type Body, drive } from './driver.js'
-import * as Refusals from './errors.schema.js'
-import { isFailureRecordError } from './failure-record.js'
-import { markTask, UNTIMED_HOOK } from './guard.js'
-import { providedCheckDefaults } from './property/defaults.js'
-import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
-import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
-import { makeFileLedger } from './property/impostor.js'
-import { providedRoot } from './provided.js'
+import { type Checks, checksFor, type Ledger, makeLedger } from '../kernel/checks.js'
+import { type Body, drive } from '../kernel/driver.js'
+import { markTask, UNTIMED_HOOK } from '../kernel/guard.js'
 import {
   type HookRefusal,
   isRefusal as isRefusalError,
@@ -49,7 +41,15 @@ import {
   refuseScopedLiveLane,
   refuseSyncBody,
   unprovidedText,
-} from './refusals.js'
+} from '../kernel/refusals.js'
+import type * as Vitest from '../mod.js'
+import * as Refusals from './errors.schema.js'
+import { isFailureRecordError } from './failure-record.js'
+import { providedCheckDefaults } from './property/defaults.js'
+import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
+import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
+import { makeFileLedger } from './property/impostor.js'
+import { providedRoot } from './provided.js'
 import { createSpanRecorder, type SpanRecorder } from './span-recorder.js'
 import { VitestTestContext } from './test-context.js'
 import { makeVirtualRuntime, virtualClockLayer, type VirtualRuntime } from './virtual-time.js'

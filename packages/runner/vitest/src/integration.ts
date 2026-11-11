@@ -7,10 +7,10 @@
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import type * as V from 'vitest'
-import { Asserted, type AssertedShape } from './internal/checks.js'
 import { VitestTestContext } from './internal/test-context.js'
+import { Asserted, type AssertedShape } from './kernel/checks.js'
 
-export type { Asserted, AssertedShape, Check, Expect } from './internal/checks.js'
+export type { Asserted, AssertedShape, Check, Expect } from './kernel/checks.js'
 
 /**
  * A flow that asserts more than once marks each assertion point with this, so the check after it is that
