@@ -11,7 +11,7 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7.0.2
-  microsandbox: 0.7.11
+  microsandbox: 0.7.14
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": ^4.1.2
   "@effect/platform-bun": 4.1.2
@@ -35,8 +35,8 @@ catalog:
   "@types/node": ^26.6.5
   tstyche: ^7.2.5
   "@microsoft/api-extractor": ^7.59.4
-  oxc-parser: ^0.155.0
-  "@oxc-project/types": ^0.155.0
+  oxc-parser: ^0.157.0
+  "@oxc-project/types": ^0.157.0
   "@testing-library/dom": ^10.4.2
   "@testing-library/react": ^16.3.3
   "@types/react": ^19.3.0
@@ -52,7 +52,7 @@ catalog:
   "@storybook/react-vite": ^10.6.3
   "@vitest/browser": ^5.0.5
   "@vitest/browser-playwright": ^5.0.5
-  playwright: ^1.64.1
+  playwright: ^1.65.0
   "@systemfsoftware/vitest-config": workspace:^
   "@pnpm/logger": ^1100.0.0
   "@pnpm/workspace.projects-reader": ^1101.1.5
@@ -65,7 +65,7 @@ catalogs:
   oxlint:
     oxlint: ~1.89.0
     "@oxlint/plugins": ~1.89.0
-    oxlint-tsgolint: 7.0.2005
+    oxlint-tsgolint: 7.0.2006
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
