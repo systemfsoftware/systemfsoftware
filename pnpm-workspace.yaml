@@ -98,8 +98,6 @@ packages:
   - packages/trace/*
   - omp/plugins/*
   - tooling/*
-patchedDependencies:
-  rolldown-plugin-dts@0.28.6: patches/rolldown-plugin-dts@0.28.6.patch
 supportedArchitectures:
   os: [linux]
   cpu: [x64, arm64]
