@@ -1,8 +1,8 @@
 # Mergify: the policy lives in systemfsoftware/.github (.mergify.yml). This file only names this repo's CI checks.
 #
-# Layering: a PR queues on the static check only (lint + typecheck + dist, ~one lane). The queue
-# draft runs the gate, which off main is the fast lanes plus the tests the change affects, and the
-# conflict gate. The heavy suites run on main after the merge (.github/workflows/ci.yml).
+# Layering (SYS-1369): a PR queues on the cheap checks only. The queue draft (`mergify/merge-queue/*`) runs the
+# per-change suite and the Nix compare, and merges only when they pass; main runs the same suite again after the merge.
+# `queue_conditions` and `merge_conditions` must stay different, or Mergify tests in place and skips the draft.
 extends: .github
 
 queue_rules:
@@ -25,6 +25,7 @@ queue_rules:
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
       - check-success = build · lint · typecheck · test / the gate (pnpm check:ci)
+      - check-success = nix / outputs match across systems
       - check-success = abort on mid-run merge conflict
 
   - name: default
@@ -50,4 +51,5 @@ queue_rules:
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
       - check-success = build · lint · typecheck · test / the gate (pnpm check:ci)
+      - check-success = nix / outputs match across systems
       - check-success = abort on mid-run merge conflict

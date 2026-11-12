@@ -55,7 +55,9 @@ runs:
         GLOBS: ${{ inputs.docs-globs }}
       run: |
         paths="$RUNNER_TEMP/sfs-changed-paths"
-        classify-diff --event "$GITHUB_EVENT_NAME" --paths "$paths" --docs-globs "$GLOBS"
+        event="$GITHUB_EVENT_NAME"
+        case "$GITHUB_HEAD_REF" in mergify/merge-queue/*) event=merge_queue ;; esac
+        classify-diff --event "$event" --paths "$paths" --docs-globs "$GLOBS"
     - name: Scope in the summary
       shell: bash
       env:

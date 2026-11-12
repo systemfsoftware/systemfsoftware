@@ -7,7 +7,6 @@ on:
       - "packages/gherkin/storybook-gherkin/**"
       - ".github/workflows/storybook-gherkin-browser.yml"
   pull_request:
-    branches: [main]
     paths:
       - "packages/gherkin/storybook-gherkin/**"
       - ".github/workflows/storybook-gherkin-browser.yml"

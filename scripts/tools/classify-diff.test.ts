@@ -65,9 +65,13 @@ Deno.test('an empty or unreadable diff runs everything', () => {
 })
 
 Deno.test('only a pull request can be docs-only', () => {
-  for (const event of ['push', 'merge_group', 'workflow_dispatch', 'pull_request_target']) {
+  for (const event of ['push', 'workflow_dispatch', 'pull_request_target']) {
     assertEquals(classify(event, ['docs/x.md']), { scope: 'full', reason: 'not-a-pull-request' })
   }
+})
+
+Deno.test('a merge-queue draft is full even when every path is docs', () => {
+  assertEquals(classify('merge_queue', ['docs/x.md']), { scope: 'full', reason: 'merge-queue' })
 })
 
 Deno.test('a docs-globs list replaces the default set', () => {
