@@ -502,15 +502,31 @@ const dispatchOutermost = (
   return queuedOrObserved(fiber, kernel, original, args)
 }
 
+// Effect 4.1.4's scheduler resumes an automatic yield by calling `evaluate` from
+// its own scheduled task, flagged by `_autoYielded` (internal/effect.ts yieldNow).
+// That call continues the slice the yield ended, so it runs inline rather than
+// being queued as a new external resume.
+const isAutomaticResume = (fiber: AnyFiber): boolean => Reflect.get(fiber, '_autoYielded') === true
+
+const dispatchResumption = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field =>
+  isAutomaticResume(fiber)
+    ? withEvaluation(fiber, () => dispatchObserved(fiber, kernel, original, args))
+    : dispatchOutermost(fiber, kernel, original, args)
+
 const dispatchEvaluate = (
   fiber: AnyFiber,
   kernel: Kernel,
   original: MethodFunction,
   args: ReadonlyArray<Field>,
-): Field => {
-  if (isEvaluating(fiber)) return dispatchObserved(fiber, kernel, original, args)
-  return dispatchOutermost(fiber, kernel, original, args)
-}
+): Field =>
+  isEvaluating(fiber)
+    ? dispatchObserved(fiber, kernel, original, args)
+    : dispatchResumption(fiber, kernel, original, args)
 
 const interruptAgain = (fiber: AnyFiber, args: ReadonlyArray<Field>) => (): void => {
   Reflect.apply(Reflect.get(fiber, 'interruptUnsafe'), fiber, args)
