@@ -1,6 +1,9 @@
 // classify-diff - decide whether a pull request changes only documentation.
 //
-//   classify-diff --event <github.event_name> [--paths <file>] [--docs-globs <globs>]
+//   classify-diff --event <github.event_name | merge_queue> [--paths <file>] [--docs-globs <globs>]
+//
+// `merge_queue` names a pull request whose head is a Mergify queue draft (`mergify/merge-queue/*`). It is always
+// `full`: the queue draft is the merge gate, so a docs-only change still runs the suite (SYS-1369).
 //
 // `--paths` names a file of NUL-separated repository paths (`git diff --name-only -z`); an absent, unreadable
 // or empty file is a diff the classifier cannot place. `--docs-globs` replaces the default docs set with a
@@ -15,7 +18,7 @@ const DEFAULT_DOCS_GLOBS: readonly string[] = ['docs/**', '*.md', '**/AGENTS.md'
 
 type Verdict =
   | { readonly scope: 'docs-only'; readonly reason: 'docs-only' }
-  | { readonly scope: 'full'; readonly reason: 'not-a-pull-request' | 'diff-unreadable' | 'no-paths' }
+  | { readonly scope: 'full'; readonly reason: 'not-a-pull-request' | 'merge-queue' | 'diff-unreadable' | 'no-paths' }
   | { readonly scope: 'full'; readonly reason: 'outside-docs'; readonly path: string }
 
 export const parseGlobs = (text: string): readonly string[] =>
@@ -27,6 +30,7 @@ export const classify = (
   paths: readonly string[] | undefined,
   globs: readonly string[] = DEFAULT_DOCS_GLOBS,
 ): Verdict => {
+  if (event === 'merge_queue') return { scope: 'full', reason: 'merge-queue' }
   if (event !== 'pull_request') return { scope: 'full', reason: 'not-a-pull-request' }
   if (paths === undefined) return { scope: 'full', reason: 'diff-unreadable' }
   if (paths.length === 0) return { scope: 'full', reason: 'no-paths' }

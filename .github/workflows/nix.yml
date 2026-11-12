@@ -1,9 +1,11 @@
 name: Nix
 
-# Heavy: main only, after the merge (owner, 2026-10-29: "They need to be fast with the heavier checks on main").
+# Scope (SYS-1369, owner 2026-11-11): runs on main after the merge and on the Mergify queue draft
+# (`mergify/merge-queue/*`), where its compare-across-systems check is a merge condition. Not on other pull requests.
 on:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -15,6 +17,7 @@ concurrency:
 jobs:
   nix:
     name: nix
+    if: github.event_name == 'push' || startsWith(github.head_ref, 'mergify/merge-queue/')
     uses: ./.github/workflows/reusable-nix.yml
     with:
       compare-across-systems: .#packages.{system}.workspace-tarballs

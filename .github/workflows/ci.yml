@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-  merge_group:
   workflow_dispatch:
 # Every commit on main gets its own run and verdict: grouping main by SHA keeps a newer push from cancelling it. On any
 # other ref a newer push cancels the superseded run.
@@ -26,7 +24,7 @@ jobs:
   plan-only:
     # A plan ships in the same PR as the code it plans (owner, 2026-10-28). Required at queue time in .mergify.yml.
     name: not a plan-only pull request
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -75,19 +73,19 @@ jobs:
           done
   checks:
     name: build · lint · typecheck · test
-    # Fast checks before the merge, heavy suites after it (owner, 2026-10-29: "They need to be fast with the heavier
-    # checks on main"). A pull request and a merge-queue draft run the static, gritlint and layers lanes and the
-    # `affected` lane (.github/ci/pr-tests.ts), and their plan schedules no packed test job
-    # (.github/ci/no-tests-before-merge.ts). Main runs every package's whole suite in the packed test jobs.
+    # Scope by event (SYS-1369, owner 2026-11-11). The Mergify queue draft (`mergify/merge-queue/*`) and main run the
+    # per-change suite: every package's whole suite in the packed test jobs, and the full lanes. A pull request runs
+    # the static, gritlint and layers lanes and the `affected` lane (.github/ci/pr-tests.ts) at `profile: local`, and
+    # its plan schedules no packed test job (.github/ci/no-tests-before-merge.ts).
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/reusable-checks.yml
     with:
-      profile: ${{ github.ref == 'refs/heads/main' && 'per-change' || 'local' }}
-      record: test-timings-${{ github.ref == 'refs/heads/main' && 'per-change' || 'local' }}
+      profile: ${{ (github.ref == 'refs/heads/main' || startsWith(github.head_ref, 'mergify/merge-queue/')) && 'per-change' || 'local' }}
+      record: test-timings-${{ (github.ref == 'refs/heads/main' || startsWith(github.head_ref, 'mergify/merge-queue/')) && 'per-change' || 'local' }}
       timings: >-
-        ${{ github.ref == 'refs/heads/main'
+        ${{ (github.ref == 'refs/heads/main' || startsWith(github.head_ref, 'mergify/merge-queue/'))
         && 'deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env --allow-run=pnpm scripts/tools/test-timings.ts'
         || 'deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-env --allow-write .github/ci/no-tests-before-merge.ts' }}
       node-options: --max-old-space-size=4096
@@ -95,6 +93,6 @@ jobs:
       test-flags: --output-logs=new-only --log-order=stream --log-prefix=none
       gate-name: the gate (pnpm check:ci)
       lanes: >-
-        ${{ github.ref == 'refs/heads/main'
+        ${{ (github.ref == 'refs/heads/main' || startsWith(github.head_ref, 'mergify/merge-queue/'))
         && '[{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static", "docs-run": "./bin/dprint check"}, {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}, {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}]'
         || '[{"id": "static", "name": "static checks (pnpm check:static)", "timeout-minutes": 45, "fetch-depth": 2, "node-options": "--max-old-space-size=4096", "run": "corepack pnpm check:static", "docs-run": "./bin/dprint check"}, {"id": "gritlint", "name": "gritlint · sandboxed journey, pnpm lint:conventions", "timeout-minutes": 30}, {"id": "layers", "name": "package layers (pnpm gate:layers)", "timeout-minutes": 15, "run": "corepack pnpm gate:layers"}, {"id": "affected", "name": "affected tests (turbo --affected, vitest --changed)", "timeout-minutes": 30, "fetch-depth": 2, "node-options": "--max-old-space-size=4096"}]' }}

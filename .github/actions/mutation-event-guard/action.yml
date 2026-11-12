@@ -11,7 +11,7 @@ runs:
         EVENT: ${{ github.event_name }}
       run: |
         case "$EVENT" in
-          pull_request | pull_request_target | merge_group)
+          pull_request | pull_request_target)
             [ -s "$RUNNER_TEMP/sfs-reason" ] || echo mutation-on-pull-request > "$RUNNER_TEMP/sfs-reason"
             echo "mutation refused on a $EVENT event: it runs on push or workflow_dispatch only"
             exit 1
