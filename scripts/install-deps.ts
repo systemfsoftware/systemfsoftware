@@ -34,6 +34,14 @@ async function pickManager(worktreePath: string): Promise<Manager | null> {
   return null
 }
 
+async function declaredInstallArgs(worktreePath: string): Promise<string[]> {
+  const pkgPath = `${worktreePath}/package.json`
+  if (!(await exists(pkgPath))) return []
+  const pkg = JSON.parse(await Deno.readTextFile(pkgPath))
+  const args = pkg?.worktrunk?.installArgs
+  return Array.isArray(args) ? args.map(String) : []
+}
+
 async function installDeps(worktreePath: string): Promise<void> {
   console.log('install-deps: installing dependencies in worktree...')
   const mgr = await pickManager(worktreePath)
@@ -59,10 +67,12 @@ async function installDeps(worktreePath: string): Promise<void> {
     console.log('install-deps: done')
     return
   }
-  const cmd = new Deno.Command(mgr.cmd[0], { args: mgr.cmd.slice(1), cwd: worktreePath })
+  const extra = await declaredInstallArgs(worktreePath)
+  const args = [...mgr.cmd.slice(1), ...extra]
+  const cmd = new Deno.Command(mgr.cmd[0], { args, cwd: worktreePath })
   const { code } = await cmd.output()
   if (code !== 0) {
-    console.error(`install-deps: ${mgr.cmd.join(' ')} exited ${code}`)
+    console.error(`install-deps: ${[mgr.cmd[0], ...args].join(' ')} exited ${code}`)
     Deno.exit(code)
   }
   console.log('install-deps: done')
