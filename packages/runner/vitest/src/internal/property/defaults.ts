@@ -10,6 +10,8 @@ import { providedBudgetOf } from './tiers.js'
 /** @internal The `test.provide` key the shared config fills with this run's tier's check options. */
 export const checkDefaultsKey = '@systemfsoftware/vitest:property-check'
 
+const processEnvironment = () => ({ ...(typeof process === 'undefined' ? undefined : process.env) })
+
 /**
  * The check options a run supplies as its property default, minus `replay`. `record` asks the engine to write a
  * failing seed to the checked-in seed store, which it does unless a run opts out.
@@ -29,4 +31,4 @@ export type ProvidedCheckDefaults = PropertyBudget
  * process's environment, read from the same table the setup entry uses.
  */
 export const providedCheckDefaults = (): ProvidedCheckDefaults =>
-  inject(checkDefaultsKey) ?? providedBudgetOf(process.env)
+  inject(checkDefaultsKey) ?? providedBudgetOf(processEnvironment())
