@@ -1,7 +1,4 @@
----
-"@systemfsoftware/vitest": patch
-"@systemfsoftware/effect-schema-discovery": patch
----
+# @systemfsoftware/effect-schema-discovery@2.0.6
 
 The property-check defaults no longer read `process.env` when a browser runner exposes a `process` with no `env`; there the record is empty, as it already was when `process` is absent.
 
