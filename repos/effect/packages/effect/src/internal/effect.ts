@@ -533,6 +533,7 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
     this._children = undefined
     this._interruptedCause = undefined
     this._yielded = undefined
+    this._autoYielded = false
     this._running = false
     this._deferredInterrupt = false
     this._parent = undefined
@@ -553,6 +554,7 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
   declare _children: Set<FiberImpl<any, any>> | undefined
   declare _interruptedCause: Cause.Cause<never> | undefined
   declare _yielded: Exit.Exit<any, any> | (() => void) | undefined
+  declare _autoYielded: boolean
   declare _running: boolean
   declare _deferredInterrupt: boolean
   declare _parent: FiberImpl<any, any> | undefined
@@ -661,6 +663,12 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
     this._stack.length = 0
     this._children = undefined
     this.context = Context.empty()
+    // The cache is shared with other fibers, so replace it rather than mutate
+    // it, letting the ended span and its parents be collected
+    const cache = this.cache
+    if (cache.span !== undefined || cache.stackFrame !== undefined) {
+      this.cache = { ...cache, span: undefined, stackFrame: undefined }
+    }
   }
   runLoop(effect: Primitive): Exit.Exit<A, E> | Yield {
     const prevFiber = (globalThis as any)[currentFiberTypeId]
@@ -668,8 +676,11 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
     const prevRunning = this._running
     this._running = true
     let yielding = false
+    let resuming = this._autoYielded
+    this._autoYielded = false
     let current: Primitive | Yield = effect
-    this.currentOpCount = 0
+    // Count the resumption as the exitVoid instruction it replaces.
+    this.currentOpCount = resuming ? 1 : 0
     try {
       while (true) {
         try {
@@ -680,18 +691,23 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
           this.currentOpCount++
           // Refresh the cache because a primitive can replace the fiber context.
           const cache = this.cache
+          // Only automatic resumptions must run their saved instruction before
+          // checking the budget; other slices retain their existing yield points.
           if (
+            !resuming &&
             !yielding &&
             !cache.preventYield &&
             cache.scheduler.shouldYield(this as any)
           ) {
+            // If dispatch throws, evaluate its defect instead of retrying the yield.
             yielding = true
-            const prev = current
-            current = flatMap(yieldNow, () => prev as any) as any
+            current = this.yieldNow(current as Primitive, 0, true)
+          } else {
+            resuming = false
+            current = cache.tracerContext
+              ? cache.tracerContext(current as any, this)
+              : (current as any)[evaluate](this)
           }
-          current = cache.tracerContext
-            ? cache.tracerContext(current as any, this)
-            : (current as any)[evaluate](this)
           if (current === Yield) {
             const yielded = this._yielded!
             if (ExitTypeId in yielded) {
@@ -753,6 +769,17 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
   yieldWith(value: Exit.Exit<any, any> | (() => void)): Yield {
     this._yielded = value
     return Yield
+  }
+  yieldNow(effect: Primitive, priority = 0, automatic = false): Yield {
+    let resumed = false
+    this.currentDispatcher.scheduleTask(() => {
+      if (resumed) return
+      this._autoYielded = automatic
+      this.evaluate(effect)
+    }, priority)
+    return this.yieldWith(() => {
+      resumed = true
+    })
   }
   children(): Set<Fiber.Fiber<any, any>> {
     return (this._children ??= new Set())
@@ -1064,14 +1091,7 @@ export const fromNullishOr = <A>(value: A): Effect.Effect<NonNullable<A>, Cause.
 export const yieldNowWith: (priority?: number) => Effect.Effect<void> = makePrimitive({
   op: "Yield",
   [evaluate](fiber) {
-    let resumed = false
-    fiber.currentDispatcher.scheduleTask(() => {
-      if (resumed) return
-      fiber.evaluate(exitVoid as any)
-    }, this[args] ?? 0)
-    return fiber.yieldWith(() => {
-      resumed = true
-    })
+    return fiber.yieldNow(exitVoid as any, this[args] ?? 0)
   }
 })
 
@@ -1701,8 +1721,9 @@ export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
         const isWinner = !done
         done = true
         resume(exit)
-        if (isWinner && options?.onWinner) {
-          options.onWinner({ fiber, index: i, parentFiber: parent })
+        if (isWinner) {
+          interruptRaceLosers(fibers, parent)
+          options?.onWinner?.({ fiber, index: i, parentFiber: parent })
         }
       }
 
@@ -1749,13 +1770,25 @@ export const raceAllFirst = <Eff extends Effect.Effect<any, any, any>>(
           const isWinner = !done
           done = true
           resume(exit)
-          if (isWinner && options?.onWinner) {
-            options.onWinner({ fiber, index, parentFiber: parent })
+          if (isWinner) {
+            interruptRaceLosers(fibers, parent)
+            options?.onWinner?.({ fiber, index, parentFiber: parent })
           }
         })
       }
     })
   })
+
+// Interrupt the losers as soon as the race settles. Waiting for the parent to
+// resume leaves a gap, for example a scheduler yield, where a loser can
+// complete and have its result discarded. The parent still awaits the losers
+// on exit. Runs after `resume`, so a loser's interrupt cannot settle the race.
+const interruptRaceLosers = (fibers: Set<Fiber.Fiber<any, any>>, parent: Fiber.Fiber<any, any>) => {
+  const annotations = fiberStackAnnotations(parent)
+  for (const fiber of fibers) {
+    fiber.interruptUnsafe(parent.id, annotations)
+  }
+}
 
 /** @internal */
 export const race: {

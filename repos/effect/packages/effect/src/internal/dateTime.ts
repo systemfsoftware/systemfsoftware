@@ -75,10 +75,12 @@ const ProtoTimeZoneNamed = {
   ...ProtoTimeZone,
   _tag: "Named",
   [Hash.symbol](this: DateTime.TimeZone.Named) {
-    return Hash.string(`Named:${this.id}`)
+    return Hash.string(`Named:${this.resolvedId}`)
   },
   [Equal.symbol](this: DateTime.TimeZone.Named, that: unknown) {
-    return isTimeZone(that) && that._tag === "Named" && this.id === that.id
+    // Zones from older copies of effect have no `resolvedId`; their `id` is the resolved one
+    return isTimeZone(that) && that._tag === "Named" &&
+      this.resolvedId === (that.resolvedId ?? that.id)
   },
   toString(this: DateTime.TimeZone.Named) {
     return `TimeZone.Named(${this.id})`
@@ -113,6 +115,51 @@ const ProtoTimeZoneOffset = {
   }
 }
 
+type CacheKey = "partsUtc" | "adjustedEpochMilliseconds" | "partsAdjusted"
+
+type Caches = { [K in CacheKey]?: DateTime.Zoned[K] }
+
+const cacheSlot: PropertyDescriptor = { value: undefined, enumerable: false, writable: true }
+
+// Instances sealed or frozen before their first cache write cannot receive own
+// slots, so their caches live here instead.
+const sealedCaches = new WeakMap<object, Caches>()
+
+// Until an instance has its own slots, every cache read and write, including
+// writes through the public fields from other copies of effect, reaches these
+// accessors. The first write defines all of the instance's slots at once and in
+// a fixed order, so construction avoids `Object.defineProperty` and instances
+// keep few shapes.
+const cacheAccessor = <K extends CacheKey>(key: K, slots: ReadonlyArray<CacheKey>): PropertyDescriptor => ({
+  get(this: object): Caches[K] {
+    return Object.isExtensible(this) ? undefined : sealedCaches.get(this)?.[key]
+  },
+  set(this: Caches, value: Caches[K]) {
+    if (Object.isExtensible(this)) {
+      for (const slot of slots) {
+        Object.defineProperty(this, slot, cacheSlot)
+      }
+      this[key] = value
+    } else {
+      let caches = sealedCaches.get(this)
+      if (caches === undefined) {
+        caches = {}
+        sealedCaches.set(this, caches)
+      }
+      caches[key] = value
+    }
+  }
+})
+
+const zonedSlots: ReadonlyArray<CacheKey> = ["partsUtc", "adjustedEpochMilliseconds", "partsAdjusted"]
+
+Object.defineProperty(ProtoUtc, "partsUtc", cacheAccessor("partsUtc", ["partsUtc"]))
+Object.defineProperties(ProtoZoned, {
+  partsUtc: cacheAccessor("partsUtc", zonedSlots),
+  adjustedEpochMilliseconds: cacheAccessor("adjustedEpochMilliseconds", zonedSlots),
+  partsAdjusted: cacheAccessor("partsAdjusted", zonedSlots)
+})
+
 /** @internal */
 export const makeZonedProto = (
   epochMillis: number,
@@ -122,21 +169,9 @@ export const makeZonedProto = (
   const self = Object.create(ProtoZoned)
   self.epochMilliseconds = epochMillis
   self.zone = zone
-  Object.defineProperty(self, "partsUtc", {
-    value: partsUtc,
-    enumerable: false,
-    writable: true
-  })
-  Object.defineProperty(self, "adjustedEpochMillis", {
-    value: undefined,
-    enumerable: false,
-    writable: true
-  })
-  Object.defineProperty(self, "partsAdjusted", {
-    value: undefined,
-    enumerable: false,
-    writable: true
-  })
+  if (partsUtc !== undefined) {
+    self.partsUtc = partsUtc
+  }
   return self
 }
 
@@ -196,11 +231,6 @@ export const clamp: {
 const makeUtc = (epochMillis: number): DateTime.Utc => {
   const self = Object.create(ProtoUtc)
   self.epochMilliseconds = epochMillis
-  Object.defineProperty(self, "partsUtc", {
-    value: undefined,
-    enumerable: false,
-    writable: true
-  })
   return self
 }
 
@@ -377,16 +407,20 @@ const formatOptions: Intl.DateTimeFormatOptions = {
   hourCycle: "h23"
 }
 
-const zoneMakeIntl = (format: Intl.DateTimeFormat): DateTime.TimeZone.Named => {
-  const zoneId = format.resolvedOptions().timeZone
-  const cached = validZoneCache.get(zoneId)
+const zoneMakeIntl = (
+  format: Intl.DateTimeFormat,
+  resolvedId: string,
+  id: string = resolvedId
+): DateTime.TimeZone.Named => {
+  const cached = validZoneCache.get(id)
   if (cached !== undefined) {
     return cached
   }
   const zone = Object.create(ProtoTimeZoneNamed)
-  zone.id = zoneId
+  zone.id = id
+  zone.resolvedId = resolvedId
   zone.format = format
-  validZoneCache.set(zoneId, zone)
+  validZoneCache.set(id, zone)
   return zone
 }
 
@@ -397,11 +431,17 @@ export const zoneMakeNamedUnsafe = (zoneId: string): DateTime.TimeZone.Named => 
     return cached
   }
   try {
+    const format = new Intl.DateTimeFormat("en-US", {
+      ...formatOptions,
+      timeZone: zoneId
+    })
+    // Intl may resolve a zone to an older alias ("Asia/Kolkata" to "Asia/Calcutta"),
+    // so keep the supplied name and take only its casing from Intl
+    const resolvedId = format.resolvedOptions().timeZone
     const zone = zoneMakeIntl(
-      new Intl.DateTimeFormat("en-US", {
-        ...formatOptions,
-        timeZone: zoneId
-      })
+      format,
+      resolvedId,
+      resolvedId.toLowerCase() === zoneId.toLowerCase() ? resolvedId : zoneId
     )
     validZoneCache.set(zoneId, zone)
     return zone
@@ -430,8 +470,10 @@ export const zoneMakeNamedEffect = (zoneId: string): Effect.Effect<DateTime.Time
   })
 
 /** @internal */
-export const zoneMakeLocal = (): DateTime.TimeZone.Named =>
-  zoneMakeIntl(new Intl.DateTimeFormat("en-US", formatOptions))
+export const zoneMakeLocal = (): DateTime.TimeZone.Named => {
+  const format = new Intl.DateTimeFormat("en-US", formatOptions)
+  return zoneMakeIntl(format, format.resolvedOptions().timeZone)
+}
 
 const offsetZoneRegExp = /^(?:GMT)?[+-]/
 
@@ -654,8 +696,9 @@ export const toParts = (self: DateTime.DateTime): DateTime.DateTime.PartsWithWee
   } else if (self.partsAdjusted !== undefined) {
     return self.partsAdjusted
   }
-  self.partsAdjusted = withDate(self, dateToParts)
-  return self.partsAdjusted
+  const parts = withDate(self, dateToParts)
+  self.partsAdjusted = parts
+  return parts
 }
 
 /** @internal */
@@ -663,8 +706,9 @@ export const toPartsUtc = (self: DateTime.DateTime): DateTime.DateTime.PartsWith
   if (self.partsUtc !== undefined) {
     return self.partsUtc
   }
-  self.partsUtc = withDateUtc(self, dateToParts)
-  return self.partsUtc
+  const parts = withDateUtc(self, dateToParts)
+  self.partsUtc = parts
+  return parts
 }
 
 /** @internal */
@@ -1024,6 +1068,29 @@ export const subtract: {
   return add(self, newParts)
 })
 
+const mutateRounding = (
+  self: DateTime.DateTime,
+  part: DateTime.DateTime.UnitSingular,
+  f: (date: Date) => void,
+  disambiguation: DateTime.Disambiguation = "compatible"
+): DateTime.DateTime => {
+  if (
+    self._tag === "Utc" || self.zone._tag === "Offset" ||
+    part === "day" || part === "week" || part === "month" || part === "year"
+  ) {
+    return mutate(self, f, { disambiguation })
+  }
+  // keep the input's offset so rounding stays in the same occurrence of a repeated hour
+  const date = toDate(self)
+  const offset = date.getTime() - Math.trunc(self.epochMilliseconds)
+  f(date)
+  const adjustedMillis = date.getTime()
+  const result = makeZonedProto(adjustedMillis - offset, self.zone)
+  return zonedOffset(result) === offset
+    ? result
+    : makeZonedFromAdjusted(adjustedMillis, self.zone, disambiguation)
+}
+
 const startOfDate = (date: Date, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
 }) => {
@@ -1075,7 +1142,7 @@ export const startOf: {
   }): A
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-}): DateTime.DateTime => mutate(self, (date) => startOfDate(date, part, options)))
+}): DateTime.DateTime => mutateRounding(self, part, (date) => startOfDate(date, part, options)))
 
 const endOfDate = (date: Date, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
@@ -1128,7 +1195,7 @@ export const endOf: {
   }): A
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-}): DateTime.DateTime => mutate(self, (date) => endOfDate(date, part, options)))
+}): DateTime.DateTime => mutateRounding(self, part, (date) => endOfDate(date, part, options), "later"))
 
 /** @internal */
 export const nearest: {
@@ -1141,7 +1208,7 @@ export const nearest: {
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
 }): DateTime.DateTime =>
-  mutate(self, (date) => {
+  mutateRounding(self, part, (date) => {
     if (part === "millisecond") return
     const millis = date.getTime()
     const start = new Date(millis)

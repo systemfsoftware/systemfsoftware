@@ -23,10 +23,21 @@ import {
   Tracer
 } from "effect"
 import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientError from "effect/http/HttpClientError"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as HttpEffect from "effect/http/HttpEffect"
-import { Rpc, RpcClient, RpcGroup, RpcMessage, RpcSchema, RpcSerialization, RpcServer, RpcTest } from "effect/rpc"
+import {
+  Rpc,
+  RpcClient,
+  RpcGroup,
+  RpcMessage,
+  RpcMiddleware,
+  RpcSchema,
+  RpcSerialization,
+  RpcServer,
+  RpcTest
+} from "effect/rpc"
 import { RpcClientDefect, RpcClientError } from "effect/rpc/RpcClientError"
 import * as Socket from "effect/socket/Socket"
 import { TestClock } from "effect/testing"
@@ -189,6 +200,16 @@ const assertEmptyResponseFailsRequest = Effect.fnUntraced(function*(
   assert.strictEqual(error.reason._tag, "RpcClientDefect")
   assert.strictEqual(error.reason.message, "Received empty HTTP response from RPC server")
 })
+
+class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+class Auth extends RpcMiddleware.Service<Auth>()("RpcClientTest/Auth", { error: Unauthorized }) {}
+
+// None of these RPCs declare `Unauthorized`; it comes from the middleware.
+const AuthGroup = RpcGroup.make(
+  Rpc.make("Get", { success: Schema.String }),
+  Rpc.make("Events", { success: Schema.String, stream: true }),
+  Rpc.make("EventsQueue", { success: Schema.String, stream: true })
+).middleware(Auth)
 
 describe("RpcClient", () => {
   it.effect("does not fail a new request started synchronously during connection defect delivery", () =>
@@ -469,6 +490,41 @@ describe("RpcClient", () => {
       assert.isUndefined(yield* Fiber.join(call))
     }))
 
+  it.effect("fails a discarded call on a transport error and interrupts its pending send", () =>
+    Effect.gen(function*() {
+      const received = yield* Deferred.make<Parameters<RpcClient.Protocol["Service"]["run"]>[1]>()
+      const sent = yield* Queue.unbounded<Parameters<RpcClient.Protocol["Service"]["send"]>[1]>()
+      const sendInterrupted = yield* Deferred.make<void>()
+      const client = yield* RpcClient.make(ChunkGroup).pipe(Effect.provideService(
+        RpcClient.Protocol,
+        RpcClient.Protocol.of({
+          codecFor: RpcSerialization.json.codecFor,
+          supportsAck: false,
+          supportsTransferables: false,
+          run: (_clientId, handle) => Deferred.succeed(received, handle).pipe(Effect.andThen(Effect.never)),
+          // a socket write waits while the connection is down
+          send: (_clientId, message) =>
+            message._tag === "Request" ?
+              Queue.offer(sent, message).pipe(
+                Effect.andThen(Effect.never),
+                Effect.onInterrupt(() => Deferred.succeed(sendInterrupted, undefined))
+              ) :
+              Effect.void
+        })
+      ))
+      const handle = yield* Deferred.await(received)
+      const call = yield* client.Unary(undefined, { discard: true }).pipe(Effect.forkChild)
+      yield* Queue.take(sent)
+      const error = new RpcClientError({
+        reason: new RpcClientDefect({ message: "connection lost", cause: undefined })
+      })
+
+      yield* handle({ _tag: "ClientProtocolError", error })
+
+      assert.deepStrictEqual(yield* Fiber.await(call), Exit.fail(error))
+      yield* Deferred.await(sendInterrupted)
+    }))
+
   it.effect("isolates a malformed stream chunk and interrupts its server request", () =>
     Effect.gen(function*() {
       const { client, handle, sent } = yield* makeChunkProtocol()
@@ -588,6 +644,58 @@ describe("RpcClient", () => {
       assert.deepStrictEqual(yield* Queue.take(sent), { _tag: "Interrupt", requestId })
     }))
 
+  it.effect("stops the server stream promptly when an acknowledged stream consumer is interrupted", () =>
+    Effect.gen(function*() {
+      let pulls = 0
+      const group = RpcGroup.make(
+        Rpc.make("Count", { success: RpcSchema.Stream(Schema.Number, Schema.Never) })
+      )
+      const client = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(group.toLayer({
+          Count: () =>
+            Stream.fromIterable(Array.from({ length: 50 }, (_, i) => i), { chunkSize: 1 }).pipe(
+              Stream.mapEffect((i) => Effect.sync(() => (pulls++, i)))
+            )
+        }))
+      )
+
+      const values = yield* client.Count(undefined, { streamBufferSize: 1 }).pipe(
+        Stream.take(1),
+        Stream.runCollect
+      )
+      yield* Effect.yieldNow
+
+      assert.deepStrictEqual(values, [0])
+      assert.isAtMost(pulls, 3)
+    }))
+
+  it.effect("does not acknowledge a chunk dropped when its stream consumer is interrupted", () =>
+    Effect.gen(function*() {
+      const consuming = yield* Deferred.make<void>()
+      const sent = yield* Queue.unbounded<RpcMessage.FromClient<RpcGroup.Rpcs<typeof ChunkGroup>>>()
+      const { client, write } = yield* RpcClient.makeNoSerialization(ChunkGroup, {
+        onFromClient: ({ message }) => Queue.offer(sent, message)
+      })
+      const reader = yield* client.Good(undefined, { streamBufferSize: 1 }).pipe(
+        Stream.runForEach(() => Deferred.succeed(consuming, void 0).pipe(Effect.andThen(Effect.never))),
+        Effect.forkChild
+      )
+      const request = yield* Queue.take(sent)
+      assert(request._tag === "Request")
+      const requestId = request.id
+      yield* write({ _tag: "Chunk", clientId: 0, requestId, values: ["a"] })
+      assert.deepStrictEqual(yield* Queue.take(sent), { _tag: "Ack", requestId })
+      const receiver = yield* write({ _tag: "Chunk", clientId: 0, requestId, values: ["b", "c"] }).pipe(
+        Effect.forkChild({ startImmediately: true })
+      )
+      yield* Deferred.await(consuming)
+      assert.isUndefined(receiver.pollUnsafe())
+      yield* Fiber.interrupt(reader)
+
+      assert(Exit.isSuccess(yield* Fiber.await(receiver)))
+      assert.deepStrictEqual((yield* Queue.takeAll(sent)).map((message) => message._tag), ["Interrupt"])
+    }))
+
   it.effect("does not send Interrupt when a failed streaming send closes its scope", () =>
     Effect.gen(function*() {
       const sent: Array<string> = []
@@ -703,6 +811,52 @@ describe("RpcClient", () => {
       assert.deepStrictEqual(sentRequestIds, [1, 2])
     }))
 
+  it.effect("fails only the calls on a crashed pooled worker", () =>
+    Effect.gen(function*() {
+      const sent = yield* Queue.unbounded<{
+        readonly id: string | number
+        readonly crash: Deferred.Deferred<never, WorkerError>
+        readonly replies: Queue.Queue<RpcMessage.FromServerEncoded>
+      }>()
+      const spawn = Effect.gen(function*() {
+        const crash = yield* Deferred.make<never, WorkerError>()
+        const replies = yield* Queue.unbounded<RpcMessage.FromServerEncoded>()
+        const backing: Worker.Worker<any, any> = {
+          send: (message) =>
+            message._tag === "Request"
+              ? Effect.asVoid(Queue.offer(sent, { id: message.id, crash, replies }))
+              : Effect.void,
+          run: (handler) =>
+            Effect.raceFirst(Deferred.await(crash), Effect.forever(Effect.flatMap(Queue.take(replies), handler)))
+        }
+        return backing
+      })
+      const client = yield* RpcClient.make(TestGroup).pipe(
+        Effect.provideServiceEffect(RpcClient.Protocol, RpcClient.makeProtocolWorker({ size: 2, concurrency: 1 })),
+        Effect.provideService(Worker.WorkerPlatform, Worker.WorkerPlatform.of({ spawn: () => spawn })),
+        Effect.provideService(Worker.Spawner, (() => undefined) as Worker.SpawnerFn)
+      )
+
+      const crashing = yield* client.Ping().pipe(Effect.forkChild)
+      const crashed = yield* Queue.take(sent)
+      const healthy = yield* client.Ping().pipe(Effect.forkChild)
+      const healthyRequest = yield* Queue.take(sent)
+
+      yield* Deferred.fail(
+        crashed.crash,
+        new WorkerError({ reason: new WorkerReceiveError({ message: "worker exited" }) })
+      )
+      const error = yield* Effect.flip(Fiber.join(crashing))
+      assert.strictEqual(error.reason._tag, "WorkerReceiveError")
+
+      yield* Queue.offer(healthyRequest.replies, {
+        _tag: "Exit",
+        requestId: healthyRequest.id,
+        exit: { _tag: "Success", value: "pong" }
+      })
+      assert.strictEqual(yield* Fiber.join(healthy), "pong")
+    }))
+
   it("preserves RpcClientError failures from a reloaded module copy", async () => {
     vi.resetModules()
     const ForeignRpcClientError = await vi.importActual<typeof RpcClientErrorModule>(
@@ -733,6 +887,26 @@ describe("RpcClient", () => {
 
   it.effect("fails request on empty HTTP response for framed serialization", () =>
     assertEmptyResponseFailsRequest(RpcSerialization.layerNdjson, ""))
+
+  it.effect("includes the HTTP failure in the error message", () =>
+    Effect.gen(function*() {
+      const httpClient = HttpClient.make((request) =>
+        Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request, description: "connect ECONNREFUSED" })
+          })
+        )
+      )
+      const client = yield* RpcClient.make(TestGroup).pipe(
+        Effect.provide(makeProtocolLayerWithClient(RpcSerialization.layerJson, httpClient))
+      )
+
+      const error = yield* client.Ping().pipe(Effect.flip)
+
+      assert.instanceOf(error, RpcClientError)
+      assert.strictEqual(error.reason._tag, "HttpError")
+      assert.strictEqual(error.message, "HttpError: Transport: connect ECONNREFUSED (POST http://localhost/rpc/)")
+    }))
 
   it.effect("sends a discarded call to a worker as a request and waits for its Exit", () =>
     Effect.gen(function*() {
@@ -1398,4 +1572,43 @@ describe("RpcClient", () => {
         }
       }))
   })
+
+  it.effect("handlers fail with middleware errors over the wire", () =>
+    Effect.gen(function*() {
+      const layer = AuthGroup.toLayer({
+        Get: () => Effect.fail(new Unauthorized()),
+        Events: () => Stream.make("a").pipe(Stream.concat(Stream.fail(new Unauthorized()))),
+        EventsQueue: Effect.fnUntraced(function*() {
+          const queue = yield* Queue.unbounded<string, Unauthorized | Cause.Done>()
+          yield* Queue.offer(queue, "a")
+          yield* Queue.fail(queue, new Unauthorized())
+          return queue
+        })
+      }).pipe(
+        Layer.merge(Layer.succeed(Auth, (effect) => effect)),
+        Layer.merge(RpcSerialization.layerJson)
+      )
+      const handler = HttpEffect.toWebHandler(yield* RpcServer.toHttpEffect(AuthGroup).pipe(Effect.provide(layer)))
+      const httpClient = HttpClient.make((request) =>
+        Effect.gen(function*() {
+          const webRequest = yield* Effect.orDie(HttpClientRequest.toWeb(request))
+          const response = yield* Effect.promise(() => handler(webRequest))
+          return HttpClientResponse.fromWeb(request, response)
+        })
+      )
+      const client = yield* RpcClient.make(AuthGroup).pipe(
+        Effect.provide(makeProtocolLayerWithClient(RpcSerialization.layerJson, httpClient))
+      )
+
+      assert.instanceOf(yield* Effect.flip(client.Get()), Unauthorized)
+      for (const events of [client.Events(), client.EventsQueue()]) {
+        const received: Array<string> = []
+        const error = yield* events.pipe(
+          Stream.runForEach((value) => Effect.sync(() => received.push(value))),
+          Effect.flip
+        )
+        assert.deepStrictEqual(received, ["a"])
+        assert.instanceOf(error, Unauthorized)
+      }
+    }))
 })

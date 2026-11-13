@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
-import { assertNone, assertSome, deepStrictEqual, strictEqual, throws } from "@effect/vitest/utils"
-import { DateTime, Duration, Effect, Option } from "effect"
+import { assertNone, assertSome, assertTrue, deepStrictEqual, strictEqual, throws } from "@effect/vitest/utils"
+import { DateTime, Duration, Effect, Equal, Hash, Option } from "effect"
 import { TestClock } from "effect/testing"
 import { vi } from "vitest"
 
@@ -132,6 +132,22 @@ describe("DateTime", () => {
       strictEqual(DateTime.formatIso(DateTime.add(beforeGap, { days: 1 })), "2025-03-09T16:00:00.000Z")
       strictEqual(DateTime.formatIso(DateTime.add(beforeGap, { days: 1, hours: 24 })), "2025-03-10T17:00:00.000Z")
     })
+  })
+
+  it("rounds within the repeated DST hour", () => {
+    const secondOneThirty = DateTime.makeZonedUnsafe("2025-11-02T06:30:15.250Z", {
+      timeZone: "America/New_York"
+    })
+    strictEqual(DateTime.formatIso(DateTime.startOf(secondOneThirty, "hour")), "2025-11-02T06:00:00.000Z")
+    strictEqual(DateTime.formatIso(DateTime.endOf(secondOneThirty, "second")), "2025-11-02T06:30:15.999Z")
+    strictEqual(DateTime.formatIso(DateTime.nearest(secondOneThirty, "minute")), "2025-11-02T06:30:00.000Z")
+  })
+
+  it("rounds calendar units to the whole day across DST", () => {
+    const havanaNoon = DateTime.makeZonedUnsafe("2025-11-02T17:00:00.000Z", { timeZone: "America/Havana" })
+    strictEqual(DateTime.formatIso(DateTime.startOf(havanaNoon, "day")), "2025-11-02T04:00:00.000Z")
+    const santiagoNoon = DateTime.makeZonedUnsafe("2025-04-05T15:00:00.000Z", { timeZone: "America/Santiago" })
+    strictEqual(DateTime.formatIso(DateTime.endOf(santiagoNoon, "day")), "2025-04-06T03:59:59.999Z")
   })
 
   describe("endOf", () => {
@@ -543,6 +559,50 @@ describe("DateTime", () => {
     })
   })
 
+  describe("zoneMakeNamed", () => {
+    it("keeps the name of a renamed zone", () => {
+      for (const name of ["Europe/Kiev", "Europe/Kyiv", "Europe/Kiev", "Europe/Kyiv"]) {
+        strictEqual(DateTime.zoneToString(DateTime.zoneMakeNamedUnsafe(name)), name)
+      }
+      strictEqual(
+        DateTime.formatIsoZoned(DateTime.makeZonedUnsafe("2024-01-01T00:00:00Z", { timeZone: "Europe/Kyiv" })),
+        "2024-01-01T02:00:00.000+02:00[Europe/Kyiv]"
+      )
+      strictEqual(DateTime.zoneToString(DateTime.zoneMakeNamedUnsafe("europe/london")), "Europe/London")
+    })
+
+    const mapsRenamedZones =
+      new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Kyiv" }).resolvedOptions().timeZone ===
+        new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Kiev" }).resolvedOptions().timeZone
+
+    it.runIf(mapsRenamedZones)("treats a renamed zone and its old name as equal", () => {
+      const kyiv = DateTime.zoneMakeNamedUnsafe("Europe/Kyiv")
+      const kiev = DateTime.zoneMakeNamedUnsafe("Europe/Kiev")
+      assertTrue(Equal.equals(kyiv, kiev))
+      strictEqual(Hash.hash(kyiv), Hash.hash(kiev))
+    })
+
+    it("treats a zone from an older copy of effect as equal", () => {
+      const zone = DateTime.zoneMakeNamedUnsafe("Europe/London")
+      // Older copies store Intl's resolved identifier in `id` and have no `resolvedId`
+      const older = {
+        "~effect/DateTime/TimeZone": "~effect/DateTime/TimeZone",
+        _tag: "Named",
+        id: "Europe/London",
+        format: new Intl.DateTimeFormat("en-US", { timeZone: "Europe/London" }),
+        [Hash.symbol]() {
+          return Hash.string(`Named:${this.id}`)
+        },
+        [Equal.symbol](that: unknown) {
+          return DateTime.isTimeZoneNamed(that) && this.id === that.id
+        }
+      }
+      assertTrue(Equal.equals(older, zone))
+      assertTrue(Equal.equals(zone, older))
+      strictEqual(Hash.hash(zone), Hash.hash(older))
+    })
+  })
+
   describe("toUtc", () => {
     it.effect("with a Utc", () =>
       Effect.gen(function*() {
@@ -575,6 +635,67 @@ describe("DateTime", () => {
         const zoned = DateTime.makeZonedUnsafe(iso, { timeZone: "UTC" })
         strictEqual(DateTime.toDate(zoned).toISOString(), iso)
       }
+    })
+  })
+
+  describe("lazy caches", () => {
+    const populate = (self: DateTime.DateTime) => {
+      DateTime.toPartsUtc(self)
+      DateTime.toParts(self)
+      DateTime.toDate(self)
+    }
+
+    it("stay out of the enumerable shape", () => {
+      const utc = DateTime.makeUnsafe("2024-07-01T12:00:00Z")
+      const zoned = DateTime.makeZonedUnsafe(utc, { timeZone: "Europe/London" })
+      populate(utc)
+      populate(zoned)
+      deepStrictEqual(Object.keys(utc), ["epochMilliseconds"])
+      deepStrictEqual(Object.keys(zoned), ["epochMilliseconds", "zone"])
+    })
+
+    it("stay out of the enumerable shape when written through the public fields", () => {
+      // e.g. by another copy of effect that shares the instance
+      const utc = DateTime.makeUnsafe("2024-07-01T12:00:00Z")
+      const zoned = DateTime.makeZonedUnsafe(utc, { timeZone: "Europe/London" })
+      const parts = DateTime.toPartsUtc(DateTime.makeUnsafe("2024-07-01T12:00:00Z"))
+      utc.partsUtc = parts
+      zoned.partsUtc = parts
+      populate(utc)
+      populate(zoned)
+      strictEqual(DateTime.toPartsUtc(zoned), parts)
+      deepStrictEqual(Object.keys(utc), ["epochMilliseconds"])
+      deepStrictEqual(Object.keys(zoned), ["epochMilliseconds", "zone"])
+    })
+
+    it("work on non-extensible instances", () => {
+      const utc = Object.preventExtensions(DateTime.makeUnsafe("2024-07-01T12:00:00Z"))
+      const zoned = Object.seal(DateTime.makeZonedUnsafe("2024-07-01T12:00:00Z", { timeZone: "Europe/London" }))
+      const frozen = Object.freeze(DateTime.makeUnsafe("2024-07-01T12:00:00Z"))
+      const written = DateTime.toPartsUtc(DateTime.makeUnsafe("2024-07-01T12:00:00Z"))
+      utc.partsUtc = undefined
+      zoned.partsUtc = written
+      const parts = { millisecond: 0, second: 0, minute: 0, day: 1, weekDay: 1, month: 7, year: 2024 }
+      deepStrictEqual(DateTime.toPartsUtc(utc), { ...parts, hour: 12 })
+      deepStrictEqual(DateTime.toPartsUtc(frozen), { ...parts, hour: 12 })
+      deepStrictEqual(DateTime.toParts(zoned), { ...parts, hour: 13 })
+      strictEqual(DateTime.toParts(zoned), DateTime.toParts(zoned))
+      strictEqual(DateTime.toPartsUtc(zoned), written)
+    })
+
+    it("carry populated UTC parts over when zoned", () => {
+      const utc = DateTime.makeUnsafe("2024-07-01T12:00:00Z")
+      const parts = DateTime.toPartsUtc(utc)
+      strictEqual(DateTime.toPartsUtc(DateTime.setZone(utc, DateTime.zoneMakeNamedUnsafe("Europe/London"))), parts)
+    })
+
+    it("do not affect equality with a fresh instance", () => {
+      const make = () => DateTime.makeZonedUnsafe("2024-07-01T12:00:00Z", { timeZone: "Europe/London" })
+      const populated = make()
+      populate(populated)
+      assertTrue(Equal.equals(populated, make()))
+      strictEqual(Hash.hash(populated), Hash.hash(make()))
+      deepStrictEqual(populated, make())
     })
   })
 

@@ -486,6 +486,13 @@ export interface FilePartEncoded extends BasePartEncoded<"file", FilePartOptions
  */
 export interface FilePartOptions extends ProviderOptions {}
 
+const TaggedURL = Schema.TaggedStruct("URL", { href: Schema.URLFromString })
+
+const urlFromTaggedURL = SchemaTransformation.transform<URL, typeof TaggedURL.Type>({
+  decode: ({ href }) => href,
+  encode: (href) => ({ _tag: "URL", href }) as const
+})
+
 /**
  * Schema for validation and encoding of file parts.
  *
@@ -532,15 +539,13 @@ export const FilePart: Schema.Struct<{
         encode: (base64) => ({ _tag: "Uint8Array", base64 }) as const
       })
     )),
-    Schema.TaggedStruct("URL", { href: Schema.URLFromString }).pipe(Schema.decodeTo(
-      Schema.URL,
-      SchemaTransformation.transform({
-        decode: ({ href }) => href,
-        encode: (href) => ({ _tag: "URL", href }) as const
-      })
-    )),
+    TaggedURL.pipe(Schema.decodeTo(Schema.URL, urlFromTaggedURL)),
     Schema.Uint8Array,
-    Schema.URL
+    // Under the JSON and binary codecs a raw `URL` would serialize as a plain
+    // string, indistinguishable from the `Schema.String` member. Serialize it
+    // through the same `TaggedURL` instance instead, so the codecs see a
+    // single `{ _tag: "URL" }` member rather than two
+    Schema.URL.annotate({ toCodecJson: () => Schema.link<URL>()(TaggedURL, urlFromTaggedURL) })
   ])
 }).annotate({ identifier: "FilePart" })
 
@@ -777,7 +782,9 @@ export interface ToolResultPart extends BasePart<"tool-result", ToolResultPartOp
    */
   readonly isFailure: boolean
   /**
-   * The result returned by the tool execution.
+   * The result returned by the tool execution. Results of locally handled
+   * tools hold their JSON encoding; provider-executed tools keep the
+   * provider's payload.
    */
   readonly result: unknown
   /**
@@ -811,7 +818,9 @@ export interface ToolResultPartEncoded extends BasePartEncoded<"tool-result", To
    */
   readonly isFailure: boolean
   /**
-   * The result returned by the tool execution.
+   * The result returned by the tool execution. Results of locally handled
+   * tools hold their JSON encoding; provider-executed tools keep the
+   * provider's payload.
    */
   readonly result: unknown
   /**

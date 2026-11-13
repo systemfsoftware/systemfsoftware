@@ -20,6 +20,7 @@ import {
 import { KeyValueStore } from "effect/persistence"
 import { AsyncResult, Atom, AtomRegistry, Hydration, Reactivity } from "effect/reactivity"
 import { TestClock } from "effect/testing"
+import { inspect } from "node:util"
 import { collectGarbage, getGc } from "../utils/gc.ts"
 
 declare const global: any
@@ -438,7 +439,7 @@ describe("Atom", { concurrent: false }, () => {
     }
   })
 
-  it("runtime replacement", async () => {
+  it("runtime replacement via a layer initial value", async () => {
     const count = counterRuntime.atom(Counter.use((_) => _.get))
     const r = AtomRegistry.make({
       initialValues: [Atom.initialValue(counterRuntime.layer, CounterTest)]
@@ -448,7 +449,7 @@ describe("Atom", { concurrent: false }, () => {
     expect(result.value).toEqual(10)
   })
 
-  it("runtime replacement", async () => {
+  it("fnSync replacement via an initial value", async () => {
     const count = Atom.fnSync<number, number>((x) => x, { initialValue: 0 })
     const r = AtomRegistry.make({ initialValues: [Atom.initialValue(count, 10)] })
     const result = r.get(count)
@@ -867,6 +868,33 @@ describe("Atom", { concurrent: false }, () => {
     r.subscribe(derived, (value) => seen.push(value))
     r.set(a, 0)
     assert.deepStrictEqual(seen, [5])
+  })
+
+  it("a listener added to an uninitialized derived atom hears its changes", () => {
+    const count = Atom.make(0)
+    const doubled = Atom.map(count, (n) => n * 2)
+    const r = AtomRegistry.make()
+    const seen: Array<number> = []
+    r.subscribe(doubled, (value) => seen.push(value))
+    r.set(count, 1)
+    r.set(count, 2)
+    assert.deepStrictEqual(seen, [2, 4])
+  })
+
+  it("subscribing reports a dependency's finalizer error from a failed build", () => {
+    let failing = true
+    const parent = Atom.make((get) => {
+      if (!failing) return 0
+      get.addFinalizer(() => {
+        throw new Error("cleanup failed")
+      })
+      throw new Error("build failed")
+    })
+    const derived = Atom.map(parent, (n) => n)
+    const r = AtomRegistry.make()
+    assert.throws(() => r.get(derived), /build failed/)
+    failing = false
+    assert.throws(() => r.subscribe(derived, () => {}), /cleanup failed/)
   })
 
   it("recovers an observed dependent when its parent first succeeds after throwing", () => {
@@ -1361,10 +1389,10 @@ describe("Atom", { concurrent: false }, () => {
     }
   )
 
-  it("label", async () => {
-    expect(
-      Atom.make(0).pipe(Atom.withLabel("counter")).label![1]
-    ).toMatch(/Atom.test.ts:\d+:\d+/)
+  it("label", () => {
+    const makeCounter = () => Atom.make(0).pipe(Atom.withLabel("counter"))
+    const atom = makeCounter()
+    assert.match(inspect(atom), /makeCounter .*Atom\.test\.ts:\d+:\d+/)
   })
 
   it("batching", async () => {
@@ -1878,7 +1906,7 @@ describe("Atom", { concurrent: false }, () => {
     assert.deepStrictEqual(r.get(atom), Result.succeed(123))
   })
 
-  it("SubscriptionRef", async () => {
+  it("SubscriptionRef reflects updates made to the ref", async () => {
     vitest.useRealTimers()
     const ref = SubscriptionRef.make(123).pipe(Effect.runSync)
     const atom = Atom.subscriptionRef(ref)
@@ -1888,7 +1916,7 @@ describe("Atom", { concurrent: false }, () => {
     assert.deepStrictEqual(r.get(atom), 124)
   })
 
-  it("SubscriptionRef", async () => {
+  it("SubscriptionRef writes registry sets to the ref", async () => {
     vitest.useRealTimers()
     const ref = SubscriptionRef.make(0).pipe(Effect.runSync)
     const atom = Atom.subscriptionRef(ref)
