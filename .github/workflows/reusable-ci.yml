@@ -1,7 +1,6 @@
 name: CI (reusable)
 
-# One job per pull request, on a GitHub-hosted runner: public repositories never use a self-hosted runner, because a
-# fork pull request would run its code there. A pull request runs the repository's fast command; a Mergify queue
+# One job per pull request. A pull request runs the repository's fast command; a Mergify queue
 # draft (head ref `mergify/merge-queue/*`) and a push to main run its full command. The squash-message lint and the
 # changeset-intent check are steps of the same job, so a pull request pays the runner and Nix setup once. A pull
 # request that changes only documentation starts no Nix and still lints its squash message. A newer push to a pull request cancels its older run; main
@@ -46,7 +45,10 @@ permissions:
 jobs:
   check:
     name: check
-    runs-on: ubuntu-latest
+    # The repository's own visibility picks the runner and no caller can choose: a public repository always runs on a
+    # GitHub-hosted runner, because a fork pull request would run its code on a self-hosted one; a private repository
+    # runs on the self-hosted CI runners, which already carry Nix.
+    runs-on: ${{ github.event.repository.private && ((github.event_name == 'pull_request' && startsWith(github.head_ref, 'mergify/merge-queue/')) && fromJSON('["self-hosted", "merge-queue", "large"]') || (github.ref == 'refs/heads/main' && fromJSON('["self-hosted", "main-ci", "large"]')) || fromJSON('["self-hosted", "systemfsoftware-runner", "medium"]')) || 'ubuntu-latest' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -57,7 +59,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
+          # A blobless clone only on a hosted runner: the filter persists on a self-hosted runner (actions/checkout#2601).
+          filter: ${{ !github.event.repository.private && 'blob:none' || '' }}
           persist-credentials: false
       - id: scope
         name: Classify the change
@@ -87,7 +90,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --filter . --ignore-scripts
           pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
-      - if: steps.scope.outputs.docs != 'true'
+      - if: steps.scope.outputs.docs != 'true' && !github.event.repository.private
         uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
