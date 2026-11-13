@@ -1,8 +1,11 @@
 name: CI (reusable)
 
-# One job per pull request. A pull request runs the repository's fast command; a Mergify queue draft
-# (head ref `mergify/merge-queue/*`) and a push to main run its full command. The squash-message lint is a step of
-# the same job, so a pull request pays the runner and Nix setup once.
+# One job per pull request, on a GitHub-hosted runner: public repositories never use a self-hosted runner, because a
+# fork pull request would run its code there. A pull request runs the repository's fast command; a Mergify queue
+# draft (head ref `mergify/merge-queue/*`) and a push to main run its full command. The squash-message lint and the
+# changeset-intent check are steps of the same job, so a pull request pays the runner and Nix setup once. A pull
+# request that changes only documentation starts no Nix. A newer push to a pull request cancels its older run; main
+# and the queue drafts never cancel.
 on:
   workflow_call:
     inputs:
@@ -23,16 +26,15 @@ on:
         description: Lint the squash message in this job; the repository must carry `@commitlint/cli` and its config
         required: true
         type: boolean
+      changeset:
+        description: Require a change intent for every publishable-package change; the dev shell must provide `changeset-management`
+        required: true
+        type: boolean
       shell:
         description: Flake reference whose dev shell runs the commands
         required: false
         type: string
         default: .
-      runs-on:
-        description: JSON label list for the job
-        required: false
-        type: string
-        default: '["ubuntu-latest"]'
       timeout-minutes:
         required: false
         type: number
@@ -44,27 +46,45 @@ permissions:
 jobs:
   check:
     name: check
-    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') }}
     env:
       CI: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: ${{ runner.environment == 'github-hosted' && 'blob:none' || '' }}
+          filter: blob:none
           persist-credentials: false
-      - uses: cachix/install-nix-action@v31
+      - id: scope
+        name: Classify the change
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') }}
+        run: |
+          docs=false
+          if [ "$PULL_REQUEST" = true ] && ! git diff --name-only "$BASE" "$HEAD" | grep -qvE '(^docs/|\.md$)'; then
+            docs=true
+          fi
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.docs != 'true'
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             extra-substituters = https://nix.systemfsoftware.com
             extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-      - name: Install, lint the squash message, then run the checks
+      - if: steps.scope.outputs.docs != 'true'
+        name: Install, lint the squash message, check the change intent, then run the checks
         env:
           SHELL_REF: ${{ inputs.shell }}
           INSTALL: ${{ inputs.install }}
           COMMAND: ${{ (github.event_name != 'pull_request' || startsWith(github.head_ref, 'mergify/merge-queue/')) && inputs.full || inputs.fast }}
           LINT_COMMITS: ${{ inputs.commitlint && github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') && github.actor != 'dependabot[bot]' }}
+          CHECK_INTENT: ${{ inputs.changeset && github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main' }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -72,6 +92,9 @@ jobs:
             eval "$INSTALL"
             if [ "$LINT_COMMITS" = true ]; then
               pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
+            fi
+            if [ "$CHECK_INTENT" = true ]; then
+              changeset-management check "$BASE"
             fi
             eval "$COMMAND"
           '
