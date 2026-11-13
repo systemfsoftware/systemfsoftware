@@ -19,6 +19,10 @@ on:
         description: Command a Mergify queue draft and a push to main run, inside the dev shell
         required: true
         type: string
+      commitlint:
+        description: Lint the squash message in this job; the repository must carry `@commitlint/cli` and its config
+        required: true
+        type: boolean
       shell:
         description: Flake reference whose dev shell runs the commands
         required: false
@@ -60,7 +64,7 @@ jobs:
           SHELL_REF: ${{ inputs.shell }}
           INSTALL: ${{ inputs.install }}
           COMMAND: ${{ (github.event_name != 'pull_request' || startsWith(github.head_ref, 'mergify/merge-queue/')) && inputs.full || inputs.fast }}
-          LINT_COMMITS: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') && github.actor != 'dependabot[bot]' }}
+          LINT_COMMITS: ${{ inputs.commitlint && github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') && github.actor != 'dependabot[bot]' }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
