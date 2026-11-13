@@ -4,7 +4,7 @@ name: CI (reusable)
 # fork pull request would run its code there. A pull request runs the repository's fast command; a Mergify queue
 # draft (head ref `mergify/merge-queue/*`) and a push to main run its full command. The squash-message lint and the
 # changeset-intent check are steps of the same job, so a pull request pays the runner and Nix setup once. A pull
-# request that changes only documentation starts no Nix. A newer push to a pull request cancels its older run; main
+# request that changes only documentation starts no Nix and still lints its squash message. A newer push to a pull request cancels its older run; main
 # and the queue drafts never cancel.
 on:
   workflow_call:
@@ -71,6 +71,22 @@ jobs:
             docs=true
           fi
           echo "docs=$docs" >> "$GITHUB_OUTPUT"
+      # A documentation-only pull request still lints its squash message, which lands on main whatever the diff is, with
+      # the repository's own commitlint config and without Nix: only the root package's dependencies are installed.
+      - if: steps.scope.outputs.docs == 'true' && inputs.commitlint && github.actor != 'dependabot[bot]'
+        uses: pnpm/action-setup@v6
+      - if: steps.scope.outputs.docs == 'true' && inputs.commitlint && github.actor != 'dependabot[bot]'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - if: steps.scope.outputs.docs == 'true' && inputs.commitlint && github.actor != 'dependabot[bot]'
+        name: Lint the squash message
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pnpm install --frozen-lockfile --filter . --ignore-scripts
+          pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
       - if: steps.scope.outputs.docs != 'true'
         uses: cachix/install-nix-action@v31
         with:
