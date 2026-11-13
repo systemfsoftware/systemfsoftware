@@ -7,11 +7,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1794379792,
-        "narHash": "sha256-EYd70jOquVsDxzGqE7UBBv2uc2vrteC8Ssq9T8LtxV0=",
+        "lastModified": 1794548726,
+        "narHash": "sha256-tZ8LWVuUMyIolrJnFd6koGkNJr4qxK0i5A6zC2L062A=",
         "owner": "systemfsoftware",
         "repo": "comment-checker",
-        "rev": "b3d29d4fb389688e6fb022f98d100ce10b4981df",
+        "rev": "f3fd49afd0f14fdf629197f1ff54aacebefe8f1d",
         "type": "github"
       },
       "original": {
@@ -76,11 +76,11 @@
         "rust-overlay": "rust-overlay_6"
       },
       "locked": {
-        "lastModified": 1792993992,
-        "narHash": "sha256-p6Gc/rxr4yD3pAxC9XpJD6c3lI017b9l6KBUBFNGPYc=",
+        "lastModified": 1794548726,
+        "narHash": "sha256-tZ8LWVuUMyIolrJnFd6koGkNJr4qxK0i5A6zC2L062A=",
         "owner": "systemfsoftware",
         "repo": "comment-checker",
-        "rev": "45e50465ef36ec0f096f37882e16a535ddf6520a",
+        "rev": "f3fd49afd0f14fdf629197f1ff54aacebefe8f1d",
         "type": "github"
       },
       "original": {
@@ -137,11 +137,11 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1794376123,
-        "narHash": "sha256-/4OIWay19mcLcyLf5edCNPRia7rcTzSXKtzwAVcmxp0=",
+        "lastModified": 1794547008,
+        "narHash": "sha256-01i0ullU492Cr+nlOSYOWZ0D9M+Uzi23yLP9vIYXits=",
         "owner": "systemfsoftware",
         "repo": "gritlint",
-        "rev": "69523f15829b152ecc9528bbd30609169ca1fa5b",
+        "rev": "99ec456979b17dc82a64a52948e6d604ab892b80",
         "type": "github"
       },
       "original": {
@@ -312,11 +312,11 @@
     },
     "nixpkgs_5": {
       "locked": {
-        "lastModified": 1793110635,
-        "narHash": "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM=",
+        "lastModified": 1791191277,
+        "narHash": "sha256-i8KuaINOYLvB2oQikGvtRmdZRxATRxsI9Yad2pp7dEA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "31ecbaca1bdefa45dffc409f0250bd8039ea0010",
+        "rev": "aa48d347080940b8a2b8d2f48228674e280a3514",
         "type": "github"
       },
       "original": {
@@ -379,17 +379,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794413271,
-        "narHash": "sha256-5XOB3VCYNhok3ecmUN6zrQQQ7K1Bcv3lv6P+nL/HfSY=",
+        "lastModified": 1794548935,
+        "narHash": "sha256-RyWkHbKKZB4SiOJeaoAGsKseapGXysPs6/OcJk3cgpA=",
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "7c976f10f0233a671caa340c5b20f9c2acaab433",
+        "rev": "43f24b21b3c475acd03eb576bba6cf48d7ca8e2f",
         "type": "github"
       },
       "original": {
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "7c976f10f0233a671caa340c5b20f9c2acaab433",
+        "rev": "43f24b21b3c475acd03eb576bba6cf48d7ca8e2f",
         "type": "github"
       }
     },
