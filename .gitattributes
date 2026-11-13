@@ -1,3 +1,7 @@
 # The Actions runner unpacks this repository's archive for every `$/` action, and fails on a symlink whose target is
 # absent. Upstream worktrunk-scripts links CONSTITUTION-ARTICLES.md to a file its own vendored constitution lacks.
 /repos/worktrunk-scripts/CONSTITUTION-ARTICLES.md export-ignore
+# The vendored upstream subtrees under repos/ are 272 MB of 38,917 files that no flake, workflow or action reads. Every
+# `github:systemfsoftware/systemfsoftware` flake input and every `$/` action downloads and unpacks this archive on a
+# cold runner (SYS-1411), so the subtrees stay out of it.
+/repos/ export-ignore
