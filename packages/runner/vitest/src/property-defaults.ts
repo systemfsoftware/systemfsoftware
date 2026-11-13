@@ -10,5 +10,6 @@ import { propertyTestDefaults } from './internal/property/tiers.js'
 
 export { propertyTestDefaults }
 
-// The shared config lists this file for browser projects too, where no `process` exists; there the record is empty.
-Arbitrary.configureGlobal(propertyTestDefaults(typeof process === 'undefined' ? {} : process.env))
+const processEnvironment = () => ({ ...(typeof process === 'undefined' ? undefined : process.env) })
+
+Arbitrary.configureGlobal(propertyTestDefaults(processEnvironment()))
