@@ -10,27 +10,58 @@ type statementFactoryNamespace struct{}
 
 var StatementFactory = statementFactoryNamespace{}
 
+// StatementFactory_MutProps names a mutable variable with an optional type and
+// initializer.
+//
+// @evidence contracts/common.md#principled-implementation A mutable variable declaration needs a name and optionally a type and an initializer, and with neither it is typed any.
+// @evidence contracts/common.md#clear-and-simple-design A three-field argument record for Mut.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states the optional parts.
 type StatementFactory_MutProps struct {
-  Name        string
-  Type        *shimast.TypeNode
+  // Name is the identifier bound by the generated let statement.
+  Name string
+
+  // Type is optional; without it or an initializer the builder inserts any.
+  Type *shimast.TypeNode
+
+  // Initializer is optional and otherwise supplies inference for an omitted Type.
   Initializer *shimast.Expression
 }
 
+// StatementFactory_ConstantProps names a constant with an optional type and its
+// value.
+//
+// @evidence contracts/common.md#principled-implementation A constant declaration needs a name, an optional type and the value.
+// @evidence contracts/common.md#clear-and-simple-design A three-field argument record for Constant.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states the fields.
 type StatementFactory_ConstantProps struct {
-  Name  string
-  Type  *shimast.TypeNode
+  // Name is the identifier bound by the generated const statement.
+  Name string
+
+  // Type is omitted to let the compiler infer it from Value.
+  Type *shimast.TypeNode
+
+  // Value supplies the initializer required by ordinary executable const use.
   Value *shimast.Expression
 }
 
+// StatementFactory_EntryProps names the two bindings of the `[key, value]` array pattern of an entry declaration.
+//
+// @evidence contracts/common.md#principled-implementation An entry declaration destructures a `[key, value]` pair, so the two binding names are the whole argument.
+// @evidence contracts/common.md#clear-and-simple-design A two-field argument record for Entry.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states the two bindings.
 type StatementFactory_EntryProps struct {
-  Key   string
+  // Key names the first binding of the array pattern.
+  Key string
+
+  // Value names the second binding of the array pattern.
   Value string
 }
 
-var statementFactory_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (statementFactoryNamespace) Mut(props StatementFactory_MutProps, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(statementFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   typeNode := props.Type
   if typeNode == nil && props.Initializer == nil {
     typeNode = TypeFactory.Keyword("any", emit...)
@@ -51,7 +82,7 @@ func (statementFactoryNamespace) Mut(props StatementFactory_MutProps, emit ...*s
 }
 
 func (statementFactoryNamespace) Constant(props StatementFactory_ConstantProps, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(statementFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   typeNode := props.Type
   if typeNode == nil && props.Value == nil {
     typeNode = TypeFactory.Keyword("any", emit...)
@@ -72,7 +103,7 @@ func (statementFactoryNamespace) Constant(props StatementFactory_ConstantProps, 
 }
 
 func (statementFactoryNamespace) Entry(props StatementFactory_EntryProps, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(statementFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   key := f.NewBindingElement(
     nil,
     nil,
@@ -97,14 +128,14 @@ func (statementFactoryNamespace) Entry(props StatementFactory_EntryProps, emit .
 }
 
 func (statementFactoryNamespace) Transpile(script string, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(statementFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewExpressionStatement(
     f.NewIdentifier(script),
   )
 }
 
 func (statementFactoryNamespace) Block(expression *shimast.Expression, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(statementFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBlock(
     f.NewNodeList([]*shimast.Node{
       f.NewExpressionStatement(expression),

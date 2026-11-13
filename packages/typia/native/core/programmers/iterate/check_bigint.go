@@ -8,14 +8,28 @@ import (
   nativemetadata "github.com/samchon/typia/packages/typia/native/core/schemas/metadata"
 )
 
+// Check_bigintProps is the argument record of Check_bigint, which builds the
+// check entry of a bigint atomic.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of Check_bigint, which builds the check entry of a bigint atomic; its 3 fields (Context, Atomic, Input) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type Check_bigintProps struct {
   Context nativecontext.ITypiaContext
   Atomic  *nativemetadata.MetadataAtomic
   Input   *shimast.Expression
 }
 
+// Check_bigint builds the check entry of a bigint atomic: a `typeof input ===
+// "bigint"` guard plus the atomic's type-tag conditions.
+//
+// @evidence contracts/common.md#principled-implementation It builds the check entry of a bigint atomic: a `typeof input === "bigint"` guard plus the atomic's type-tag conditions.
+// @evidence contracts/common.md#clear-and-simple-design One exported function; the pieces that repeat live in private helpers of the same file.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Its inputs are its arguments and the context they carry, and it keeps no state of its own.
+// @evidence contracts/common.md#meaningful-documentation The doc states what it builds.
 func Check_bigint(props Check_bigintProps) nativehelpers.ICheckEntry {
-  f := nativecontext.EmitFactoryOf(check_bigint_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   conditions := check_bigint_type_tags(props)
   return nativehelpers.ICheckEntry{
     Expected: props.Atomic.GetName(),
@@ -72,7 +86,5 @@ func check_bigint_transpile(context nativecontext.ITypiaContext, script string) 
   return nativefactories.ExpressionFactory.Transpile(nativefactories.ExpressionFactory_TranspileProps{
     Importer: importer,
     Script:   script,
-  })
+  }, context.Emit)
 }
-
-var check_bigint_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})

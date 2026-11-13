@@ -15,20 +15,47 @@ type validateProgrammerNamespace struct{}
 
 var ValidateProgrammer = validateProgrammerNamespace{}
 
+// ValidateProgrammer_IConfig selects the generator's variants: Equals is the
+// strict form that also rejects properties the type does not declare and
+// StandardSchema is whether the validator is wrapped as a Standard Schema
+// object.
+//
+// @evidence contracts/common.md#principled-implementation Each variant of the generator is one boolean or option on a record, so the transformers pick a form by naming the field and no second code path is copied.
+// @evidence contracts/common.md#clear-and-simple-design A record of 2 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states what each field selects.
 type ValidateProgrammer_IConfig struct {
   Equals         bool
   StandardSchema bool
 }
 
+// ValidateProgrammer_IProps is the input of Write for the validate generator:
+// Context (the transform context), Modulo (the call's callee expression), Type
+// (the type to generate for), Name (an optional type name) and Config (the
+// configuration).
+//
+// @evidence contracts/common.md#principled-implementation Write needs the transform context, the call's callee expression, the type to generate for, an optional type name and the configuration, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 5 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type ValidateProgrammer_IProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
   Type    *nativechecker.Type
   Name    *string
-  Init    *shimast.Node
   Config  ValidateProgrammer_IConfig
 }
 
+// ValidateProgrammer_DecomposeProps is the input of Decompose for the validate
+// generator: Context (the transform context), Modulo (the call's callee
+// expression), Functor (the collector of the helper functions that the generator
+// emits), Config (the configuration), Type (the type to generate for) and Name
+// (an optional type name).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs the transform context, the call's callee expression, the collector of the helper functions that the generator emits, the configuration, the type to generate for and an optional type name, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 6 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type ValidateProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
@@ -38,10 +65,8 @@ type ValidateProgrammer_DecomposeProps struct {
   Name    *string
 }
 
-var validateProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (validateProgrammerNamespace) Decompose(props ValidateProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   is := IsProgrammer.Decompose(IsProgrammer_DecomposeProps{
     Context: props.Context,
     Functor: props.Functor,
@@ -182,12 +207,12 @@ func (validateProgrammerNamespace) Write(props ValidateProgrammer_IProps) *shima
   })
   var wrapper func(arrow *shimast.Node) *shimast.Node
   if props.Config.StandardSchema {
-    f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+    f := nativecontext.NodeFactoryOf(props.Context.Emit)
     wrapper = func(arrow *shimast.Node) *shimast.Node {
       return f.NewCallExpression(validateProgrammer_internal(props.Context, "createStandardSchema"), nil, nil, f.NewNodeList([]*shimast.Node{arrow}), shimast.NodeFlagsNone)
     }
   }
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:        props.Modulo,
     Functor:       functor,
     Result:        result,
@@ -196,7 +221,7 @@ func (validateProgrammerNamespace) Write(props ValidateProgrammer_IProps) *shima
 }
 
 func validateProgrammer_atomist(props ValidateProgrammer_DecomposeProps) func(next nativeinternal.CheckerProgrammer_AtomistProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return func(next nativeinternal.CheckerProgrammer_AtomistProps) *shimast.Node {
     expressions := []*shimast.Node{}
     if next.Entry.Expression != nil {
@@ -238,7 +263,7 @@ func validateProgrammer_combine(props struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
 }) nativeinternal.CheckerProgrammer_IConfig_Combiner {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return func(next nativeinternal.CheckerProgrammer_CombinerProps) *shimast.Node {
     if next.Explore.Tracable == false {
       options := &IsProgrammer_CONFIG_IOptions{
@@ -287,7 +312,7 @@ type validateProgrammer_validateObjectProps struct {
 }
 
 func validateProgrammer_validate_object(props validateProgrammer_validateObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return nativeiterate.Check_object(nativeiterate.Check_objectProps{
     Config: nativeiterate.Check_object_IConfig{
       Equals:    props.Config.Equals,
@@ -338,13 +363,13 @@ func validateProgrammer_validate_object(props validateProgrammer_validateObjectP
 }
 
 func validateProgrammer_joiner(props ValidateProgrammer_DecomposeProps) nativeinternal.CheckerProgrammer_IConfig_IJoiner {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return nativeinternal.CheckerProgrammer_IConfig_IJoiner{
     Object: func(v nativeinternal.CheckerProgrammer_JoinerObjectProps) *shimast.Node {
       return validateProgrammer_validate_object(validateProgrammer_validateObjectProps{Context: props.Context, Functor: props.Functor, Config: props.Config, Entries: v.Entries, Input: v.Input})
     },
     Array: func(v nativeinternal.CheckerProgrammer_JoinerArrayProps) *shimast.Node {
-      return nativeiterate.Check_everything(f.NewCallExpression(nativefactories.IdentifierFactory.Access(props.Context.Emit, v.Input, "map"), nil, nil, f.NewNodeList([]*shimast.Node{v.Arrow}), shimast.NodeFlagsNone))
+      return nativeiterate.Check_everything(f.NewCallExpression(nativefactories.IdentifierFactory.Access(props.Context.Emit, v.Input, "map"), nil, nil, f.NewNodeList([]*shimast.Node{v.Arrow}), shimast.NodeFlagsNone), props.Context.Emit)
     },
     Failure: func(next nativeinternal.CheckerProgrammer_JoinerFailureProps) *shimast.Node {
       explore := nativeinternal.FeatureProgrammer_IExplore{}
@@ -354,13 +379,13 @@ func validateProgrammer_joiner(props ValidateProgrammer_DecomposeProps) nativein
       return validateProgrammer_create_report_call(validateProgrammer_createReportCallProps{Exceptionable: validateProgrammer_exceptionable(explore, props.Context.Emit), Path: validateProgrammer_path(explore, props.Context.Emit), Expected: next.Expected, Value: next.Input, Functor: props.Functor, Emit: props.Context.Emit})
     },
     Tuple: func(binaries []*shimast.Node) *shimast.Node {
-      return nativeiterate.Check_everything(f.NewArrayLiteralExpression(f.NewNodeList(binaries), true))
+      return nativeiterate.Check_everything(f.NewArrayLiteralExpression(f.NewNodeList(binaries), true), props.Context.Emit)
     },
   }
 }
 
 func validateProgrammer_create_output(emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return nativefactories.ExpressionFactory.Conditional(
     f.NewIdentifier("success"),
     f.NewObjectLiteralExpression(f.NewNodeList([]*shimast.Node{
@@ -387,7 +412,7 @@ type validateProgrammer_createReportCallProps struct {
 }
 
 func validateProgrammer_create_report_call(props validateProgrammer_createReportCallProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   exceptionable := props.Exceptionable
   if exceptionable == nil {
     exceptionable = f.NewIdentifier("_exceptionable")
@@ -413,7 +438,7 @@ func validateProgrammer_create_report_call(props validateProgrammer_createReport
 }
 
 func validateProgrammer_expected_expression(props validateProgrammer_createReportCallProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if props.Functor == nil || len(props.Expected) < 128 {
     return f.NewStringLiteral(props.Expected, shimast.TokenFlagsNone)
   }
@@ -434,7 +459,7 @@ func validateProgrammer_reduce(expressions []*shimast.Node, operator shimast.Kin
 }
 
 func validateProgrammer_binary(left *shimast.Expression, operator shimast.Kind, right *shimast.Expression, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(operator), right)
 }
 
@@ -447,17 +472,17 @@ func validateProgrammer_or(left *shimast.Expression, right *shimast.Expression, 
 }
 
 func validateProgrammer_property(name string, value *shimast.Expression, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewPropertyAssignment(nil, nativefactories.IdentifierFactory.Identifier(name, emit), nil, nil, value)
 }
 
 func validateProgrammer_shorthand(name string, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewShorthandPropertyAssignment(nil, nativefactories.IdentifierFactory.Identifier(name, emit), nil, nil, nil, nil)
 }
 
 func validateProgrammer_exceptionable(explore nativeinternal.FeatureProgrammer_IExplore, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   if explore.From == "top" || explore.Source == "top" {
     return f.NewKeywordExpression(shimast.KindTrueKeyword)
   }
@@ -465,7 +490,7 @@ func validateProgrammer_exceptionable(explore nativeinternal.FeatureProgrammer_I
 }
 
 func validateProgrammer_path(explore nativeinternal.FeatureProgrammer_IExplore, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   if explore.Postfix != "" {
     return f.NewIdentifier("_path + " + explore.Postfix)
   }
@@ -473,7 +498,7 @@ func validateProgrammer_path(explore nativeinternal.FeatureProgrammer_IExplore, 
 }
 
 func validateProgrammer_type_reference(context nativecontext.ITypiaContext, typ *nativechecker.Type, name *string) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   if name != nil {
     return f.NewTypeReferenceNode(f.NewIdentifier(*name), nil)
   }
@@ -484,7 +509,7 @@ func validateProgrammer_import_type(context nativecontext.ITypiaContext, props n
   if importer := context.Importer; importer != nil {
     return importer.Type(props)
   }
-  f := nativecontext.EmitFactoryOf(validateProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   if str, ok := props.Name.(string); ok {
     return f.NewTypeReferenceNode(f.NewIdentifier(str), nil)
   }
@@ -495,7 +520,7 @@ func validateProgrammer_internal(context nativecontext.ITypiaContext, name strin
   if importer := context.Importer; importer != nil {
     return importer.Internal(name)
   }
-  return nativecontext.EmitFactoryOf(validateProgrammer_factory, context.Emit).NewIdentifier(name)
+  return nativecontext.NodeFactoryOf(context.Emit).NewIdentifier(name)
 }
 
 func validateProgrammer_bool_ptr(value bool) *bool {

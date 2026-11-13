@@ -20,19 +20,45 @@ type llmEvaluationProgrammerNamespace struct{}
 // LlmEvaluationProgrammer writes `typia.llm.evaluation<T>()`.
 //
 // The emitted code is one call to the `_createLlmEvaluation` runtime helper
-// with a compile-time plan: one entry per decision leaf of `T`, carrying its
-// property path, question text, and probability requirements. The helper
+// with the configured decimals and a compile-time plan: one entry per decision
+// leaf of `T`, carrying its property path, question text, and probability
+// requirements. The helper
 // derives both the question map and the checked decoder from that plan,
 // so the question-key encoding has a single owner at runtime.
 var LlmEvaluationProgrammer = llmEvaluationProgrammerNamespace{}
 
+// LlmEvaluationProgrammer_IWriteProps is the argument record of
+// LlmEvaluationProgrammer.Write, which builds the evaluation function of a
+// decision type.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of LlmEvaluationProgrammer.Write, which builds the evaluation function of a decision type; its 4 fields (Context, Metadata, Name, Config) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type LlmEvaluationProgrammer_IWriteProps struct {
   Context  nativecontext.ITypiaContext
   Metadata *schemametadata.MetadataSchema
   Name     *string
+  Config   LlmEvaluationProgrammer_IConfig
+}
+
+// LlmEvaluationProgrammer_IConfig is `ILlmEvaluation.IConfig`: the decimal
+// places of the evaluation model's answers, two by default.
+//
+// @evidence contracts/common.md#principled-implementation It is the configuration of the evaluation function, which is the number of decimal places of the evaluation model's answers; its 1 fields (Decimals) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 1-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
+type LlmEvaluationProgrammer_IConfig struct {
+  Decimals int
 }
 
 // LlmEvaluationProgrammer_IError is one rejected position of the decision type.
+//
+// @evidence contracts/common.md#principled-implementation It is one rejected position of the decision type, with its validation path and its message; its 2 fields (Accessor, Message) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 2-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type LlmEvaluationProgrammer_IError struct {
   // Accessor is the typia validation path of the position, like
   // `$input.refund.requested`.
@@ -40,24 +66,24 @@ type LlmEvaluationProgrammer_IError struct {
   Message  string
 }
 
-var llmEvaluationProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
-// Write emits `_createLlmEvaluation(plan) as ILlmEvaluation<T>`. The metadata
-// must already have passed Compose without errors.
+// Write emits `_createLlmEvaluation(plan, decimals) as ILlmEvaluation<T>`.
+// The metadata must already have passed Compose without errors.
 func (llmEvaluationProgrammerNamespace) Write(props LlmEvaluationProgrammer_IWriteProps, plan []any) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(llmEvaluationProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   typeName := "unknown"
   if props.Name != nil {
     typeName = *props.Name
   }
+  arguments := []*shimast.Node{
+    nativefactories.LiteralFactory.Write(plan, props.Context.Emit),
+  }
+  arguments = append(arguments, nativefactories.LiteralFactory.Write(float64(props.Config.Decimals), props.Context.Emit))
   return f.NewAsExpression(
     f.NewCallExpression(
       llmProgrammer_internal(props.Context, "createLlmEvaluation"),
       nil,
       nil,
-      f.NewNodeList([]*shimast.Node{
-        nativefactories.LiteralFactory.Write(plan, props.Context.Emit),
-      }),
+      f.NewNodeList(arguments),
       shimast.NodeFlagsNone,
     ),
     llmProgrammer_import_type(props.Context, nativecontext.ImportProgrammer_TypeProps{
@@ -70,8 +96,9 @@ func (llmEvaluationProgrammerNamespace) Write(props LlmEvaluationProgrammer_IWri
 
 // Compose walks the decision type and returns the evaluation plan, or every
 // position an evaluation model cannot answer.
-func (llmEvaluationProgrammerNamespace) Compose(metadata *schemametadata.MetadataSchema) ([]any, []LlmEvaluationProgrammer_IError) {
+func (llmEvaluationProgrammerNamespace) Compose(metadata *schemametadata.MetadataSchema, config LlmEvaluationProgrammer_IConfig) ([]any, []LlmEvaluationProgrammer_IError) {
   composer := &llmEvaluationComposer{
+    config:  config,
     plan:    []any{},
     visited: map[*schemametadata.MetadataObjectType]bool{},
   }
@@ -95,6 +122,7 @@ func (llmEvaluationProgrammerNamespace) Message(errors []LlmEvaluationProgrammer
 }
 
 type llmEvaluationComposer struct {
+  config  LlmEvaluationProgrammer_IConfig
   plan    []any
   errors  []LlmEvaluationProgrammer_IError
   visited map[*schemametadata.MetadataObjectType]bool
@@ -228,10 +256,19 @@ func (c *llmEvaluationComposer) property(property *schemametadata.MetadataProper
       c.fail(accessor, "LLM evaluation boolean has both tags.Probability and @probability; keep only one.")
       return
     }
+    // rows are union alternatives, so `(true & A) | false` or
+    // `(true & A) | (false & B)` states no single threshold
+    if found && len(value.Atomics[0].Tags) > 1 {
+      c.fail(accessor, "LLM evaluation boolean has different tags.Probability on true and false; put one on boolean.")
+      return
+    }
     if found {
       threshold = tagged
     } else if hasFallback {
       threshold = fallback
+    }
+    if found || hasFallback {
+      c.grid(accessor, threshold)
     }
     leaf["threshold"] = threshold
   case "choice", "score", "set":
@@ -240,6 +277,24 @@ func (c *llmEvaluationComposer) property(property *schemametadata.MetadataProper
       constant = llmEvaluation_unalias(value.Arrays[0].Type.Value).Constants
     }
     entries := constant[0].Values
+    // TypeSafe's Jev rejects a choice above 255 options and a score above 10
+    // levels, so a larger one only fails when the provider is called
+    if kind == "choice" && len(entries) > llmEvaluation_maxChoiceOptions {
+      c.fail(accessor, fmt.Sprintf(
+        "LLM evaluation does not support a choice of %d options, because an evaluation model accepts at most %d.",
+        len(entries),
+        llmEvaluation_maxChoiceOptions,
+      ))
+      return
+    }
+    if kind == "score" && len(entries) > llmEvaluation_maxScoreLevels {
+      c.fail(accessor, fmt.Sprintf(
+        "LLM evaluation does not support a score of %d levels, because an evaluation model accepts at most %d.",
+        len(entries),
+        llmEvaluation_maxScoreLevels,
+      ))
+      return
+    }
     if kind == "score" {
       entries = append([]*schemametadata.MetadataConstantValue{}, entries...)
       sort.SliceStable(entries, func(i, j int) bool {
@@ -248,12 +303,23 @@ func (c *llmEvaluationComposer) property(property *schemametadata.MetadataProper
         return left < right
       })
     }
+    // the property default is one declaration however many members inherit it
+    if hasFallback {
+      c.grid(accessor, fallback)
+    }
     members := make([]any, 0, len(entries))
     hasMemberRequirement := false
     missingRequirements := make([]*schemametadata.MetadataConstantValue, 0)
     for _, entry := range entries {
       if message := llmEvaluation_unsupported_tags(entry.Tags); message != "" {
         c.fail(accessor, fmt.Sprintf("%s (member %s)", message, llmEvaluation_value_text(entry.Value)))
+        continue
+      }
+      if entry.Duplicated {
+        c.fail(accessor, fmt.Sprintf(
+          "LLM evaluation does not support enum members or literals sharing the value %s, because their descriptions and probability requirements would collide.",
+          llmEvaluation_value_text(entry.Value),
+        ))
         continue
       }
       member := map[string]any{"value": llmEvaluation_value(entry.Value)}
@@ -267,7 +333,9 @@ func (c *llmEvaluationComposer) property(property *schemametadata.MetadataProper
         c.fail(accessor, fmt.Sprintf("%s (member %s)", message, llmEvaluation_value_text(entry.Value)))
         continue
       }
-      if found == false && hasFallback {
+      if found {
+        c.grid(accessor, requirement)
+      } else if hasFallback {
         requirement, found = fallback, true
       }
       if found {
@@ -296,6 +364,28 @@ func (c *llmEvaluationComposer) property(property *schemametadata.MetadataProper
     leaf[map[string]string{"choice": "options", "score": "levels", "set": "members"}[kind]] = members
   }
   c.plan = append(c.plan, leaf)
+}
+
+// The largest choice and score TypeSafe's API accepts.
+const (
+  llmEvaluation_maxChoiceOptions = 255
+  llmEvaluation_maxScoreLevels   = 10
+)
+
+// grid rejects a declared probability requirement finer than the configured
+// `decimals`, because the model's answers never resolve it. A
+// default the author did not write is never checked.
+func (c *llmEvaluationComposer) grid(accessor string, number float64) {
+  decimals := c.config.Decimals
+  scale := math.Pow10(decimals)
+  if math.Abs(number*scale-math.Round(number*scale)) <= 1e-9 {
+    return
+  }
+  c.fail(accessor, fmt.Sprintf(
+    "LLM evaluation probability requirement must use at most %d decimal places, the configured decimals, but got %s.",
+    decimals,
+    strconv.FormatFloat(number, 'f', -1, 64),
+  ))
 }
 
 // A decoded value is trusted as T, so every tag with a validation meaning

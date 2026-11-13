@@ -15,15 +15,32 @@ type httpQueryProgrammerNamespace struct{}
 
 var HttpQueryProgrammer = httpQueryProgrammerNamespace{}
 
+// HttpQueryProgrammer_IProps is the argument record of
+// HttpQueryProgrammer.Write, which builds the query decoder.
+// AllowOptional permits an optional target query type when all properties are
+// optional; it does not make the decoder input optional.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpQueryProgrammer.Write, which builds the query decoder; its 5 fields (Context, Modulo, Type, Name, AllowOptional) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type HttpQueryProgrammer_IProps struct {
   Context       nativecontext.ITypiaContext
   Modulo        *shimast.Node
   Type          *shimchecker.Type
   Name          *string
-  Init          *shimast.Node
   AllowOptional bool
 }
 
+// HttpQueryProgrammer_DecomposeProps is the argument record of
+// HttpQueryProgrammer.Decompose, which builds the query decoder.
+// AllowOptional permits an optional target query type when all properties are
+// optional; it does not make the decoder input optional.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpQueryProgrammer.Decompose, which builds the query decoder; its 6 fields (Context, Functor, AllowOptional, Type, Name, Missing) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type HttpQueryProgrammer_DecomposeProps struct {
   Context       nativecontext.ITypiaContext
   Functor       *nativehelpers.FunctionProgrammer
@@ -40,10 +57,8 @@ type HttpQueryProgrammer_DecomposeProps struct {
   Missing bool
 }
 
-var httpQueryProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (httpQueryProgrammerNamespace) Decompose(props HttpQueryProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   collection := schemametadata.NewMetadataCollection()
   result := nativefactories.MetadataFactory.Analyze(nativefactories.MetadataFactory_IProps{
     Checker: props.Context.Checker,
@@ -136,7 +151,7 @@ func (httpQueryProgrammerNamespace) Write(props HttpQueryProgrammer_IProps) *shi
     Name:          props.Name,
     Missing:       true,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -216,7 +231,7 @@ func httpQueryProgrammer_decode_object(props struct {
   Object  *schemametadata.MetadataObjectType
   Missing bool
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   input := f.NewIdentifier("input")
   output := f.NewIdentifier("output")
   properties := make([]*shimast.Node, 0, len(props.Object.Properties))
@@ -269,7 +284,7 @@ func httpQueryProgrammer_decode_regular_property(props struct {
   Property *schemametadata.MetadataProperty
   Missing  bool
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   key := httpProgrammer_property_key(props.Property)
   value := props.Property.Value
   typ, isArray := httpProgrammer_decode_type(value, false)
@@ -373,7 +388,7 @@ func httpQueryProgrammer_decode_value(props struct {
   Coalesce bool
   Input    *shimast.Node
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   call := f.NewCallExpression(
     httpParameterProgrammer_internal(props.Context, "httpQueryRead"+httpParameterProgrammer_capitalize(props.Type)),
     nil,
@@ -394,7 +409,7 @@ func httpQueryProgrammer_decode_value(props struct {
 }
 
 func httpQueryProgrammer_assert_required_value(key string, input *shimast.Node, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   value := f.NewIdentifier("value")
   return f.NewCallExpression(
     f.NewArrowFunction(
@@ -431,7 +446,7 @@ func httpQueryProgrammer_assert_required_value(key string, input *shimast.Node, 
 }
 
 func httpQueryProgrammer_missing_error(key string, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewNewExpression(
     f.NewIdentifier("Error"),
     nil,
@@ -446,7 +461,7 @@ func httpQueryProgrammer_decode_array(props struct {
   Metadata *schemametadata.MetadataSchema
   Input    *shimast.Node
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpQueryProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Metadata.Nullable == false && props.Metadata.IsRequired() == true {
     return props.Input
   }

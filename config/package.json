@@ -1,10 +1,10 @@
 {
   "private": true,
   "name": "@typia/config",
-  "version": "15.0.1",
+  "version": "15.4.0",
   "description": "Shared build configuration for typia packages",
   "devDependencies": {
-    "@ttsc/unplugin": "catalog:typescript",
+    "@ttsc/unplugin": "catalog:samchon",
     "tinyglobby": "^0.2.12"
   }
 }

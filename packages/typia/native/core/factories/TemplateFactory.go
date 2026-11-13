@@ -12,15 +12,23 @@ type templateFactoryNamespace struct{}
 
 var TemplateFactory = templateFactoryNamespace{}
 
+// TemplateFactory_IIterator is the running state of a template build: the literal
+// text gathered for the current literal segment and the next expression index.
+//
+// @evidence contracts/common.md#principled-implementation Generate alternates literal segments and expressions; gather replaces Value with the current consecutive string-literal segment and advances Index to its following expression or the end.
+// @evidence contracts/common.md#clear-and-simple-design A two-field record shared by the generate and gather functions.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states the two fields.
 type TemplateFactory_IIterator struct {
+  // Value is the current consecutive string-literal segment, replaced by gather.
   Value string
+
+  // Index is the next unconsumed expression position, or the input length.
   Index int
 }
 
-var templateFactory_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (templateFactoryNamespace) Generate(expressions []*shimast.Expression, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(templateFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   allString := true
   for _, exp := range expressions {
     if !shimast.IsStringLiteral(exp) {

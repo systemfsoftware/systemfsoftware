@@ -14,35 +14,86 @@ type functionalIsParametersProgrammerNamespace struct{}
 
 var FunctionalIsParametersProgrammer = functionalIsParametersProgrammerNamespace{}
 
+// FunctionalIsParametersProgrammer_IConfig selects the generator's variants:
+// Equals is the strict form that also rejects properties the type does not
+// declare.
+//
+// @evidence contracts/common.md#principled-implementation Each variant of the generator is one boolean or option on a record, so the transformers pick a form by naming the field and no second code path is copied.
+// @evidence contracts/common.md#clear-and-simple-design A record of 1 field.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states what each field selects.
 type FunctionalIsParametersProgrammer_IConfig struct {
+  // Equals rejects surplus properties in addition to checking declared values.
   Equals bool
 }
 
+// FunctionalIsParametersProgrammer_IProps is the input of Write for the is
+// parameters generator: Context (the transform context), Modulo (the call's
+// callee expression), Config (the configuration), Declaration (the function
+// declaration) and Expression (the function expression).
+//
+// @evidence contracts/common.md#principled-implementation Write needs the transform context, the call's callee expression, the configuration, the function declaration and the function expression, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 5 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type FunctionalIsParametersProgrammer_IProps struct {
-  Context     nativecontext.ITypiaContext
-  Modulo      *shimast.Node
-  Config      FunctionalIsParametersProgrammer_IConfig
+  // Context borrows the checker, emitter and importer for this transform.
+  Context nativecontext.ITypiaContext
+
+  // Modulo identifies the typia call for helper naming and diagnostics.
+  Modulo *shimast.Node
+
+  // Config selects ordinary validation or rejection of surplus properties.
+  Config FunctionalIsParametersProgrammer_IConfig
+
+  // Declaration supplies parameter bindings and the checker return signature.
   Declaration *shimast.Node
-  Expression  *shimast.Node
-  Init        *shimast.Node
+
+  // Expression is the original callable, invoked with the wrapper receiver.
+  Expression *shimast.Node
 }
 
+// FunctionalIsParametersProgrammer_IDecomposeProps is the input of Decompose for
+// the is parameters generator: Context (the transform context), Config (the
+// configuration), Modulo (the call's callee expression) and Declaration (the
+// function declaration).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs the transform context, the configuration, the call's callee expression and the function declaration, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 4 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type FunctionalIsParametersProgrammer_IDecomposeProps struct {
-  Context     nativecontext.ITypiaContext
-  Config      FunctionalIsParametersProgrammer_IConfig
-  Modulo      *shimast.Node
+  // Context borrows the checker, emitter and importer for this transform.
+  Context nativecontext.ITypiaContext
+
+  // Config selects ordinary validation or rejection of surplus properties.
+  Config FunctionalIsParametersProgrammer_IConfig
+
+  // Modulo identifies the typia call for helper naming and diagnostics.
+  Modulo *shimast.Node
+
+  // Declaration supplies parameter bindings and the checker return signature.
   Declaration *shimast.Node
 }
 
+// FunctionalIsParametersProgrammer_IDecomposeOutput is what the generator
+// returns: Functions is the helper function statements and Statements is the
+// body statements.
+//
+// @evidence contracts/common.md#principled-implementation The generator returns its pieces separately so the caller can place helper functions, statements and values where its own wrapper needs them.
+// @evidence contracts/common.md#clear-and-simple-design A record of 2 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states each returned part.
 type FunctionalIsParametersProgrammer_IDecomposeOutput struct {
-  Functions  []*shimast.Node
+  // Functions contains helper declarations placed outside the returned wrapper.
+  Functions []*shimast.Node
+
+  // Statements contains ordered checks and returns inside the wrapper body.
   Statements []*shimast.Node
 }
 
-var functionalIsProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (functionalIsParametersProgrammerNamespace) Write(props FunctionalIsParametersProgrammer_IProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := functionalinternal.FunctionalGeneralProgrammer.GetReturnType(functionalinternal.FunctionalGeneralProgrammer_IProps{
     Checker:     props.Context.Checker,
     Declaration: props.Declaration,
@@ -81,7 +132,7 @@ func (functionalIsParametersProgrammerNamespace) Write(props FunctionalIsParamet
 }
 
 func (functionalIsParametersProgrammerNamespace) Decompose(props FunctionalIsParametersProgrammer_IDecomposeProps) FunctionalIsParametersProgrammer_IDecomposeOutput {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   parameters := functionalIsProgrammer_parameterNodes(props.Declaration)
   functions := make([]*shimast.Node, 0, len(parameters))
   statements := []*shimast.Node{}
@@ -123,7 +174,7 @@ func (functionalIsParametersProgrammerNamespace) Decompose(props FunctionalIsPar
 
 func functionalIsProgrammer_parameters(declaration *shimast.Node, emit ...*shimprinter.EmitContext) *shimast.ParameterList {
   if declaration == nil || declaration.FunctionLikeData() == nil || declaration.FunctionLikeData().Parameters == nil {
-    return nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, emit...).NewNodeList(nil)
+    return nativecontext.NodeFactoryOf(emit...).NewNodeList(nil)
   }
   return declaration.FunctionLikeData().Parameters
 }
@@ -150,7 +201,7 @@ func functionalIsProgrammer_function(
   returnType *shimast.Node,
   body *shimast.Node,
 ) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   return f.NewFunctionExpression(
     functionalIsProgrammer_asyncModifiers(async, context.Emit),
     nil,
@@ -164,7 +215,7 @@ func functionalIsProgrammer_function(
 }
 
 func functionalIsProgrammer_call(context nativecontext.ITypiaContext, expression *shimast.Node, declaration *shimast.Node) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   return f.NewCallExpression(
     nativefactories.IdentifierFactory.Access(context.Emit, f.NewIdentifier("Reflect"), "apply"),
     nil,
@@ -179,7 +230,7 @@ func functionalIsProgrammer_call(context nativecontext.ITypiaContext, expression
 }
 
 func functionalIsProgrammer_parameterIdentifiers(declaration *shimast.Node, emit ...*shimprinter.EmitContext) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   parameters := functionalIsProgrammer_parameterNodes(declaration)
   output := make([]*shimast.Node, 0, len(parameters))
   for _, p := range parameters {
@@ -198,7 +249,7 @@ func functionalIsProgrammer_parameterIdentifiers(declaration *shimast.Node, emit
 // functionalIsProgrammer_parameterName gives it: the wrapper validates and
 // forwards the whole argument, and a pattern names no single value.
 func functionalIsProgrammer_wrapperParameters(declaration *shimast.Node, emit ...*shimprinter.EmitContext) *shimast.ParameterList {
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   list := functionalIsProgrammer_parameters(declaration, emit...)
   if list == nil {
     return list
@@ -304,7 +355,7 @@ func functionalIsProgrammer_asyncModifiers(async bool, emit ...*shimprinter.Emit
   if async == false {
     return nil
   }
-  f := nativecontext.EmitFactoryOf(functionalIsProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewModifierList([]*shimast.Node{
     f.NewModifier(shimast.KindAsyncKeyword),
   })

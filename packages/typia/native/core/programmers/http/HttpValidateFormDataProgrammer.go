@@ -14,6 +14,14 @@ type httpValidateFormDataProgrammerNamespace struct{}
 
 var HttpValidateFormDataProgrammer = httpValidateFormDataProgrammerNamespace{}
 
+// HttpValidateFormDataProgrammer_DecomposeProps is the argument record of
+// HttpValidateFormDataProgrammer.Decompose, which builds the form-data decoder
+// that returns an IValidation.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpValidateFormDataProgrammer.Decompose, which builds the form-data decoder that returns an IValidation; its 5 fields (Context, Modulo, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type HttpValidateFormDataProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
@@ -21,8 +29,6 @@ type HttpValidateFormDataProgrammer_DecomposeProps struct {
   Type    *shimchecker.Type
   Name    *string
 }
-
-var httpValidateProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (httpValidateFormDataProgrammerNamespace) Decompose(props HttpValidateFormDataProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   validate := nativeprogrammers.ValidateProgrammer.Decompose(nativeprogrammers.ValidateProgrammer_DecomposeProps{
@@ -51,7 +57,7 @@ func (httpValidateFormDataProgrammerNamespace) Write(props nativecontext.IProgra
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -59,7 +65,7 @@ func (httpValidateFormDataProgrammerNamespace) Write(props nativecontext.IProgra
 }
 
 func httpProgrammer_validate_result(context nativecontext.ITypiaContext, validate nativeinternal.FeatureProgrammer_IDecomposed, decode nativeinternal.FeatureProgrammer_IDecomposed) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(httpValidateProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   decodeArrow := decode.Arrow.AsArrowFunction()
   output := decodeArrow.Type
   if output == nil {

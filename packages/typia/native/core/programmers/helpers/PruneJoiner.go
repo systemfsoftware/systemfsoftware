@@ -12,6 +12,13 @@ type pruneJoinerNamespace struct{}
 
 var PruneJoiner = pruneJoinerNamespace{}
 
+// PruneJoiner_ObjectProps is the argument record of PruneJoiner.Object, which
+// builds the pruning of an object.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of PruneJoiner.Object, which builds the pruning of an object; its 4 fields (Input, Entries, Object, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type PruneJoiner_ObjectProps struct {
   Input   *shimast.Expression
   Entries []IExpressionEntry
@@ -19,22 +26,34 @@ type PruneJoiner_ObjectProps struct {
   Emit    *shimprinter.EmitContext
 }
 
+// PruneJoiner_ArrayProps is the argument record of PruneJoiner.Array, which
+// prunes an array by visiting its elements with Arrow for side effects.
+//
+// @evidence contracts/common.md#principled-implementation Input is the array expression and Arrow is the in-place element pruner passed to forEach. Emit supplies AST creation context; this record does not model a mapped output array.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type PruneJoiner_ArrayProps struct {
   Input *shimast.Expression
   Arrow *shimast.Expression
   Emit  *shimprinter.EmitContext
 }
 
+// PruneJoiner_TupleProps is the argument record of PruneJoiner.Tuple, which
+// prunes the element and rest bodies of a tuple.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of PruneJoiner.Tuple, which prunes the element and rest bodies of a tuple; its 3 fields (Elements, Rest, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type PruneJoiner_TupleProps struct {
   Elements []*shimast.ConciseBody
   Rest     *shimast.ConciseBody
   Emit     *shimprinter.EmitContext
 }
 
-var pruneJoiner_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (pruneJoinerNamespace) Object(props PruneJoiner_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   regular := []IExpressionEntry{}
   dynamic := []IExpressionEntry{}
   for _, entry := range props.Entries {
@@ -67,9 +86,9 @@ func (pruneJoinerNamespace) Object(props PruneJoiner_ObjectProps) *shimast.Node 
 }
 
 func (pruneJoinerNamespace) Array(props PruneJoiner_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   return f.NewCallExpression(
-    nativefactories.IdentifierFactory.Access(nil, props.Input, "forEach"),
+    nativefactories.IdentifierFactory.Access(props.Emit, props.Input, "forEach"),
     nil,
     nil,
     f.NewNodeList([]*shimast.Node{props.Arrow}),
@@ -78,7 +97,7 @@ func (pruneJoinerNamespace) Array(props PruneJoiner_ArrayProps) *shimast.Node {
 }
 
 func (pruneJoinerNamespace) Tuple(props PruneJoiner_TupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   entire := make([]*shimast.Node, 0, len(props.Elements)+1)
   for _, elem := range props.Elements {
     entire = append(entire, elem)
@@ -97,7 +116,7 @@ func (pruneJoinerNamespace) Tuple(props PruneJoiner_TupleProps) *shimast.Node {
 }
 
 func pruneJoiner_statements(node *shimast.Node, emit ...*shimprinter.EmitContext) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if node != nil && node.Kind == shimast.KindBlock {
     return append([]*shimast.Node{}, node.Statements()...)
   }
@@ -112,7 +131,7 @@ type pruneJoiner_iterate_dynamic_propertiesProps struct {
 }
 
 func pruneJoiner_iterate_dynamic_properties(props pruneJoiner_iterate_dynamic_propertiesProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   statements := []*shimast.Node{
     f.NewIfStatement(
       f.NewBinaryExpression(
@@ -169,7 +188,7 @@ func pruneJoiner_iterate_dynamic_properties(props pruneJoiner_iterate_dynamic_pr
   }
   return f.NewCallExpression(
     nativefactories.IdentifierFactory.Access(
-      nil,
+      props.Emit,
       f.NewCallExpression(
         f.NewIdentifier("Object.entries"),
         nil,
@@ -199,7 +218,7 @@ func pruneJoiner_iterate_dynamic_properties(props pruneJoiner_iterate_dynamic_pr
 }
 
 func pruneJoiner_binding_pattern(emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBindingPattern(
     shimast.KindArrayBindingPattern,
     f.NewNodeList([]*shimast.Node{
@@ -210,7 +229,7 @@ func pruneJoiner_binding_pattern(emit ...*shimprinter.EmitContext) *shimast.Node
 }
 
 func pruneJoiner_prune_object_properties(object *nativemetadata.MetadataObjectType, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   input := f.NewIdentifier("input")
   key := f.NewIdentifier("key")
   conditions := []*shimast.Node{}
@@ -275,7 +294,7 @@ func pruneJoiner_prune_object_properties(object *nativemetadata.MetadataObjectTy
 }
 
 func pruneJoiner_reduce(expressions []*shimast.Node, operator shimast.Kind, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(pruneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   output := expressions[0]
   for _, next := range expressions[1:] {
     output = f.NewBinaryExpression(

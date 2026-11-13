@@ -23,37 +23,86 @@ type notationGeneralProgrammerNamespace struct{}
 
 var NotationGeneralProgrammer = notationGeneralProgrammerNamespace{}
 
+// NotationGeneralProgrammer_IRename is a key conversion: its Name selects the
+// runtime helper and the `*Case` type, and Func converts one key.
+//
+// @evidence contracts/common.md#principled-implementation The case name picks the runtime helper and the return type and Func is the conversion that the transform applies to emitted keys, so one record defines a notation.
+// @evidence contracts/common.md#clear-and-simple-design A two-field record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names both fields.
 type NotationGeneralProgrammer_IRename struct {
+  // Name selects the runtime notation helper and public case type.
   Name string
+
+  // Func converts a static property key while emitting its object member.
   Func func(str string) string
 }
 
+// NotationGeneralProgrammer_IProps is the shared programmer props plus the
+// Rename that selects the key conversion.
+//
+// @evidence contracts/common.md#principled-implementation The embedded shared props carry the context, call site, type, name and initializer, so the notation programmers take what every generic programmer takes and only add the conversion.
+// @evidence contracts/common.md#clear-and-simple-design An embedded record and one field.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names the embedded record and the rename.
 type NotationGeneralProgrammer_IProps struct {
+  // IProgrammerProps carries the shared call context, type and initializer.
   nativecontext.IProgrammerProps
+
+  // Rename selects the runtime case helper and static key conversion.
   Rename NotationGeneralProgrammer_IRename
 }
 
+// NotationGeneralProgrammer_ReturnTypeProps is the Rename, the transform context
+// and the name of the type whose `*Case` return type is built.
+//
+// @evidence contracts/common.md#principled-implementation The return type is typia's case type applied to the type name, so those three inputs are enough.
+// @evidence contracts/common.md#clear-and-simple-design A three-field record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type NotationGeneralProgrammer_ReturnTypeProps struct {
-  Rename  NotationGeneralProgrammer_IRename
+  // Rename selects the runtime case helper and static key conversion.
+  Rename NotationGeneralProgrammer_IRename
+
+  // Context borrows the checker, emitter and importer for this transform.
   Context nativecontext.ITypiaContext
-  Type    string
+
+  // Type is the rendered type name passed to the public case type.
+  Type string
 }
 
+// NotationGeneralProgrammer_DecomposeProps is the input of Decompose: the
+// Rename, whether the input is already Validated, the transform context, the
+// Functor and the type with its optional name.
+//
+// @evidence contracts/common.md#principled-implementation When a caller has already validated the input the is-helpers are not emitted again, so the flag is part of the input.
+// @evidence contracts/common.md#clear-and-simple-design A six-field record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field and the meaning of Validated.
 type NotationGeneralProgrammer_DecomposeProps struct {
-  Rename    NotationGeneralProgrammer_IRename
+  // Rename selects the runtime case helper and static key conversion.
+  Rename NotationGeneralProgrammer_IRename
+
+  // Validated reuses enclosing checks instead of adding ordinary is-helper declarations.
   Validated bool
-  Context   nativecontext.ITypiaContext
-  Functor   *nativehelpers.FunctionProgrammer
-  Type      *shimchecker.Type
-  Name      *string
+
+  // Context borrows the checker, emitter and importer for this transform.
+  Context nativecontext.ITypiaContext
+
+  // Functor collects shared helper declarations and recursive-visit state.
+  Functor *nativehelpers.FunctionProgrammer
+
+  // Type is the checker type whose input shape is analyzed.
+  Type *shimchecker.Type
+
+  // Name optionally overrides the rendered type name; nil uses the checker name.
+  Name *string
 }
 
 const notationGeneralProgrammer_PREFIX = "_c"
 
-var notationGeneralProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (notationGeneralProgrammerNamespace) ReturnType(props NotationGeneralProgrammer_ReturnTypeProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return notationGeneralProgrammer_import_type(props.Context, nativecontext.ImportProgrammer_TypeProps{
     File: "typia",
     Name: notationGeneralProgrammer_capitalize(props.Rename.Name) + "Case",
@@ -64,7 +113,7 @@ func (notationGeneralProgrammerNamespace) ReturnType(props NotationGeneralProgra
 }
 
 func (notationGeneralProgrammerNamespace) Decompose(props NotationGeneralProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   config := notationGeneralProgrammer_configure(struct {
     Rename  NotationGeneralProgrammer_IRename
     Context nativecontext.ITypiaContext
@@ -129,7 +178,7 @@ func notationGeneralProgrammer_write_array_functions(props struct {
   Functor    *nativehelpers.FunctionProgrammer
   Collection *schemametadata.MetadataCollection
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := []*shimast.Node{}
   for _, typ := range props.Collection.Arrays() {
     if typ.Recursive == false {
@@ -144,7 +193,7 @@ func notationGeneralProgrammer_write_array_functions(props struct {
       Value: f.NewArrowFunction(
         nil,
         nil,
-        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{
+        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{Emit: props.Context.Emit,
           Config: nativeinternal.FeatureProgrammer_ParameterConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
           Type:   nativefactories.TypeFactory.Keyword("any", props.Context.Emit),
           Input:  f.NewIdentifier("input"),
@@ -186,7 +235,7 @@ func notationGeneralProgrammer_write_tuple_functions(props struct {
   Functor    *nativehelpers.FunctionProgrammer
   Collection *schemametadata.MetadataCollection
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := []*shimast.Node{}
   for _, tuple := range props.Collection.Tuples() {
     if tuple.Recursive == false {
@@ -201,7 +250,7 @@ func notationGeneralProgrammer_write_tuple_functions(props struct {
       Value: f.NewArrowFunction(
         nil,
         nil,
-        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{
+        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{Emit: props.Context.Emit,
           Config: nativeinternal.FeatureProgrammer_ParameterConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
           Type:   nativefactories.TypeFactory.Keyword("any", props.Context.Emit),
           Input:  f.NewIdentifier("input"),
@@ -243,7 +292,7 @@ func notationGeneralProgrammer_decode(props struct {
   Explore  nativeinternal.FeatureProgrammer_IExplore
   Input    *shimast.Node
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Metadata.Any ||
     notationGeneralProgrammer_some_arrays(props.Metadata.Arrays, func(a *schemametadata.MetadataArray) bool { return a.Type.Value.Any }) ||
     notationGeneralProgrammer_some_tuples(props.Metadata.Tuples, func(t *schemametadata.MetadataTuple) bool {
@@ -288,7 +337,7 @@ func notationGeneralProgrammer_decode(props struct {
           Functor:  props.Functor,
           Input:    props.Input,
           Metadata: partial,
-          Explore:  notationGeneralProgrammer_checker_explore(props.Explore),
+          Explore:  props.Explore,
         })
       },
       Value: func() *shimast.Node {
@@ -474,7 +523,7 @@ type notationGeneralProgrammer_decodeArrayProps struct {
 }
 
 func notationGeneralProgrammer_decode_array(props notationGeneralProgrammer_decodeArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Array.Type.Recursive {
     index := 0
     if props.Array.Type.Index != nil {
@@ -484,7 +533,7 @@ func notationGeneralProgrammer_decode_array(props notationGeneralProgrammer_deco
       f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%sa%d", props.Config.Prefix, index))),
       nil,
       nil,
-      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
         Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
         Explore: notationGeneralProgrammer_explore_with(props.Explore, "function", "array"),
         Input:   props.Input,
@@ -496,7 +545,7 @@ func notationGeneralProgrammer_decode_array(props notationGeneralProgrammer_deco
 }
 
 func notationGeneralProgrammer_decode_array_inline(props notationGeneralProgrammer_decodeArrayProps) *shimast.Node {
-  return nativeinternal.FeatureProgrammer.Decode_array(nativeinternal.FeatureProgrammer_DecodeArrayProps{
+  return nativeinternal.FeatureProgrammer.Decode_array(nativeinternal.FeatureProgrammer_DecodeArrayProps{Emit: props.Context.Emit,
     Config: nativeinternal.FeatureProgrammer_DecodeArrayConfig{
       Trace:   props.Config.Trace,
       Path:    props.Config.Path,
@@ -531,7 +580,7 @@ type notationGeneralProgrammer_decodeTupleProps struct {
 }
 
 func notationGeneralProgrammer_decode_tuple(props notationGeneralProgrammer_decodeTupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Tuple.Type.Recursive {
     index := 0
     if props.Tuple.Type.Index != nil {
@@ -541,7 +590,7 @@ func notationGeneralProgrammer_decode_tuple(props notationGeneralProgrammer_deco
       f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%st%d", props.Config.Prefix, index))),
       nil,
       nil,
-      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
         Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
         Explore: notationGeneralProgrammer_explore_with(props.Explore, "function", props.Explore.From),
         Input:   props.Input,
@@ -571,7 +620,7 @@ type notationGeneralProgrammer_decodeTupleInlineProps struct {
 }
 
 func notationGeneralProgrammer_decode_tuple_inline(props notationGeneralProgrammer_decodeTupleInlineProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   elements := []*shimast.Node{}
   for index, elem := range props.Tuple.Elements {
     if elem.Rest != nil {
@@ -645,7 +694,7 @@ func notationGeneralProgrammer_decode_native(props struct {
   Name  string
   Input *shimast.Node
 }, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if props.Name == "Date" {
     return f.NewNewExpression(
       f.NewIdentifier(props.Name),
@@ -666,7 +715,7 @@ type notationGeneralProgrammer_exploreSetsProps struct {
 }
 
 func notationGeneralProgrammer_explore_sets(props notationGeneralProgrammer_exploreSetsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativehelpers.UnionExplorer.Set(nativehelpers.UnionExplorer_SetProps{
       Config: nativehelpers.UnionExplorer_ArrayLikeConfig{
@@ -676,7 +725,7 @@ func notationGeneralProgrammer_explore_sets(props notationGeneralProgrammer_expl
             Functor:  props.Functor,
             Input:    v.Input,
             Metadata: v.Definition.(*schemametadata.MetadataSchema),
-            Explore:  notationGeneralProgrammer_checker_explore(v.Explore),
+            Explore:  v.Explore,
           })
         },
         Decoder: func(v nativehelpers.UnionExplorer_ArrayLikeDecoderProps) *shimast.Node {
@@ -690,7 +739,7 @@ func notationGeneralProgrammer_explore_sets(props notationGeneralProgrammer_expl
                 Functor: props.Functor,
                 Input:   v.Input,
                 Array:   v.Definition.(*schemametadata.MetadataArray),
-                Explore: notationGeneralProgrammer_feature_explore(v.Explore),
+                Explore: v.Explore,
               }),
             }),
           )
@@ -733,7 +782,7 @@ type notationGeneralProgrammer_exploreMapsProps struct {
 }
 
 func notationGeneralProgrammer_explore_maps(props notationGeneralProgrammer_exploreMapsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativehelpers.UnionExplorer.Map(nativehelpers.UnionExplorer_MapProps{
       Config: nativehelpers.UnionExplorer_ArrayLikeConfig{
@@ -769,7 +818,7 @@ func notationGeneralProgrammer_explore_maps(props notationGeneralProgrammer_expl
                 Functor: props.Functor,
                 Input:   v.Input,
                 Array:   v.Definition.(*schemametadata.MetadataArray),
-                Explore: notationGeneralProgrammer_feature_explore(v.Explore),
+                Explore: v.Explore,
               }),
             }),
           )
@@ -815,7 +864,7 @@ type notationGeneralProgrammer_exploreObjectsProps struct {
 }
 
 func notationGeneralProgrammer_explore_objects(props notationGeneralProgrammer_exploreObjectsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if len(props.Metadata.Objects) == 1 {
     return notationGeneralProgrammer_decode_object(struct {
       Functor *nativehelpers.FunctionProgrammer
@@ -832,7 +881,7 @@ func notationGeneralProgrammer_explore_objects(props notationGeneralProgrammer_e
     f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%su%d", notationGeneralProgrammer_PREFIX, index))),
     nil,
     nil,
-    f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+    f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
       Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
       Explore: props.Explore,
       Input:   props.Input,
@@ -851,7 +900,7 @@ type notationGeneralProgrammer_exploreArraysProps struct {
 }
 
 func notationGeneralProgrammer_explore_arrays(props notationGeneralProgrammer_exploreArraysProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return notationGeneralProgrammer_explore_array_like_union_types(notationGeneralProgrammer_exploreArrayLikeUnionTypesProps[*schemametadata.MetadataArray]{
     Context: props.Context,
     Config:  props.Config,
@@ -865,7 +914,7 @@ func notationGeneralProgrammer_explore_arrays(props notationGeneralProgrammer_ex
               Functor:  props.Functor,
               Input:    v.Input,
               Metadata: v.Definition.(*schemametadata.MetadataSchema),
-              Explore:  notationGeneralProgrammer_checker_explore(v.Explore),
+              Explore:  v.Explore,
             })
           },
           Decoder: func(v nativehelpers.UnionExplorer_ArrayLikeDecoderProps) *shimast.Node {
@@ -875,7 +924,7 @@ func notationGeneralProgrammer_explore_arrays(props notationGeneralProgrammer_ex
               Functor: props.Functor,
               Input:   v.Input,
               Array:   v.Definition.(*schemametadata.MetadataArray),
-              Explore: notationGeneralProgrammer_feature_explore(v.Explore),
+              Explore: v.Explore,
             })
           },
           Empty:   f.NewIdentifier("[]"),
@@ -924,7 +973,7 @@ type notationGeneralProgrammer_exploreArrayLikeUnionTypesProps[T interface {
 func notationGeneralProgrammer_explore_array_like_union_types[T interface {
   *schemametadata.MetadataArray | *schemametadata.MetadataTuple
 }](props notationGeneralProgrammer_exploreArrayLikeUnionTypesProps[T]) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   arrow := func(next struct {
     Parameters []*shimast.Node
     Explore    nativeinternal.FeatureProgrammer_IExplore
@@ -974,7 +1023,7 @@ func notationGeneralProgrammer_configure(props struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
 }) nativeinternal.FeatureProgrammer_IConfig {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   var config nativeinternal.FeatureProgrammer_IConfig
   config = nativeinternal.FeatureProgrammer_IConfig{
     Types: nativeinternal.FeatureProgrammer_IConfig_ITypes{
@@ -1015,7 +1064,7 @@ func notationGeneralProgrammer_configure(props struct {
           Functor:  props.Functor,
           Input:    next.Input,
           Metadata: next.Metadata,
-          Explore:  notationGeneralProgrammer_checker_explore(next.Explore),
+          Explore:  next.Explore,
         })
       },
       Decoder: func(next nativeinternal.FeatureProgrammer_ObjectorDecoderProps) *shimast.Node {
@@ -1054,14 +1103,14 @@ func notationGeneralProgrammer_configure(props struct {
         })
       },
       Unionizer: func(next nativeinternal.FeatureProgrammer_ObjectorUnionizerProps) *shimast.Node {
-        return nativeiterate.Decode_union_object(nativeiterate.Decode_union_objectProps{
+        return nativeiterate.Decode_union_object(nativeiterate.Decode_union_objectProps{Emit: props.Context.Emit,
           Checker: func(v nativeiterate.Decode_union_object_next) *shimast.Node {
             return nativeprogrammers.IsProgrammer.Decode_object(nativeprogrammers.IsProgrammer_DecodeObjectProps{
               Context: props.Context,
               Functor: props.Functor,
               Object:  v.Object,
               Input:   v.Input,
-              Explore: notationGeneralProgrammer_feature_explore(v.Explore),
+              Explore: v.Explore,
             })
           },
           Decoder: func(v nativeiterate.Decode_union_object_next) *shimast.Node {
@@ -1070,7 +1119,7 @@ func notationGeneralProgrammer_configure(props struct {
               Object  *schemametadata.MetadataObjectType
               Input   *shimast.Node
               Explore nativeinternal.FeatureProgrammer_IExplore
-            }{Functor: props.Functor, Object: v.Object, Input: v.Input, Explore: notationGeneralProgrammer_feature_explore(v.Explore)})
+            }{Functor: props.Functor, Object: v.Object, Input: v.Input, Explore: v.Explore})
           },
           Success: func(exp *shimast.Expression) *shimast.Node {
             return exp
@@ -1158,7 +1207,7 @@ type notationGeneralProgrammer_throwProps struct {
 }
 
 func notationGeneralProgrammer_create_throw_error(props notationGeneralProgrammer_throwProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewExpressionStatement(
     f.NewCallExpression(
       notationGeneralProgrammer_internal(props.Context, "throwTypeGuardError"),
@@ -1196,7 +1245,7 @@ type notationGeneralProgrammer_IUnion struct {
 }
 
 func notationGeneralProgrammer_binary(left *shimast.Node, operator shimast.Kind, right *shimast.Node, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(operator), right)
 }
 
@@ -1204,7 +1253,7 @@ func notationGeneralProgrammer_internal(context nativecontext.ITypiaContext, nam
   if importer := context.Importer; importer != nil {
     return importer.Internal(name)
   }
-  return nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, context.Emit).NewIdentifier(name)
+  return nativecontext.NodeFactoryOf(context.Emit).NewIdentifier(name)
 }
 
 func notationGeneralProgrammer_import_type(context nativecontext.ITypiaContext, props nativecontext.ImportProgrammer_TypeProps) *shimast.Node {
@@ -1212,7 +1261,7 @@ func notationGeneralProgrammer_import_type(context nativecontext.ITypiaContext, 
     return importer.Type(props)
   }
   if str, ok := props.Name.(string); ok {
-    f := nativecontext.EmitFactoryOf(notationGeneralProgrammer_factory, context.Emit)
+    f := nativecontext.NodeFactoryOf(context.Emit)
     return f.NewTypeReferenceNode(f.NewIdentifier(str), f.NewNodeList(props.Arguments))
   }
   return props.Name.(*shimast.Node)
@@ -1232,32 +1281,9 @@ func notationGeneralProgrammer_method_text(modulo *shimast.Node) string {
   return nativehelpers.ModuloMethodText(modulo)
 }
 
-func notationGeneralProgrammer_feature_explore(input any) nativeinternal.FeatureProgrammer_IExplore {
-  switch v := input.(type) {
-  case nativeinternal.FeatureProgrammer_IExplore:
-    return v
-  case *nativeinternal.FeatureProgrammer_IExplore:
-    return *v
-  default:
-    return nativeinternal.FeatureProgrammer_IExplore{}
-  }
-}
-
-func notationGeneralProgrammer_checker_explore(input any) nativeinternal.CheckerProgrammer_IExplore {
-  v := notationGeneralProgrammer_feature_explore(input)
-  return nativeinternal.CheckerProgrammer_IExplore{
-    Tracable: v.Tracable,
-    Source:   v.Source,
-    From:     v.From,
-    Postfix:  v.Postfix,
-    Start:    v.Start,
-  }
-}
-
-func notationGeneralProgrammer_checker_explore_with_postfix(input any, postfix string) nativeinternal.CheckerProgrammer_IExplore {
-  v := notationGeneralProgrammer_checker_explore(input)
-  v.Postfix = v.Postfix + postfix
-  return v
+func notationGeneralProgrammer_checker_explore_with_postfix(input nativeinternal.CheckerProgrammer_IExplore, postfix string) nativeinternal.CheckerProgrammer_IExplore {
+  input.Postfix = input.Postfix + postfix
+  return input
 }
 
 func notationGeneralProgrammer_explore_with(explore nativeinternal.FeatureProgrammer_IExplore, source string, from string) nativeinternal.FeatureProgrammer_IExplore {

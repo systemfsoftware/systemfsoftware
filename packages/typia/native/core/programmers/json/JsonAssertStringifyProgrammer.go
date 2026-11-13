@@ -14,6 +14,15 @@ type jsonAssertStringifyProgrammerNamespace struct{}
 
 var JsonAssertStringifyProgrammer = jsonAssertStringifyProgrammerNamespace{}
 
+// JsonAssertStringifyProgrammer_DecomposeProps is the argument record of
+// JsonAssertStringifyProgrammer.Decompose, which builds the asserting
+// `json.assertStringify` function. Init is the default initializer of the
+// generated `errorFactory` parameter, or nil.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonAssertStringifyProgrammer.Decompose, which builds the asserting `json.assertStringify` function; its 5 fields (Context, Functor, Type, Name, Init) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type JsonAssertStringifyProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
@@ -21,8 +30,6 @@ type JsonAssertStringifyProgrammer_DecomposeProps struct {
   Name    *string
   Init    *shimast.Node
 }
-
-var jsonAssertStringifyProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (jsonAssertStringifyProgrammerNamespace) Decompose(props JsonAssertStringifyProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   assertContext := props.Context
@@ -45,7 +52,7 @@ func (jsonAssertStringifyProgrammerNamespace) Decompose(props JsonAssertStringif
     Name:      props.Name,
     Validated: true,
   })
-  f := nativecontext.EmitFactoryOf(jsonAssertStringifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   statements := append([]*shimast.Node{}, assert.Statements...)
   statements = append(statements, stringify.Statements...)
   statements = append(statements,
@@ -100,7 +107,7 @@ func (jsonAssertStringifyProgrammerNamespace) Write(props nativecontext.IProgram
     Name:    props.Name,
     Init:    props.Init,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

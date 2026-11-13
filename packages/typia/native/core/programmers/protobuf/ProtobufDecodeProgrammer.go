@@ -18,14 +18,32 @@ type protobufDecodeProgrammerNamespace struct{}
 
 var ProtobufDecodeProgrammer = protobufDecodeProgrammerNamespace{}
 
+// ProtobufDecodeProgrammer_IProps is the input of Write for the protobuf decode
+// generator: Context (the transform context), Modulo (the call's callee
+// expression), Type (the type to generate for) and Name (an optional type
+// name).
+//
+// @evidence contracts/common.md#principled-implementation Write needs the transform context, the call's callee expression, the type to generate for and an optional type name, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 4 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type ProtobufDecodeProgrammer_IProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
   Type    *shimchecker.Type
   Name    *string
-  Init    *shimast.Node
 }
 
+// ProtobufDecodeProgrammer_DecomposeProps is the input of Decompose for the
+// protobuf decode generator: Context (the transform context), Modulo (the call's
+// callee expression), Functor (the collector of the helper functions that the
+// generator emits), Type (the type to generate for) and Name (an optional type
+// name).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs the transform context, the call's callee expression, the collector of the helper functions that the generator emits, the type to generate for and an optional type name, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 5 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type ProtobufDecodeProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
@@ -75,11 +93,8 @@ type protobufDecodeProgrammer_decodeMapProps struct {
 
 const protobufDecodeProgrammer_PREFIX = "_pd"
 
-var protobufDecodeProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-var protobufDecodeProgrammer_objectSequence = 0
-
 func (protobufDecodeProgrammerNamespace) Decompose(props ProtobufDecodeProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   collection := schemametadata.NewMetadataCollection()
   meta := nativefactories.ProtobufFactory.Metadata(nativefactories.ProtobufFactory_IProps{
     Method:     protobufDecodeProgrammer_method_text(props.Modulo),
@@ -161,7 +176,7 @@ func (protobufDecodeProgrammerNamespace) Write(props ProtobufDecodeProgrammer_IP
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -173,7 +188,7 @@ func protobufDecodeProgrammer_write_object_function(props struct {
   Functor *nativehelpers.FunctionProgrammer
   Object  *schemametadata.MetadataObjectType
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   body := protobufDecodeProgrammer_write_object_function_body(protobufDecodeProgrammer_objectBodyProps{
     Context:   props.Context,
     Condition: protobufDecodeProgrammer_lessThan(protobufDecodeProgrammer_callReader("index", nil, props.Context.Emit), protobufDecodeProgrammer_callReader("size", nil, props.Context.Emit), props.Context.Emit),
@@ -202,7 +217,7 @@ func protobufDecodeProgrammer_write_object_function(props struct {
 }
 
 func protobufDecodeProgrammer_write_object_function_body(props protobufDecodeProgrammer_objectBodyProps) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if protobufDecodeProgrammer_objectNeedsProtobuf(props.Object) {
     nativefactories.ProtobufFactory.EmplaceObject(props.Object)
   }
@@ -272,7 +287,7 @@ func protobufDecodeProgrammer_write_object_function_body(props protobufDecodePro
 }
 
 func protobufDecodeProgrammer_write_property_default_value(value *schemametadata.MetadataSchema, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   var expression *shimast.Node
   if value.Nullable {
     expression = f.NewKeywordExpression(shimast.KindNullKeyword)
@@ -323,7 +338,7 @@ func protobufDecodeProgrammer_decode_property(props protobufDecodeProgrammer_dec
 }
 
 func protobufDecodeProgrammer_decode_property_type(props protobufDecodeProgrammer_decodePropertyTypeProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   outExpr := func(title string, value *shimast.Node) *shimast.Node {
     return protobufDecodeProgrammer_caseClause(protobufDecodeProgrammer_indexValue(protobufDecodeProgrammer_propertyIndex(props.Schema)), title, []*shimast.Node{
       f.NewExpressionStatement(protobufDecodeProgrammer_assignment(props.Accessor, shimast.KindEqualsToken, value, props.Context.Emit)),
@@ -414,7 +429,7 @@ func protobufDecodeProgrammer_decode_property_type(props protobufDecodeProgramme
 }
 
 func protobufDecodeProgrammer_decode_number(schema schemaprotobuf.IProtobufSchema, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   name := protobufDecodeProgrammer_numberName(schema)
   value := protobufDecodeProgrammer_callReader(name, nil, emit)
   if name == "int64" || name == "uint64" {
@@ -430,7 +445,7 @@ func protobufDecodeProgrammer_decode_number(schema schemaprotobuf.IProtobufSchem
 }
 
 func protobufDecodeProgrammer_decode_array(props protobufDecodeProgrammer_decodeArrayProps, emit *shimprinter.EmitContext) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   statements := []*shimast.Node{}
   if props.Required == false {
     statements = append(statements, f.NewExpressionStatement(
@@ -477,7 +492,7 @@ func protobufDecodeProgrammer_decode_regular_object(props struct {
   Top    bool
   Object *schemametadata.MetadataObjectType
 }, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   index := 0
   if props.Object != nil {
     index = props.Object.Index
@@ -496,7 +511,7 @@ func protobufDecodeProgrammer_decode_regular_object(props struct {
 }
 
 func protobufDecodeProgrammer_decode_map(props protobufDecodeProgrammer_decodeMapProps) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   statements := []*shimast.Node{}
   if props.Required {
     statements = append(statements, f.NewExpressionStatement(
@@ -558,7 +573,7 @@ func protobufDecodeProgrammer_decode_array_value(schema schemaprotobuf.IProtobuf
 }
 
 func protobufDecodeProgrammer_callReader(method string, args []*shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewCallExpression(
     nativefactories.IdentifierFactory.Access(emit, f.NewIdentifier("reader"), method),
     nil,
@@ -569,7 +584,7 @@ func protobufDecodeProgrammer_callReader(method string, args []*shimast.Node, em
 }
 
 func protobufDecodeProgrammer_caseClause(index int, title string, statements []*shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   body := []*shimast.Node{
     f.NewExpressionStatement(f.NewIdentifier("// " + title)),
   }
@@ -582,6 +597,10 @@ func protobufDecodeProgrammer_caseClause(index int, title string, statements []*
   )
 }
 
+// protobufDecodeProgrammer_createObjectType supplies the temporary key/value
+// properties of a wire map entry. Only its properties reach the body writer and
+// ProtobufFactory.EmplaceObject; it never enters a metadata collection or a
+// name-indexed cache, so it needs no synthetic type identity or shared counter.
 func protobufDecodeProgrammer_createObjectType(definitions []struct {
   Key   string
   Value *schemametadata.MetadataSchema
@@ -594,9 +613,7 @@ func protobufDecodeProgrammer_createObjectType(definitions []struct {
       JsDocTags: []schemametadata.IJsDocTagInfo{},
     }))
   }
-  protobufDecodeProgrammer_objectSequence++
   obj := schemametadata.MetadataObjectType_create(schemametadata.MetadataObjectType{
-    Name:       fmt.Sprintf("object.o%d", protobufDecodeProgrammer_objectSequence),
     Properties: properties,
     JsDocTags:  []schemametadata.IJsDocTagInfo{},
     Index:      -1,
@@ -672,7 +689,7 @@ func protobufDecodeProgrammer_objectNeedsProtobuf(object *schemametadata.Metadat
 }
 
 func protobufDecodeProgrammer_arrayPush(accessor *shimast.Node, value *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewCallExpression(
     nativefactories.IdentifierFactory.Access(emit, accessor, "push"),
     nil,
@@ -683,27 +700,27 @@ func protobufDecodeProgrammer_arrayPush(accessor *shimast.Node, value *shimast.N
 }
 
 func protobufDecodeProgrammer_assignment(left *shimast.Node, operator shimast.Kind, right *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(operator), right)
 }
 
 func protobufDecodeProgrammer_lessThan(left *shimast.Node, right *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(shimast.KindLessThanToken), right)
 }
 
 func protobufDecodeProgrammer_unsigned_right_shift(left *shimast.Node, right *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(shimast.KindGreaterThanGreaterThanGreaterThanToken), right)
 }
 
 func protobufDecodeProgrammer_bitwise_and(left *shimast.Node, right *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(shimast.KindAmpersandToken), right)
 }
 
 func protobufDecodeProgrammer_strict_equal(left *shimast.Node, right *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewBinaryExpression(nil, left, nil, f.NewToken(shimast.KindEqualsEqualsEqualsToken), right)
 }
 
@@ -850,7 +867,7 @@ func protobufDecodeProgrammer_import_type(context nativecontext.ITypiaContext, p
   if importer := context.Importer; importer != nil {
     return importer.Type(props)
   }
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   if str, ok := props.Name.(string); ok {
     return f.NewTypeReferenceNode(f.NewIdentifier(str), f.NewNodeList(props.Arguments))
   }
@@ -861,7 +878,7 @@ func protobufDecodeProgrammer_internal(context nativecontext.ITypiaContext, name
   if importer := context.Importer; importer != nil {
     return importer.Internal(name)
   }
-  f := nativecontext.EmitFactoryOf(protobufDecodeProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   return f.NewIdentifier(name)
 }
 
