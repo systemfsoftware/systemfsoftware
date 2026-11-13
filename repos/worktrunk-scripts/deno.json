@@ -7,7 +7,7 @@
     "fmt:check": "dprint check",
     "test": "deno test --allow-read --allow-write --allow-run --allow-env",
     "commitlint": "deno run --allow-read --allow-run --allow-env --allow-sys npm:@commitlint/cli@19.8.1 --edit",
-    "prepare": "deno run --allow-read --allow-write --allow-run --allow-sys npm:husky@9.1.7"
+    "prepare": "deno run --allow-read --allow-write --allow-run --allow-sys --allow-env npm:husky@9.1.7"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.14",
