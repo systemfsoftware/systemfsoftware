@@ -22,6 +22,7 @@ jobs:
           owner: systemfsoftware
           permission-actions: write
           permission-contents: read
+          permission-pull-requests: read
       - name: Delete artifacts of closed and merged pull requests
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
