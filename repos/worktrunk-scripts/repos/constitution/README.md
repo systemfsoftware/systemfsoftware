@@ -1,99 +1,29 @@
-# Constitution
+# constitution
 
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
-[![System F Software](https://img.shields.io/badge/systemfsoftware.com-constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
-[![Rules: 38](https://img.shields.io/badge/rules-38%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
 
-Shared engineering laws for repositories at [System F Software](https://systemfsoftware.com).
+The shared engineering laws for System F Software: how to model a domain, shape its code, prove it works and finish a change. Repositories across the organization vendor this one and read the same laws.
 
-It defines baseline architecture and code quality standards: a pure functional core behind a thin imperative shell, domain types before logic, mutation testing for decision paths, and subtracting code before adding more. Stack-neutral and enforced across all projects.
+## What is here
 
-```mermaid
-flowchart LR
-    S["<b>systemfsoftware/constitution</b><br><i>Upstream Repository</i>"] -->|git subtree| A[Consumer Repo A]
-    S -->|git subtree| B[Consumer Repo B]
-    S -->|git subtree| C[Consumer Repo C]
-    A -.symlink.-> S
-    B -.symlink.-> S
-    C -.symlink.-> S
-```
+| File | Read it when |
+| :-- | :-- |
+| [CONSTITUTION.md](CONSTITUTION.md) | You write or review code under these laws. It holds 16 laws in four sections (model the domain, shape the code, prove it, finish), each with its harm and a wrong and right example. |
+| [ENFORCEMENT.md](ENFORCEMENT.md) | You build or change a check that grades work, such as a lint rule, a CI job or a rubric. It holds the gate design, each law's mechanism and its incidents. |
+| [`docs/solutions/`](docs/solutions) | You want the past problem behind a rule. Each note has YAML frontmatter (`module`, `tags`, `problem_type`). |
 
----
+Each law states an obligation and the harm it prevents. Read every law by its purpose: where the words and the harm disagree, the harm decides.
 
-## Quick Start
+## Use it in a repository
 
-Vendor the repository using `git subtree` and symlink `CONSTITUTION.md` to the project root:
+Vendor this repository into the consumer with `git subtree` under `repos/constitution`, and symlink `CONSTITUTION.md` to the vendored copy, as [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware) does.
 
-```bash
-# 1. Fetch the remote into a local ref
-git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
+Consumers that build or change a gate route that work to `ENFORCEMENT.md`. Makers read `CONSTITUTION.md` only, so the grading rules stay out of the work they grade.
 
-# 2. Add as a squashed subtree
-git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash \
-  -m "chore: vendor shared constitution"
+## Contributing
 
-# 3. Symlink the constitution to the repo root
-ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
-```
-
-Include `@CONSTITUTION.md` in your agent harness (`AGENTS.md` or `CLAUDE.md`) so all 38 rules remain always-on in the context window. Never include `ENFORCEMENT.md` there — it is doctrine for whoever builds the gates, not for the agent the gates grade. Instead, wire it at the surfaces that own instruments: in every `AGENTS.md` leaf governing a lint plugin, guard script, CI workflow, rules directory, or advisor roster, add one routing line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands."
-
----
-
-## The Articles
-
-The 38 rules are structured across six sections in [`CONSTITUTION.md`](CONSTITUTION.md):
-
-| Section | Key Invariants |
-| :--- | :--- |
-| **Application** | Invoke rules by harm rather than clause; build failures decide; never edit what grades your work; evidence before done. |
-| **Article I: Pure Core** | Pure decisions, explicit types, tagged error variants, no `null` states. |
-| **Article II: Boundaries** | Functional core / imperative shell, values for effects, decode inputs rather than casting. |
-| **Article III: Verification** | Testing Trophy investment order, properties by narrow grant, mutation as the measure, independent oracles. |
-| **Article IV: Organization** | Organize by domain responsibility, clear naming, keep modules small. |
-| **Article V: Conduct** | Zero-appeal P0 review enforcement, fix root causes, challenge decisions before committing, subtract before adding. |
-
----
-
-## Machine Validation
-
-Rules are defined as structured YAML blocks in `CONSTITUTION.md`:
-
-```yaml
-- id: CONST-S4
-  title: Subtract Before You Add
-  gate: review
-  do: treat every line as a liability — removal is the default response to slop
-  dont: extend a copy-paste cluster; patch around a rotten core
-  harm: the codebase only grows; rot survives every patch and regrows
-  check: review reads the net line delta; fixes that leave root violations are rejected
-```
-
-Run the validator to check rule IDs, schema compliance, and citation integrity across the corpus:
-
-```bash
-deno task test
-```
-
-To verify that rule identifiers have not been reassigned against a previous git revision:
-
-```bash
-deno task test --against <rev>
-```
-
----
-
-## Pulling Updates
-
-Pull upstream changes into the subtree without touching existing symlinks:
-
-```bash
-git subtree pull --prefix=vendor/constitution https://github.com/systemfsoftware/constitution.git main --squash \
-  -m "chore: update shared constitution"
-```
-
----
+Setup, the validation task and the amendment rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[Apache-2.0](LICENSE) © 2026 Ryan Lee.
+Apache 2.0. See [LICENSE](LICENSE).
