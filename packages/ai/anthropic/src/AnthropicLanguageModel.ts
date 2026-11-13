@@ -34,7 +34,7 @@ import type { Span } from "effect/Tracer"
 import type { Mutable, Simplify } from "effect/Types"
 import { AnthropicClient, type MessageStreamEvent } from "./AnthropicClient.ts"
 import { addGenAIAnnotations } from "./AnthropicTelemetry.ts"
-import type { AnthropicTool } from "./AnthropicTool.ts"
+import * as AnthropicTool from "./AnthropicTool.ts"
 import type * as Generated from "./Generated.ts"
 import * as InternalUtilities from "./internal/utilities.ts"
 
@@ -80,7 +80,7 @@ export class Config extends Context.Service<
     >
     & {
       readonly output_config?: {
-        readonly effort?: "low" | "medium" | "high" | null
+        readonly effort?: Generated.BetaEffortLevel | null
       }
       /**
        * Disables Claude's ability to use multiple tools to respond to a query.
@@ -111,6 +111,11 @@ export class Config extends Context.Service<
     }
   >
 >()("@effect/ai-anthropic/AnthropicLanguageModel/Config") {}
+
+/**
+ * The provider configuration merged with the resolved model identifier.
+ */
+type ResolvedConfig = typeof Config.Service & { readonly model: string }
 
 // =============================================================================
 // Provider Options / Metadata
@@ -729,7 +734,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
 }): Effect.fn.Return<LanguageModel.LanguageModel, never, AnthropicClient> {
   const client = yield* AnthropicClient
 
-  const makeConfig: Effect.Effect<typeof Config.Service & { readonly model: string }> = Effect.contextWith((services) =>
+  const makeConfig: Effect.Effect<ResolvedConfig> = Effect.contextWith((services) =>
     Effect.succeed({
       model,
       ...providerConfig,
@@ -739,7 +744,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
 
   const makeRequest = Effect.fnUntraced(
     function*<Tools extends ReadonlyArray<Tool.Any>>({ config, options, toolNameMapper }: {
-      readonly config: typeof Config.Service & { readonly model: string }
+      readonly config: ResolvedConfig
       readonly options: LanguageModel.ProviderOptions
       readonly toolNameMapper: Tool.NameMapper<Tools>
     }): Effect.fn.Return<{
@@ -798,7 +803,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
       annotateRequest(options.span, request.payload)
       const [rawResponse, response] = yield* client.createMessage(request)
       annotateResponse(options.span, rawResponse)
-      return yield* makeResponse({ options, rawResponse, response, toolNameMapper })
+      return yield* makeResponse({ config, options, rawResponse, response, toolNameMapper })
     }),
     streamText: Effect.fnUntraced(function*(options) {
       const config = yield* makeConfig
@@ -806,7 +811,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
       const request = yield* makeRequest({ config, options, toolNameMapper })
       annotateRequest(options.span, request.payload)
       const [response, stream] = yield* client.createMessageStream(request)
-      return yield* makeStreamResponse({ stream, response, options, toolNameMapper })
+      return yield* makeStreamResponse({ config, stream, response, options, toolNameMapper })
     }, (effect, options) =>
       effect.pipe(
         Stream.unwrap,
@@ -1165,7 +1170,11 @@ const prepareMessages = Effect.fnUntraced(
                   }
 
                   if (toolName === "code_execution" && Predicate.hasProperty(part.result, "type")) {
-                    if (part.result.type === "code_execution_result") {
+                    if (
+                      part.result.type === "code_execution_result" ||
+                      part.result.type === "encrypted_code_execution_result" ||
+                      part.result.type === "code_execution_tool_result_error"
+                    ) {
                       content.push({
                         type: "code_execution_tool_result",
                         tool_use_id: part.id,
@@ -1218,7 +1227,9 @@ const prepareMessages = Effect.fnUntraced(
                     content.push({
                       type: "tool_search_tool_result",
                       tool_use_id: part.id,
-                      content: part.result as any
+                      content: Array.isArray(part.result)
+                        ? { type: "tool_search_tool_search_result", tool_references: part.result }
+                        : part.result as any
                     })
                     break
                   }
@@ -1403,7 +1414,7 @@ const prepareTools = Effect.fnUntraced(
   function*<Tools extends ReadonlyArray<Tool.Any>>({ betas, capabilities, config, options, toolNameMapper }: {
     readonly betas: Set<string>
     readonly capabilities: ModelCapabilities
-    readonly config: typeof Config.Service
+    readonly config: ResolvedConfig
     readonly options: LanguageModel.ProviderOptions
     readonly toolNameMapper: Tool.NameMapper<Tools>
   }): Effect.fn.Return<{
@@ -1439,17 +1450,15 @@ const prepareTools = Effect.fnUntraced(
     for (const tool of options.tools) {
       if (Tool.isUserDefined(tool) || Tool.isDynamic(tool)) {
         const description = Tool.getDescription(tool)
-        const input_schema = yield* tryToolJsonSchema(tool, "prepareTools")
-        const toolStrict = Tool.getStrictMode(tool)
-        const strict = capabilities.supportsStructuredOutput
-          ? (toolStrict ?? config.strictJsonSchema ?? true)
-          : undefined
+        const strict = getToolStrictMode(tool, config)
+        const input_schema = yield* tryToolJsonSchema(tool, strict === true, "prepareTools")
 
         userTools.push({
           name: tool.name,
           input_schema: input_schema as any,
           ...(Predicate.isNotUndefined(description) ? { description } : undefined),
-          ...(Predicate.isNotUndefined(strict) ? { strict } : undefined)
+          ...(Predicate.isNotUndefined(strict) ? { strict } : undefined),
+          ...(Context.get(tool.annotations, AnthropicTool.DeferLoading) ? { defer_loading: true } : undefined)
         })
 
         if (capabilities.supportsStructuredOutput === true) {
@@ -1458,7 +1467,7 @@ const prepareTools = Effect.fnUntraced(
       }
 
       if (Tool.isProviderDefined(tool)) {
-        const providerTool = tool as AnthropicTool
+        const providerTool = tool as AnthropicTool.AnthropicTool
         switch (providerTool.id) {
           case "anthropic.bash_20241022": {
             betas.add("computer-use-2024-10-22")
@@ -1657,11 +1666,13 @@ const buildHttpResponseDetails = (
 
 const makeResponse = Effect.fnUntraced(
   function*<Tools extends ReadonlyArray<Tool.Any>>({
+    config,
     options,
     rawResponse,
     response,
     toolNameMapper
   }: {
+    readonly config: ResolvedConfig
     readonly options: LanguageModel.ProviderOptions
     readonly rawResponse: Generated.BetaMessage
     readonly response: HttpClientResponse.HttpClientResponse
@@ -1768,7 +1779,7 @@ const makeResponse = Effect.fnUntraced(
             // Map the provider wire name (e.g. "memory") back to the tool's
             // custom name (e.g. "AnthropicMemory") that the toolkit is keyed by
             const toolName = toolNameMapper.getCustomName(part.name)
-            const params = yield* transformToolCallParams(options, toolName, part.input)
+            const params = yield* transformToolCallParams(config, options, toolName, part.input)
 
             parts.push({
               type: "tool-call",
@@ -1884,23 +1895,14 @@ const makeResponse = Effect.fnUntraced(
         case "code_execution_tool_result": {
           const toolName = toolNameMapper.getCustomName("code_execution")
 
-          if (part.content.type === "code_execution_result") {
-            parts.push({
-              type: "tool-result",
-              id: part.tool_use_id,
-              name: toolName,
-              isFailure: false,
-              result: part.content
-            })
-          } else {
-            parts.push({
-              type: "tool-result",
-              id: part.tool_use_id,
-              name: toolName,
-              isFailure: true,
-              result: part.content
-            })
-          }
+          parts.push({
+            type: "tool-result",
+            id: part.tool_use_id,
+            name: toolName,
+            isFailure: part.content.type === "code_execution_tool_result_error",
+            result: part.content,
+            providerExecuted: true
+          })
 
           break
         }
@@ -1956,7 +1958,8 @@ const makeResponse = Effect.fnUntraced(
               id: part.tool_use_id,
               name: toolName,
               isFailure: false,
-              result: part.content.tool_references
+              result: part.content.tool_references,
+              providerExecuted: true
             })
           } else {
             parts.push({
@@ -1964,7 +1967,8 @@ const makeResponse = Effect.fnUntraced(
               id: part.tool_use_id,
               name: toolName,
               isFailure: true,
-              result: part.content
+              result: part.content,
+              providerExecuted: true
             })
           }
 
@@ -1979,23 +1983,16 @@ const makeResponse = Effect.fnUntraced(
               title: part.content.content.title ?? part.content.url,
               mediaType: part.content.content.source.media_type
             })
-
-            parts.push({
-              type: "tool-result",
-              id: part.tool_use_id,
-              name: toolName,
-              isFailure: false,
-              result: part.content
-            })
-          } else {
-            parts.push({
-              type: "tool-result",
-              id: part.tool_use_id,
-              name: toolName,
-              isFailure: true,
-              result: part.content
-            })
           }
+
+          parts.push({
+            type: "tool-result",
+            id: part.tool_use_id,
+            name: toolName,
+            isFailure: part.content.type !== "web_fetch_result",
+            result: part.content,
+            providerExecuted: true
+          })
 
           break
         }
@@ -2009,7 +2006,8 @@ const makeResponse = Effect.fnUntraced(
               id: part.tool_use_id,
               name: toolName,
               isFailure: true,
-              result: part.content
+              result: part.content,
+              providerExecuted: true
             })
           } else {
             const idGenerator = yield* IdGenerator.IdGenerator
@@ -2019,7 +2017,8 @@ const makeResponse = Effect.fnUntraced(
               id: part.tool_use_id,
               name: toolName,
               isFailure: false,
-              result: part.content
+              result: part.content,
+              providerExecuted: true
             })
 
             const content = part.content as ReadonlyArray<Generated.BetaResponseWebSearchResultBlock>
@@ -2046,7 +2045,7 @@ const makeResponse = Effect.fnUntraced(
     // Anthropic always returns a non-null `stop_reason` for non-streaming responses
     const finishReason = InternalUtilities.resolveFinishReason(
       rawResponse.stop_reason!,
-      options.responseFormat.type === "json"
+      hasStructuredOutputTool
     )
 
     const inputTokens = rawResponse.usage.input_tokens
@@ -2089,11 +2088,13 @@ const makeStreamResponse = Effect.fnUntraced(
   function*<Tools extends ReadonlyArray<Tool.Any>>({
     stream,
     response,
+    config,
     options,
     toolNameMapper
   }: {
     readonly stream: Stream.Stream<MessageStreamEvent, AiError.AiError>
     readonly response: HttpClientResponse.HttpClientResponse
+    readonly config: ResolvedConfig
     readonly options: LanguageModel.ProviderOptions
     readonly toolNameMapper: Tool.NameMapper<Tools>
   }): Effect.fn.Return<
@@ -2207,7 +2208,7 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.id
                   })
 
-                  const params = yield* transformToolCallParams(options, toolName, part.input)
+                  const params = yield* transformToolCallParams(config, options, toolName, part.input)
 
                   parts.push({
                     type: "tool-call",
@@ -2453,23 +2454,16 @@ const makeStreamResponse = Effect.fnUntraced(
                     title: part.content.content.title ?? part.content.url,
                     mediaType: part.content.content.source.media_type
                   })
-
-                  parts.push({
-                    type: "tool-result",
-                    id: part.tool_use_id,
-                    name: toolName,
-                    isFailure: false,
-                    result: part.content
-                  })
-                } else {
-                  parts.push({
-                    type: "tool-result",
-                    id: part.tool_use_id,
-                    name: toolName,
-                    isFailure: true,
-                    result: part.content
-                  })
                 }
+
+                parts.push({
+                  type: "tool-result",
+                  id: part.tool_use_id,
+                  name: toolName,
+                  isFailure: part.content.type !== "web_fetch_result",
+                  result: part.content,
+                  providerExecuted: true
+                })
 
                 break
               }
@@ -2484,7 +2478,8 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.tool_use_id,
                     name: toolName,
                     isFailure: true,
-                    result: part.content
+                    result: part.content,
+                    providerExecuted: true
                   })
                 } else {
                   const idGenerator = yield* IdGenerator.IdGenerator
@@ -2494,7 +2489,8 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.tool_use_id,
                     name: toolName,
                     isFailure: false,
-                    result: part.content
+                    result: part.content,
+                    providerExecuted: true
                   })
 
                   const content = part.content as ReadonlyArray<Generated.BetaResponseWebSearchResultBlock>
@@ -2519,23 +2515,14 @@ const makeStreamResponse = Effect.fnUntraced(
                 const part = event.content_block
                 const toolName = toolNameMapper.getCustomName("code_execution")
 
-                if (part.content.type === "code_execution_result") {
-                  parts.push({
-                    type: "tool-result",
-                    id: part.tool_use_id,
-                    name: toolName,
-                    isFailure: false,
-                    result: part.content
-                  })
-                } else {
-                  parts.push({
-                    type: "tool-result",
-                    id: part.tool_use_id,
-                    name: toolName,
-                    isFailure: true,
-                    result: part.content
-                  })
-                }
+                parts.push({
+                  type: "tool-result",
+                  id: part.tool_use_id,
+                  name: toolName,
+                  isFailure: part.content.type === "code_execution_tool_result_error",
+                  result: part.content,
+                  providerExecuted: true
+                })
                 break
               }
 
@@ -2590,7 +2577,8 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.tool_use_id,
                     name: toolName,
                     isFailure: false,
-                    result: part.content.tool_references
+                    result: part.content.tool_references,
+                    providerExecuted: true
                   })
                 } else {
                   parts.push({
@@ -2598,7 +2586,8 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.tool_use_id,
                     name: toolName,
                     isFailure: true,
-                    result: part.content
+                    result: part.content,
+                    providerExecuted: true
                   })
                 }
                 break
@@ -2821,7 +2810,7 @@ const makeStreamResponse = Effect.fnUntraced(
 
                   const params = contentBlock.providerExecuted === true
                     ? toolParams
-                    : yield* transformToolCallParams(options, contentBlock.name, toolParams)
+                    : yield* transformToolCallParams(config, options, contentBlock.name, toolParams)
 
                   parts.push({
                     type: "tool-call",
@@ -3173,7 +3162,7 @@ interface ModelCapabilities {
   readonly supportsMidConversationSystemMessages: boolean
 }
 
-const getConfigCapabilities = (config: typeof Config.Service & { readonly model: string }): ModelCapabilities => {
+const getConfigCapabilities = (config: ResolvedConfig): ModelCapabilities => {
   const capabilities = getModelCapabilities(config.model)
   return {
     ...capabilities,
@@ -3263,12 +3252,6 @@ const unsupportedSchemaError = (error: unknown, method: string): AiError.AiError
     })
   })
 
-const tryCodecTransform = <S extends Schema.Constraint>(schema: S, method: string) =>
-  Effect.try({
-    try: () => toCodecAnthropic(schema),
-    catch: (error) => unsupportedSchemaError(error, method)
-  })
-
 const tryJsonSchema = <S extends Schema.Constraint>(schema: S, method: string) =>
   Effect.try({
     try: () => Tool.getJsonSchemaFromSchema(schema, { transformer: toCodecAnthropic }),
@@ -3282,9 +3265,23 @@ const toolParametersError = (tool: Tool.Any, error: unknown, method: string): Ai
     method
   )
 
-const tryToolJsonSchema = <T extends Tool.Any | Tool.AnyDynamic>(tool: T, method: string) =>
+/**
+ * Resolves whether a tool is advertised with the strict Anthropic schema.
+ * `undefined` means the model does not support the `strict` field at all.
+ */
+const getToolStrictMode = (tool: Tool.Any, config: ResolvedConfig): boolean | undefined =>
+  getConfigCapabilities(config).supportsStructuredOutput
+    ? (Tool.getStrictMode(tool) ?? config.strictJsonSchema ?? true)
+    : undefined
+
+const getToolJsonSchema = (tool: Tool.Any | Tool.AnyDynamic, strict: boolean) =>
+  Tool.getJsonSchema(tool, {
+    transformer: strict ? toCodecAnthropic : LanguageModel.defaultCodecTransformer
+  })
+
+const tryToolJsonSchema = <T extends Tool.Any | Tool.AnyDynamic>(tool: T, strict: boolean, method: string) =>
   Effect.try({
-    try: () => Tool.getJsonSchema(tool, { transformer: toCodecAnthropic }),
+    try: () => getToolJsonSchema(tool, strict),
     catch: (error) => toolParametersError(tool, error, method)
   }).pipe(Effect.filterOrFail(
     // A raw JSON Schema given to a dynamic tool is sent unchanged
@@ -3311,7 +3308,26 @@ const getOutputFormat = Effect.fnUntraced(function*({ capabilities, options }: {
   return undefined
 })
 
+const getToolParamsCodec = (tool: Tool.Any, config: ResolvedConfig) => {
+  const schema = tool.parametersSchema
+  if (Tool.isProviderDefined(tool)) {
+    // Provider-defined tools are not advertised with a schema; decode them with
+    // the Anthropic codec, falling back to plain JSON for schemas it cannot
+    // convert
+    try {
+      return toCodecAnthropic(schema).codec
+    } catch {
+      return Schema.toCodecJson(schema)
+    }
+  }
+  // Decode with the codec of the schema the request advertised
+  return getToolStrictMode(tool, config) === true
+    ? toCodecAnthropic(schema).codec
+    : Schema.toCodecJson(schema)
+}
+
 const transformToolCallParams = Effect.fnUntraced(function*(
+  config: ResolvedConfig,
   options: LanguageModel.ProviderOptions,
   toolName: string,
   toolParams: unknown
@@ -3332,14 +3348,17 @@ const transformToolCallParams = Effect.fnUntraced(function*(
     })
   }
 
-  const { codec } = yield* tryCodecTransform(tool.parametersSchema, "makeResponse")
+  const codec = getToolParamsCodec(tool, config)
 
   // Normalize valid parameters; leave invalid ones for Toolkit.
   return yield* (
     Schema.decodeEffect(codec)(toolParams) as Effect.Effect<unknown, Schema.SchemaError>
   ).pipe(
     Effect.flatMap((decoded) =>
-      Schema.encodeUnknownEffect(tool.parametersSchema)(decoded) as Effect.Effect<unknown, Schema.SchemaError>
+      Schema.encodeUnknownEffect(Schema.toCodecJson(tool.parametersSchema))(decoded) as Effect.Effect<
+        unknown,
+        Schema.SchemaError
+      >
     ),
     Effect.orElseSucceed(() => toolParams)
   )

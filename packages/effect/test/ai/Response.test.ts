@@ -1,7 +1,8 @@
 import { describe, it } from "@effect/vitest"
 import { assertInstanceOf, assertTrue, deepStrictEqual } from "@effect/vitest/utils"
 import { Effect, Schema, Stream } from "effect"
-import { AiError, Response, Tool, Toolkit } from "effect/ai"
+import { AiError, Prompt, Response, Tool, Toolkit } from "effect/ai"
+import { SchemaBinary } from "effect/encoding"
 import { TestSchema } from "effect/testing"
 
 describe("Response", () => {
@@ -105,6 +106,53 @@ describe("Response", () => {
       deepStrictEqual(decoded.result.module, failure.module)
       deepStrictEqual(decoded.result.method, failure.method)
       deepStrictEqual(decoded.encodedResult, encodedFailure, "round-tripped encoded AiError")
+    }))
+
+  it.effect("round trips a Toolkit result with a non-JSON encoding through AllParts JSON", () =>
+    Effect.gen(function*() {
+      const tool = Tool.make("Schedule", { success: Schema.Struct({ at: Schema.Date }) })
+      const toolkit = Toolkit.make(tool)
+      const at = new Date("2026-01-01T00:00:00.000Z")
+      const handlers = yield* toolkit.pipe(Effect.provide(toolkit.toLayer({
+        Schedule: () => Effect.succeed({ at })
+      })))
+      const results = yield* handlers.handle(tool.name, {}).pipe(Effect.flatMap(Stream.runCollect))
+      const part = Response.makePart("tool-result", {
+        ...results[0],
+        id: "tool-123",
+        name: tool.name,
+        providerExecuted: false
+      })
+      const schema = Response.AllParts(toolkit)
+      const encoded = yield* Schema.encodeEffect(schema)(part)
+      const decoded = yield* Schema.decodeUnknownEffect(schema)(JSON.parse(JSON.stringify(encoded)))
+
+      assertTrue(encoded.type === "tool-result")
+      deepStrictEqual(encoded.result, { at: "2026-01-01T00:00:00.000Z" })
+      deepStrictEqual(decoded, part)
+    }))
+
+  it.effect("keeps the raw encoding for provider-executed tool results", () =>
+    Effect.gen(function*() {
+      const tool = Tool.providerDefined({
+        id: "test.provider_search",
+        customName: "ProviderSearch",
+        providerName: "provider_search",
+        success: Schema.Struct({ cursor: Schema.optional(Schema.String) })
+      })()
+      const part = Response.makePart("tool-result", {
+        id: "tool-123",
+        name: tool.name,
+        isFailure: false,
+        result: { cursor: undefined },
+        encodedResult: { cursor: undefined },
+        providerExecuted: true,
+        preliminary: false
+      })
+      const encoded = yield* Schema.encodeUnknownEffect(Response.AllParts(Toolkit.make(tool)))(part)
+
+      // The JSON encoding would hold `null` for the omitted optional
+      deepStrictEqual((encoded as Response.ToolResultPartEncoded).result, { cursor: undefined })
     }))
 
   describe("provider-defined tool execution failures", () => {
@@ -235,6 +283,46 @@ describe("Response", () => {
             deepStrictEqual<unknown>(decoded, part, `decoded ${part.type}`)
           }
         }))
+    }
+  })
+
+  describe("binary codecs", () => {
+    const toolkit = Toolkit.make(
+      Tool.make("GetWeather", {
+        parameters: Schema.Struct({ city: Schema.String }),
+        success: Schema.Struct({ temperature: Schema.Number })
+      })
+    )
+
+    const text = Response.makePart("text", { text: "hi" })
+
+    for (
+      const [name, makeSchema, part] of [
+        ["AllParts", () => Response.AllParts(), text],
+        ["Part", () => Response.Part(), text],
+        ["StreamPart", () => Response.StreamPart(), Response.makePart("text-delta", { id: "1", delta: "hi" })],
+        ["Part with a toolkit", () => Response.Part(toolkit), text],
+        [
+          "Part",
+          () => Response.Part(),
+          Response.makePart("tool-result", {
+            id: "call-1",
+            name: "Screenshot",
+            isFailure: false,
+            result: "done",
+            encodedResult: "done",
+            modelOutput: [Prompt.filePart({ mediaType: "image/png", data: new URL("https://example.com/a.png") })],
+            providerExecuted: false,
+            preliminary: false
+          })
+        ]
+      ] as const
+    ) {
+      it(`${name} round trips a ${part.type} part`, () => {
+        const codec = SchemaBinary.toCodec(makeSchema())
+
+        deepStrictEqual(Schema.decodeUnknownSync(codec)(Schema.encodeUnknownSync(codec)(part)), part)
+      })
     }
   })
 

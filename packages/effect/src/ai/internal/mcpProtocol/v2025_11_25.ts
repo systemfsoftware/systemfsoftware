@@ -8,9 +8,10 @@ import * as McpCore from "../mcpCore.ts"
 import * as McpProtocol from "../mcpProtocol.ts"
 import * as McpRuntime from "../mcpRuntime.ts"
 import * as McpSchema from "../mcpSchema/v2025_11_25.ts"
+import * as McpSkills from "../mcpSkills.ts"
 
 // Pings can arrive before initialize and do not require a client session.
-const ClientRequestRpcs = McpSchema.ClientRequestRpcs.omit("ping").middleware(
+const ClientRequestRpcs = McpSchema.ClientRequestRpcs.omit("ping").merge(McpSkills.LegacyRpcs).middleware(
   PublicMcpSchema.McpServerClientMiddleware
 ).add(McpSchema.Ping)
 
@@ -133,6 +134,7 @@ export const protocol = McpProtocol.make({
   handlerRpcs: AdapterRpcs,
   makeHandlers: (core, lifecycle) =>
     AdapterRpcs.of({
+      ...McpSkills.legacyHandlers(core),
       initialize: (request, { client }) =>
         lifecycle.initialize(McpSchema.protocolVersion, {
           protocolVersion: McpSchema.protocolVersion,
@@ -176,8 +178,8 @@ export const protocol = McpProtocol.make({
         ),
       "notifications/roots/list_changed": (_, { client, headers }) =>
         lifecycle.clientNotification(McpCore.ClientNotification.RootsChanged(), client.id, headers),
-      "resources/list": () =>
-        McpProtocol.listForClient(core.resources.list)
+      "resources/list": (pageRequest) =>
+        McpProtocol.listForClient(core.resources.list, pageRequest?.cursor)
           .pipe(
             Effect.map((resources) =>
               McpSchema.ListResourcesResult.make({
@@ -185,8 +187,8 @@ export const protocol = McpProtocol.make({
               })
             )
           ),
-      "resources/templates/list": () =>
-        McpProtocol.listForClient(core.resources.listTemplates).pipe(
+      "resources/templates/list": (pageRequest) =>
+        McpProtocol.listForClient(core.resources.listTemplates, pageRequest?.cursor).pipe(
           Effect.map((resourceTemplates) =>
             McpSchema.ListResourceTemplatesResult.make({
               resourceTemplates: resourceTemplates.map((resourceTemplate) =>
@@ -223,8 +225,8 @@ export const protocol = McpProtocol.make({
         lifecycle.subscribe(uri, client.id, headers).pipe(Effect.as({})),
       "resources/unsubscribe": ({ uri }, { client, headers }) =>
         lifecycle.unsubscribe(uri, client.id, headers).pipe(Effect.as({})),
-      "prompts/list": () =>
-        McpProtocol.listForClient(core.prompts.list)
+      "prompts/list": (pageRequest) =>
+        McpProtocol.listForClient(core.prompts.list, pageRequest?.cursor)
           .pipe(
             Effect.map((prompts) =>
               McpSchema.ListPromptsResult.make({
@@ -282,8 +284,8 @@ export const protocol = McpProtocol.make({
           _meta: result.metadata
         })
       }),
-      "tools/list": Effect.fnUntraced(function*() {
-        const tools = yield* McpProtocol.listForClient(core.tools.list)
+      "tools/list": Effect.fnUntraced(function*(pageRequest) {
+        const tools = yield* McpProtocol.listForClient(core.tools.list, pageRequest?.cursor)
         return McpSchema.ListToolsResult.make({
           tools: tools.map((tool) =>
             McpSchema.Tool.make({
