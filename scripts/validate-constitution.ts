@@ -826,7 +826,7 @@ const totalRawIds = rawLawIds + rawCorpusIds;
 
 let againstAccountingOnly = false;
 let vacated: string[] = [];
-let uncompared: string[] = [];
+const uncompared: string[] = [];
 
 function idsFromConstitutionAtRev(text: string): string[] {
   const ids: string[] = [];
