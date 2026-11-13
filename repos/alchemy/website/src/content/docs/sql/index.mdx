@@ -3,6 +3,10 @@ title: SQL
 description: Choose a database, connect with Effect SQL, Drizzle, or Prisma ORM, and deploy committed migrations.
 ---
 
+`@alchemy.run/sql` is how Alchemy apps use SQL databases, on every cloud. You declare the database, its migrations run on deploy, and your code queries it with Effect SQL, Drizzle or Prisma ORM over a connection that lasts one request.
+
+**New here?** [How SQL works in Alchemy](/sql/what-is-sql) walks through databases, clients, connections, pools and migrations, once each.
+
 <span id="databases" />
 
 ## Choose a database
@@ -50,7 +54,7 @@ See [runnable examples](https://github.com/alchemy-run/alchemy/blob/main/example
 ## Already have a database?
 
 ```typescript
-import * as SQL from "alchemy/SQL/Postgres";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
