@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: '["self-hosted", "mutation"]'
+      upload-artifacts:
+        description: Upload the merged mutation report as an artifact; false drops it for a quota incident, visibly by the run's inputs, never by swallowing the upload error
+        required: false
+        type: boolean
+        default: true
     secrets:
       sfs-fetch-token:
         description: GitHub token Nix fetches `github:` flake inputs with in the dev-shell step, for inputs in private repositories; unset keeps the job's GITHUB_TOKEN
@@ -135,14 +140,12 @@ jobs:
           key: mutation-incremental-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: always()
+        if: always() && inputs.upload-artifacts
         with:
           name: mutation-report-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/mutation-out/*/report.json
-            ${{ runner.temp }}/mutation-out/*/merged/mutation.json
+          path: ${{ runner.temp }}/mutation-out/*/merged/mutation.json
           if-no-files-found: ignore
-          retention-days: 35
+          retention-days: 7
 
       - name: Remove .stryker-tmp
         if: always()
