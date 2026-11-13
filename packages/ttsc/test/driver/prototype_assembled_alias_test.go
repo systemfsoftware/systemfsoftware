@@ -6,6 +6,7 @@ import (
   "testing"
 
   shimast "github.com/microsoft/typescript-go/shim/ast"
+  shimchecker "github.com/microsoft/typescript-go/shim/checker"
   shimcompiler "github.com/microsoft/typescript-go/shim/compiler"
   shimcore "github.com/microsoft/typescript-go/shim/core"
   shimprinter "github.com/microsoft/typescript-go/shim/printer"
@@ -16,41 +17,53 @@ import (
 )
 
 // assembledEmitHost implements printer.EmitHost by delegating to driver.Program
-// (the same delegation tsgo's internal emitHost does). It carries the emit
-// resolver from the program's single checker.
+// (the same delegation tsgo's internal emitHost does). Its emit resolver comes
+// from the program's single checker. The methods whose names or types differ
+// between compiler targets live in assembled_emit_host_ts70_test.go and
+// assembled_emit_host_ts71_test.go.
 type assembledEmitHost struct {
-  program      *shimcompiler.Program
-  emitResolver shimprinter.EmitResolver
+  program *shimcompiler.Program
+  checker *shimchecker.Checker
 }
 
 func (h *assembledEmitHost) Options() *shimcore.CompilerOptions { return h.program.Options() }
 func (h *assembledEmitHost) SourceFiles() []*shimast.SourceFile { return h.program.SourceFiles() }
-func (h *assembledEmitHost) UseCaseSensitiveFileNames() bool {
-  return h.program.UseCaseSensitiveFileNames()
+func (h *assembledEmitHost) CommonSourceDirectory() shimtspath.RootedDirectoryPath {
+  return h.program.CommonSourceDirectory()
 }
-func (h *assembledEmitHost) GetCurrentDirectory() string    { return h.program.GetCurrentDirectory() }
-func (h *assembledEmitHost) CommonSourceDirectory() string  { return h.program.CommonSourceDirectory() }
-func (h *assembledEmitHost) IsEmitBlocked(file string) bool { return h.program.IsEmitBlocked(file) }
-func (h *assembledEmitHost) WriteFile(fileName string, text string) error {
+func (h *assembledEmitHost) IsEmitBlocked(file shimtspath.RootedFilePath) bool {
+  return h.program.IsEmitBlocked(file)
+}
+func (h *assembledEmitHost) WriteFile(fileName shimtspath.RootedFilePath, text string) error {
   return h.program.Host().FS().WriteFile(fileName, text)
 }
 func (h *assembledEmitHost) GetEmitModuleFormatOfFile(file shimast.HasFileName) shimcore.ModuleKind {
   return h.program.GetEmitModuleFormatOfFile(file)
 }
-func (h *assembledEmitHost) GetEmitResolver() shimprinter.EmitResolver { return h.emitResolver }
-func (h *assembledEmitHost) GetProjectReferenceFromSource(path shimtspath.Path) *shimtsoptions.SourceOutputAndProjectReference {
+func (h *assembledEmitHost) GetProjectReferenceFromSource(path shimtspath.PathKey) *shimtsoptions.SourceOutputAndProjectReference {
   return h.program.GetProjectReferenceFromSource(path)
 }
 func (h *assembledEmitHost) IsSourceFileFromExternalLibrary(file *shimast.SourceFile) bool {
   return h.program.IsSourceFileFromExternalLibrary(file)
 }
 
-// TestPrototypeAssembledAlias proves the AST-integration core: ttsc assembles
+// TestPrototypeAssembledAlias Verifies the AST-integration core: this case assembles
 // the emit pipeline from shimmed tsgo parts, runs a plugin transformer FIRST in
 // the same EmitContext as the builtins (here a stand-in that replaces `foo`
 // with a synthetic identifier and SetOriginal-links it to the parse-tree node),
 // then the builtin module-transform aliases it to dep_1.foo on its own. No
 // text-splice, no hand-rolled commonJS naming.
+//
+// The authored named import needs both binding and member reference; either alone could mask import elision.
+//
+// 1. Load a named-import project and rebuild foo identifiers with SetOriginal.
+// 2. Apply builtin transforms using the original parse-tree reference target.
+// 3. Print the result and require both dep_1.foo and its require binding.
+//
+// @evidence contracts/testing.md#behavioral-verification A manually assembled shim transform chain emits dep_1.foo and its require binding.
+// @evidence contracts/testing.md#independent-expectations The authored named import needs both binding and member reference; either alone could mask import elision.
+// @evidence contracts/testing.md#distinguishing-cases Rebuilt identifier with SetOriginal is covered; maintained EmitWithPluginTransformers is not invoked by this prototype.
+// @evidence contracts/testing.md#execution-ownership Go unit TestPrototypeAssembledAlias is discovered by go test in test/driver and invokes source/shim operations directly. Temporary filesystem inputs do not install a consumer or build a host artifact.
 func TestPrototypeAssembledAlias(t *testing.T) {
   root := t.TempDir()
   writeProjectFile(t, root, "tsconfig.json", `{
@@ -74,7 +87,7 @@ func TestPrototypeAssembledAlias(t *testing.T) {
   }
 
   ec := shimprinter.NewEmitContext()
-  host := &assembledEmitHost{program: prog.TSProgram, emitResolver: prog.Checker.GetEmitResolver()}
+  host := &assembledEmitHost{program: prog.TSProgram, checker: prog.Checker}
 
   // Plugin transformer stand-in: replace every parse-tree `foo` with a fresh
   // node built by the EMIT EmitContext's factory, linked to the original via
@@ -97,11 +110,7 @@ func TestPrototypeAssembledAlias(t *testing.T) {
   // built from the PARSE tree and applied to the transformed one, exactly as
   // EmitWithPluginTransformers does it: the file handed to GetScriptTransformers
   // is the reference-marking target, not the file being transformed.
-  builtins := shimcompiler.GetScriptTransformers(ec, host, sf)
-  out := transformed
-  for _, tr := range builtins {
-    out = tr.TransformSourceFile(out)
-  }
+  out := applyAssembledBuiltins(ec, host, sf, transformed)
 
   writer := shimprinter.NewTextWriter("\n", 0)
   p := shimprinter.NewPrinter(shimprinter.PrinterOptions{}, shimprinter.PrintHandlers{}, ec)
@@ -118,7 +127,7 @@ func TestPrototypeAssembledAlias(t *testing.T) {
   // the assembly in this test only. The driver's own lane is guarded by the
   // emit_plugin_rebuilt_* tests, which this one cannot stand in for because it
   // never calls EmitWithPluginTransformers.
-  if !strings.Contains(text, `require("./dep")`) {
+  if !strings.Contains(text, `dep_1 = require("./dep")`) {
     t.Fatalf("alias dep_1.foo has no require binding, so the assembled output would throw at runtime:\n%s", text)
   }
 }

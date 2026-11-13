@@ -22,9 +22,24 @@ import { make } from "../internal/make";
  * @param left The left-hand operand.
  * @param right The right-hand operand.
  * @returns The created {@link QualifiedName}.
+ * @evidence contracts/common.md#principled-implementation
+ *   EntityName permits nested left segments and the right argument is restricted
+ *   to Identifier/string, making the asName result an identifier rather than a
+ *   private name. The printer joins the segments as a type-position dotted name.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The builder preserves the left tree and normalizes only the final segment;
+ *   callers compose deeper paths without another dotted-string parser.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The final segment passes through the identifier-only helper rather than
+ *   coercing an unsupported node or patching a dotted source string.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains nesting and string normalization and shows A.b separately
+ *   from the tags, applying the documentation skill's paragraph guidance.
  */
 export const createQualifiedName = (
   left: EntityName,
   right: string | Identifier,
-): QualifiedName =>
-  make("QualifiedName", { left, right: asName(right) as Identifier });
+): QualifiedName => make("QualifiedName", { left, right: asName(right) });

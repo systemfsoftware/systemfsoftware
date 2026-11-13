@@ -4,30 +4,67 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
- * Runtime import helpers for the built `@ttsc/metro` package.
+ * Runtime import helpers for the Metro source units.
  *
- * Tests load the compiled ESM output through file URLs so they validate the
- * package exactly as Node loads it after a build, the same approach the
- * `@ttsc/unplugin` suite uses for its adapters.
+ * Authored owners are loaded under the unit loader with a fresh worker module
+ * and a restored environment per case, without starting native compilation.
  */
 export namespace TestMetroRuntime {
-  /** Resolve a built entrypoint under `packages/metro/lib`. */
-  export function libPath(entry: string, extension: "js" | "mjs"): string {
-    return path.resolve(
-      TestProject.WORKSPACE_ROOT,
-      "packages/metro/lib",
-      `${entry}.${extension}`,
-    );
+  /** Environment variable `withTtsc` sets to its workers' transform session. */
+  const SESSION_ENV = "TTSC_UNPLUGIN_TRANSFORM_SESSION";
+
+  /**
+   * Run `body` with a temporary directory of its own, then restore the
+   * transform session environment a `withTtsc` call inside it changed
+   * (samchon/ttsc#1390).
+   *
+   * `withTtsc` opens the session Metro's workers inherit by setting a
+   * process-wide variable. This suite shares one process among every case, so a
+   * session left open would make later cases share compiles they expect to make
+   * themselves, and the variable is restored. The store outlives every process
+   * (samchon/ttsc#1483) and belongs to the user, so the session opens below a
+   * temporary directory of this case's own, never the user's, which the process
+   * removes when it exits with everything else the case made there.
+   */
+  export async function confineSession<T>(
+    body: () => T | Promise<T>,
+  ): Promise<T> {
+    const previous = process.env[SESSION_ENV];
+    const temporary = TEMPORARY_ENV.map((key) => [key, process.env[key]]);
+    const isolated = TestProject.tmpdir("ttsc-metro-session-");
+    for (const key of TEMPORARY_ENV) process.env[key] = isolated;
+    try {
+      return await body();
+    } finally {
+      for (const [key, value] of temporary) {
+        if (value === undefined) delete process.env[key!];
+        else process.env[key!] = value;
+      }
+      if (previous === undefined) delete process.env[SESSION_ENV];
+      else process.env[SESSION_ENV] = previous;
+    }
   }
 
-  /** Convert a built ESM entrypoint into a dynamic-importable file URL. */
-  export function libUrl(entry: string): string {
-    return pathToFileURL(libPath(entry, "mjs")).href;
+  /** The variables `os.tmpdir()` reads, on every platform. */
+  const TEMPORARY_ENV = ["TEMP", "TMP", "TMPDIR"];
+
+  /**
+   * Authored owners are loaded from source so the unit exercises the code under
+   * review.
+   */
+  function runtimeUrl(entry: string): string {
+    return pathToFileURL(
+      path.resolve(
+        TestProject.WORKSPACE_ROOT,
+        "packages/metro/src",
+        `${entry}.ts`,
+      ),
+    ).href;
   }
 
   /** Load the package entry (`withTtsc`, types). */
   export async function loadIndex(): Promise<any> {
-    return import(libUrl("index"));
+    return import(runtimeUrl("index"));
   }
 
   /**
@@ -35,12 +72,12 @@ export namespace TestMetroRuntime {
    * `resolveOptionsFromEnv`, `ENV_KEY`).
    */
   export async function loadOptions(): Promise<any> {
-    return import(libUrl("core/options"));
+    return import(runtimeUrl("core/options"));
   }
 
   /** Load the internal upstream-resolution module. */
   export async function loadUpstream(): Promise<any> {
-    return import(libUrl("core/upstream"));
+    return import(runtimeUrl("core/upstream"));
   }
 
   /**
@@ -48,7 +85,7 @@ export namespace TestMetroRuntime {
    * `computeProjectFingerprint`, `readSnapshotState`).
    */
   export async function loadFingerprint(): Promise<any> {
-    return import(libUrl("core/fingerprint"));
+    return import(runtimeUrl("core/fingerprint"));
   }
 
   // The transformer keeps module-level singletons (resolved options + transform
@@ -63,7 +100,7 @@ export namespace TestMetroRuntime {
    */
   export async function loadFreshTransformer(): Promise<any> {
     freshCounter += 1;
-    return import(`${libUrl("transformer")}?case=${freshCounter}`);
+    return import(`${runtimeUrl("transformer")}?case=${freshCounter}`);
   }
 
   let fakeUpstreamPath: string | undefined;

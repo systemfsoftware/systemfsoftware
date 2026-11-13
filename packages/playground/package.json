@@ -1,6 +1,6 @@
 {
   "name": "@ttsc/playground",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "Reusable React + Web Worker scaffolding for in-browser ttsc playgrounds built on @ttsc/wasm.",
   "main": "lib/src/index.js",
   "types": "lib/src/index.d.ts",
@@ -20,7 +20,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "rimraf lib && tsc -p ."
+    "build": "rimraf lib && tsc -p .",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -45,6 +46,7 @@
     "tgrid": "^1.0.3"
   },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@monaco-editor/react": "^4.6.0",
     "@ttsc/wasm": "workspace:^",
     "@types/semver": "^7.7.1",

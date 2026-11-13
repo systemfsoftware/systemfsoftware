@@ -3,7 +3,6 @@ package evidence
 import (
   "encoding/json"
   "io/fs"
-  "os"
   "path"
   "path/filepath"
   "sort"
@@ -12,6 +11,7 @@ import (
   shimast "github.com/microsoft/typescript-go/shim/ast"
   shimcore "github.com/microsoft/typescript-go/shim/core"
   shimparser "github.com/microsoft/typescript-go/shim/parser"
+  shimtspath "github.com/microsoft/typescript-go/shim/tspath"
 )
 
 // typeScriptLoader materializes TypeScript inventories for a reference
@@ -22,6 +22,7 @@ import (
 // that symbol is precisely the one an obligation needs to name — an evidence
 // graph exists to report the operation the frontend never called.
 type typeScriptLoader struct {
+  inputs        evidenceInputReader
   boundary      *populationBase
   root          string
   identityRoot  string
@@ -38,8 +39,10 @@ type typeScriptLoader struct {
 func newTypeScriptLoader(
   root string,
   program map[string]*artifactInventory,
+  readers ...evidenceInputReader,
 ) *typeScriptLoader {
   loader := &typeScriptLoader{
+    inputs:        inputReader(readers),
     root:          strings.ReplaceAll(root, "\\", "/"),
     program:       map[string]*artifactInventory{},
     programIDs:    map[string]*artifactInventory{},
@@ -50,7 +53,7 @@ func newTypeScriptLoader(
     identities:    map[string]typeScriptModuleIdentity{},
     installs:      map[string]installedPackageLocation{},
   }
-  loader.identityRoot, _ = physicalTypeScriptPath(filepath.FromSlash(loader.root))
+  loader.identityRoot, _ = physicalTypeScriptPath(filepath.FromSlash(loader.root), loader.inputs)
   keys := make([]string, 0, len(program))
   for key := range program {
     keys = append(keys, key)
@@ -116,9 +119,22 @@ func (loader *typeScriptLoader) inventory(relative string) (result *artifactInve
 
 func (loader *typeScriptLoader) parse(relative string) *artifactInventory {
   relative = loader.projectPath(relative)
-  content, err := os.ReadFile(resolveProjectPath(loader.root, relative))
+  content, err := loader.inputs.ReadFile(resolveProjectPath(loader.root, relative))
   if err != nil {
     loader.failures[relative] = err.Error()
+    return nil
+  }
+  // The parser's file name must be rooted. The read above resolves a relative
+  // path against the working directory (only an empty project root leaves one),
+  // so anchor the name at that same directory: it names the file that was read.
+  absolute, err := filepath.Abs(resolveProjectPath(loader.root, relative))
+  if err != nil {
+    loader.failures[relative] = err.Error()
+    return nil
+  }
+  fileName, ok := shimtspath.TryRootedFilePathFromAbsolute(absolute)
+  if !ok {
+    loader.failures[relative] = "the TypeScript source path is not rooted: " + absolute
     return nil
   }
   kind := shimcore.ScriptKindTS
@@ -126,9 +142,7 @@ func (loader *typeScriptLoader) parse(relative string) *artifactInventory {
     kind = shimcore.ScriptKindTSX
   }
   file := shimparser.ParseSourceFile(
-    shimast.SourceFileParseOptions{
-      FileName: filepath.ToSlash(resolveProjectPath(loader.root, relative)),
-    },
+    shimast.SourceFileParseOptions{FileName: fileName},
     string(content),
     kind,
   )
@@ -178,7 +192,7 @@ func (loader *typeScriptLoader) programInventory(module string) *artifactInvento
 // candidate, and a watch cycle resolves every re-export in the population — so
 // callers that can answer from the Program should do that first.
 func (loader *typeScriptLoader) existsOnDisk(relative string) bool {
-  info, err := os.Stat(resolveProjectPath(loader.root, relative))
+  info, err := loader.inputs.Stat(resolveProjectPath(loader.root, relative))
   return err == nil && !info.IsDir()
 }
 
@@ -215,10 +229,10 @@ func (loader *typeScriptLoader) resolveUncached(
       normalized = append(normalized, module)
     }
     // The Program answers first, and not only because it answers without a
-    // syscall. A project that emits beside its sources has both `x.js` and
-    // `x.ts` on disk, and `x.js` is written earlier in the candidate order;
-    // resolving an import to emitted JavaScript would read a module whose
-    // declarations the graph cannot address.
+    // syscall. A module under edit has to be read as the editor has it rather
+    // than as the disk last saw it, which is the rule `inventory` states for a
+    // file already named. The candidates never include emitted JavaScript, so
+    // an emit beside its sources cannot win here.
     for _, candidate := range normalized {
       if loader.programInventory(candidate) != nil {
         if !loader.withinBoundary(candidate) {
@@ -263,7 +277,7 @@ func (loader *typeScriptLoader) moduleIdentity(module string) (string, bool) {
     return cached.Path, cached.Resolved
   }
   absolute := resolveProjectPath(loader.root, module)
-  resolved, ok := physicalTypeScriptPath(absolute)
+  resolved, ok := physicalTypeScriptPath(absolute, loader.inputs)
   // Resolve both sides before taking a relative identity. Canonicalizing only
   // the file makes a project junction or Windows 8.3 root leak the checkout's
   // absolute location into every unit ID and invalidate unchanged reviews.
@@ -272,16 +286,17 @@ func (loader *typeScriptLoader) moduleIdentity(module string) (string, bool) {
   return identity, ok
 }
 
-func physicalTypeScriptPath(absolute string) (string, bool) {
+func physicalTypeScriptPath(absolute string, readers ...evidenceInputReader) (string, bool) {
+  inputs := inputReader(readers)
   current := filepath.Clean(absolute)
   // A directory link can introduce another link in an already-walked parent.
   // Settle the complete path, with the same finite bound as directory chains.
   for range 32 {
-    resolved, ok := resolveLinkedPath(current)
+    resolved, ok := resolveLinkedPath(current, inputs)
     if !ok {
       return resolved, false
     }
-    resolved = expandTypeScriptPath(resolved)
+    resolved = expandTypeScriptPath(resolved, inputs)
     if resolved == current {
       return resolved, true
     }
@@ -293,11 +308,12 @@ func physicalTypeScriptPath(absolute string) (string, bool) {
 // An unsaved or deleted file still has an identity. Expand the deepest existing
 // prefix so Windows short names do not reappear when EvalSymlinks cannot read
 // the complete path, then restore the missing suffix without changing its case.
-func expandTypeScriptPath(absolute string) string {
+func expandTypeScriptPath(absolute string, readers ...evidenceInputReader) string {
+  inputs := inputReader(readers)
   probe := absolute
   suffix := []string{}
   for {
-    if final, err := filepath.EvalSymlinks(probe); err == nil {
+    if final, err := inputs.EvalSymlinks(probe); err == nil {
       if !strings.EqualFold(final, probe) {
         probe = final
       }
@@ -352,7 +368,7 @@ func (loader *typeScriptLoader) projectPath(relative string) string {
 
 // isCleanProjectRelativePath reports whether a path is already the identity
 // `projectPath` would produce: forward slashes, no drive or leading separator,
-// and no `.` or `..` segment to collapse.
+// and no empty, `.`, or `..` segment to collapse.
 func isCleanProjectRelativePath(value string) bool {
   if value == "" || strings.ContainsRune(value, '\\') {
     return false
@@ -447,16 +463,23 @@ type installedPackageLocation struct {
 func (loader *typeScriptLoader) locateInstalledPackage(
   name string,
 ) (string, map[string]json.RawMessage) {
+  current := filepath.Clean(filepath.FromSlash(loader.root))
   prefix := ""
-  for range 32 {
+  for {
     directory := path.Join(prefix, "node_modules", name)
     manifest := readPackageManifest(
       loader.root,
       path.Join(directory, "package.json"),
+      loader.inputs,
     )
     if manifest != nil {
       return directory, manifest
     }
+    parent := filepath.Dir(current)
+    if parent == current {
+      break
+    }
+    current = parent
     prefix = path.Join(prefix, "..")
   }
   return path.Join("node_modules", name), nil
@@ -474,7 +497,7 @@ func (loader *typeScriptLoader) locateInstalledPackage(
 // The second answer is what separates an exhausted chain from a resolved
 // directory, which are one string without it: a caller comparing paths against
 // a link that still names another link cannot tell that it holds one, and that
-// is how the leaf case of #1269 stayed silent until the caller was told.
+// is how a leaf link stays silent unless the caller is told.
 //
 // The bound counts links followed, not answers given. A chain that ends exactly
 // on the last hop this rule follows has landed on its directory with no
@@ -485,17 +508,18 @@ func (loader *typeScriptLoader) locateInstalledPackage(
 // every earlier ending is a return from inside the loop. Refusing it instead
 // would turn a root that works into an error at the boundary, which is what
 // this rule exists to keep from happening in the other direction.
-func resolveLinkedDirectory(directory string) (string, bool) {
+func resolveLinkedDirectory(directory string, readers ...evidenceInputReader) (string, bool) {
+  inputs := inputReader(readers)
   current := directory
   for range 32 {
-    info, err := os.Lstat(current)
+    info, err := inputs.Lstat(current)
     if err != nil || info.IsDir() {
       return current, true
     }
-    if target, err := os.Stat(current); err != nil || !target.IsDir() {
+    if target, err := inputs.Stat(current); err != nil || !target.IsDir() {
       return current, true
     }
-    linked, err := os.Readlink(current)
+    linked, err := inputs.Readlink(current)
     if err != nil {
       return current, true
     }
@@ -504,7 +528,7 @@ func resolveLinkedDirectory(directory string) (string, bool) {
     }
     current = filepath.ToSlash(linked)
   }
-  info, err := os.Lstat(current)
+  info, err := inputs.Lstat(current)
   return current, err == nil && info.IsDir()
 }
 
@@ -527,10 +551,10 @@ func (loader *typeScriptLoader) walk(base string) ([]string, string) {
   // owed there is a better cause, not a diagnostic that does not exist. A
   // declared base has no such report behind it, which is why
   // `resolvedBaseDirectory` does refuse.
-  walked, _ := resolveLinkedDirectory(root)
+  walked, _ := resolveLinkedDirectory(root, loader.inputs)
   found := []string{}
   problem := ""
-  err := filepath.WalkDir(walked, func(current string, entry fs.DirEntry, err error) error {
+  err := loader.inputs.WalkDir(walked, func(current string, entry fs.DirEntry, err error) error {
     if walked != root {
       if inside, ok := containedProjectPath(walked, filepath.ToSlash(current)); ok {
         current = path.Join(root, inside)

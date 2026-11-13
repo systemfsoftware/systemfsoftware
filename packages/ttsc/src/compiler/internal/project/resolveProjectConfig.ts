@@ -1,140 +1,31 @@
-import fs from "node:fs";
-import path from "node:path";
-
-import type { ITtscProjectIdentity } from "../../../structures/internal/ITtscProjectIdentity";
 import type { ITtscProjectLocatorOptions } from "../../../structures/internal/ITtscProjectLocatorOptions";
+import { resolveProjectIdentity } from "./resolveProjectIdentity";
 
 /**
- * Resolve the tsconfig/jsconfig that owns a ttsc invocation.
+ * Resolve the selected tsconfig/jsconfig through its filesystem links.
  *
- * Resolution order:
+ * An explicit config wins; otherwise discovery walks upward from the file's
+ * directory or the invocation directory. Discovery does not check root-file
+ * membership or follow solution references. That separate responsibility
+ * belongs to `resolveOwningProjectConfig`.
  *
- * 1. `opts.tsconfig` — resolved absolute and checked for existence.
- * 2. `opts.file` — the nearest ancestor config that contains the file is found by
- *    walking up from the file's directory.
- * 3. `opts.cwd` — the nearest ancestor config walking up from cwd.
- *
- * Returns the real (symlink-resolved) absolute config path. Use
+ * Returns the symlink-resolved absolute config path when realpath succeeds;
+ * otherwise the shared resolver preserves the selected absolute spelling. That
+ * fallback does not certify physical identity. Use
  * {@link resolveProjectIdentity} when both the caller-selected spelling and the
  * Program identity are required.
+ *
+ * @evidence contracts/common.md#principled-implementation Selecting physicalConfigPath from resolveProjectIdentity preserves the shared explicit-config and ancestor-discovery semantics without pretending discovery proves file membership.
+ * @evidence contracts/common.md#clear-and-simple-design This adapter returns one path; lexical/physical identity and discovery remain owned by the shared resolver.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts No caller-specific config spelling or fallback search is added around the identity resolver.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs distinguish config selection from reference ownership and identify the richer identity API, following the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Native resolution and realpath behavior remain with resolveProjectIdentity; this adapter preserves its realpath-failure fallback without independently folding case or certifying the selected spelling as physically proven.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The synchronous resolver retains call-local paths and no open handle or historical state; the selected string transfers to the caller.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms The shared resolver owns explicit selection, ancestor candidate traversal and realpath queries; this adapter adds only a field projection and chooses no separate processing strategy.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each invocation observes current config selection through the shared resolver; this adapter retains no completed or in-flight answer for reuse.
  */
 export function resolveProjectConfig(
   opts: ITtscProjectLocatorOptions = {},
 ): string {
   return resolveProjectIdentity(opts).physicalConfigPath;
-}
-
-/**
- * Resolve the selected config while retaining its lexical spelling separately
- * from the physical paths used by the TypeScript Program.
- */
-export function resolveProjectIdentity(
-  opts: ITtscProjectLocatorOptions = {},
-): Omit<ITtscProjectIdentity, "pluginConfigOrigin"> {
-  const cwd = path.resolve(opts.cwd ?? process.cwd());
-  const explicitProjectRoot =
-    opts.projectRoot === undefined || opts.projectRoot === ""
-      ? undefined
-      : resolveAbsolutePath(cwd, opts.projectRoot);
-  let logicalConfigPath: string;
-  if (opts.tsconfig) {
-    const resolved = resolveAbsolutePath(cwd, opts.tsconfig);
-    if (!fs.existsSync(resolved)) {
-      throw new Error(`ttsc: tsconfig not found: ${resolved}`);
-    }
-    // `-p <directory>` is the documented tsgo shorthand for the
-    // directory that contains a `tsconfig.json`. Mirror that — without
-    // this branch a forwarded `--tsconfig=sub` would feed the directory
-    // path into `readResolvedCompilerOptions`, which calls
-    // `fs.readFileSync` and throws `EISDIR` (the RCA's predicted
-    // RC-3 §5 #2 bug, pinned by
-    // `test_ttsc_dash_p_directory_path_is_accepted`).
-    if (isDirectory(resolved)) {
-      const tsconfigInDir = path.join(resolved, "tsconfig.json");
-      if (fs.existsSync(tsconfigInDir)) {
-        logicalConfigPath = tsconfigInDir;
-      } else {
-        const jsconfigInDir = path.join(resolved, "jsconfig.json");
-        if (fs.existsSync(jsconfigInDir)) {
-          logicalConfigPath = jsconfigInDir;
-        } else {
-          throw new Error(
-            `ttsc: directory has no tsconfig.json / jsconfig.json: ${resolved}`,
-          );
-        }
-      }
-    } else {
-      logicalConfigPath = resolved;
-    }
-  } else {
-    const start = opts.file ? resolveAbsolutePath(cwd, opts.file) : cwd;
-    const from = isDirectory(start) ? start : path.dirname(start);
-    const found = findUp(from, ["tsconfig.json", "jsconfig.json"]);
-    if (!found) {
-      throw new Error(
-        `ttsc: could not find tsconfig.json or jsconfig.json starting from ${from}`,
-      );
-    }
-    logicalConfigPath = found;
-  }
-  const physicalConfigPath = resolveRealPath(logicalConfigPath);
-  const physicalProjectRoot = resolveRealPath(
-    explicitProjectRoot ?? path.dirname(physicalConfigPath),
-  );
-  return {
-    ...(explicitProjectRoot === undefined ? {} : { explicitProjectRoot }),
-    invocationCwd: cwd,
-    logicalConfigPath,
-    logicalProjectRoot: path.dirname(logicalConfigPath),
-    physicalConfigPath,
-    physicalProjectRoot,
-  };
-}
-
-/** Resolve `target` against `cwd` when it is not already absolute. */
-function resolveAbsolutePath(cwd: string, target: string): string {
-  return path.isAbsolute(target) ? target : path.resolve(cwd, target);
-}
-
-/**
- * Resolve symlinks on `location`, returning the original path when
- * `realpathSync` fails (e.g. when the file does not yet exist).
- */
-function resolveRealPath(location: string): string {
-  try {
-    return fs.realpathSync(location);
-  } catch {
-    return location;
-  }
-}
-
-/**
- * Walk up the directory tree from `from`, returning the first directory that
- * contains a file whose name is in `names`. Returns `null` when the filesystem
- * root is reached without finding a match.
- */
-function findUp(from: string, names: readonly string[]): string | null {
-  let current = path.resolve(from);
-  while (true) {
-    for (const name of names) {
-      const candidate = path.join(current, name);
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return null;
-    }
-    current = parent;
-  }
-}
-
-/** Return true when `location` exists and is a directory. */
-function isDirectory(location: string): boolean {
-  try {
-    return fs.statSync(location).isDirectory();
-  } catch {
-    return false;
-  }
 }

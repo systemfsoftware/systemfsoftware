@@ -1,6 +1,6 @@
 {
   "name": "@ttsc/unplugin",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "Bundler adapters for ttsc plugins.",
   "main": "lib/index.js",
   "module": "lib/index.mjs",
@@ -181,7 +181,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rimraf lib && tsc --emitDeclarationOnly && node scripts/emit-dual-declarations.mjs && rollup -c"
+    "build": "rimraf lib && tsc --emitDeclarationOnly && node scripts/emit-dual-declarations.mjs && rollup -c",
+    "evidence": "evidence"
   },
   "keywords": [
     "ttsc",
@@ -201,10 +202,14 @@
   "dependencies": {
     "unplugin": "^2.3.11"
   },
+  "optionalDependencies": {
+    "fsevents": "^2.3.3"
+  },
   "peerDependencies": {
     "ttsc": "workspace:^"
   },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@rollup/plugin-commonjs": "^29.0.2",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@types/node": "catalog:utils",
@@ -216,7 +221,8 @@
     "tslib": "^2.8.1",
     "ttsc": "workspace:*",
     "typescript": "catalog:typescript",
-    "vite": "^7.3.5"
+    "vite": "^7.3.5",
+    "vite8": "npm:vite@^8.3.4"
   },
   "repository": {
     "type": "git",

@@ -1,6 +1,6 @@
 {
   "name": "@ttsc/factory",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "Self-contained legacy-style TypeScript AST factory and printer for source code generation, surviving the TypeScript-Go (tsgo) migration. Zero dependencies, no `typescript` import.",
   "main": "src/index.ts",
   "exports": {
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "rimraf lib && tsc && rollup -c",
     "dev": "tsc -p . --watch",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -23,6 +24,7 @@
   },
   "homepage": "https://ttsc.dev",
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "rimraf": "catalog:utils",
     "rollup": "catalog:rollup",
     "typescript": "catalog:typescript"

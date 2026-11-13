@@ -1,0 +1,13 @@
+{
+  "name": "ttsc-shared-boundary-corpus",
+  "private": true,
+  "workspaces": ["packages/*", "tools/*"],
+  "type": "commonjs",
+  "exports": { ".": "./tools/native-emission/src/package-entry.ts" },
+  "imports": {
+    "#local-descriptor": "./descriptors/input.cjs",
+    "#installed-descriptor": "batch-descriptor-input",
+    "#missing-local-descriptor": "./descriptors/optional.cjs",
+    "#missing-package-descriptor": "batch-absent-descriptor-input"
+  }
+}

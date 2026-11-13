@@ -1,0 +1,45 @@
+import type { ITtscProjectMembershipPolicy } from "../../tsconfig/ITtscProjectMembershipPolicy";
+import { hashText } from "../utils/hashText";
+import { stableStringify } from "../utils/stableStringify";
+import type { TtscProjectDirectorySnapshot } from "./TtscProjectDirectorySnapshot";
+
+/**
+ * Digest a project's root-file membership: the policy that decides it and every
+ * directory whose subtree currently contains an admitted regular file, with its
+ * membership signature.
+ *
+ * It is the same judgement `sameProjectDirectories` makes. Directories that
+ * contain no admitted regular file are left out, so a bundler filling its
+ * output directory leaves the digest alone, while a program input appearing
+ * anywhere the walk enters changes a signature and with it the digest. The
+ * policy is part of it, since the same directories under another rule are
+ * another membership, and a re-walk must apply the rule the digest was taken
+ * under.
+ *
+ * @param policy The rule the walk applied.
+ * @param directories The walk's directory snapshots.
+ * @evidence contracts/common.md#principled-implementation Relevant directory address/signature pairs and the exact membership policy define the digest; sorting the pairs removes enumeration order without discarding policy arrays or admitted-input meaning.
+ * @evidence contracts/common.md#clear-and-simple-design A projection, lexical sort and shared encoding/hash compose the identity without performing another filesystem walk.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Irrelevant emitted trees are excluded by the walk's computed relevance, not hardcoded output names; changed policy remains part of the identity.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain policy inclusion, irrelevant-directory omission and equivalence to the membership comparison; parameter tags name the contributing values.
+ * @evidence contracts/portability.md#os-neutral-implementation Directory addresses and policy path spellings are serialized exactly as recorded by the same native project walk; sorting only removes enumeration order and introduces no independent case or alias equivalence.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Temporary pairs and serialization are local to this call; the digest transfers to its caller and no resource is retained.
+ * @evidence contracts/performance.md#efficient-algorithms Filtering scans all D directory records and retains r relevant address/signature pairs. Pair sorting uses O(r log r) path-text comparisons; stable encoding additionally sorts policy record keys and serializes policy arrays and selected path/signature text, then hashes the emitted bytes. Temporary filter/pair arrays, sorted record copies and JSON text follow those populations rather than only the relevant-directory count.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work The operation hashes caller-supplied values and coordinates no completed or in-flight computation; mutable snapshot arrays and policy do not authorize persistent memoization here.
+ */
+export function projectMembershipDigest(
+  policy: ITtscProjectMembershipPolicy,
+  directories: readonly TtscProjectDirectorySnapshot[],
+): string {
+  return hashText(
+    stableStringify({
+      directories: directories
+        .filter((directory) => directory.relevant)
+        .map((directory) => [directory.path, directory.signature])
+        .sort((left, right) =>
+          left[0]! < right[0]! ? -1 : left[0]! > right[0]! ? 1 : 0,
+        ),
+      policy,
+    }),
+  );
+}

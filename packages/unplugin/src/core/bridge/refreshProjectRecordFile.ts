@@ -1,0 +1,121 @@
+import fs from "node:fs";
+
+import { DEFAULT_FILESYSTEM_OPERATIONS } from "../transform/filesystem/DEFAULT_FILESYSTEM_OPERATIONS";
+import type { TtscTransformFilesystemOperations } from "../transform/filesystem/TtscTransformFilesystemOperations";
+import type { HostWatchBridge } from "./HostWatchBridge";
+import { projectRecordArgumentsMatch } from "./projectRecordArgumentsMatch";
+import { projectRecordMoved } from "./projectRecordMoved";
+import { projectRecordWatchInputs } from "./projectRecordWatchInputs";
+import { readProjectRecordFile } from "./readProjectRecordFile";
+import { signalProjectRecordFile } from "./signalProjectRecordFile";
+
+/**
+ * Prove one project record against the disk before a host serves a module of
+ * its project from a cache, and move the record when the project's state
+ * changed while nothing ran.
+ *
+ * A host restoring a module from its cache never runs the adapter for it, so
+ * the adapter cannot learn at delivery that an input moved, a root file
+ * appeared, or a tsconfig vanished while the host was stopped. It learns here:
+ * the captured compiler invocation must match the active context, then each
+ * recorded input is proven against the disk the way a delivery proves it
+ * (`watchInputEvidenceMatchesDisk`), and the walk is run again under the
+ * recorded policy and its digest compared. One mismatch moves the record
+ * (`signalProjectRecordFile`); the host, which recorded the file as a
+ * dependency of every module of the project, runs those modules again, and
+ * their deliveries write the record of the generation that read the change. A
+ * record that cannot be read proves nothing and is moved too. A record whose
+ * tsconfig is gone is removed instead, the one move no delivery has to end.
+ *
+ * A watching session's bridge takes the record instead
+ * (`projectRecordWatchInputs`): the bridge proves the recorded inputs as it
+ * takes them, moves a record it finds stale and again until a delivery answers,
+ * and observes them from then on. A project the host restored whole from its
+ * cache has no delivery in this process to register it, and an input of it
+ * edited while the host runs would otherwise be heard by nothing.
+ *
+ * The detached path replays the recorded input codecs and optional membership
+ * walk, rather than proving every module independently. The observing bridge
+ * owns later invalidation attempts; neither registration nor signaling is a
+ * certificate that the host received or completed a rebuilding delivery.
+ *
+ * @param file The project record (`projectRecordFile`).
+ * @param bridge The watching session's bridge, when the host has one.
+ * @evidence contracts/common.md#principled-implementation
+ *   An unreadable record proves nothing and is signaled; a vanished project is
+ *   removed. Watching restoration transfers evidence to the bridge, while a
+ *   one-shot cache restore directly re-proves the recorded filesystem state.
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The operation owns refresh effects and delegates decoding, evidence conversion
+ *   and state proof to the record-format and validation owners.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   A failed proof invalidates rather than inventing validity; removing deleted
+ *   projects avoids a retry schedule no future delivery could settle.
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native paragraphs explain cached-session restoration and proof failure effects,
+ *   with lifecycle comments and tag separation per documentation guidance.
+ * @evidence contracts/portability.md#os-neutral-implementation Record persistence remains on the host's native filesystem, while project existence and proof use the supplied observation view; deletion errors remain retryable rather than being treated as successful removal.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources It keeps no handle. A record whose tsconfig is gone is removed, which ends a record no generation will write again, and a removal another process blocks is retried by the next proof.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Record reading parses and validates byte/list populations. Detached replay
+ *   pays clock admission, input codec native/byte/tree work and any membership
+ *   walk/digest sorting; watching conversion builds input lists and delegates
+ *   observer admission. Removal/signaling retain native path/serialization/IO
+ *   costs. Codec replay is not uniformly one read and one listing per directory.
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   Project-record granularity permits host owners to avoid per-module replay;
+ *   this function itself refreshes each request without a verdict cache. A bridge
+ *   coordinates retained observations only under its current evidence authority.
+ */
+export function refreshProjectRecordFile(
+  file: string,
+  bridge?: HostWatchBridge,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  compilerArgumentsIdentity?: string,
+): void {
+  const record = readProjectRecordFile(file);
+  // A record that cannot be read proves nothing, and is moved as a proof that
+  // found a change is. A host may hold exactly these bytes: a signal that could
+  // not read the record writes a bare one (`signalProjectRecordFile`), the host
+  // runs the project's modules on that move, and a delivery of a generation its
+  // process already recorded hands the file over without writing it again, so
+  // the host's cache ends up recording bytes no proof can run over. Only a move
+  // here runs those modules again, whose deliveries write the record whole. A
+  // writer caught mid-write loses its bytes to the move, which its own host
+  // hears and runs on, and a record another process removed stays removed.
+  if (record === undefined) {
+    signalProjectRecordFile(file);
+    return;
+  }
+  // Nothing will write this project again: the record's own rule, that it
+  // keeps moving until a delivery writes the state a proof found, has no
+  // delivery left to end it, and every proof would rewrite it forever.
+  // Removing it is the move, which every host hears as the dependency it holds
+  // going away, and it ends there.
+  if (!filesystem.exists(record.tsconfig)) {
+    try {
+      fs.rmSync(file, { force: true });
+    } catch {
+      // Held by another process; the next proof removes it.
+    }
+    return;
+  }
+  if (bridge !== undefined) {
+    if (!projectRecordArgumentsMatch(record, compilerArgumentsIdentity)) {
+      signalProjectRecordFile(file);
+      return;
+    }
+    bridge.register(file, projectRecordWatchInputs(record));
+    return;
+  }
+  // A proof that cannot run proves nothing, and the record is moved as if it
+  // had found a change: the host then runs the modules, whose deliveries write
+  // a record the next proof can run over.
+  let moved: string | undefined;
+  try {
+    moved = projectRecordMoved(record, filesystem, compilerArgumentsIdentity);
+  } catch {
+    moved = record.root;
+  }
+  if (moved !== undefined) signalProjectRecordFile(file);
+}

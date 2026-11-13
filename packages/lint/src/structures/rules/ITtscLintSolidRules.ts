@@ -9,31 +9,37 @@ import type { TtscLintRuleSetting } from "../TtscLintRuleSetting";
  * common Solid-only pitfalls.
  *
  * @reference https://github.com/solidjs-community/eslint-plugin-solid
+ *
+ * @evidence contracts/common.md#principled-implementation Optional solid identifiers use severity-only settings because this native family exposes no rule options decoder; its public shape does not promise upstream option objects.
+ * @evidence contracts/common.md#clear-and-simple-design The map groups Solid reactivity and JSX policies while keeping native rule execution outside the configuration representation and sharing severity construction.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Supported Solid rule identifiers remain explicit entries; unsupported upstream options are not admitted through a catch-all payload or consumer-specific exception.
+ * @evidence contracts/common.md#meaningful-documentation Native member comments distinguish the current native checks from upstream configurable behavior and explain Solid-specific concerns; paragraphs and member spacing follow documentation guidance.
  */
 export interface ITtscLintSolidRules {
   /**
-   * Reject early and conditional `return` from a Solid component — Solid
-   * components must return exactly once at the top level.
+   * For recognized JSX component functions with multiple returns, report all
+   * but the last and a conditional expression in the last return. A single
+   * conditional return is not rejected by this native check.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/components-return-once.md
    */
   "solid/components-return-once"?: TtscLintRuleSetting;
 
   /**
-   * Require DOM event handler props to use canonical Solid casing (`onClick`,
-   * not `onclick` / `onClIcK`) so the compiler recognizes them as events. Also
-   * flags `on*`-named props bound to non-function values, which look like
-   * handlers but are not.
+   * Report DOM event handler names whose first letter after `on` is lowercase,
+   * such as `onclick`, so they can use `onClick` or an `on:` namespace. The
+   * native check does not validate the complete casing or handler value type.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/event-handlers.md
    */
   "solid/event-handlers"?: TtscLintRuleSetting;
 
   /**
-   * Route each Solid export to the correct entry point (`solid-js`,
-   * `solid-js/web`, or `solid-js/store`) and relocate a misrouted one to where
-   * it belongs, joining an existing import from that entry when the file
-   * already has one. The diagnostic names the symbol and its entry point.
+   * Route recognized named Solid exports to the correct entry point
+   * (`solid-js`, `solid-js/web`, or `solid-js/store`) and relocate a misrouted
+   * one to where it belongs, joining an existing import from that entry when
+   * the file already has one. The diagnostic names the symbol and its entry
+   * point.
    *
    * Autofixable. A specifier that stands alone has its declaration's module
    * specifier rewritten; one with siblings, or one beside a default binding, is
@@ -63,16 +69,18 @@ export interface ITtscLintSolidRules {
   "solid/jsx-no-script-url"?: TtscLintRuleSetting;
 
   /**
-   * Reject Solid JSX component names that are not declared or imported in
-   * scope.
+   * Reject bare JSX component names absent from the file's collected
+   * declaration and import names. Member tags are skipped; this is not lexical
+   * resolution.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/jsx-no-undef.md
    */
   "solid/jsx-no-undef"?: TtscLintRuleSetting;
 
   /**
-   * Reject array values passed as Solid event handlers — Solid does not unwrap
-   * the array form React supports.
+   * Report array literals passed as Solid DOM event handlers. This source
+   * policy does not distinguish Solid's handler-and-data tuple from other array
+   * values.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-array-handlers.md
    */
@@ -87,9 +95,9 @@ export interface ITtscLintSolidRules {
   "solid/no-destructure"?: TtscLintRuleSetting;
 
   /**
-   * Reject `innerHTML` JSX attributes because they bypass sanitization and are
-   * a common XSS sink. A static string literal is still allowed by default;
-   * flip `allowStatic` off to ban that form too.
+   * Reject `innerHTML` and `dangerouslySetInnerHTML` JSX attributes, including
+   * static strings, because they bypass ordinary text escaping. The native rule
+   * does not expose upstream's `allowStatic` option.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-innerhtml.md
    */
@@ -97,9 +105,9 @@ export interface ITtscLintSolidRules {
 
   /**
    * Reject Solid APIs that rely on ES6 `Proxy` (including `new Proxy`,
-   * `Proxy.revocable`, imports from `solid-js/store`, and dynamic spread shapes
-   * through `mergeProps`). For shipping to runtimes without `Proxy` support;
-   * off by default.
+   * `Proxy.revocable`, imports from `solid-js/store`, and recognized
+   * `mergeProps` calls regardless of their argument shape). For shipping to
+   * runtimes without `Proxy` support; off by default.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-proxy-apis.md
    */
@@ -109,14 +117,13 @@ export interface ITtscLintSolidRules {
    * Reject React-style dependency arrays in Solid tracked scopes
    * (`createEffect(() => ..., [deps])`).
    *
-   * Type-aware via the Checker. The tag below claims the array is dead, so the
-   * callee has to be the Solid primitive itself rather than a same-named local
-   * or a shadowing parameter, and only symbol resolution can say that. Enabling
+   * Type-aware via the Checker: the callee has to resolve to the Solid
+   * primitive rather than a same-named local or a shadowing parameter. Enabling
    * this rule therefore puts the whole run on the checker path.
    *
-   * Tagged `Unnecessary`: the reported range is the array literal alone, and
-   * Solid tracks dependencies automatically, so deleting it is the whole
-   * resolution and an editor greys it out.
+   * The native check requires two arguments, a parameterless function and an
+   * array literal. Findings remain untagged: evaluating the array can have
+   * effects, so safe deletion is not proven.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-react-deps.md
    */
@@ -127,9 +134,8 @@ export interface ITtscLintSolidRules {
    * uses `class` and `for`.
    *
    * The two renames are autofixed by rewriting the name token alone, so the
-   * value survives untouched. The `key` arm stays diagnostic-only: a Solid DOM
-   * element does not consume `key`, so its resolution is a deletion that has to
-   * take the surrounding whitespace with it.
+   * value survives untouched. The `key` arm stays diagnostic-only; no deletion
+   * or proof of absent DOM attribute effects is supplied.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-react-specific-props.md
    */
@@ -137,8 +143,9 @@ export interface ITtscLintSolidRules {
 
   /**
    * Restrict namespaced JSX attributes (`ns:name={...}`) to the built-in Solid
-   * namespaces (`on:`, `oncapture:`, `use:`, `prop:`, `attr:`, `bool:`,
-   * `style:`, `class:`). Extra names can be allowed through the
+   * namespaces recognized by the native rule (`on:`, `oncapture:`, `use:`,
+   * `prop:`, `attr:`, `bool:`, `xmlns:`, `xlink:`). Namespaced props on
+   * components are reported separately. The native rule does not expose an
    * `allowedNamespaces` option.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/no-unknown-namespaces.md
@@ -146,8 +153,9 @@ export interface ITtscLintSolidRules {
   "solid/no-unknown-namespaces"?: TtscLintRuleSetting;
 
   /**
-   * Rewrite `class={cn({ ... })}` / `clsx(...)` / `classnames(...)` calls to
-   * the reactive `classlist={{ ... }}` prop.
+   * Report `class={cn({ ... })}` / `clsx(...)` / `classnames(...)` calls so
+   * callers can use the reactive `classList={{ ... }}` prop. The native rule
+   * supplies a diagnostic without an automatic rewrite.
    *
    * Deprecated and off by default upstream.
    *
@@ -156,44 +164,46 @@ export interface ITtscLintSolidRules {
   "solid/prefer-classlist"?: TtscLintRuleSetting;
 
   /**
-   * Replace inline `array.map(item => <JSX />)` with Solid's `<For>` component
-   * so the iteration stays keyed and reactive instead of re-creating every
-   * child on each update.
+   * Report `.map()` calls with a function argument inside JSX expressions,
+   * recommending Solid's `<For>` for reactive list rendering. The native rule
+   * supplies a diagnostic without an automatic rewrite.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/prefer-for.md
    */
   "solid/prefer-for"?: TtscLintRuleSetting;
 
   /**
-   * Rewrite `{cond && <JSX />}` short-circuits in JSX to `<Show
-   * when={cond}>...</Show>`. Stylistic only — Solid's compiler already handles
-   * the boolean form — so it is off by default.
+   * Report conditional expressions in JSX and recommend `<Show
+   * when={cond}>...</Show>`. This is a style policy; the native rule supplies a
+   * diagnostic without an automatic rewrite.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/prefer-show.md
    */
   "solid/prefer-show"?: TtscLintRuleSetting;
 
   /**
-   * Reject common Solid reactivity breakages — reading a signal outside a
-   * tracking scope, destructuring a `Store`, etc.
+   * Report async tracked callbacks, destructuring a binding named `props`, and
+   * signal accessor identifiers rendered without being called in JSX. These are
+   * the native subset's source patterns, not complete reactivity analysis.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/reactivity.md
    */
   "solid/reactivity"?: TtscLintRuleSetting;
 
   /**
-   * Collapse JSX elements with no children to the self-closing form
-   * (`<Foo></Foo>` to `<Foo />`). Configurable per component vs HTML element,
-   * including a `"void"` mode that only enforces it for void tags.
+   * Report JSX elements with no meaningful children so they can be written in
+   * the self-closing form (`<Foo></Foo>` to `<Foo />`). The native rule is
+   * diagnostic-only and exposes no per-component or HTML-element mode.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/self-closing-comp.md
    */
   "solid/self-closing-comp"?: TtscLintRuleSetting;
 
   /**
-   * Require `style={{...}}` keys to be valid kebab-case CSS properties
-   * (`"font-size"`, not React's `fontSize`) and dimensioned values to be
-   * strings — Solid does not append implicit `px`.
+   * Report uppercase letters in explicit `style={{...}}` property names and
+   * nonzero numeric literals for recognized dimensioned property names, plus
+   * literal string style values. The check does not validate all CSS names or
+   * infer the types of arbitrary value expressions.
    *
    * @reference https://github.com/solidjs-community/eslint-plugin-solid/blob/main/packages/eslint-plugin-solid/docs/style-prop.md
    */

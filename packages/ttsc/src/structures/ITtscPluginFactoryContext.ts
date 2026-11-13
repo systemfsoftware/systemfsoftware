@@ -8,9 +8,18 @@ import type { ITtscProjectPluginConfig } from "./ITtscProjectPluginConfig";
  * descriptor needs to inspect the original plugin config, the resolved tsconfig
  * path, the project root, or the descriptor's own location on disk.
  *
- * The factory runs in Node.js while ttsc is loading `compilerOptions.plugins`.
- * It should only create the descriptor. Heavy validation and TypeScript-Go work
- * belong in the Go source plugin selected by {@link ITtscPlugin.source}.
+ * The factory runs in an isolated supported JavaScript runtime while ttsc loads
+ * `compilerOptions.plugins`. It should only create the descriptor. Heavy
+ * validation and TypeScript-Go work belong in the selected Go source plugin.
+ *
+ * @evidence contracts/common.md#principled-implementation Separate invocation, project, configuration and descriptor locations preserve their different resolution bases; the generic plugin field keeps the factory's own config type without guessing its shape.
+ * @evidence contracts/common.md#clear-and-simple-design One factory input collects already-resolved context and the original configuration so descriptors need neither reparse CLI arguments nor infer their own load mode.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Explicit filename/dirname fields are the supported descriptor boundary for both module modes; they avoid substituting globals or consumer-specific path repairs.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc explains each path's origin, generated-wrapper overrides and the descriptor factory's limited responsibility; member spacing, paragraphs and separation before tags follow the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Explicit native descriptor and project path anchors support OS-neutral path resolution without deriving them from URL text, POSIX separator splitting or CommonJS-only globals. Invocation cwd, project root and config origin keep their separate identities across generated wrappers.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
  */
 export interface ITtscPluginFactoryContext<T = ITtscProjectPluginConfig> {
   /**
@@ -67,8 +76,8 @@ export interface ITtscPluginFactoryContext<T = ITtscProjectPluginConfig> {
   plugin: T;
 
   /**
-   * Caller-declared anchor for plugin config-file discovery and relative
-   * `configFile` resolution.
+   * Caller-declared consumer directory for plugin package discovery, factory
+   * contexts and relative `configFile` resolution.
    *
    * Absent for ordinary invocations, where a factory anchors config discovery
    * at the {@link ITtscPluginFactoryContext.tsconfig} directory. Present when
@@ -82,13 +91,14 @@ export interface ITtscPluginFactoryContext<T = ITtscProjectPluginConfig> {
   pluginConfigDir?: string;
 
   /**
-   * Project root used as the native plugin working directory and package
-   * discovery base.
+   * Consumer directory used for plugin package discovery.
    *
-   * By default this is the directory containing the resolved tsconfig/jsconfig.
-   * Callers may override it when a wrapper config lives outside the project.
-   * Relative `source` paths returned by a plugin descriptor resolve from this
-   * directory.
+   * This is pluginConfigDir when supplied, otherwise the directory containing
+   * the resolved tsconfig/jsconfig. A compiler projectRoot override can widen
+   * source membership without changing this package-resolution anchor.
+   * Descriptor process cwd, native plugin cwd and returned relative source
+   * paths retain the compiler's source root; return absolute source paths when
+   * those directories differ.
    */
   projectRoot: string;
 

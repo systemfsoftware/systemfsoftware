@@ -12,6 +12,7 @@ import (
   "os"
   "path/filepath"
   "sort"
+  "strings"
 
   shimdw "github.com/microsoft/typescript-go/shim/diagnosticwriter"
 )
@@ -21,8 +22,17 @@ import (
 // a buggy rule that re-reports its own edit cannot loop forever.
 const maxFixPasses = 10
 
-// RunFix implements `@ttsc/lint fix` — apply autofixes, then report any
+// RunFix implements `@ttsc/lint fix`: apply autofixes, then report any
 // remaining type or lint diagnostics without emitting JavaScript.
+//
+// @evidence contracts/common.md#principled-implementation The command rejects emit and delegates to the bounded all-rule fix cascade, which preserves per-finding edit atomicity and finishes with compiler and lint diagnostics.
+// @evidence contracts/common.md#clear-and-simple-design Shared flag parsing and edit selection serve fix and format while this entry point selects all-rule diagnostics policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The pass cap detects a nonconverging fixer and reports failure instead of hiding repeated edits with retries or expected-source substitutions.
+// @evidence contracts/common.md#meaningful-documentation Native prose distinguishes applying fixes, remaining diagnostics and no JavaScript emission; cascade comments explain ownership and the convergence cap.
+// @evidence contracts/portability.md#os-neutral-implementation RunFix resolves native cwd/config/source paths through shared flag and compiler-host helpers. The cascade resolves writable finding paths with filepath, orders them deterministically and writes source bytes through os.WriteFile. Per-finding selection atomicity is not a transactional file-write guarantee; no shell text or OS-name case assumption represents these paths.
+// @evidence contracts/performance.md#efficient-algorithms Flags/config are loaded once, then at most ten lint/edit passes run with a fresh Program loaded after each modifying pass, followed by final compiler/lint diagnostics. Work includes each pass's source/checker/rule visits, grouped edit selection, sorted file paths, transformed and written bytes, and all Program reload costs. The pass cap bounds iterations rather than project/byte work or evaluator time; no fixed total command cost is claimed.
+// @evidence contracts/performance.md#reuse-equivalent-work The invocation reuses its resolved policy and Engine across cascade passes, while reloading Programs after writes so subsequent findings use updated source positions. Config evaluation retains its own dependency-validated reuse policy. Effectful source writes and diagnostics are not shared across invocations merely because flags or edit values match.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Reload closes the old standalone checker before acquiring a new Program, and the final deferred close drops the current checker on every later return. Program, findings and per-file edit/output buffers become reclaimable when otherwise unreferenced; policy/Engine live for the command and global registries/config caches retain separate state. There is no total source/output byte bound, caller deadline or rollback of earlier successful file writes on later failure.
 func RunFix(args []string) int {
   opts, err := parseSubcommandFlags("fix", args)
   if err != nil {
@@ -62,6 +72,7 @@ func runFix(opts *subcommandOpts) int {
     return 2
   }
   engine.SetSerial(opts.singleThreaded)
+  engine.SetCurrentDirectory(opts.cwd)
   needsRuleChecker := engine.NeedsTypeChecker()
 
   prog, code := loadFixProgram(opts, needsRuleChecker)
@@ -150,6 +161,7 @@ func loadFixProgram(opts *subcommandOpts, needsRuleChecker bool) (*program, int)
     singleThreaded:     opts.singleThreaded,
     checkers:           opts.checkers,
     tsgoArgs:           opts.tsgoArgs,
+    tsgoArgsCwd:        opts.tsgoArgsCwd,
     projectIdentity:    opts.projectIdentity,
   })
   if err != nil {
@@ -193,7 +205,7 @@ func applyFindingFixes(cwd string, findings []*Finding) (int, error) {
     if finding == nil || finding.File == nil || len(finding.Fix) == 0 {
       continue
     }
-    path := finding.File.FileName()
+    path := string(finding.File.FileName())
     if path == "" {
       continue
     }
@@ -230,7 +242,7 @@ func applyFindingFixes(cwd string, findings []*Finding) (int, error) {
 
 // applyTextEditsToFile selects a non-overlapping, per-finding-atomic set of
 // edits from `groups` (one group per finding), applies them to `source` in
-// reverse order (right-to-left) to preserve earlier offsets, and writes the
+// source order without shifting snapshot offsets, and writes the
 // result to `path`. Returns the number of edits applied, or 0 when no edits
 // survive selection.
 func applyTextEditsToFile(path, source string, groups [][]TextEdit) (int, error) {
@@ -238,11 +250,7 @@ func applyTextEditsToFile(path, source string, groups [][]TextEdit) (int, error)
   if len(selected) == 0 {
     return 0, nil
   }
-  next := source
-  for i := len(selected) - 1; i >= 0; i-- {
-    edit := selected[i]
-    next = next[:edit.Pos] + edit.Text + next[edit.End:]
-  }
+  next := applySelectedTextEdits(source, selected)
   if next == source {
     return 0, nil
   }
@@ -250,6 +258,25 @@ func applyTextEditsToFile(path, source string, groups [][]TextEdit) (int, error)
     return 0, fmt.Errorf("@ttsc/lint fix: write %s: %w", path, err)
   }
   return len(selected), nil
+}
+
+// applySelectedTextEdits renders validated, source-ordered disjoint edits.
+// Every range still addresses the original snapshot, so each unchanged span
+// and replacement is copied once rather than copying the whole file per edit.
+// Selection owns range validation, duplicate removal and overlap decisions.
+func applySelectedTextEdits(source string, selected []TextEdit) string {
+  if len(selected) == 0 {
+    return source
+  }
+  var out strings.Builder
+  cursor := 0
+  for _, edit := range selected {
+    out.WriteString(source[cursor:edit.Pos])
+    out.WriteString(edit.Text)
+    cursor = edit.End
+  }
+  out.WriteString(source[cursor:])
+  return out.String()
 }
 
 // selectTextEdits filters and sorts `edits` into a non-overlapping
@@ -288,10 +315,9 @@ func selectTextEdits(sourceLen int, edits []TextEdit) []TextEdit {
   // lastInsertAt marks the offset of the previously-selected edit when that
   // edit was a zero-width insert (Pos==End), else -1. A new zero-width
   // insert at that same offset must be dropped: two coincident inserts both
-  // pass the `edit.Pos < lastEnd` gate, then apply in reverse sort order and
-  // concatenate at one point — silently corrupting the source (e.g. a `;`
-  // insert and a `\n` insert at EOF yielding `\n;`). This edit-level selector
-  // keeps one winner and drops the rest; selectTextEditGroups turns that drop
+  // pass the `edit.Pos < lastEnd` gate and concatenate at one point, making
+  // competing replacement intentions into a single unintended result. This
+  // edit-level selector keeps one winner and drops the rest; selectTextEditGroups turns that drop
   // into a whole-finding skip, which is the contract rule.TextEdit states. A
   // zero-width insert sitting at the end of a prior NON-empty edit is left
   // alone: it applies cleanly after the replacement and is a legitimate

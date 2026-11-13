@@ -28,6 +28,20 @@ import { make } from "../internal/make";
  * @param expression The expression.
  * @param statement The statement.
  * @returns The created {@link ForInStatement}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Initializer, enumerated object and body retain for-in's key-enumeration
+ *   grammar; ForInitializer permits declaration lists or assignment-target trees.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The syntax node distinguishes binding/object/body without resolving keys
+ *   or sharing implementation with value-iteration semantics.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   No Object.keys snapshot is substituted for the requested for-in program.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains enumerable string keys and header/body roles, with a key-loop
+ *   example and separated acknowledgment paragraphs.
  */
 export const createForInStatement = (
   initializer: ForInitializer,

@@ -1,180 +1,34 @@
-import childProcess from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-
-import { captureProcessOutput } from "../compiler/internal/captureProcessOutput";
-import {
-  isSpawnSyncFdExhaustion,
-  spawnSyncWithLowDescriptors,
-} from "./spawnSyncResilient";
-
-export type JavaScriptRuntimeCapabilities = {
-  bun: boolean;
-  executable?: string;
-  registerHooks: boolean;
-};
-
-type RuntimeCapabilityCacheEntry = {
-  capabilities: JavaScriptRuntimeCapabilities;
-  identity: string;
-};
-
-const runtimeCapabilityCache = new Map<string, RuntimeCapabilityCacheEntry>();
-
-/** Probe an interpreter instead of inferring its identity from the host. */
-export function javascriptRuntimeCapabilities(
-  runtime: string,
-  env: NodeJS.ProcessEnv,
-  cwd: string,
-): JavaScriptRuntimeCapabilities {
-  const effectiveEnv = { ...process.env, ...env };
-  const cacheKey = runtimeCapabilityCacheKey(runtime, effectiveEnv);
-  const beforeIdentity = runtimeExecutableIdentity(runtime);
-  if (cacheKey !== undefined && beforeIdentity !== undefined) {
-    const cached = runtimeCapabilityCache.get(cacheKey);
-    if (cached?.identity === beforeIdentity) return { ...cached.capabilities };
-    runtimeCapabilityCache.delete(cacheKey);
-  }
-  const args = [
-    "-e",
-    `const Module = require("node:module"); process.stdout.write(JSON.stringify({ bun: typeof globalThis.Bun === "object", executable: process.execPath, registerHooks: typeof Module.registerHooks === "function" }));`,
-  ];
-  const options = {
-    cwd,
-    encoding: "utf8" as const,
-    env: effectiveEnv,
-    timeout: 30_000,
-    windowsHide: true,
-  };
-  let result = childProcess.spawnSync(runtime, args, options);
-  if (process.platform !== "win32" && isSpawnSyncFdExhaustion(result.error)) {
-    const capture = captureProcessOutput();
-    try {
-      const retried = spawnSyncWithLowDescriptors(runtime, args, options, {
-        stderr: capture.stderrPath,
-        stdout: capture.stdoutPath,
-      });
-      const stdout = capture.read("stdout", "utf8") as string;
-      const stderr = capture.read("stderr", "utf8") as string;
-      result = {
-        ...retried,
-        output: [null, stdout, stderr],
-        stderr,
-        stdout,
-      };
-    } finally {
-      capture.dispose();
-    }
-  }
-  let capabilities: JavaScriptRuntimeCapabilities = {
-    bun: false,
-    registerHooks: false,
-  };
-  if (result.status === 0) {
-    try {
-      const parsed = JSON.parse(
-        result.stdout,
-      ) as Partial<JavaScriptRuntimeCapabilities>;
-      capabilities = {
-        bun: parsed.bun === true,
-        ...(typeof parsed.executable === "string" &&
-        path.isAbsolute(parsed.executable)
-          ? { executable: path.resolve(parsed.executable) }
-          : {}),
-        registerHooks: parsed.registerHooks === true,
-      };
-    } catch {
-      // An incompatible executable is not a Node runtime candidate.
-    }
-  }
-  // Cache successful absolute candidates only when the child reports that same
-  // executable and both its lexical link and physical target retain the same
-  // filesystem identity. Relative/bare commands and wrappers can resolve
-  // differently by cwd/PATH/environment, negative probes can become valid later,
-  // and NODE_OPTIONS can load mutable user code, so none of those states are
-  // memoized. This removes a process spawn from the common path without
-  // authorizing a replaced or redirected runtime in a long-lived host.
-  const afterIdentity = runtimeExecutableIdentity(runtime);
-  if (
-    cacheKey !== undefined &&
-    capabilities.executable !== undefined &&
-    beforeIdentity !== undefined &&
-    beforeIdentity === afterIdentity &&
-    sameRuntimeExecutable(runtime, capabilities.executable)
-  ) {
-    runtimeCapabilityCache.set(cacheKey, {
-      capabilities: { ...capabilities },
-      identity: afterIdentity,
-    });
-  }
-  return capabilities;
-}
-
-/** True when a probe ran the candidate itself rather than a mutable wrapper. */
-function sameRuntimeExecutable(candidate: string, executable: string): boolean {
-  try {
-    const candidateStats = fs.statSync(candidate, { bigint: true });
-    const executableStats = fs.statSync(executable, { bigint: true });
-    return (
-      (candidateStats.ino !== 0n &&
-        candidateStats.dev === executableStats.dev &&
-        candidateStats.ino === executableStats.ino) ||
-      fs.realpathSync.native(candidate) === fs.realpathSync.native(executable)
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Stable cache key only for an absolute runtime with no preload authority. */
-function runtimeCapabilityCacheKey(
-  runtime: string,
-  env: NodeJS.ProcessEnv,
-): string | undefined {
-  if (!path.isAbsolute(runtime) || env.NODE_OPTIONS?.trim()) return undefined;
-  return path.resolve(runtime);
-}
-
-/** Identity of an executable spelling and the physical file it selects. */
-function runtimeExecutableIdentity(runtime: string): string | undefined {
-  if (!path.isAbsolute(runtime)) return undefined;
-  try {
-    const lexical = fs.lstatSync(runtime, { bigint: true });
-    const physicalPath = fs.realpathSync.native(runtime);
-    const physical = fs.statSync(physicalPath, { bigint: true });
-    return [
-      physicalPath,
-      lexical.dev,
-      lexical.ino,
-      lexical.mode,
-      lexical.size,
-      lexical.mtimeNs,
-      lexical.ctimeNs,
-      physical.dev,
-      physical.ino,
-      physical.mode,
-      physical.size,
-      physical.mtimeNs,
-      physical.ctimeNs,
-    ].join("\0");
-  } catch {
-    return undefined;
-  }
-}
+import { SidecarEnvironment } from "../compiler/internal/sharedHost/SidecarEnvironment";
+import type { PluginContentIdentities } from "../plugin/internal/source/PluginContentIdentities";
+import { javascriptRuntimeCapabilities } from "./javascriptRuntimeCapabilities";
 
 /**
  * Locate a real Node runtime for ttsx and native JavaScript config loaders.
  *
  * Bun can directly evaluate a descriptor, but it does not implement the
  * synchronous `module.registerHooks` contract used by those loaders.
+ *
+ * @param env Effective environment naming `TTSC_NODE_BINARY`.
+ * @param cwd Working directory of the probes.
+ * @param identities Optional record store that lets probes of an unchanged
+ *   runtime be answered across processes (#1723).
+ * @evidence contracts/common.md#principled-implementation Ordered candidates are accepted only after an actual runtime probe reports non-Bun registerHooks support and its absolute executable; names alone do not establish the loader capability.
+ * @evidence contracts/common.md#clear-and-simple-design Candidate precedence and duplicate suppression remain here, while the shared probe owns launch, capability parsing and freshness policy.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts The node spelling is a supported final discovery candidate, not an assumed successful runtime; incompatible candidates are skipped without patching modules or globals.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain the consumer and the required synchronous hook capability, while the selection loop makes precedence apparent without redundant prose.
+ * @evidence contracts/portability.md#os-neutral-implementation Executable discovery reads injected Windows environment names case-insensitively, measures candidates through native spawning and returns the child's absolute executable.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Candidate references and seen spellings are invocation-local and become reclaimable after return. The delegated synchronous probe owns child/capture cleanup and its persistent capability map; the four-candidate list does not bound that historical map, which has no eviction policy.
+ * @evidence contracts/performance.md#efficient-algorithms At most four candidate slots are inspected with first-usable short-circuiting and exact-spelling deduplication. Environment-key/spelling work and delegated executable-byte identity, environment merge, native probing/parsing or descriptor-exhaustion retry costs dominate; four slots do not bound executable bytes, output text or native work.
+ * @evidence contracts/performance.md#reuse-equivalent-work Exact duplicate spellings share one candidate probe within this call. The probe owner additionally reuses stable absolute same-executable capabilities only while byte/link/target identity and no-preload authority hold; relative, wrapper, changed and unproven failed candidates need fresh observation.
  */
 export function resolveNodeBinary(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
+  identities?: PluginContentIdentities.Store,
 ): string | undefined {
   const candidates = [
-    env.TTSC_NODE_BINARY,
-    process.env.TTSC_NODE_BINARY,
+    SidecarEnvironment.read(env, "TTSC_NODE_BINARY"),
+    SidecarEnvironment.read(process.env, "TTSC_NODE_BINARY"),
     process.execPath,
     "node",
   ];
@@ -183,7 +37,12 @@ export function resolveNodeBinary(
     if (candidate === undefined || candidate.trim() === "") continue;
     if (seen.has(candidate)) continue;
     seen.add(candidate);
-    const capabilities = javascriptRuntimeCapabilities(candidate, env, cwd);
+    const capabilities = javascriptRuntimeCapabilities(
+      candidate,
+      env,
+      cwd,
+      identities,
+    );
     if (
       !capabilities.bun &&
       capabilities.registerHooks &&

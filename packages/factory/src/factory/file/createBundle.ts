@@ -23,6 +23,20 @@ import { make } from "../internal/make";
  * @param sourceFiles The bundled source files.
  * @param _prepends Ignored; kept for signature parity.
  * @returns The created {@link Bundle}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Bundle preserves source-file order; the outline model has no prepended
+ *   emit-helper nodes, so the legacy prepends argument remains unsupported.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One sourceFiles collection groups files; each SourceFile still owns its
+ *   statements and the printer owns separators between files.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Ignored prepends is a documented model limitation, not fabricated helpers.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc distinguishes bundle grouping from helper prepending and gives a
+ *   two-file example, with prose and tags separated under documentation guidance.
  */
 export const createBundle = (
   sourceFiles: readonly SourceFile[],

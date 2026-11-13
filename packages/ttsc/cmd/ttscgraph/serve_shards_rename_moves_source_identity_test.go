@@ -7,18 +7,21 @@ import (
 )
 
 // TestServeShardsRenameMovesSourceIdentity verifies a renamed source deletes its
-// old shard and publishes a new one whose coordinates name the new path.
+// old shard key and upserts a different key mapped to the new resident path.
 //
-// A rename is a delete and a create at the filesystem layer but not at the
-// resolution layer: the old path can still be imported, and the shard key binds
-// the path, so carrying the old identity forward would leave the consumer with
-// two coordinates for one declaration. The dependent's import is rewritten in
-// the same step, which is what keeps the program resolvable and proves the
-// closure covers both ends of the move.
+// The consumer import is rewritten with the rename, and its committed key must
+// change. This unit observes resident-path membership and shard-key changes;
+// it does not inspect wire coordinate text, consumer upsert payloads, actual
+// resolution diagnostics, or consumer application of the move.
 //
 //  1. Commit a project whose consumer imports a source by its original path.
 //  2. Rename that source and repoint the import in the same generation.
-//  3. Require the old shard deleted, a new shard published, and the dependent replaced.
+//  3. Require the old shard deleted, a new shard upserted, and the consumer's committed key changed.
+//
+// @evidence contracts/testing.md#behavioral-verification Verifies explicit deletion of the original shard key, resident membership and an upserted different key for the renamed source, and a nonempty changed consumer key. Wire coordinate text, consumer upsert payloads, and actual resolution diagnostics are not asserted.
+// @evidence contracts/testing.md#independent-expectations The expectations are literal over a consumer importing ./original: after renaming it to renamed.ts and repointing the import, the snapshot must be changed with BaseGeneration equal to the initial generation, Deletes must contain the old shard key, the store must drop the old source identity, the renamed source must hold a new, upserted shard key different from the old one, and the consumer's shard key must change. The test does not assert the new shard's coordinates text.
+// @evidence contracts/testing.md#distinguishing-cases Commit a project whose consumer imports a source by its original path; Rename that source and repoint the import in the same generation; Require the old shard deleted, a new shard upserted, and the consumer's committed key changed.
+// @evidence contracts/testing.md#execution-ownership TestServeShardsRenameMovesSourceIdentity is a Go source-unit entry. snapshotGraphShardState calls the actual prepareShardSnapshot transaction and completes each prepared projection, including fallback, with explicit empty ignore membership. The owning operations stay in this test process, without installing a consumer or building or starting a native product binary. The separate worktree E2E owns real Git acquisition.
 func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
   root := t.TempDir()
   writeGraphFile(t, filepath.Join(root, "tsconfig.json"), `{
@@ -35,7 +38,7 @@ func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
     t.Fatal(err)
   }
   defer session.Close()
-  initial, mode, changed, err := session.SnapshotShards()
+  initial, mode, changed, err := snapshotGraphShardState(session)
   if err != nil {
     t.Fatal(err)
   }
@@ -49,8 +52,8 @@ func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
   }
   originalKeyFile := originalSource.FileName()
   consumerKeyFile := consumerSource.FileName()
-  originalKey := session.graphStore.sourceKeys[originalKeyFile]
-  initialConsumerKey := session.graphStore.sourceKeys[consumerKeyFile]
+  originalKey := session.graphStore.sourceKeys[string(originalKeyFile)]
+  initialConsumerKey := session.graphStore.sourceKeys[string(consumerKeyFile)]
   if originalKey == "" || initialConsumerKey == "" {
     t.Fatal("initial generation omitted a fixture source shard")
   }
@@ -61,7 +64,7 @@ func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
   }
   writeGraphFile(t, consumerFile, "import { moved } from './renamed';\nexport function consume(): number { return moved(); }\n")
 
-  next, mode, changed, err := session.SnapshotShards()
+  next, mode, changed, err := snapshotGraphShardState(session)
   if err != nil {
     t.Fatal(err)
   }
@@ -71,14 +74,14 @@ func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
   if !containsString(next.Deletes, originalKey) {
     t.Fatalf("rename did not delete the superseded shard %q: %v", originalKey, next.Deletes)
   }
-  if _, exists := session.graphStore.sourceKeys[originalKeyFile]; exists {
+  if _, exists := session.graphStore.sourceKeys[string(originalKeyFile)]; exists {
     t.Fatal("committed store retained the pre-rename source identity")
   }
   renamedSource := session.compiler.Program().SourceFile(renamed)
   if renamedSource == nil {
     t.Fatal("renamed source did not enter the resident program")
   }
-  renamedKey := session.graphStore.sourceKeys[renamedSource.FileName()]
+  renamedKey := session.graphStore.sourceKeys[string(renamedSource.FileName())]
   if renamedKey == "" {
     t.Fatal("renamed source did not acquire a committed shard identity")
   }
@@ -88,8 +91,8 @@ func TestServeShardsRenameMovesSourceIdentity(t *testing.T) {
   if !containsUpsertedShardKey(next, renamedKey) {
     t.Fatalf("generation did not publish the renamed source shard %q", renamedKey)
   }
-  nextConsumerKey := session.graphStore.sourceKeys[consumerKeyFile]
-  if nextConsumerKey == initialConsumerKey {
+  nextConsumerKey := session.graphStore.sourceKeys[string(consumerKeyFile)]
+  if nextConsumerKey == "" || nextConsumerKey == initialConsumerKey {
     t.Fatalf("dependent shard identity %q survived a repointed import", nextConsumerKey)
   }
 }

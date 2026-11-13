@@ -12,6 +12,15 @@ import { materializeSharedSource as publishSharedSource } from "./materializeSha
  * The generated project contains a TypeScript entrypoint, a tsconfig plugin
  * descriptor, and a tiny Go source transformer. That lets tests exercise the
  * same native source-plugin path that real bundler integrations use.
+ *
+ * @evidence contracts/common.md#principled-implementation Synthetic projects name actual authored Go protocol source and execute the same descriptor and compiler paths as native adapter consumers.
+ * @evidence contracts/common.md#clear-and-simple-design One namespace owns fixture construction and ordinary immutable native source selection; private mutable copies remain explicit operations.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Generated descriptors select real Go source, not expected transform results; package discovery and source mutation keep their required private inputs.
+ * @evidence contracts/common.md#meaningful-documentation The paragraph describes the TS entry, plugin descriptor and native producer purpose; member prose describes sharing boundaries.
+ * @evidence contracts/portability.md#os-neutral-implementation Native joins, filesystem writes and package-based compiler resolution preserve platform paths; the descriptor serializes its source string through JSON.
+ * @evidence contracts/performance.md#efficient-algorithms Project writing scales with input bytes; shared source publication hashes the authored tree and avoids copying installed dependencies.
+ * @evidence contracts/performance.md#reuse-equivalent-work The process-wide source location and cache are shared only for frozen authored inputs; product build witnesses still own artifact validity.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Project roots are tracked by TestProject; one source-path string remains process-held and published digest directories persist without historical eviction.
  */
 export namespace TestUnpluginProject {
   let sharedGoPluginRoot: string | undefined;
@@ -26,6 +35,8 @@ export namespace TestUnpluginProject {
   interface ICreateProjectOptions {
     plugins?: unknown[];
     source?: string;
+    /** Private ancestry for tests observing unresolved package candidates. */
+    temporaryParent?: string;
   }
 
   /** Require function scoped to the unplugin package under test. */
@@ -47,10 +58,19 @@ export namespace TestUnpluginProject {
    * Create a temporary project that transforms `goUpper("...")` through a Go
    * plugin descriptor. Callers can override plugin config or source text to
    * probe adapter-specific behavior without duplicating fixture setup.
+   *
+   * @evidence contracts/common.md#principled-implementation The helper writes a strict CommonJS fixture, chooses the caller's explicit plugins or the default descriptor and supplies actual native source.
+   * @evidence contracts/common.md#clear-and-simple-design One operation prepares the entry, config and descriptor using existing shared-cache and temporary-root owners.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The goUpper source is authored stimulus for the synthetic native producer; its output is still computed by the actual compiler path.
+   * @evidence contracts/common.md#meaningful-documentation The paragraph explains source and plugin overrides and why the fixture selects a native transformer.
+   * @evidence contracts/portability.md#os-neutral-implementation Native filesystem joins locate generated files, and JSON serialization preserves descriptor values without shell interpolation.
+   * @evidence contracts/performance.md#efficient-algorithms A constant number of metadata files plus the source text are written; native shared-source preparation is delegated.
+   * @evidence contracts/performance.md#reuse-equivalent-work Ordinary consumers share a process cache and immutable authored source; each project's mutable TS/config files are allocated anew.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The unique project is tracked until process exit, including partial preparation failures; the shared source publisher owns staging release.
    */
   export function createProject(options: ICreateProjectOptions = {}) {
     ensureSharedCacheDir();
-    const root = TestProject.tmpdir("ttsc-unplugin-");
+    const root = TestProject.tmpdir("ttsc-unplugin-", options.temporaryParent);
     fs.mkdirSync(path.join(root, "src"), { recursive: true });
     fs.writeFileSync(
       mainFile(root),
@@ -96,12 +116,21 @@ export namespace TestUnpluginProject {
    * Exported for fixture builders that do not go through {@link createProject}
    * (the Vite serve scenarios), which would otherwise rebuild the native
    * compiler host into every fixture's own `node_modules/.cache`.
+   *
+   * @evidence contracts/common.md#principled-implementation An existing TTSC_CACHE_DIR is preserved; otherwise the shared allocation owner supplies exactly one process cache location.
+   * @evidence contracts/common.md#clear-and-simple-design One environment-setting boundary serves both generated projects and Vite fixture builders.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The explicit environment override is a supported owner choice; no compiler result or cache witness is invented.
+   * @evidence contracts/common.md#meaningful-documentation The paragraphs state process lifetime, caller override precedence and why direct Vite preparation also calls this owner.
+   * @evidence contracts/portability.md#os-neutral-implementation The helper passes the selected native directory as an environment value without shell quoting or separator rewriting.
+   * @evidence contracts/performance.md#efficient-algorithms After first allocation, selection and assignment are constant work.
+   * @evidence contracts/performance.md#reuse-equivalent-work All later consumers use the same configured root while production content witnesses decide artifact reuse; callers must not change shared inputs concurrently.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources At most one shared path string is held here; its allocated root remains TestProject exit-owned unless transferred for unresolved readers. The environment assignment persists for this test process.
    */
   export function ensureSharedCacheDir(): void {
     if (process.env.TTSC_CACHE_DIR !== undefined) {
       return;
     }
-    sharedCacheDir ??= TestProject.tmpdir("ttsc-unplugin-cache-");
+    sharedCacheDir ??= TestProject.sharedPluginCache();
     process.env.TTSC_CACHE_DIR = sharedCacheDir;
   }
 
@@ -112,6 +141,15 @@ export namespace TestUnpluginProject {
    * complete directory. A concurrent publisher either wins the rename or sees
    * the same digest already present, so no compiler can observe a truncated Go
    * source while another test process is materializing it.
+   *
+   * @evidence contracts/common.md#principled-implementation The common publisher hashes and atomically publishes the caller's complete source under the checkout-owned test cache.
+   * @evidence contracts/common.md#clear-and-simple-design This adapter chooses one shared cache parent and delegates hashing, contention and staging cleanup.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The writer supplies actual source files; publication does not certify a compiler artifact or transform result.
+   * @evidence contracts/common.md#meaningful-documentation The paragraphs explain private staging and atomic publication before consumers receive the path.
+   * @evidence contracts/portability.md#os-neutral-implementation Native joins and rename handle platform paths; content framing uses portable relative names in the delegated publisher.
+   * @evidence contracts/performance.md#efficient-algorithms Each invocation writes and hashes its supplied tree; an existing destination is rehashed only after publication contention.
+   * @evidence contracts/performance.md#reuse-equivalent-work Equivalent source bytes at the same label and parent share a digest directory after content comparison; changing bytes chooses another digest.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The publisher removes private staging on failure or contention; completed digest directories remain in the shared test cache without automatic eviction.
    */
   export function materializeSharedSource(
     label: string,
@@ -129,23 +167,67 @@ export namespace TestUnpluginProject {
     );
   }
 
-  /** Absolute path to the generated TypeScript entrypoint. */
+  /**
+   * Absolute path to the generated TypeScript entrypoint.
+   *
+   * @evidence contracts/common.md#principled-implementation Joining the root with the helper's src/main.ts convention identifies its authored entrypoint.
+   * @evidence contracts/common.md#clear-and-simple-design One path constructor keeps entry selection consistent with project creation and reading.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The fixed relative location is the fixture contract, not a product-specific output exception.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies the generated entry path.
+   * @evidence contracts/portability.md#os-neutral-implementation Native join preserves the caller root's platform path spelling.
+   * @evidence contracts/performance.md#efficient-algorithms A fixed number of path operations processes the root string.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work This path constructor shares no observed filesystem or compilation result.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The returned path string owns no handle or background work.
+   */
   export function mainFile(root: string): string {
     return path.join(root, "src", "main.ts");
   }
 
-  /** Read the generated entrypoint after a test mutates it. */
+  /**
+   * Read the generated entrypoint after a test mutates it.
+   *
+   * @evidence contracts/common.md#principled-implementation The current generated entry is read as UTF-8 after native entry-path construction.
+   * @evidence contracts/common.md#clear-and-simple-design One read delegates filename selection to mainFile.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Actual mutated fixture bytes supply the result; stale expected source is not substituted.
+   * @evidence contracts/common.md#meaningful-documentation The headline explains reading after caller mutation.
+   * @evidence contracts/portability.md#os-neutral-implementation Native join and readFile use the filesystem's real path semantics.
+   * @evidence contracts/performance.md#efficient-algorithms One complete read allocates storage proportional to entry bytes.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Every call rereads mutable fixture content without retained snapshots.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The synchronous read closes before return; the caller receives the text without retained helper state.
+   */
   export function mainSource(root: string): string {
     return fs.readFileSync(mainFile(root), "utf8");
   }
 
-  /** Assert that the fixture Go plugin replaced the helper call with output. */
+  /**
+   * Assert that the fixture Go plugin replaced the helper call with output.
+   *
+   * @evidence contracts/common.md#principled-implementation The two independent text assertions require the authored PLUGIN marker and removal of its goUpper stimulus.
+   * @evidence contracts/common.md#clear-and-simple-design A small shared assertion keeps the fixture's transform oracle in one place.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts These literals belong to the synthetic producer contract; actual emitted code is supplied by the caller and no product behavior is special-cased.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies the intended native replacement; it does not claim full JavaScript semantic equivalence.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation String assertions cross no native process or filesystem boundary.
+   * @evidence contracts/performance.md#efficient-algorithms Each regular-expression check scans the supplied code text with constant pattern size.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each supplied output is asserted anew; no prior assertion result is reused.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The assertion retains no handle, task or cache.
+   */
   export function assertTransformedToPlugin(code: string): void {
     assert.match(code, /PLUGIN/);
     assert.doesNotMatch(code, /goUpper/);
   }
 
-  /** Extract JavaScript code chunks from Rollup's mixed output array. */
+  /**
+   * Extract JavaScript code chunks from Rollup's mixed output array.
+   *
+   * @evidence contracts/common.md#principled-implementation Only non-null object chunks with a string code member contribute text, preserving their input order with newline separators.
+   * @evidence contracts/common.md#clear-and-simple-design A filter and projection handle Rollup's mixed output without interpreting asset fields.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The actual supplied chunks determine the result; no expected bundle is inserted.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies JavaScript-only extraction from mixed Rollup output.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation This operation projects in-memory objects and performs no native boundary operation.
+   * @evidence contracts/performance.md#efficient-algorithms The input array is visited by filter and map, then joined; temporary arrays and result bytes scale with chunks and code length.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Mutable output arrays are read per call without cached projections.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Only call-local arrays and the returned string are allocated; no persistent resource is owned.
+   */
   export function collectRollupOutputCode(output: readonly unknown[]): string {
     return output
       .filter(
@@ -159,9 +241,45 @@ export namespace TestUnpluginProject {
       .join("\n");
   }
 
-  /** Write the local CommonJS plugin descriptor consumed by ttsc. */
+  /**
+   * The Go source directory the project's plugin descriptor names, resolved
+   * from the project root: the directory a transform reports among its plugin
+   * sources, and every host watches, once the plugin runs (samchon/ttsc#1487).
+   *
+   * Read from the descriptor this namespace or a scenario wrote, whose `source`
+   * is a string literal.
+   *
+   * @evidence contracts/common.md#principled-implementation The helper reads the authored descriptor's JSON string literal and resolves it from the fixture root; absent literals fail explicitly.
+   * @evidence contracts/common.md#clear-and-simple-design One narrow extractor supplies the exact source location observed by topology scenarios.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The parser is limited to descriptors written by this namespace or compatible authored scenarios; it does not pretend to evaluate arbitrary JS descriptors.
+   * @evidence contracts/common.md#meaningful-documentation The paragraph states the string-literal premise and watched-source purpose.
+   * @evidence contracts/portability.md#os-neutral-implementation Native resolve interprets descriptor-relative paths; JSON decoding preserves backslashes and native absolute source spelling.
+   * @evidence contracts/performance.md#efficient-algorithms One descriptor read and a linear literal search process its text.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Descriptor contents may change between scenarios, so every call rereads them.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The synchronous read closes before return and no parsed descriptor is retained.
+   */
+  export function pluginSource(root: string): string {
+    const descriptor = fs.readFileSync(path.join(root, "plugin.cjs"), "utf8");
+    const named = /source: ("(?:[^"\\]|\\.)*")/.exec(descriptor)?.[1];
+    if (named === undefined)
+      throw new Error(`plugin.cjs below ${root} names no source literal`);
+    return path.resolve(root, JSON.parse(named) as string);
+  }
+
+  /**
+   * Write the local CommonJS plugin descriptor consumed by ttsc.
+   *
+   * @evidence contracts/common.md#principled-implementation A CommonJS descriptor serializes the immutable source path and selects its name from the actual plugin context.
+   * @evidence contracts/common.md#clear-and-simple-design One writer connects private project metadata to the shared authored source owner.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The descriptor still invokes the real native compiler protocol; source sharing does not fabricate a transform answer.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies the local CommonJS descriptor; sharedNativeFixtureSource documents its frozen source premise.
+   * @evidence contracts/portability.md#os-neutral-implementation JSON.stringify escapes the native path for JavaScript rather than applying shell or separator rewriting.
+   * @evidence contracts/performance.md#efficient-algorithms One small descriptor is written after delegated source publication.
+   * @evidence contracts/performance.md#reuse-equivalent-work Ordinary descriptors share one process-held native source path; the actual native artifact cache independently validates compiler inputs.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The caller owns the descriptor file; the shared publisher owns staging cleanup and keeps completed digest directories.
+   */
   export function writePluginEntry(root: string): void {
-    const source = sharedGoPluginSource();
+    const source = sharedNativeFixtureSource();
     fs.writeFileSync(
       path.join(root, "plugin.cjs"),
       [
@@ -180,6 +298,15 @@ export namespace TestUnpluginProject {
    *
    * This mirrors the npm package contract where package.json advertises the
    * ttsc plugin entry and the descriptor resolves its own Go source directory.
+   *
+   * @evidence contracts/common.md#principled-implementation The fixture advertises an actual package-discovered descriptor and writes native source at its package-relative go-plugin location.
+   * @evidence contracts/common.md#clear-and-simple-design Project dependency metadata and the package entrypoint are constructed together so resolution sees one coherent fixture package.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The synthetic version and package metadata are fixture inputs; actual package resolution and Go execution remain required.
+   * @evidence contracts/common.md#meaningful-documentation The paragraphs explain the npm-style plugin contract and package-relative source discovery.
+   * @evidence contracts/portability.md#os-neutral-implementation Native joins and JSON encoding construct package files; the descriptor uses node:path to resolve its own source on each platform.
+   * @evidence contracts/performance.md#efficient-algorithms A fixed number of metadata files and the two authored native files are written; existing manifest parsing scales with its bytes.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each mutable package fixture is written into its caller-owned root; it is not shared as an immutable package result.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The caller's tracked project owns all writes; failures can leave partial package files and no child is started here.
    */
   export function writePackagePlugin(root: string, packageName: string): void {
     const projectManifest = JSON.parse(
@@ -238,553 +365,108 @@ export namespace TestUnpluginProject {
   }
 
   /**
-   * Write the tiny Go transformer used by unplugin adapter tests.
+   * Copy the authored protocol producer into a private package fixture.
    *
-   * This is a handwritten synthetic protocol double: it owns its JSON envelope
-   * shape and does not stand in for the production driver's reference graph.
-   * The real-host contract is calibrated by test-unplugin's native envelope
-   * cache gate; this fixture stays synthetic so tests can request controlled
-   * operations and deliberately incomplete shapes.
+   * Package discovery requires the source below the consumer's package root;
+   * source-edit scenarios likewise require bytes that no other consumer owns.
    *
-   * The plugin supports multiple operations so adapter tests can prove plugin
-   * ordering, generated tsconfig paths, config path absolutization, and cache
-   * invalidation without depending on a production utility plugin.
+   * @evidence contracts/common.md#principled-implementation Delegating to the authored source copier preserves the package-relative go-plugin location while retaining the exact shared producer bytes.
+   * @evidence contracts/common.md#clear-and-simple-design This operation owns only the package-relative destination; the common copier owns its two authored inputs.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Private files retain actual Go compilation and source mutation rather than replacing the producer with a fabricated result.
+   * @evidence contracts/common.md#meaningful-documentation The native paragraph explains why package discovery and source edits require a private copy despite ordinary source sharing.
+   *
+   * @evidence contracts/portability.md#os-neutral-implementation The delegated native copier uses platform path joins and byte-copy APIs; no source-path casing assumptions are introduced.
+   * @evidence contracts/performance.md#efficient-algorithms Two fixed authored native files are copied once, with cost proportional to their bytes.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Package-relative mutable copies deliberately remain independent and are not reused as shared state.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The caller's project owns copied files and any partial copy after failure; synchronous copying retains no handle.
    */
   export function writeGoPlugin(root: string): void {
-    fs.mkdirSync(path.join(root, "go-plugin"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "go-plugin", "go.mod"),
-      "module example.com/ttscunpluginfixture\n\ngo 1.26\n",
-      "utf8",
-    );
-    fs.writeFileSync(
-      path.join(root, "go-plugin", "main.go"),
-      [
-        "package main",
-        "",
-        "import (",
-        '  "crypto/sha256"',
-        '  "encoding/json"',
-        '  "flag"',
-        '  "fmt"',
-        '  "os"',
-        '  "path/filepath"',
-        '  "regexp"',
-        '  "strconv"',
-        '  "strings"',
-        '  "time"',
-        ")",
-        "",
-        'var goUpperCall = regexp.MustCompile(`(?m)export\\s+const\\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\\s*:\\s*[^=]+)?=\\s*goUpper\\("([^"]*)"\\)\\s*;`)',
-        "",
-        "type pluginDescriptor struct {",
-        '  Config map[string]any `json:"config"`',
-        '  Name string `json:"name"`',
-        '  Stage string `json:"stage"`',
-        "}",
-        "",
-        "type graphSection struct {",
-        '  Edges map[string][]string `json:"edges"`',
-        '  Globals []string `json:"globals"`',
-        '  Configs []string `json:"configs"`',
-        '  InputHashes map[string]*string `json:"inputHashes,omitempty"`',
-        '  InputRealpaths map[string]*string `json:"inputRealpaths,omitempty"`',
-        "}",
-        "",
-        "type transformResult struct {",
-        '  TypeScript map[string]string `json:"typescript"`',
-        '  Dependencies map[string][]string `json:"dependencies,omitempty"`',
-        '  DependenciesComplete []string `json:"dependenciesComplete,omitempty"`',
-        '  Graph *graphSection `json:"graph,omitempty"`',
-        '  HostInputs []string `json:"hostInputs,omitempty"`',
-        '  HostInputHashes map[string]*string `json:"hostInputHashes,omitempty"`',
-        '  HostInputRealpaths map[string]*string `json:"hostInputRealpaths,omitempty"`',
-        '  Volatile []string `json:"volatile,omitempty"`',
-        "}",
-        "",
-        "// collectedDependencies is filled by the emit-dependencies operation and",
-        "// rides the transform envelope's optional dependencies field.",
-        "var collectedDependencies map[string][]string",
-        "",
-        "// collectedGraph is filled by the emit-graph operation and rides the",
-        "// transform envelope's optional graph section, mirroring the reference",
-        "// graph a driver-SDK host stamps.",
-        "var collectedGraph *graphSection",
-        "",
-        "// collectedVolatile is filled by the emit-volatile operation and rides",
-        "// the transform envelope's optional volatile list.",
-        "var collectedVolatile []string",
-        "var collectedHostInputs []string",
-        "var collectedHostInputHashes map[string]*string",
-        "var collectedHostInputRealpaths map[string]*string",
-        "",
-        "// collectedComplete is filled by the declare-complete operation and rides",
-        "// the transform envelope's optional dependenciesComplete list, mirroring a",
-        "// producer that declares its reported dependency list exhaustive.",
-        "var collectedComplete []string",
-        "",
-        "// extraOutputs echoes further project files into the envelope's typescript",
-        "// map, so a scenario can address more than one transformed file in the one",
-        "// envelope a transform invocation produces.",
-        "var extraOutputs = map[string]string{}",
-        "",
-        "func main() { os.Exit(run(os.Args[1:])) }",
-        "",
-        "func run(args []string) int {",
-        "  if len(args) == 0 { return 2 }",
-        "  switch args[0] {",
-        '  case "transform":',
-        "    return transform(args[1:])",
-        '  case "check", "build":',
-        "    return verifyEnvOperations(args[1:])",
-        '  case "version":',
-        "    return 0",
-        "  default:",
-        '    fmt.Fprintf(os.Stderr, "fixture: unknown command %q\\n", args[0])',
-        "    return 2",
-        "  }",
-        "}",
-        "",
-        "// verifyEnvOperations keeps the check/build subcommands as no-ops except",
-        "// when a plugin entry explicitly requests the env assertion, so the",
-        "// scrub of an inherited TTSC_PLUGIN_CONFIG_DIR is observable on the",
-        "// build lane too.",
-        "func verifyEnvOperations(args []string) int {",
-        "  for _, arg := range args {",
-        '    if !strings.HasPrefix(arg, "--plugins-json=") { continue }',
-        '    plugins, err := parsePlugins(strings.TrimPrefix(arg, "--plugins-json="))',
-        "    if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
-        "    for _, plugin := range plugins {",
-        '      if operation(plugin.Config) != "assert-no-plugin-config-dir" { continue }',
-        '      if v := os.Getenv("TTSC_PLUGIN_CONFIG_DIR"); v != "" {',
-        '        fmt.Fprintf(os.Stderr, "TTSC_PLUGIN_CONFIG_DIR must be scrubbed from an undeclared run, got %q\\n", v)',
-        "        return 2",
-        "      }",
-        "    }",
-        "  }",
-        "  return 0",
-        "}",
-        "",
-        "func transform(args []string) int {",
-        '  fs := flag.NewFlagSet("transform", flag.ContinueOnError)',
-        "  fs.SetOutput(os.Stderr)",
-        '  cwd := fs.String("cwd", "", "")',
-        '  tsconfig := fs.String("tsconfig", "", "")',
-        '  pluginsJSON := fs.String("plugins-json", "", "")',
-        "  if err := fs.Parse(args); err != nil { return 2 }",
-        "  root := *cwd",
-        '  if root == "" { root, _ = os.Getwd() }',
-        '  source, err := os.ReadFile(filepath.Join(root, "src", "main.ts"))',
-        "  if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
-        "  plugins, err := parsePlugins(*pluginsJSON)",
-        "  if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
-        "  code, err := transformSource(string(source), plugins, *tsconfig, root)",
-        "  if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
-        '  outputs := map[string]string{"src/main.ts": code}',
-        "  for key, text := range extraOutputs { outputs[key] = text }",
-        "  data, err := json.Marshal(transformResult{TypeScript: outputs, Dependencies: collectedDependencies, DependenciesComplete: collectedComplete, Graph: collectedGraph, HostInputs: collectedHostInputs, HostInputHashes: collectedHostInputHashes, HostInputRealpaths: collectedHostInputRealpaths, Volatile: collectedVolatile})",
-        "  if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
-        "  fmt.Fprintln(os.Stdout, string(data))",
-        "  return 0",
-        "}",
-        "",
-        "func parsePlugins(input string) ([]pluginDescriptor, error) {",
-        '  if input == "" { return nil, nil }',
-        "  var plugins []pluginDescriptor",
-        "  if err := json.Unmarshal([]byte(input), &plugins); err != nil { return nil, err }",
-        "  return plugins, nil",
-        "}",
-        "",
-        "func transformSource(source string, plugins []pluginDescriptor, tsconfig string, root string) (string, error) {",
-        "  match := goUpperCall.FindStringSubmatch(source)",
-        '  if match == nil { return "", fmt.Errorf(`expected export const value = goUpper("...")`) }',
-        "  name := match[1]",
-        "  value := match[2]",
-        '  if len(plugins) == 0 { plugins = []pluginDescriptor{{Config: map[string]any{"operation": "go-uppercase"}}} }',
-        "  for _, plugin := range plugins {",
-        "    switch operation(plugin.Config) {",
-        '    case "assert-paths":',
-        '      if err := assertPaths(tsconfig, plugin.Config); err != nil { return "", err }',
-        "      value = strings.ToUpper(value)",
-        '    case "assert-absolute-alias-paths":',
-        '      if err := assertAbsoluteAliasPaths(tsconfig, plugin.Config); err != nil { return "", err }',
-        "      value = strings.ToUpper(value)",
-        '    case "emit-dependencies":',
-        "      collectedDependencies = dependenciesFromConfig(plugin.Config)",
-        "      value = strings.ToUpper(value)",
-        '    case "emit-graph":',
-        "      collectedGraph = graphFromConfig(plugin.Config)",
-        '      if boolValue(plugin.Config, "echoTsconfig") {',
-        "        // Echo the host-provided --tsconfig path into the config chain,",
-        "        // mirroring how a real driver-SDK graph lists the loaded config;",
-        "        // with an alias/compiler-options overlay that is the generated",
-        "        // temp-dir tsconfig the adapter must drop from watch inputs.",
-        "        collectedGraph.Configs = append(collectedGraph.Configs, tsconfig)",
-        "      }",
-        "      addGraphInputProofs(collectedGraph, root)",
-        "      value = strings.ToUpper(value)",
-        '    case "declare-complete":',
-        '      collectedComplete = stringListValue(plugin.Config, "complete")',
-        "      value = strings.ToUpper(value)",
-        '    case "echo-file":',
-        '      relative := stringValue(plugin.Config, "path")',
-        "      text, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))",
-        '      if err != nil { return "", err }',
-        "      // Append a marker so the echoed output differs from its source and",
-        "      // the adapter reports a real transform result for it.",
-        '      extraOutputs[relative] = string(text) + "// ttsc-fixture\\n"',
-        "      value = strings.ToUpper(value)",
-        '    case "emit-volatile":',
-        '      collectedVolatile = stringListValue(plugin.Config, "volatile")',
-        "      // A volatile transform depends on non-file inputs by definition;",
-        "      // embed one so replayed cache entries are observably stale.",
-        '      value = strings.ToUpper(value) + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)',
-        '    case "assert-temp-tsconfig-outside-project":',
-        '      if err := assertTempTsconfigOutsideProject(root, tsconfig); err != nil { return "", err }',
-        "      value = strings.ToUpper(value)",
-        '    case "assert-config-path":',
-        '      if err := assertConfigPath(root, plugin.Config); err != nil { return "", err }',
-        "      value = strings.ToUpper(value)",
-        '    case "assert-config-file-path":',
-        '      if err := assertConfigFilePath(root, plugin.Config); err != nil { return "", err }',
-        '      if !boolValue(plugin.Config, "omitHostInputProof") {',
-        '        if err := recordHostInput(stringValue(plugin.Config, "configFile")); err != nil { return "", err }',
-        "      }",
-        "      value = strings.ToUpper(value)",
-        '    case "assert-no-plugin-config-dir":',
-        '      if v := os.Getenv("TTSC_PLUGIN_CONFIG_DIR"); v != "" {',
-        '        return "", fmt.Errorf("TTSC_PLUGIN_CONFIG_DIR must be scrubbed from an undeclared run, got %q", v)',
-        "      }",
-        "      value = strings.ToUpper(value)",
-        '    case "read-helper":',
-        '      helper, err := os.ReadFile(filepath.Join(root, "src", "helper.ts"))',
-        '      if err != nil { return "", err }',
-        '      value = strings.ToUpper(value) + ":" + strings.ToUpper(strings.TrimSpace(string(helper)))',
-        '    case "read-configured-helper":',
-        '      helper, err := os.ReadFile(filepath.Join(root, stringValue(plugin.Config, "path")))',
-        '      if err != nil { return "", err }',
-        '      value = strings.ToUpper(value) + ":" + strings.ToUpper(strings.TrimSpace(string(helper)))',
-        '    case "count-runs":',
-        '      if err := countRun(plugin.Config); err != nil { return "", err }',
-        '    case "go-uppercase":',
-        "      value = strings.ToUpper(value)",
-        '    case "go-prefix":',
-        '      value = stringValue(plugin.Config, "prefix") + value',
-        '    case "go-suffix":',
-        '      value += stringValue(plugin.Config, "suffix")',
-        "    default:",
-        '      return "", fmt.Errorf("unsupported operation")',
-        "    }",
-        "  }",
-        '  return fmt.Sprintf("export const %s = %q;\\nconsole.log(%s);\\n", name, value, name), nil',
-        "}",
-        "",
-        "// countRun appends one byte per transform invocation to the configured",
-        "// run log, so a scenario can count whole-project compiles from outside the",
-        "// build. The log lives wherever the caller puts it, which is deliberately",
-        "// outside the project so the transform's own input walk never sees it.",
-        "func countRun(config map[string]any) error {",
-        '  runLog := stringValue(config, "runLog")',
-        '  if runLog == "" { return fmt.Errorf("count-runs requires a runLog path") }',
-        "  file, err := os.OpenFile(runLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)",
-        "  if err != nil { return err }",
-        "  if _, err := file.Write([]byte{1}); err != nil { _ = file.Close(); return err }",
-        "  return file.Close()",
-        "}",
-        "",
-        "func assertPaths(tsconfig string, config map[string]any) error {",
-        '  if tsconfig == "" { return fmt.Errorf("missing tsconfig flag") }',
-        "  data, err := os.ReadFile(tsconfig)",
-        "  if err != nil { return err }",
-        "  var parsed map[string]any",
-        "  if err := json.Unmarshal(data, &parsed); err != nil { return err }",
-        '  compilerOptions, _ := parsed["compilerOptions"].(map[string]any)',
-        '  paths, _ := compilerOptions["paths"].(map[string]any)',
-        '  key := stringValue(config, "key")',
-        '  target := stringValue(config, "target")',
-        "  if !pathEntryEquals(paths[key], target) {",
-        '    return fmt.Errorf("missing paths entry %s -> %s", key, target)',
-        "  }",
-        '  if !pathEntryEquals(paths[key+"/*"], target+"/*") {',
-        '    return fmt.Errorf("missing paths entry %s/* -> %s/*", key, target)',
-        "  }",
-        "  return nil",
-        "}",
-        "",
-        "func assertAbsoluteAliasPaths(tsconfig string, config map[string]any) error {",
-        '  if tsconfig == "" { return fmt.Errorf("missing tsconfig flag") }',
-        "  data, err := os.ReadFile(tsconfig)",
-        "  if err != nil { return err }",
-        "  var parsed map[string]any",
-        "  if err := json.Unmarshal(data, &parsed); err != nil { return err }",
-        '  compilerOptions, _ := parsed["compilerOptions"].(map[string]any)',
-        '  if _, found := compilerOptions["baseUrl"]; found {',
-        '    return fmt.Errorf("generated tsconfig must not declare baseUrl (removed in TypeScript-Go)")',
-        "  }",
-        '  paths, _ := compilerOptions["paths"].(map[string]any)',
-        '  key := stringValue(config, "key")',
-        "  entries, ok := paths[key].([]any)",
-        "  if !ok || len(entries) == 0 {",
-        '    return fmt.Errorf("missing paths entry for %s", key)',
-        "  }",
-        "  target, _ := entries[0].(string)",
-        "  if !filepath.IsAbs(filepath.FromSlash(target)) {",
-        '    return fmt.Errorf("paths target for %s is not absolute: %s", key, target)',
-        "  }",
-        '  if !pathEntryEquals(paths[key+"/*"], target+"/*") {',
-        '    return fmt.Errorf("missing paths entry %s/* -> %s/*", key, target)',
-        "  }",
-        "  return nil",
-        "}",
-        "",
-        "func assertTempTsconfigOutsideProject(root string, tsconfig string) error {",
-        '  if tsconfig == "" { return fmt.Errorf("missing tsconfig flag") }',
-        "  cleanRoot, err := filepath.Abs(root)",
-        "  if err != nil { return err }",
-        "  cleanConfig, err := filepath.Abs(tsconfig)",
-        "  if err != nil { return err }",
-        '  if cleanConfig == filepath.Join(cleanRoot, "tsconfig.json") { return nil }',
-        "  rel, err := filepath.Rel(cleanRoot, cleanConfig)",
-        "  if err != nil { return err }",
-        '  if rel == "." || rel == "" || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..") {',
-        '    return fmt.Errorf("temporary tsconfig was written under project root: %s", cleanConfig)',
-        "  }",
-        "  return nil",
-        "}",
-        "",
-        "func assertConfigPath(root string, config map[string]any) error {",
-        '  expected := filepath.Join(root, "fixture.config.json")',
-        '  actual := stringValue(config, "config")',
-        "  if actual != expected {",
-        '    return fmt.Errorf("expected config path %s, got %s", expected, actual)',
-        "  }",
-        "  return nil",
-        "}",
-        "",
-        "func assertConfigFilePath(root string, config map[string]any) error {",
-        '  expected := filepath.Join(root, "fixture.config.json")',
-        '  actual := stringValue(config, "configFile")',
-        "  if actual != expected {",
-        '    return fmt.Errorf("expected configFile path %s, got %s", expected, actual)',
-        "  }",
-        "  return nil",
-        "}",
-        "",
-        "// recordHostInput mirrors the compiler-time evidence a native plugin",
-        "// must publish for every config file whose bytes influenced output.",
-        "func recordHostInput(file string) error {",
-        "  data, err := os.ReadFile(file)",
-        "  if err != nil { return err }",
-        "  realpath, err := filepath.EvalSymlinks(file)",
-        "  if err != nil { return err }",
-        "  absolute, err := filepath.Abs(realpath)",
-        "  if err != nil { return err }",
-        "  digest := sha256.Sum256(data)",
-        '  hash := fmt.Sprintf("%x", digest[:])',
-        "  collectedHostInputs = append(collectedHostInputs, file)",
-        "  collectedHostInputHashes = map[string]*string{file: &hash}",
-        "  collectedHostInputRealpaths = map[string]*string{file: &absolute}",
-        "  return nil",
-        "}",
-        "",
-        "// dependenciesFromConfig reads the emit-dependencies operation's",
-        '// "dependencies" list and keys it to the transformed file, mirroring how',
-        "// a real type-driven plugin reports the sources it consulted.",
-        "func dependenciesFromConfig(config map[string]any) map[string][]string {",
-        '  raw, _ := config["dependencies"].([]any)',
-        "  out := make([]string, 0, len(raw))",
-        "  for _, entry := range raw {",
-        "    if text, ok := entry.(string); ok {",
-        "      out = append(out, text)",
-        "    }",
-        "  }",
-        "  if len(out) == 0 { return nil }",
-        '  return map[string][]string{"src/main.ts": out}',
-        "}",
-        "",
-        "// graphFromConfig reads the emit-graph operation's edges/globals/configs",
-        "// keys, mirroring the reference graph a driver-SDK host computes from the",
-        "// loaded program.",
-        "func graphFromConfig(config map[string]any) *graphSection {",
-        "  section := &graphSection{",
-        "    Edges: map[string][]string{},",
-        '    Globals: stringListValue(config, "globals"),',
-        '    Configs: stringListValue(config, "configs"),',
-        '    InputHashes: optionalStringMapValue(config, "inputHashes"),',
-        '    InputRealpaths: optionalStringMapValue(config, "inputRealpaths"),',
-        "  }",
-        '  rawEdges, _ := config["edges"].(map[string]any)',
-        "  for source, targets := range rawEdges {",
-        "    list, _ := targets.([]any)",
-        "    out := make([]string, 0, len(list))",
-        "    for _, entry := range list {",
-        "      if text, ok := entry.(string); ok {",
-        "        out = append(out, text)",
-        "      }",
-        "    }",
-        "    if len(out) != 0 {",
-        "      section.Edges[source] = out",
-        "    }",
-        "  }",
-        "  return section",
-        "}",
-        "",
-        "// addGraphInputProofs gives the synthetic host the same generation-time",
-        "// evidence contract as the real driver: every graph spelling carries the",
-        "// bytes/kind and physical target observed for this transform.",
-        "func addGraphInputProofs(graph *graphSection, root string) {",
-        "  inputs := map[string]struct{}{}",
-        "  for source, targets := range graph.Edges {",
-        "    inputs[source] = struct{}{}",
-        "    for _, target := range targets { inputs[target] = struct{}{} }",
-        "  }",
-        "  for _, input := range graph.Globals { inputs[input] = struct{}{} }",
-        "  for _, input := range graph.Configs { inputs[input] = struct{}{} }",
-        "  for input := range inputs { addGraphInputProof(graph, root, input) }",
-        "}",
-        "",
-        "func addGraphInputProof(graph *graphSection, root, input string) {",
-        "  _, hasHash := graph.InputHashes[input]",
-        "  _, hasRealpath := graph.InputRealpaths[input]",
-        "  if hasHash && hasRealpath { return }",
-        "  file := filepath.FromSlash(input)",
-        "  if !filepath.IsAbs(file) { file = filepath.Join(root, file) }",
-        "  realpath, ok := physicalGraphInput(file)",
-        "  if !ok {",
-        "    graph.InputHashes[input] = nil",
-        "    graph.InputRealpaths[input] = nil",
-        "    return",
-        "  }",
-        "  data, err := os.ReadFile(file)",
-        "  if err != nil {",
-        "    info, statErr := os.Stat(file)",
-        "    if statErr != nil || !info.IsDir() { return }",
-        '    data = []byte("ttsc:host-input:directory\\x00")',
-        "  }",
-        "  if !hasHash {",
-        "    digest := sha256.Sum256(data)",
-        '    hash := fmt.Sprintf("%x", digest[:])',
-        "    graph.InputHashes[input] = &hash",
-        "  }",
-        "  if !hasRealpath { graph.InputRealpaths[input] = &realpath }",
-        "}",
-        "",
-        "// physicalGraphInput follows both ordinary symlinks and Windows",
-        "// junction ancestors, matching the production host's graph proof.",
-        "func physicalGraphInput(file string) (string, bool) {",
-        "  resolved, err := filepath.Abs(file)",
-        '  if err != nil { return "", false }',
-        "  resolved = filepath.Clean(resolved)",
-        "  seen := map[string]struct{}{}",
-        "  for range 255 {",
-        '    if _, exists := seen[resolved]; exists { return "", false }',
-        "    seen[resolved] = struct{}{}",
-        "    if evaluated, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {",
-        "      evaluated, evalErr = filepath.Abs(evaluated)",
-        '      if evalErr != nil { return "", false }',
-        "      evaluated = filepath.Clean(evaluated)",
-        '      if _, statErr := os.Stat(evaluated); statErr != nil { return "", false }',
-        "      return evaluated, true",
-        "    }",
-        "    next, ok := resolveGraphInputLinkAncestor(resolved)",
-        '    if !ok { return "", false }',
-        "    resolved = next",
-        "  }",
-        '  return "", false',
-        "}",
-        "",
-        "func resolveGraphInputLinkAncestor(location string) (string, bool) {",
-        "  probe := filepath.Clean(location)",
-        "  suffix := []string{}",
-        "  for {",
-        "    if target, err := os.Readlink(probe); err == nil {",
-        "      if !filepath.IsAbs(target) { target = filepath.Join(filepath.Dir(probe), target) }",
-        "      for i := len(suffix) - 1; i >= 0; i-- { target = filepath.Join(target, suffix[i]) }",
-        "      absolute, absErr := filepath.Abs(target)",
-        '      if absErr != nil { return "", false }',
-        "      return filepath.Clean(absolute), true",
-        "    }",
-        "    parent := filepath.Dir(probe)",
-        '    if parent == probe { return "", false }',
-        "    suffix = append(suffix, filepath.Base(probe))",
-        "    probe = parent",
-        "  }",
-        "}",
-        "",
-        "func optionalStringMapValue(config map[string]any, key string) map[string]*string {",
-        "  output := map[string]*string{}",
-        "  raw, _ := config[key].(map[string]any)",
-        "  for name, value := range raw {",
-        "    if value == nil { output[name] = nil; continue }",
-        "    if text, ok := value.(string); ok {",
-        "      copied := text",
-        "      output[name] = &copied",
-        "    }",
-        "  }",
-        "  return output",
-        "}",
-        "",
-        "func stringListValue(config map[string]any, key string) []string {",
-        "  raw, _ := config[key].([]any)",
-        "  out := make([]string, 0, len(raw))",
-        "  for _, entry := range raw {",
-        "    if text, ok := entry.(string); ok {",
-        "      out = append(out, text)",
-        "    }",
-        "  }",
-        "  if len(out) == 0 { return nil }",
-        "  return out",
-        "}",
-        "",
-        "func pathEntryEquals(value any, expected string) bool {",
-        "  entries, ok := value.([]any)",
-        "  if !ok || len(entries) == 0 { return false }",
-        "  actual, _ := entries[0].(string)",
-        "  return actual == expected",
-        "}",
-        "",
-        "func operation(config map[string]any) string {",
-        '  if value, ok := config["operation"].(string); ok && value != "" { return value }',
-        '  if _, ok := config["prefix"]; ok { return "go-prefix" }',
-        '  if _, ok := config["suffix"]; ok { return "go-suffix" }',
-        '  return "go-uppercase"',
-        "}",
-        "",
-        "func stringValue(config map[string]any, key string) string {",
-        "  value, _ := config[key].(string)",
-        "  return value",
-        "}",
-        "",
-        "func boolValue(config map[string]any, key string) bool {",
-        "  value, _ := config[key].(bool)",
-        "  return value",
-        "}",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
+    writeNativeFixtureSource(path.join(root, "go-plugin"));
   }
 
   /**
-   * Materialize one process-wide source identity for the synthetic transformer.
+   * Copy the common synthetic producer's exact Go inputs. Private copies retain
+   * source-edit and package-relative discovery scenarios; ordinary consumers
+   * share its immutable content-addressed source instead.
    *
-   * The native cache keys source plugins by both content and location. Writing
-   * identical Go sources below every temporary consumer therefore defeated the
-   * cache and rebuilt the same host for each scenario. The package-discovery
-   * fixture remains local because that case owns the package-relative source
-   * contract; ordinary projects all point at this one deterministic location.
+   * @evidence contracts/common.md#principled-implementation Copying the authored go.mod and main.go preserves their bytes and the main.go mutation address used by source invalidation scenarios.
+   * @evidence contracts/common.md#clear-and-simple-design One source directory and a two-file copy replace independent generated Go implementations; protocol selection remains in the fixture descriptor config.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Consumers execute the actual authored Go program. The copier adds no product branch, foreign patch or expected-result substitution.
+   * @evidence contracts/common.md#meaningful-documentation Native prose distinguishes private mutable copies from the immutable ordinary source and names their discovery and mutation responsibilities.
+   *
+   * @evidence contracts/portability.md#os-neutral-implementation Native joins and copyFile address the authored fixture and destination without shell commands or case folding.
+   * @evidence contracts/performance.md#efficient-algorithms Two fixed files are copied once; byte size determines IO cost.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each requested private destination receives its own writable files; shared immutable selection is a separate owner.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The caller owns destination files and partial preparation; synchronous operations leave no outstanding task or handle.
    */
-  function sharedGoPluginSource(): string {
-    sharedGoPluginRoot ??= materializeSharedSource(
-      "default-go-plugin",
-      writeGoPlugin,
+  export function writeNativeFixtureSource(directory: string): void {
+    const source = path.join(
+      TestProject.WORKSPACE_ROOT,
+      "packages",
+      "unplugin",
+      "test",
+      "fixtures",
+      "native-transform-producer",
     );
-    return path.join(sharedGoPluginRoot, "go-plugin");
+    fs.mkdirSync(directory, { recursive: true });
+    for (const file of ["go.mod", "main.go"])
+      fs.copyFileSync(path.join(source, file), path.join(directory, file));
+  }
+
+  /**
+   * Materialize one process-wide authored module for both native entrypoints.
+   *
+   * Generic and cache-protocol projects and the linked Program probe use one
+   * immutable three-file module rather than generating independent producer
+   * implementations. Synthetic descriptor config selects its protocol in one
+   * main executable; the linked probe uses a separate non-main package and host
+   * artifact. Neither source sharing nor a shared main executable establishes
+   * one transform generation. The native artifact cache owns source-digest and
+   * Go-environment equivalence independently of this publisher.
+   * Package-discovery and source-edit fixtures remain private because those
+   * cases observe package-relative locations or mutate the source bytes.
+   *
+   * @evidence contracts/common.md#principled-implementation The publisher hashes the authored three-file module and atomically publishes complete bytes, establishing a common immutable source location for both protocols.
+   * @evidence contracts/common.md#clear-and-simple-design One process-held module path coordinates both synthetic protocols and the linked Program probe. Package discovery uses the private two-file copier; source-edit consumers copy the immutable module into their own writable root.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Source and artifact sharing retains native execution. The source path neither fabricates envelopes nor promises reuse across distinct consumer state or options.
+   * @evidence contracts/common.md#meaningful-documentation Native paragraphs distinguish executable source identity, private mutable cases and transform-generation ownership.
+   * @evidence contracts/performance.md#reuse-equivalent-work Both protocol consumers compile the same main package at one immutable module location; the linked probe selects its separate non-main package from that module; valid descriptor config chooses an operation at execution time. Changed authored bytes select a different digest on the next publisher invocation, while this process expects fixture inputs to remain frozen.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources This namespace retains one source-path string for the process. The publisher owns staging cleanup; content-addressed filesystem artifacts persist in the shared test cache and this function does not reclaim historical digests.
+   *
+   * @evidence contracts/portability.md#os-neutral-implementation Native joins locate the authored module and delegated copying preserves filenames; publication uses native rename and portable digest framing.
+   * @evidence contracts/performance.md#efficient-algorithms First use copies and hashes the complete three-file module; later calls return the process-held path without rescanning frozen authored inputs.
+   */
+  export function sharedNativeFixtureSource(): string {
+    sharedGoPluginRoot ??= materializeSharedSource(
+      "native-transform-producer",
+      (directory) =>
+        TestProject.copyDirectory(
+          path.join(
+            TestProject.WORKSPACE_ROOT,
+            "packages",
+            "unplugin",
+            "test",
+            "fixtures",
+            "native-transform-producer",
+          ),
+          directory,
+        ),
+    );
+    return sharedGoPluginRoot;
   }
 
   /**
    * Resolve the native TypeScript `tsc` binary for unplugin tests that call
    * transform APIs directly.
+   *
+   * @evidence contracts/common.md#principled-implementation The actual typescript manifest scopes resolution of its matching platform package before selecting the native executable.
+   * @evidence contracts/common.md#clear-and-simple-design One resolver supplies the direct transform APIs' compiler override.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Missing native packages fail actual resolution rather than selecting an arbitrary toolchain fallback.
+   * @evidence contracts/common.md#meaningful-documentation The paragraph identifies native compiler resolution for in-process transform calls.
+   * @evidence contracts/portability.md#os-neutral-implementation Platform package naming and the win32 .exe suffix follow the dependency contract; native joins preserve paths.
+   * @evidence contracts/performance.md#efficient-algorithms Two package resolutions and fixed path operations avoid any workspace tree scan.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work This operation caches no resolution; the module's environment initialization chooses its process lifetime separately.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources No process, handle or retained mutable state is acquired by package resolution.
    */
   export function resolveTsgoBinary() {
     const packageJson = TestProject.REQUIRE_FROM_TEST.resolve(

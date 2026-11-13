@@ -31,6 +31,10 @@ checker := prog.Checker                  // type-aware queries
 - builds the tsgo `Program` through `shim/compiler.NewProgram` and leases a `*shimchecker.Checker` from the pool.
 - returns a `*driver.Program` carrying the parsed config, the host, the FS, and the lease release function.
 
+`LoadProgramOptions.TsgoArgsCwd` supplies the base for upstream response-file and command-line option parsing. It does not change the selected config, Program host, `PluginContext.Cwd` or plugin discovery root. An empty value uses `cwd`. With nil `TsgoArgs`, the launcher may supply both `TTSC_TSGO_ARGS` and its `TTSC_TSGO_ARGS_CWD` companion. Explicit non-nil `TsgoArgs`, including `[]string{}`, suppresses inherited argv and cwd; supply `TsgoArgsCwd` explicitly when that argv needs another base. A cwd companion without forwarded arguments has no inherited authority. Config-relative paths and inheritance remain upstream-owned.
+
+`Program.CompilerArgumentsAreCurrent()` replays the argument phase's captured response reads and base-directory identity against a fresh native filesystem. Resident native consumers reload when it returns false. It retains the parser's original observations rather than attaching later response bytes to an older Program; virtual-only argument files cannot establish native freshness through this method.
+
 `Program.SourceFiles()` returns the Program's resident non-declaration implementation files. Imported raw TypeScript or JavaScript dependencies can be present, so a consumer that needs project-owned files must apply its own root predicate. `Program.Diagnostics()` runs `GetDiagnosticsOfAnyProgram` + `SortAndDeduplicateDiagnostics` and drops the unused-overload-signature noise that tsgo emits internally. **Always `defer prog.Close()`**, without it the checker pool fills up and subsequent loads stall.
 
 ## Emit
@@ -49,7 +53,7 @@ text := shimprinter.EmitSourceFile(printer, file)
 | `EmitAllRaw` | You want tsgo's full output (JS, d.ts, source maps) with default write-file handling. |
 | `EmitAll(rs, fn)` | You want to layer a `*RewriteSet` over emit and intercept each write through `fn`. |
 | `EmitFile(...)` | You only need one file's emit (rarely used outside the utility host). |
-| `DefaultWriteFile` | The default `WriteFileFunc`. Writes through the program's FS. Pass to `EmitAll` when you don't need interception. |
+| `DefaultWriteFile(fileName, text)` | You need the disk writer directly. Pass `nil` to an emit method to select its default writer. |
 
 ### Native plugin emission
 
@@ -65,13 +69,19 @@ For the `transform` subcommand, the host treats `typescript[fileName]` as opaque
 
 ### Emit-concurrency contract
 
-TypeScript-Go emits source files in parallel. One emitter goroutine per source. Ttsc nonetheless **guarantees your `WriteFile` callback runs single-threaded**: both `EmitAll` and `EmitAllRaw` funnel every invocation through one internal mutex, so the callback never executes on two goroutines at once. A plugin's output rewriter is therefore free to carry per-file state. Rewrite cursors, an output map, a runtime-alias cache, in a plain Go map without locking it yourself; ttsc owns the serialization. The callback body is cheap I/O, so serializing it costs effectively nothing while parsing, type-checking, and emit-text generation still parallelize.
+TypeScript-Go emits source files in parallel. Ttsc **guarantees your `WriteFile` callback runs single-threaded**: both `EmitAll` and `EmitAllRaw` funnel every invocation through one internal mutex, so the callback never executes on two goroutines at once.
+
+A plugin's callback can therefore keep rewrite cursors, an output map or a runtime-alias cache in a plain Go map without its own locking. Only callback execution is serialized; parsing, type-checking and emit-text generation retain the compiler's parallelism. Work performed inside the callback still contributes to the serial part of the emit.
 
 This is the one ttsc-layered phase that observes emit at all; everything else a plugin does (`SourcePreamble`, `ApplyProgram`, rewrite collection against the pooled `Checker`) already runs on ttsc's own serial path.
 
+An embedder may load several Programs in one process and emit them at the same time, one goroutine per Program. Each Program owns its compiler state, and the driver shares only the linked-plugin registry that `init` fills before any Program exists. Running two emits of the same Program at once is outside this contract, so give each concurrent worker its own Program.
+
+That guarantee holds only while every transform builds the nodes it returns with the `ec.Factory` it was handed, or with a factory it creates inside that call. A package-level or retained `NodeFactory` shares one node arena across files and Programs: once two emits overlap, its nodes race and can print under another file's source, which the printer reports as `Debug failure. False expression.` from `emitIdentifierText`. `TestEmitWithPluginTransformerDistinctProgramsConcurrently` emits two Programs concurrently through an `ec.Factory` transform, and CI runs it under the Go race detector with `pnpm test:go:race`.
+
 ### Output containment
 
-When the project configures `outDir`, every driver emit lane (`EmitAll`, `EmitAllRaw`, `EmitFile`, `EmitWithPluginTransformers`) skips any output whose computed path would land outside it (outside `declarationDir` too, when set; `.tsbuildinfo` is exempt because its default home is next to the tsconfig). A forced emit past the `TS6059` rootDir check would otherwise resolve an out-of-`rootDir` source (typically a dependency package's raw `.ts` entry reached by package self-reference) to a `.js` right next to the dependency's own source, polluting a sibling package's tree. Skipped files behave exactly like `node_modules` externals: no write, no diagnostic, and your `WriteFile` callback never sees them.
+When the project configures `outDir`, every driver emit lane (`EmitAll`, `EmitAllRaw`, `EmitFile`, `EmitWithPluginTransformers`) skips any output whose computed path would land outside it (outside `declarationDir` too, when set; the compiler-selected build-information artifact is exempt because its configured location can be outside those directories, regardless of its extension). A forced emit past the `TS6059` rootDir check would otherwise resolve an out-of-`rootDir` source (typically a dependency package's raw `.ts` entry reached by package self-reference) to a `.js` right next to the dependency's own source, polluting a sibling package's tree. Skipped files behave exactly like `node_modules` externals: no write, no diagnostic, and your `WriteFile` callback never sees them.
 
 ## Reference graph
 
@@ -90,14 +100,23 @@ for _, file := range prog.SourceFiles() {
 
 `NewTransformGraph(prog, cwd)` computes the loaded program's reference graph under `tsc --incremental` semantics and returns the `graph` envelope section (`edges`, `globals`, `configs`) documented in [Plugin protocol → Transform](/docs/development/concepts/protocol#transform):
 
-- `Edges` maps each file to its direct resolved references — imports, re-exports, `/// <reference>` targets, type reference directives, type-only edges included. A leaf source remains present with an empty list so its compiler-time input proof cannot be omitted.
+- `Edges` maps each file to its direct resolved references: imports, re-exports, `/// <reference>` targets and type reference directives, including type-only edges. A leaf source remains present with an empty list so its compiler-time input proof cannot be omitted.
 - `Globals` lists the files contributing to the global scope (ambient declaration files, script files, global augmentations, `typeRoots` entries).
 - `Configs` lists the project tsconfig followed by its `extends` ancestry.
-- `Candidates` maps each importing file to resolution probes that would outrank its selected module target. Bundlers watch and hash these paths so creating or changing one reloads an otherwise unchanged program. Lower-priority paths are excluded.
-- `InputHashes` and `InputRealpaths` pair every proven graph member with the exact content state and physical identity observed by the compiler filesystem.
-- `InputProofFailures` identifies realized members whose paired proof could not be produced with a stable reason code. Persistent consumers refuse those generations and use the code only to explain the failed proof; speculative `Candidates` are omitted from this diagnostic map.
+- `Candidates` maps each importing file to the paths whose predicates and package manifests a replay of the compiler's module and type-reference resolution consulted. These paths precede or otherwise participate in the selected result; a changed predicate or manifest can change an unchanged reference's meaning.
+- `ResolutionInputs` lists universal automatic-type-discovery and resolution inputs, including the type-root directory membership that determines which packages enter the Program.
+- `InputObservations` preserves the filesystem predicates the compiler actually asked: existence, stat, content, physical identity and accessible-entry listings. Consumers repeat the recorded operations rather than assuming every candidate was read as a file.
+- `InputHashes` and `InputRealpaths` retain the legacy paired content and physical-identity projection. A candidate can have sufficient predicate proof without a content hash when the compiler never read its bytes.
+- `UseCaseSensitiveFileNames` is the case policy the compiler matched the project with, taken from the filesystem its executable lives on; hosts decide project membership under it.
+- `InputProofFailures` gives stable reason codes for realized members without required proof and for changed or contradictory resolver predicates, including candidate predicates. The codes explain a refused generation; they never authorize reuse.
 
-Keys use `TransformOutputKey(cwd, fileName)` — the same convention as the envelope's `typescript` map (project-relative slash paths, absolute slash paths outside the project root) — so consumers can join the sections by key. The embedded `bundled:///` standard library is excluded; it is not a filesystem input.
+Keys use `TransformOutputKey(cwd, fileName)`, following the envelope's `typescript` map: project-relative slash paths, or absolute slash paths outside the project root. Consumers can join the sections by key. The embedded `bundled:///` standard library is excluded because it is not a filesystem input.
+
+`prog.CompilerObservations()` returns every filesystem predicate the compiler asked while the Program was loaded, checked and emitted, keyed by the native absolute path it asked under, and whether that population is complete. The graph keeps only the predicates of the input classes it names; this is all of them, so a host that finds each one still answering as recorded can reuse the Program's result without loading it again. It reports incomplete when any path's answers conflicted or a content mapper declared dependencies. Call it after the last compiler operation whose reads must be covered. `WriteCheckObservationsJSON` publishes it as `compilerObservations`.
+
+`prog.Env(name)` is `PluginContext.Env` for a host that owns its Program. An executable host calls `LoadProgram` itself and receives no `PluginContext`, so it reads a result-changing variable here instead of with `os.Getenv`. The read is recorded in the same generation ledger, reported by `PluginEnvironmentInputs` and published as `environmentInputs`.
+
+On TypeScript 7.1, a module name declared locally in its containing source resolves without a filesystem query. `ProgramResolutionTasks` excludes these ambient-module cache sentinels; the declaration remains covered by its source content proof and reference edges. Imports of the same name from another source, external-module augmentations, unresolved filesystem lookups and automatic type directives retain their replay and strict result comparison. An unchanged same-named package on disk therefore cannot cause a local ambient declaration's `resolution-changed` failure.
 
 Stamp the returned struct into your `transform` stdout envelope. The built-in native host (`ttsc api-transform`) and the linked-plugin generic host already do, so linked transform packages inherit graph emission for free; an executable sidecar that encodes its own envelope adds the one field above. `@ttsc/unplugin` consumes the section to register bundler watch files, which is what keeps webpack filesystem caches and watch graphs from serving stale generated code when a type-only input changes.
 
@@ -133,14 +152,14 @@ rs.Add(driver.Rewrite{
     Method:      "log",
     Replacement: "/* console.log */",
 })
-prog.EmitAll(rs, driver.DefaultWriteFile)
+prog.EmitAll(rs, nil)
 ```
 
-`RewriteSet` is the path the engine uses to splice replacements over plugin-owned call expressions in the emitted JavaScript text. Pair with `EmitAll`; pass `DefaultWriteFile` unless you need to intercept.
+`RewriteSet` splices replacements over registered plugin-owned call expressions in emitted JavaScript. The driver parses each affected output with TypeScript-Go and selects complete executable property chains in registration order. Strings, comments, regex literals and template text stay unchanged; executable template substitutions participate in matching. Maps, declarations and compiler-selected build information remain native output, including state configured with a JavaScript-looking filename. Pair with `EmitAll` or `EmitFile`; pass `nil` for the callback to use the default disk writer, or supply one to intercept writes.
 
 For a default or namespace import, set `RootName` to its source-local binding. When CommonJS lowering creates a `require` declaration, the driver matches the import's module specifier to that actual emitted declaration, so TypeScript-Go remains free to choose any collision suffix without redirecting the rewrite to a similar local identifier. Retained ESM imports and non-import roots keep their source spelling.
 
-The `RewriteSentinel` constant (`/* @ttsc-rewritten */`) is the idempotency marker inserted at the top of a patched file so re-emitting an already-rewritten file is a no-op.
+The `RewriteSentinel` constant (`/* @ttsc-rewritten */`) is the exact header comment inserted after the directive prologue, preserving any byte-order mark and interpreter directive. Re-emitting output with that marker is a no-op. An application string, template, larger comment or body comment containing the marker does not suppress rewrites. Header markers produced by earlier versions remain recognized.
 
 ## Source preambles
 
@@ -149,6 +168,10 @@ text = driver.ApplySourcePreamble(text, "/* @license MIT */")
 ```
 
 `ApplySourcePreamble` keeps a BOM or hashbang at the physical start of the file while inserting generated text after it. `@ttsc/banner` computes the preamble through `driver.SourcePreamblePlugin`; the generic host applies it when source text or declaration output needs the banner.
+
+Native plugin emit and utility transforms correct external JavaScript maps, declaration maps and inline map trailers back to the authored sources. The correction uses the exact inserted region, including a preamble on the same line or after a hashbang; it also restores authored `sourcesContent` when present. An invalid map fails the emit instead of publishing incorrect coordinates.
+
+Embedders that intercept emitted files can obtain `prog.NewSourceMapCorrector()` once per emit and apply it once to each uncorrected output. The returned operation shares that generation's source regions and native output directories. Keep the captured Program unchanged until the emit ends, serialize calls to the corrector, and propagate its errors. Discard the corrector when that emit ends.
 
 ## Linked Plugins
 
@@ -171,6 +194,8 @@ Implement `SourcePreamble(ctx)` when the plugin needs text before parsing, and `
 
 A linked plugin that reads or probes configuration calls `ctx.ReportHostInputHash(path, &digest)` at the observation point, using a lowercase SHA-256 digest for a file and nil for a missing candidate. It pairs this with `ctx.ReportHostInputRealpath(path, &physicalPath)`, or nil when the candidate was missing, so a symlink or junction retarget cannot reuse output from the earlier target. The path is also added to the transformation's `hostInputs`. If the plugin cannot capture either proof at evaluation time, call `ctx.ReportHostInput(path)`; persistent adapters keep watching it but decline narrow generation reuse. Conflicting reports omit the affected proof and preserve the path.
 
+A linked plugin whose output depends on an environment variable reads it with `value, ok := ctx.Env(name)` instead of `os.Getenv`. `Env` returns what `os.LookupEnv` returns and records the name with that value, or `null` when the variable is unset, in the transformation's `environmentInputs`. The first read of a name fixes its value for every hook of the compile, including differently cased Windows aliases, so the output and the record cannot disagree. POSIX names remain case-sensitive. Consumers reuse the output only while every recorded variable still has its recorded value: changing `NODE_ENV` from `test` to `production` recompiles a project whose plugin read it, and a variable no plugin read changes nothing. A build with `--verbose` prints the names, never the values, after its emitted-file summary, for example `// ttsc utility: environment inputs=["NODE_ENV"]`. Each `@ttsc/unplugin` compile runs with its own temporary directory, and ttsc sets its own `TTSC_*` variables for every plugin process, so output that depends on `TMPDIR` or a `TTSC_*` variable is not reused.
+
 A linked plugin that knows what its own contribution to a file consumed can declare it. `ctx.ReportFileDependency(file, dependency)` names one file whose content influenced this plugin's contribution to `file`, which only widens what consumers invalidate on. `ctx.ReportFileDependenciesComplete(file)` turns the reported set into a claim: everything that contribution consumed, beyond `file`'s own text and the universal compiler-option chain, was reported. `ctx.ReportDependenciesComplete()` makes that claim for every file at once: the honest shape for a transform that decides from the file in front of it and its own configuration, and the only form available to `SourcePreamble`, which never sees the Program.
 
 The host aggregates the claims into the envelope's [`dependenciesComplete`](/docs/development/concepts/protocol#dependency-completeness): a file is listed only when **every** plugin that can contribute to it declared it, because a consumer cannot attribute one plugin's entries back to it. Contributors are the entries whose hooks can change transform output, `SourcePreamble` and `ApplyProgram`. An `EmitTransform` runs in `build`, which produces no envelope. A plugin that declares nothing leaves every file unlisted, which is exactly the pre-existing behaviour.
@@ -181,7 +206,9 @@ A plugin that discovers its own config by walking up from the project uses `driv
 
 Among the first-party utility plugins, `@ttsc/banner` and `@ttsc/strip` declare completeness: the first's text comes from `banner.config.*` alone (including every module the config loader pulled in, each reported as a host input), and the second's rewrite reads only the statements in front of it plus `strip.config.*`. `@ttsc/paths` deliberately declares nothing, because two of its inputs are outside the file it rewrites: which source files the program contains decides whether an alias target resolves, and the Checker decides whether a bare `require` is the module loader or a binding an ambient declaration introduced.
 
-The driver runs these hooks itself; a host binary never has to know which linked packages ttsc compiled into it. `SourcePreamble` applies inside `LoadProgram`. `ApplyProgram` runs once per Program, triggered by the first call to `SourceFiles()` / `SourceFile()` or by any driver emit lane — including `EmitWithPluginTransformers`, so a host that emits with only its own transforms (the typia shape) still honors linked plugins. `EmitTransform` transforms join the per-file chain after the host's own transforms, in registration order. Calling `ApplyLinkedPlugins()` by hand remains valid and idempotent.
+The driver runs these hooks itself; the host binary needs no list of linked packages. `SourcePreamble` applies inside `LoadProgram`. `ApplyProgram` runs once per Program, triggered by the first call to `SourceFiles()` / `SourceFile()` or by any driver emit lane. This includes `EmitWithPluginTransformers`, so hosts using their own transforms still honor linked plugins.
+
+`EmitTransform` transforms join the per-file chain after the host's own transforms, in registration order. Calling `ApplyLinkedPlugins()` explicitly remains valid and idempotent.
 
 An `EmitTransform` that injects an import must allocate one file-level unique identifier and reuse that node for the import binding and every reference:
 
@@ -213,11 +240,19 @@ Do not derive an injected import binding with `NewGeneratedNameForNode(moduleSpe
 
 These symbols are for embedders of `ttscserver`, **not for plugin authors**. Skip this section unless you are building a `ttsc`-aware editor extension.
 
-`ttscserver` is a process wrapper around the project-selected `tsc --lsp --stdio` binary. Resolve `typescript` in the user project, pass its absolute executable path as `TsgoBinary`, and keep plugin diagnostics, code actions, and `executeCommand` handlers in your `PluginSource`. `CommandIDs()` is the ownership gate: the proxy calls `ExecuteCommand()` only for ids returned there. Returning a nil `WorkspaceEdit` is a valid handled no-op. `ErrCommandNotHandled` is only for commands not listed by `CommandIDs()`; if `ExecuteCommand()` returns it for an advertised id, the proxy returns an LSP error instead of forwarding upstream. Implement an optional `CodeActionKinds() []string` method on the same source when your actions should be advertised in the initialize result. Implement `driver.CompletionHintSource` when the source also publishes an in-memory completion corpus. The shipped VS Code extension is the reference client for TypeScript-Go plus the built-in lint/format command bridge; it suppresses those two wrapper-owned command ids while leaving other plugin command ids advertised through `vscode-languageclient`. Because VS Code command ids are global, the extension also sets `ExecuteCommandIDPrefix` per project root so custom plugin commands from multiple roots do not collide; the proxy maps prefixed ids back before calling `ExecuteCommand()`. If an embedder relies on `vscode-languageclient` to register advertised plugin commands, it must still apply any returned `changes`-map `WorkspaceEdit`; the languageclient command handler only invokes `workspace/executeCommand`.
+`ttscserver` is a process wrapper around the project-selected `tsc --lsp --stdio` binary. Resolve `typescript` in the user project, pass its absolute executable path as `TsgoBinary`, and keep plugin diagnostics, code actions, and `executeCommand` handlers in your `PluginSource`.
+
+`CommandIDs()` is the ownership gate: the proxy calls `ExecuteCommand()` only for ids returned there. Returning a nil `WorkspaceEdit` is a valid handled no-op. `ErrCommandNotHandled` is only for commands not listed by `CommandIDs()`; if `ExecuteCommand()` returns it for an advertised id, the proxy returns an LSP error instead of forwarding upstream.
+
+Implement an optional `CodeActionKinds() []string` method on the same source when your actions should be advertised in the initialize result. Implement `driver.CompletionHintSource` when the source also publishes an in-memory completion corpus.
+
+The shipped VS Code extension is the reference client for TypeScript-Go plus the built-in lint/format command bridge; it suppresses those two wrapper-owned command ids while leaving other plugin command ids advertised through `vscode-languageclient`. Because VS Code command ids are global, the extension also sets `ExecuteCommandIDPrefix` per project root so custom plugin commands from multiple roots do not collide; the proxy maps prefixed ids back before calling `ExecuteCommand()`.
+
+If an embedder relies on `vscode-languageclient` to register advertised plugin commands, it must still apply any returned `changes`-map `WorkspaceEdit`; the languageclient command handler only invokes `workspace/executeCommand`.
 
 An embedder's client has to answer the requests TypeScript-Go sends to it. The proxy forwards a server-initiated request such as `client/registerCapability` or `workspace/applyEdit` to the editor untouched, and forwards the editor's response back untouched. TypeScript-Go issues `client/registerCapability` from inside its `initialized` handler, on the loop that dispatches every later request, and waits there until the response arrives. A client that ignores server-initiated requests still receives the `initialize` result and everything ttsc publishes on its own, while every request the proxy forwards (hover, completion, document symbols) waits forever. `vscode-languageclient` answers them for you; a hand-written JSON-RPC client must answer them itself.
 
-Once the editor sends the `exit` notification, `RunLSPServer` returns nil even if the upstream process ends with a failure status. After `exit` the upstream is required to terminate, and TypeScript-Go's own exit code at that moment depends on whether its `exit` handler or the closed stdin reaches its process group first, so the status carries no information about the session. Errors raised by the proxy itself still surface, and an upstream failure before any `exit` is still reported.
+The `exit` notification ends the session: once the upstream has ended after it, `RunLSPServer` returns without waiting for the editor's input to close, since a read blocked on a Windows pipe is not interrupted by closing it. It returns nil when a `shutdown` request came first, and `ErrLSPExitWithoutShutdown` when none did, which `ttscserver` turns into exit status 1 as the LSP specification asks. It returns nil after a `shutdown` and `exit` even if the upstream process ends with a failure status. After `exit` the upstream is required to terminate, and TypeScript-Go's own exit code at that moment depends on whether its `exit` handler or the closed stdin reaches its process group first, so the status carries no information about the session. Errors raised by the proxy itself still surface, and an upstream failure before any `exit` is still reported.
 
 `CompletionHintSource.CompletionHints()` returns `[]driver.LSPCompletionHint`. Each group names a JSDoc-scoped literal in `After` and an ordered list of `LSPCompletionItem` values. The proxy matches the corpus against the live document, appends the matching items to TypeScript-Go's completion response, and keeps TypeScript-Go's own items. The items are fully resolved plain-text insertions with optional labels and short details; they do not use `completionItem/resolve`.
 
@@ -266,7 +301,7 @@ err := driver.RunLSPServer(context.Background(), driver.LSPServerOptions{
 | `CompletionHintSource`, `LSPCompletionHint`, `LSPCompletionItem` | Optional completion corpus contributed alongside a `PluginSource`. |
 | `CompletionHintRefresher`, `CompletionHintObserverSource` | Optional mid-session rediscovery of that corpus and its completion callback. |
 | `NativePluginSource`, `NewNativePluginSource`, `NativePluginManifest` | Sidecar-backed `PluginSource` implementation used by the shipped `ttscserver` launcher. |
-| `RunLSPServer`, `LSPServerOptions`, `LSPUpstream`, `ErrLSPUpstreamRunnerRequired`, `ErrCommandNotHandled` | Host-side entry points and invocation-scoped upstream dependency. |
+| `RunLSPServer`, `LSPServerOptions`, `LSPUpstream`, `ErrLSPUpstreamRunnerRequired`, `ErrLSPExitWithoutShutdown`, `ErrCommandNotHandled` | Host-side entry points and invocation-scoped upstream dependency. |
 | `LSPDocumentVersion`, `LSPDiagnostic`, `LSPCodeAction`, `LSPRange`, `LSPWorkspaceEdit` | Wire types in the LSP envelope. |
 | `FrameReader`, `NewFrameReader`, `WriteFrame`, `MaxFrameBytes`, `MaxHeaderBytes`, `ErrFrameClosed`, `ErrFrameTooLarge` | Lower-level JSON-RPC framing helpers and safety caps for embedders that test or wrap the byte stream directly. |
 | `Envelope`, `ParseEnvelope`, `ErrInvalidJSONRPC` | JSON-RPC envelope parsing helpers for embedders that need to inspect LSP payloads outside the proxy. |

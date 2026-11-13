@@ -20,6 +20,19 @@ import { make } from "../internal/make";
  * @param name The name.
  * @param initializer The initializer, if any.
  * @returns The created {@link EnumMember}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Property-name normalization retains the member key. An omitted initializer
+ *   leaves implicit enum evaluation to TypeScript instead of guessing its value.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The member owns only name and initializer; its enum parent owns sequencing.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Explicit initializer expressions are caller trees, not hardcoded ordinals.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc distinguishes explicit and implicit values; the bare-member example
+ *   omits declaration punctuation and tags follow separated prose paragraphs.
  */
 export const createEnumMember = (
   name: string | PropertyName,

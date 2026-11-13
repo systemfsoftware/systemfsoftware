@@ -10,6 +10,8 @@ import (
   "os"
   "runtime"
   "strings"
+
+  "github.com/samchon/ttsc/packages/ttsc/internal/graph"
 )
 
 // Build metadata; overwritten via -ldflags in release builds.
@@ -55,13 +57,16 @@ func run(args []string) int {
   return 2
 }
 
+// printVersion names the build and the TypeScript compiler it links, which is
+// how a platform package's per-target producers tell themselves apart.
 func printVersion(w io.Writer) {
   fmt.Fprintf(
     w,
-    "ttscgraph %s (commit %s, built %s, %s/%s, go %s)\n",
+    "ttscgraph %s (commit %s, built %s, typescript %s, %s/%s, go %s)\n",
     version,
     commit,
     date,
+    graph.TypescriptVersion(),
     runtime.GOOS,
     runtime.GOARCH,
     runtime.Version(),
@@ -87,11 +92,15 @@ Dump:
   --cwd <dir>          Project root (defaults to the process working directory).
   --tsconfig <path>    Project tsconfig path (default: tsconfig.json).
   --pretty             Indent the JSON output.
+  --runExternalCode    Allow TypeScript 7.1 content mappers; an explicit
+                       =false overrides inherited compiler permission.
 
 Serve:
   serve                Internal newline-delimited snapshot protocol used by
                        @ttsc/graph. Keeps the compiler Program resident, applies
                        source edits incrementally, and reloads on structural
                        project changes.
+  --runExternalCode    Same invocation-scoped permission as dump; retained
+                       across every resident project reload.
 `))
 }

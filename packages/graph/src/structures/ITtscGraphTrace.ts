@@ -1,6 +1,17 @@
 import { ITtscGraphEvidence } from "./ITtscGraphEvidence";
 
-/** The compact dependency or caller flow returned from a selected start symbol. */
+/**
+ * The compact dependency or caller flow returned from a selected start symbol.
+ *
+ * @evidence contracts/common.md#principled-implementation Start, reached nodes, hops and optional target/path distinguish open traversal from requested-path outcomes and ambiguity.
+ * @evidence contracts/common.md#clear-and-simple-design Optional path and junction facets extend one trace result without disguising a shared junction as a path.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Unreachable paths remain empty and ambiguity retains candidates rather than invented execution edges.
+ * @evidence contracts/common.md#meaningful-documentation Native comments explain breadth-first order, truncation, unreachable paths and the difference between a junction and a call path.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+ */
 export interface ITtscGraphTrace {
   /** Discriminator for dependency tracing. */
   type: "trace";
@@ -14,10 +25,10 @@ export interface ITtscGraphTrace {
   /** Edges traversed, in breadth-first order. */
   hops: ITtscGraphTrace.IHop[];
 
-  /** Unique nodes reached (excluding the start), each with its depth and roles. */
+  /** Unique nodes reached (excluding the start), each with its depth, and its roles on an impact trace. */
   reached: ITtscGraphTrace.INode[];
 
-  /** In an open trace, true when a bound omitted an eligible node or hop. */
+  /** True when an open walk omitted an eligible node or hop, or an unsuccessful path search stopped on a depth or dispatch bound. */
   truncated: boolean;
 
   /** The resolved `to` target, when a path was requested. */
@@ -29,11 +40,12 @@ export interface ITtscGraphTrace {
    */
   path?: ITtscGraphTrace.INode[];
 
-  /** Compact hop summaries preserving node names and edge evidence, capped. */
+  /** Hop summaries preserving names and evidence. First twelve by default; every returned hop with `complete: true`. */
   steps?: string[];
 
   /**
-   * Symbols both ends touch, when no call path runs between them.
+   * Up to four ranked symbols both ends touch, when no call path runs between
+   * them. This diagnostic summary does not change path-search completeness.
    *
    * Nothing calls across the gap because in an event-driven codebase nothing
    * does: a handler registers a listener on an emitter, the emitter's `emit()`
@@ -52,7 +64,18 @@ export interface ITtscGraphTrace {
   candidates?: ITtscGraphTrace.INode[];
 }
 export namespace ITtscGraphTrace {
-  /** A symbol both ends of an unreachable path touch, and how each touches it. */
+  /**
+   * A symbol both ends of an unreachable path touch, and how each touches it.
+   *
+   * @evidence contracts/common.md#principled-implementation A resolved shared node and two directional edge descriptions establish contact, not an execution bridge.
+   * @evidence contracts/common.md#clear-and-simple-design The record pairs each endpoint's relationship with one common symbol coordinate.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Shared references do not become guessed callbacks or synthetic calls.
+   * @evidence contracts/common.md#meaningful-documentation Native members explain stable follow-up identity and which endpoint each edge describes.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IJunction {
     /** Stable node id: trace or inspect this symbol to cross the seam. */
     id: string;
@@ -76,7 +99,18 @@ export namespace ITtscGraphTrace {
     fromTarget: IJunctionEdge;
   }
 
-  /** One edge between an end of the requested path and the junction. */
+  /**
+   * One edge between an end of the requested path and the junction.
+   *
+   * @evidence contracts/common.md#principled-implementation Relation kind and outgoing distinguish endpoint-to-junction from junction-to-endpoint, with optional source evidence.
+   * @evidence contracts/common.md#clear-and-simple-design Three fields retain the direction and cause needed beside an already identified junction.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The relation is the graph edge's kind, not a guessed event-flow label.
+   * @evidence contracts/common.md#meaningful-documentation Native comments explain the directional boolean and evidence coordinates beside separate members.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IJunctionEdge {
     /** `calls`, `accesses`, `instantiates`, `type_ref`, ... */
     kind: string;
@@ -88,7 +122,18 @@ export namespace ITtscGraphTrace {
     evidence?: ITtscGraphEvidence;
   }
 
-  /** Where and how far to trace dependency flow. */
+  /**
+   * Where and how far to trace dependency flow.
+   *
+   * @evidence contracts/common.md#principled-implementation Handles, direction, edge family and depth/node bounds specify graph traversal rather than inferring execution from text.
+   * @evidence contracts/common.md#clear-and-simple-design Optional target selects path mode within the same traversal request; orthogonal options govern the inspected population.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts External inclusion and bounds are supported request choices, not agent-specific throttles.
+   * @evidence contracts/common.md#meaningful-documentation Separate member paragraphs explain ambiguity, path preference, direction/focus unions, bounds and defaults.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IRequest {
     /** Discriminator for dependency tracing. */
     type: "trace";
@@ -135,15 +180,34 @@ export namespace ITtscGraphTrace {
     focus?: "all" | "execution" | "types";
 
     /**
-     * Hops deep to follow (open forward/reverse cap at 8, impact at 4, path
-     * mode at 12). Raise it to follow a runtime chain to its end in one call.
+     * Exhaust the finite graph admitted by direction, focus and external-node
+     * policy, including every eligible dispatch relation. Overrides maxDepth,
+     * maxNodes, hop budgets and limits on hop summaries. Path mode returns one shortest path.
+     *
+     * Output and synchronous traversal can grow with the entire graph; there is
+     * no per-request cancellation or fixed response-size bound. Resource or
+     * transport failures fail the request rather than return partial success.
+     *
+     * @default false
+     */
+    complete?: boolean;
+
+    /**
+     * Hops deep to follow. Positive finite values have no upper clamp and are
+     * rounded down; invalid or omitted values use 3 (12 in path mode).
+     * Values below one become one. Ignored with complete true.
      *
      * @default 3
      */
     maxDepth?: number;
 
     /**
-     * Cap on reached nodes (open forward/reverse cap at 32, impact at 16).
+     * Cap on unique reached nodes, excluding the start. Positive finite values
+     * have no upper clamp and are rounded down; invalid or omitted values use
+     * 12. Values below one become one. Open walks also limit hops to twice this
+     * budget and withhold dispatch fanouts of twelve or more implementations.
+     * Use complete true to remove every traversal budget. Path mode ignores
+     * maxNodes.
      *
      * @default 12
      */
@@ -158,7 +222,18 @@ export namespace ITtscGraphTrace {
     includeExternal?: boolean;
   }
 
-  /** One traversed edge, with its depth from the start. */
+  /**
+   * One traversed edge, with its depth from the start.
+   *
+   * @evidence contracts/common.md#principled-implementation Original endpoints and kind preserve the graph edge; depth records traversal distance rather than altering relation identity.
+   * @evidence contracts/common.md#clear-and-simple-design A hop adds depth and optional coordinates without embedding endpoint nodes.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Source evidence refers to the actual edge rather than a generated path explanation.
+   * @evidence contracts/common.md#meaningful-documentation Member comments identify depth units and distinguish source and target ids.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IHop {
     /** Source node id for this traversed edge. */
     from: string;
@@ -176,7 +251,18 @@ export namespace ITtscGraphTrace {
     evidence?: ITtscGraphEvidence;
   }
 
-  /** A node on the trace: the start, a reached node, or a candidate. */
+  /**
+   * A node on the trace: the start, a reached node, or a candidate.
+   *
+   * @evidence contracts/common.md#principled-implementation Stable coordinates identify every trace node while optional depth, signature and roles represent facts applicable to particular trace positions.
+   * @evidence contracts/common.md#clear-and-simple-design One coordinate record serves starts, candidates and reached nodes instead of duplicating nearly identical shapes.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Candidate identities remain distinct; role text describes graph selection rather than certainty about a user's question.
+   * @evidence contracts/common.md#meaningful-documentation Native comments specify optional facts' contexts and one-based source coordinates with separated member documentation.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface INode {
     /** Stable node id for subsequent graph calls. */
     id: string;
@@ -202,7 +288,7 @@ export namespace ITtscGraphTrace {
     /** The node's signature, carried on path nodes so the path explains itself. */
     signature?: string;
 
-    /** Why this node matters to an impact trace: `exported`, `test`. */
+    /** Why this node matters to an impact trace: `exported` (a compiler fact) or `test` (assigned by the server from a conventional test path, not by the compiler). */
     roles?: string[];
   }
 }

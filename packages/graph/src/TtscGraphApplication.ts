@@ -16,6 +16,18 @@ import { runTrace } from "./server/runTrace";
 import { ITtscGraphApplication } from "./structures/ITtscGraphApplication";
 import { ITtscGraphEscape } from "./structures/ITtscGraphEscape";
 
+/**
+ * A fixed graph generation or a provider synchronizing one before each request.
+ *
+ * @evidence contracts/common.md#principled-implementation The union admits resident values and synchronous/asynchronous producers with the same graph result contract.
+ * @evidence contracts/common.md#clear-and-simple-design One provider boundary lets dispatch use fixed dumps and refreshing sessions without separate applications.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Refresh remains a supplied ownership boundary instead of foreign graph mutation.
+ * @evidence contracts/common.md#meaningful-documentation The native headline states fixed versus synchronized generation and the provider's timing.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+ */
 export type TtscGraphSource =
   | TtscGraphMemory
   | (() => TtscGraphMemory | Promise<TtscGraphMemory>);
@@ -24,7 +36,7 @@ export type TtscGraphSource =
  * The MCP tool surface as a plain class over the resident
  * {@link TtscGraphMemory}.
  *
- * Its public method is the MCP tool: `typia.llm.application` reflects
+ * Its public method is the MCP tool: `typia.llm.controller` reflects
  * {@link ITtscGraphApplication} to generate the tool's JSON schema and argument
  * validator from the signature and JSDoc, with no hand-written schema, and
  * `@typia/mcp`'s `createMcpServer` registers it (see `./server/createServer`).
@@ -35,6 +47,15 @@ export type TtscGraphSource =
  * that graph before the operation when project files changed. Output is kept
  * compact and bounded so a model can read structure without a file read, which
  * is the token win the redesign exists for.
+ *
+ * @evidence contracts/common.md#principled-implementation Exhaustive request dispatch chooses the matching graph operation and its operation-specific audit; escape bypasses graph acquisition entirely.
+ * @evidence contracts/common.md#clear-and-simple-design The class binds one graph provider to pure runners, leaving traversal and ranking with their owning functions.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts No forced first lookup or agent-specific call suppression is introduced; legitimate escape and incomplete coverage remain explicit.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain reflected tool wiring, provider refresh and source-free result ownership.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources holds only the provider function; the session owns the resources.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms dispatches one request to its runner and the runners own the algorithms.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work each non-escape call asks the provider function for the graph, and the provider owns reuse.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation dispatches to in-memory runners; the provider function owns session and process work.
  */
 export class TtscGraphApplication implements ITtscGraphApplication {
   private readonly graph: () => TtscGraphMemory | Promise<TtscGraphMemory>;
@@ -43,6 +64,22 @@ export class TtscGraphApplication implements ITtscGraphApplication {
     this.graph = typeof source === "function" ? source : () => source;
   }
 
+  /**
+   * Synchronize the graph once and dispatch the selected request.
+   *
+   * Escape returns an explicit no-op before invoking the provider. Ranked
+   * operations report heuristic selection; details distinguishes capped members
+   * from its complete identity facts.
+   *
+   * @evidence contracts/common.md#principled-implementation Each discriminated branch returns its corresponding runner result with the audit appropriate to that operation's actual completeness.
+   * @evidence contracts/common.md#clear-and-simple-design The exhaustive switch owns only dispatch and audit choice; runners own graph semantics and the provider owns synchronization.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Escape does no indexing, and heuristic selection is not advertised as exhaustive compiler proof.
+   * @evidence contracts/common.md#meaningful-documentation Native prose explains provider timing, no-op escape and operation-specific completeness before the tags.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources keeps nothing between calls.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms a switch over seven request types that calls one runner.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work each non-escape call asks the provider function for the graph, and the provider owns reuse.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation dispatches to in-memory runners; the provider function owns session and process work.
+   */
   public async inspect_typescript_graph(
     props: ITtscGraphApplication.IProps,
   ): Promise<ITtscGraphApplication.IOutput> {

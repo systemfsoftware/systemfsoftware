@@ -9,11 +9,13 @@ import (
   shimast "github.com/microsoft/typescript-go/shim/ast"
   shimcompiler "github.com/microsoft/typescript-go/shim/compiler"
   shimprinter "github.com/microsoft/typescript-go/shim/printer"
+  shimtspath "github.com/microsoft/typescript-go/shim/tspath"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
 )
 
-// Verifies generated member accesses preserve declarations and checker state.
+// TestEmitPluginGeneratedMembersKeepDeclarations Verifies generated member accesses preserve
+// declaration output and original enum inlining without checker errors.
 //
 // Independent factories do not mark generated nodes as synthesized. Neither
 // those nodes nor generated nodes with copied source ranges belong to the
@@ -22,6 +24,11 @@ import (
 // 1. Load valid sources with declarations, maps and noEmitOnError.
 // 2. Inject a bound arrow with property or element access using each factory.
 // 3. Emit twice and check complete output, clean diagnostics and enum inlining.
+//
+// @evidence contracts/testing.md#behavioral-verification Runs six factory/access combinations twice through actual plugin emission, checking required JS/maps/declarations, generated members, original const enum resolution and clean diagnostics before and after.
+// @evidence contracts/testing.md#independent-expectations Authored answer:number declaration, explicit enum constants seven/eleven and literal input.value/input[value] structures independently define expectations.
+// @evidence contracts/testing.md#distinguishing-cases Emit/standalone/copied-range factories and property/element members distinguish generated checker admission; repeat emits detect contamination while original-linked enum accesses remain a positive checker control.
+// @evidence contracts/testing.md#execution-ownership Each named Go driver unit owns a private Program and project and runs the actual compiler/transformer in process, with fresh output maps and deferred close rather than any product binary.
 func TestEmitPluginGeneratedMembersKeepDeclarations(t *testing.T) {
   for _, factory := range []string{"emit", "standalone", "copied-range"} {
     for _, element := range []bool{false, true} {
@@ -75,8 +82,8 @@ func TestEmitPluginGeneratedMembersKeepDeclarations(t *testing.T) {
         }
         for iteration := 0; iteration < 2; iteration++ {
           outputs := map[string]string{}
-          diagnostics, err := program.EmitWithPluginTransformer(transform, func(name, source string, _ *shimcompiler.WriteFileData) error {
-            outputs[filepath.Base(name)] = source
+          diagnostics, err := program.EmitWithPluginTransformer(transform, func(name shimtspath.RootedFilePath, source string, _ *shimcompiler.WriteFileData) error {
+            outputs[filepath.Base(string(name))] = source
             return nil
           })
           if err != nil || len(diagnostics) != 0 {

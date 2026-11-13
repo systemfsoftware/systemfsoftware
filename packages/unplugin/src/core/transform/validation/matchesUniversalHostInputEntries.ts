@@ -1,0 +1,82 @@
+import type { TtscCachedProjectTransform } from "../cache/TtscCachedProjectTransform";
+import { resultFilesystem } from "../cache/resultFilesystem";
+import { envelopeDerivation } from "../envelope/envelopeDerivation";
+import { hostInputRealpath } from "../inputs/hostInputRealpath";
+import { inputMetadataEvidence } from "../inputs/inputMetadataEvidence";
+import { inputMetadataSignature } from "../inputs/inputMetadataSignature";
+import { MISSING_INPUT_STATE } from "./MISSING_INPUT_STATE";
+import type { TtscHostInputValidation } from "./TtscHostInputValidation";
+import { inputSignatureSlot } from "./inputSignatureSlot";
+import { matchesRecordedInput } from "./matchesRecordedInput";
+import { trackerProvesInputUnchanged } from "./trackerProvesInputUnchanged";
+
+/**
+ * Validate existing universal inputs by qualified metadata or notifications,
+ * otherwise replay their recorded state and physical target. Unchanged metadata
+ * without clock separation still requires the owning content comparison.
+ *
+ * A false verdict can mean a changed target, blocker or content, or unavailable
+ * metadata after replay. It withdraws entry proof without distinguishing those
+ * causes; it does not certify that every rejected generation actually changed.
+ *
+ * @evidence contracts/common.md#principled-implementation Qualified exact notifications and separable metadata preserve the recorded entry; otherwise physical target and owning content comparison must match before readable state or signature is refreshed.
+ * @evidence contracts/common.md#clear-and-simple-design Existing-entry proof is separate from native absence probes and plugin-tree proof because their authorities differ.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Strict non-directory blockers cannot inherit content equivalence, and unreadable inputs cannot skip reads merely because their metadata is unchanged.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain existing-entry authority, clock qualification and false verdict's change-or-unavailability meaning.
+ * @evidence contracts/portability.md#os-neutral-implementation Metadata and physical targets come from the result's native filesystem operations; exact watcher coverage uses its proved capabilities rather than an OS-name assumption.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Existing entries are updated in place within one generation manifest; no per-delivery history or additional native handle is retained.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   One entry scan skips qualified notifications or metadata. Remaining native
+ *   target/metadata work follows path components and fields; recorded-state
+ *   replay additionally costs consulted bytes or predicate entries.
+ * @evidence contracts/performance.md#reuse-equivalent-work Re-earned readable/signature state is shared by all modules of this generation only after recorded content and physical target remain qualified.
+ */
+export function matchesUniversalHostInputEntries(
+  cached: TtscCachedProjectTransform,
+  validation: TtscHostInputValidation,
+): boolean {
+  const filesystem = resultFilesystem(cached.result);
+  for (const entry of validation.entries.values()) {
+    // An entry whose tracker proves it unchanged needs no read, whatever the
+    // other inputs' watches can vouch for: one input a watch cannot prove, a
+    // plugin source outside the project on macOS (samchon/ttsc#1453), must not
+    // send every other back to the disk.
+    if (
+      trackerProvesInputUnchanged(cached.hostInputMutationTracker, entry.path)
+    )
+      continue;
+    const evidence = inputMetadataEvidence(entry.path, filesystem);
+    if (
+      entry.signature !== undefined &&
+      evidence?.signature === entry.signature &&
+      (entry.strict === true || evidence.separable)
+    )
+      continue;
+    if (entry.strict === true) return false;
+    if (hostInputRealpath(entry.path, filesystem) !== entry.realpath)
+      return false;
+    if (!matchesRecordedInput(cached, entry.path)) {
+      return false;
+    }
+    if (entry.readable === false) {
+      const slot = inputSignatureSlot(
+        cached,
+        envelopeDerivation(cached),
+        entry.path,
+      );
+      entry.readable =
+        slot !== undefined && slot.recorded !== MISSING_INPUT_STATE;
+    }
+    if (evidence === undefined) return false;
+    // Re-earn the proof under the rules the capture applies: an entry whose
+    // recorded state came from reading nothing keeps its content comparison, a
+    // write racing the read that just proved it records nothing, and a stamp
+    // the filesystem's clock has not provably left records nothing either.
+    const after = inputMetadataSignature(entry.path, filesystem);
+    entry.signature =
+      entry.readable && evidence.separable && after === evidence.signature
+        ? evidence.signature
+        : undefined;
+  }
+  return true;
+}

@@ -1,0 +1,318 @@
+/**
+ * Parse the text of a JSONC configuration file, a `tsconfig.json` or a
+ * `jsconfig.json`, by the grammar TypeScript-Go reads one with.
+ *
+ * This parser models the compiler's config literal grammar: comments that end
+ * at any ECMAScript line terminator (`\n`, `\r`, U+2028, U+2029), every
+ * character it counts as whitespace (a byte-order mark, a no-break space, the
+ * Unicode space separators), trailing commas, hexadecimal, octal, binary,
+ * fractional and separated numbers, valid string escapes, and a file holding no
+ * value at all, which reads as an empty object. It rejects: a key or string
+ * that is not double-quoted (TS1327), a value that is not a literal (TS1328), a
+ * legacy octal number (TS1121), a missing comma, and text after the root value.
+ * Legacy octal and decimal string escapes and malformed hexadecimal or Unicode
+ * escapes are rejected because the compiler scanner reports them, even when it
+ * constructs a recovery string. Raw U+2028/U+2029 remain string data; escaped
+ * line terminators continue the string. Returned objects preserve their
+ * authored keys, including an empty key and `__proto__`; this is not a
+ * reproduction of the compiler's recovery AST projection or diagnostic
+ * messages. Comment stripping over `JSON.parse` would reject the supported
+ * non-JSON literal forms.
+ *
+ * The one reading of that grammar in the workspace. ttsc's own project reader
+ * reads every config through it (`readJsoncFile`), and `@ttsc/unplugin` reads
+ * the configs it builds its membership policy and alias overlay from through
+ * the `ttsc/tsconfig` entry, so the two cannot disagree about what a config
+ * says. A failure names the line and UTF-16 column of the original text,
+ * treating CRLF as one line end and recognizing U+2028/U+2029 line ends.
+ *
+ * @param input The file's text as read.
+ * @returns The parsed value.
+ * @throws A `SyntaxError` naming the position of text that is not a config.
+ * @evidence contracts/common.md#principled-implementation Recursive descent follows the compiler config's literal, trivia and comma grammar; explicit property definition preserves __proto__ as data, and JavaScript Number represents numeric values rather than preserving arbitrary-precision source spelling. Error positions count the original UTF-16 text and ECMAScript line terminators.
+ * @evidence contracts/common.md#clear-and-simple-design One cursor owns token consumption and positioned failures, while bounded lexical helpers handle strings, numbers and trivia. Public parsing returns a fresh value; filesystem attribution and object-root validation remain reader responsibilities.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts The parser implements the supported compiler grammar directly instead of stripping comments into a narrower JSON grammar or accepting particular config filenames and fixture values.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain accepted grammar, rejected forms, shared consumers and original-text positions, followed by native parameter/result/failure tags and separated acknowledgments following the documentation skill.
+ * @evidence contracts/performance.md#efficient-algorithms The cursor advances through N text units; sticky token patterns avoid materializing the remaining suffix for every literal, and string spans are joined once rather than appended character by character. Parsing retains O(N) value storage and O(D) recursive frames for depth D; an error-position scan adds at most O(N). Native stack limits still bound supported nesting depth.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each call returns a fresh mutable object/array tree; sharing a previous parse would expose one caller's mutations to another. This pure parser owns no immutable-result cache or coordinated config lifecycle.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The reader and lexical span arrays are invocation-local, and the parsed value transfers to its caller; no historical config tree, descriptor or task is retained in the module.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation parseJsonc computes from its arguments only; it opens no file, builds no path and calls no platform or process API.
+ */
+export function parseJsonc(input: string): unknown {
+  const reader = new JsoncReader(input);
+  reader.skipTrivia();
+  if (reader.done()) return {};
+  const value = reader.readValue();
+  reader.skipTrivia();
+  if (!reader.done()) reader.fail("Unexpected text after the root value");
+  return value;
+}
+
+/** A cursor over config text that reads one value at a time. */
+class JsoncReader {
+  private pos = 0;
+
+  public constructor(private readonly text: string) {}
+
+  public done(): boolean {
+    return this.pos >= this.text.length;
+  }
+
+  /** Skip whitespace, line terminators, and comments. */
+  public skipTrivia(): void {
+    while (!this.done()) {
+      const current = this.text.charCodeAt(this.pos);
+      if (isWhiteSpace(current) || isLineBreak(current)) {
+        this.pos += 1;
+      } else if (this.text.startsWith("//", this.pos)) {
+        this.pos += 2;
+        while (!this.done() && !isLineBreak(this.text.charCodeAt(this.pos)))
+          this.pos += 1;
+      } else if (this.text.startsWith("/*", this.pos)) {
+        const end = this.text.indexOf("*/", this.pos + 2);
+        if (end === -1) this.fail("Unterminated comment");
+        this.pos = end + 2;
+      } else {
+        return;
+      }
+    }
+  }
+
+  public readValue(): unknown {
+    const current = this.text[this.pos];
+    if (current === "{") return this.readObject();
+    if (current === "[") return this.readArray();
+    if (current === '"') return this.readString();
+    if (current === "'")
+      this.fail("String literal with double quotes expected");
+    if (current === "-") {
+      // A prefix minus, which the compiler parses with trivia after it.
+      this.pos += 1;
+      this.skipTrivia();
+      return -this.readNumber();
+    }
+    if (current !== undefined && isNumberStart(this.text, this.pos))
+      return this.readNumber();
+    const word = this.matchToken(IDENTIFIER_LITERAL)?.[0];
+    if (word === "true" || word === "false" || word === "null") {
+      this.pos += word.length;
+      return word === "true" ? true : word === "false" ? false : null;
+    }
+    return this.fail(
+      this.done()
+        ? "Unexpected end of text"
+        : "Property value can only be string literal, numeric literal, 'true', 'false', 'null', object literal or array literal",
+    );
+  }
+
+  /** Raise a failure positioned at the cursor. */
+  public fail(message: string): never {
+    let line = 1;
+    let column = 1;
+    for (let i = 0; i < this.pos && i < this.text.length; i += 1) {
+      const current = this.text.charCodeAt(i);
+      if (current === 0x0d && this.text.charCodeAt(i + 1) === 0x0a) continue;
+      if (isLineBreak(current)) {
+        line += 1;
+        column = 1;
+      } else {
+        column += 1;
+      }
+    }
+    throw new SyntaxError(`${message} (line ${line} column ${column})`);
+  }
+
+  private readObject(): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    this.pos += 1;
+    this.readElements("}", () => {
+      if (this.text[this.pos] !== '"')
+        this.fail("String literal with double quotes expected");
+      const key = this.readString();
+      this.skipTrivia();
+      if (this.text[this.pos] !== ":") this.fail("':' expected");
+      this.pos += 1;
+      this.skipTrivia();
+      // A defined property, so a `__proto__` key stays an ordinary key.
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value: this.readValue(),
+        writable: true,
+      });
+    });
+    return result;
+  }
+
+  private readArray(): unknown[] {
+    const result: unknown[] = [];
+    this.pos += 1;
+    this.readElements("]", () => result.push(this.readValue()));
+    return result;
+  }
+
+  /** Read comma-separated elements up to `close`, allowing a trailing comma. */
+  private readElements(close: string, readElement: () => void): void {
+    this.skipTrivia();
+    while (this.text[this.pos] !== close) {
+      if (this.done()) this.fail(`'${close}' expected`);
+      readElement();
+      this.skipTrivia();
+      if (this.text[this.pos] === ",") {
+        this.pos += 1;
+        this.skipTrivia();
+      } else if (this.text[this.pos] !== close) {
+        this.fail("',' expected");
+      }
+    }
+    this.pos += 1;
+  }
+
+  private readString(): string {
+    this.pos += 1;
+    let start = this.pos;
+    const spans: string[] = [];
+    for (;;) {
+      if (
+        this.done() ||
+        this.text[this.pos] === "\r" ||
+        this.text[this.pos] === "\n"
+      )
+        this.fail("Unterminated string literal");
+      const current = this.text[this.pos]!;
+      if (current === '"') {
+        spans.push(this.text.slice(start, this.pos));
+        this.pos += 1;
+        return spans.join("");
+      }
+      if (current !== "\\") {
+        this.pos += 1;
+        continue;
+      }
+      spans.push(this.text.slice(start, this.pos), this.readEscape());
+      start = this.pos;
+    }
+  }
+
+  /** Read one escape sequence, starting at its backslash. */
+  private readEscape(): string {
+    this.pos += 1;
+    if (this.done()) this.fail("Unexpected end of text");
+    const current = this.text[this.pos]!;
+    this.pos += 1;
+    const simple = SIMPLE_ESCAPES[current];
+    if (simple !== undefined) return simple;
+    if (current === "0" && !/[0-9]/.test(this.text[this.pos] ?? ""))
+      return "\0";
+    if (/[0-9]/.test(current))
+      this.fail("Octal and decimal escape sequences are not allowed");
+    if (current === "x") return this.readHexEscape(2);
+    if (current === "u") {
+      if (this.text[this.pos] !== "{") return this.readHexEscape(4);
+      const hex = this.matchToken(UNICODE_CODE_POINT_ESCAPE);
+      if (hex === null || parseInt(hex[1]!, 16) > 0x10ffff)
+        this.fail("Invalid Unicode escape sequence");
+      this.pos += hex[0].length;
+      return String.fromCodePoint(parseInt(hex[1]!, 16));
+    }
+    if (current === "\r") {
+      if (this.text[this.pos] === "\n") this.pos += 1;
+      return "";
+    }
+    if (isLineBreak(current.charCodeAt(0))) return "";
+    return current;
+  }
+
+  /**
+   * Read the exact digit count of a `\x` or `\u` escape. Compiler scanner
+   * diagnostics make an incomplete escape invalid configuration text.
+   */
+  private readHexEscape(length: number): string {
+    const start = this.pos - 2;
+    while (
+      this.pos - start - 2 < length &&
+      /[0-9A-Fa-f]/.test(this.text[this.pos] ?? "")
+    )
+      this.pos += 1;
+    const hex = this.text.slice(start + 2, this.pos);
+    if (hex.length !== length) this.fail("Hexadecimal digit expected");
+    return String.fromCharCode(parseInt(hex, 16));
+  }
+
+  private readNumber(): number {
+    const token = this.matchToken(NUMERIC_LITERAL)?.[0];
+    if (token === undefined) return this.fail("Numeric literal expected");
+    if (/^0[0-9]/.test(token)) this.fail("Octal literals are not allowed");
+    this.pos += token.length;
+    // A separator in the wrong place, a second `.`, or a suffix stops the
+    // literal early; the compiler reports what follows it.
+    if (/^[\w$.]/.test(this.text[this.pos] ?? ""))
+      this.fail("Invalid character after a numeric literal");
+    return Number(token.replaceAll("_", ""));
+  }
+
+  /** Reset a sticky pattern to this cursor before every match. */
+  private matchToken(pattern: RegExp): RegExpExecArray | null {
+    pattern.lastIndex = this.pos;
+    return pattern.exec(this.text);
+  }
+}
+
+const IDENTIFIER_LITERAL = /[A-Za-z_$][\w$]*/y;
+const UNICODE_CODE_POINT_ESCAPE = /\{([0-9A-Fa-f]+)\}/y;
+
+/**
+ * An ECMAScript numeric literal without a sign: hexadecimal, octal, binary, or
+ * decimal with an optional fraction and exponent, each digit run allowing
+ * single `_` separators between digits.
+ */
+const NUMERIC_LITERAL = new RegExp(
+  [
+    "0[xX][0-9A-Fa-f]+(?:_[0-9A-Fa-f]+)*",
+    "0[oO][0-7]+(?:_[0-7]+)*",
+    "0[bB][01]+(?:_[01]+)*",
+    "(?:[0-9]+(?:_[0-9]+)*(?:\\.(?:[0-9]+(?:_[0-9]+)*)?)?|\\.[0-9]+(?:_[0-9]+)*)(?:[eE][+-]?[0-9]+(?:_[0-9]+)*)?",
+  ].join("|"),
+  "y",
+);
+
+const SIMPLE_ESCAPES: Record<string, string> = {
+  '"': '"',
+  "'": "'",
+  "\\": "\\",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+};
+
+/** Whether a number starts at `pos`: a digit, or a `.` before a digit. */
+function isNumberStart(text: string, pos: number): boolean {
+  return /[0-9]/.test(text[pos]!) || /^\.[0-9]/.test(text.slice(pos, pos + 2));
+}
+
+/** TypeScript-Go's `IsLineBreak`: the ECMAScript line terminators. */
+function isLineBreak(code: number): boolean {
+  return code === 0x0a || code === 0x0d || code === 0x2028 || code === 0x2029;
+}
+
+/** TypeScript-Go's `IsWhiteSpaceSingleLine`. */
+function isWhiteSpace(code: number): boolean {
+  return (
+    code === 0x20 ||
+    code === 0x09 ||
+    code === 0x0b ||
+    code === 0x0c ||
+    code === 0x85 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200b) ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}

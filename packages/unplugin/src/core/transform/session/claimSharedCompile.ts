@@ -1,0 +1,597 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+import { isZombieProcess } from "../utils/isZombieProcess";
+import { environmentInputMismatch } from "../validation/environmentInputMismatch";
+import { isEnvironmentInputs } from "../validation/isEnvironmentInputs";
+import type { TtscSharedCompileClaim } from "./TtscSharedCompileClaim";
+import type { TtscSharedCompilePublication } from "./TtscSharedCompilePublication";
+
+/** How often a lock holder proves it is still working. */
+const HEARTBEAT_MS = 1_000;
+
+/**
+ * How long a lock may go without a heartbeat before a waiter takes it over. A
+ * holder whose process died is detected at once through its pid. This bound
+ * covers a pid that was reused, and a holder that cannot run at all.
+ */
+const ABANDONED_MS = 15_000;
+
+/** Longest pause between two looks at the store while another worker holds it. */
+const MAX_WAIT_MS = 250;
+
+/** Publications kept per compile identity, most recently used first. */
+const KEPT_PUBLICATIONS = 4;
+
+/**
+ * Publications kept in the whole store, most recently used first. The store
+ * outlives every process (samchon/ttsc#1483), so without a bound it would keep
+ * every identity a project ever had, those of an older ttsc among them, which
+ * can never be adopted again.
+ */
+const KEPT_STORE_PUBLICATIONS = 32;
+
+/** Maximum publication bytes retained by the shared store after pruning. */
+const KEPT_STORE_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Ask the session store for the compile named `identity` and `state`: another
+ * worker's publication, or the lock to compile it here (samchon/ttsc#1390).
+ *
+ * `identity` encodes reported compile configuration and `state` a supplied
+ * project-input projection. Neither key alone certifies a publication. The
+ * first worker to need a pair takes its lock by creating a directory, which the
+ * filesystem makes atomic. The others wait without blocking the event loop, and
+ * adopt the publication the holder leaves behind. When the holder releases the
+ * lock without publishing, the next waiter takes the lock instead. A holder
+ * whose process has died, or whose heartbeat stopped, can lose the lock to a
+ * waiter. Waiting has no total deadline or cancellation; progress still depends
+ * on native operations and successful reclamation.
+ *
+ * The store outlives the processes that use it (samchon/ttsc#1483), so it
+ * best-effort prunes itself: an adoption marks its publication used, and each
+ * publication keeps the most recently used ones of its identity within the
+ * store's count and byte budgets, and removes locks and partial writes whose
+ * writer is gone. A publication larger than the byte budget stays in the
+ * compiling worker; it cannot be shared without making persistent storage
+ * unbounded.
+ *
+ * Sharing is only an optimization. An unreadable or unusable publication is
+ * ignored and a worker may claim its own compile. An escaping claim error
+ * answers `undefined`; publishing and cleanup failures are suppressed without
+ * certifying persistence. The caller retains local compilation. With `adopt:
+ * false` the caller has already found a publication wanting and compiles
+ * regardless, but still under the lock, so its compile replaces the publication
+ * for the waiters. A rejectedPublication excludes only that serialized payload:
+ * another worker's replacement under the same projected state remains eligible
+ * for independent adoption proof. The digest is computed from the already read
+ * UTF-8 publication, without another filesystem query.
+ *
+ * Neither key names the environment variables the plugins read: only the
+ * compile discovers them. A publication is therefore adoptable only while each
+ * variable its envelope recorded has the recorded value, or stays unset, in the
+ * adopter's `environment`. An ineligible publication is treated like a rejected
+ * one: the worker takes the lock and its compile replaces it.
+ *
+ * Its place in the adapter's invalidation model, and the units beside it, are
+ * mapped in the maintainer page
+ * `website/src/content/docs/development/reference/unplugin-invalidation.mdx`.
+ *
+ * @param store The session's shared compile store.
+ * @param identity Caller-provided hex configuration digest used in store names.
+ * @param state Caller-provided hex project-state digest used in store names.
+ * @param options.adopt Whether an existing publication may be adopted.
+ * @param options.environment The adopter's compiler environment, which every
+ *   recorded environment read of an adopted publication must still match.
+ * @param options.rejectedPublication Digest of the exact previously refuted
+ *   payload; a replacement still requires the caller's full proof.
+ * @evidence contracts/common.md#principled-implementation
+ *   Filesystem directory creation coordinates independent workers, and owned
+ *   tokens distinguish a claim from another holder at the same pathname.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One identity/state claim selects adoption or compile ownership. Private
+ *   helpers separate lock coordination, publication, and bounded retention;
+ *   filesystem failure leaves the caller's local compile path available.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The optional store preserves a local compile path when sharing is
+ *   unavailable rather than changing compile semantics; it uses native APIs
+ *   without replacing foreign methods.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains why the store is optional, what identity and state name,
+ *   how waiting and abandonment differ, and why retained publications need
+ *   bounds. Purpose and reasons use separate native paragraphs under the
+ *   documentation skill; claim and publication interfaces retain their value
+ *   documentation.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node native paths and filesystem operations own store publication. The
+ *   implementation has a Windows replacement path because an open destination
+ *   may refuse rename; this does not make its ownership checks atomic. The
+ *   remaining pathname-check and replacement windows are recorded for
+ *   investigation rather than asserted OS-safe.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Each waiting iteration may reread and parse all publication bytes, inspect
+ *   envelope fields, probe lock metadata/token/process state and reclaim a
+ *   subtree. Backoff intervals are capped, not iteration count or total time.
+ *   Each valid read additionally hashes its serialized UTF-8 payload in O(bytes)
+ *   time for attempt-local refutation identity. This is not an input proof.
+ *   Publishing serializes the full payload before its UTF8 byte-budget check.
+ *   Pruning materializes all N store names, launches concurrent stats for J
+ *   JSON entries, sorts J last-use observations and scans names again for
+ *   abandoned state. Text comparisons, encoded bytes, native IO and removed
+ *   descendants contribute beyond entry counts; transient state includes full
+ *   publication text/value and O(N+J) lists/promises. Independent processes
+ *   share the inventory, so a process-local index cannot establish its contents.
+ *
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   The supplied identity/state pair coordinates in-flight ownership and
+ *   retained publication lookup. Shape checks reject unusable envelopes but
+ *   do not prove inputs; the producer and adopter supply separate stability,
+ *   completeness and current-state proofs. Caller adopt=false bypasses lookup
+ *   while retaining locking. Repeated claims still reread publication/lock
+ *   state; failed or oversized persistence leaves later workers compiling.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   A publication over 256 MiB is not persisted. Each successful publication
+ *   best-effort prunes to four files per identity, 32 store-wide and 256 MiB of
+ *   publication bytes. Concurrent writes, failed removals or failed pruning
+ *   can leave limits exceeded until a later successful prune. Limits do not
+ *   bound live locks, partial-write bytes, waiting claims or concurrent IO.
+ *   A compile claim transfers its unref'd heartbeat and lock to the caller,
+ *   whose release clears the timer and best-effort removes an owned lock;
+ *   publishing alone does not release it. Later prunes reclaim abandoned locks
+ *   and departed-writer partial files. Owner checks followed by pathname IO
+ *   remain non-atomic, including asynchronous heartbeat touches.
+ */
+export async function claimSharedCompile(
+  store: string,
+  identity: string,
+  state: string,
+  options:
+    | { adopt: false }
+    | {
+        adopt: true;
+        environment: NodeJS.ProcessEnv;
+        rejectedPublication?: string;
+      },
+): Promise<TtscSharedCompileClaim | undefined> {
+  const name = `${identity}-${state}`;
+  const publication = path.join(store, `${name}.json`);
+  const lock = path.join(store, `${name}.lock`);
+  let wait = 20;
+  try {
+    for (;;) {
+      if (options.adopt) {
+        const published = await readPublication(publication);
+        if (
+          published !== undefined &&
+          published.fingerprint !== options.rejectedPublication &&
+          environmentInputMismatch(
+            published.value.result.type === "exception"
+              ? undefined
+              : published.value.result.environmentInputs,
+            options.environment,
+          ) === undefined
+        ) {
+          await markUsed(publication);
+          return {
+            kind: "adopt",
+            publication: published.value,
+            fingerprint: published.fingerprint,
+          };
+        }
+      }
+      const token = await acquire(lock);
+      if (token !== undefined) {
+        const claim = holdLock(store, identity, publication, lock, token);
+        if (options.adopt) {
+          // A holder may have published and released between the read above
+          // and the lock.
+          const published = await readPublication(publication);
+          if (
+            published !== undefined &&
+            published.fingerprint !== options.rejectedPublication &&
+            environmentInputMismatch(
+              published.value.result.type === "exception"
+                ? undefined
+                : published.value.result.environmentInputs,
+              options.environment,
+            ) === undefined
+          ) {
+            claim.release();
+            await markUsed(publication);
+            return {
+              kind: "adopt",
+              publication: published.value,
+              fingerprint: published.fingerprint,
+            };
+          }
+        }
+        return claim;
+      }
+      const stale = await abandoned(lock);
+      if (stale !== undefined) {
+        await reclaim(lock, stale);
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      wait = Math.min(wait * 2, MAX_WAIT_MS);
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Take the lock and return this claim's owner token, or `undefined` when
+ * another worker holds it. The token lets a release tell its own lock from one
+ * a waiter took over after this holder's heartbeat went stale.
+ */
+async function acquire(lock: string): Promise<string | undefined> {
+  try {
+    await fs.promises.mkdir(lock);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+    throw error;
+  }
+  const token = `${process.pid}:${crypto.randomUUID()}`;
+  try {
+    await fs.promises.writeFile(path.join(lock, "owner"), token);
+  } catch (error) {
+    fs.rmSync(lock, { force: true, recursive: true });
+    throw error;
+  }
+  return token;
+}
+
+/**
+ * The owner token of `lock` when its holder is gone or has stopped working, or
+ * `undefined` when the lock is live or released. A stale lock whose holder
+ * never named itself answers the empty token.
+ */
+async function abandoned(lock: string): Promise<string | undefined> {
+  let modified: number;
+  try {
+    modified = (await fs.promises.stat(lock)).mtimeMs;
+  } catch {
+    // Released meanwhile: not abandoned, and the next loop takes it.
+    return undefined;
+  }
+  let token: string;
+  try {
+    token = await fs.promises.readFile(path.join(lock, "owner"), "utf8");
+  } catch {
+    // The holder is between creating the lock and naming itself, unless it
+    // stopped there.
+    return Date.now() - modified > ABANDONED_MS ? "" : undefined;
+  }
+  if (Date.now() - modified > ABANDONED_MS) return token;
+  return processGone(Number.parseInt(token, 10)) ? token : undefined;
+}
+
+/**
+ * Take an abandoned lock away from its holder, and only that holder's.
+ *
+ * Removing the path would remove whatever lock is there by then, and two
+ * reclaimers that saw the same abandoned holder would each remove the other's
+ * fresh lock. The lock is instead moved aside, which one reclaimer alone can
+ * do, and the moved lock's owner is compared with the one judged abandoned.
+ * When another reclaimer's fresh lock was moved instead, it is put back; if a
+ * third worker already locked the path, the moved holder has lost its lock,
+ * which its own ownership checks then find, so it neither publishes nor removes
+ * the lock that replaced it.
+ */
+async function reclaim(lock: string, stale: string): Promise<void> {
+  const aside = `${lock}.${process.pid}.${crypto.randomUUID()}.retired`;
+  try {
+    await fs.promises.rename(lock, aside);
+  } catch {
+    // Released, or reclaimed by another waiter meanwhile.
+    return;
+  }
+  let owner: string | undefined;
+  try {
+    owner = await fs.promises.readFile(path.join(aside, "owner"), "utf8");
+  } catch {
+    owner = "";
+  }
+  if (owner !== stale) {
+    try {
+      await fs.promises.rename(aside, lock);
+      return;
+    } catch {
+      // The path was locked again meanwhile; the moved lock is lost.
+    }
+  }
+  await fs.promises
+    .rm(aside, { force: true, recursive: true })
+    .catch(() => undefined);
+}
+
+/** Whether this claim's token still names the holder of `lock`. */
+function owns(lock: string, token: string): boolean {
+  try {
+    return fs.readFileSync(path.join(lock, "owner"), "utf8") === token;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether no process with this id runs on this machine, which the store's locks
+ * and partial writes name their writer by. An id that is not a positive integer
+ * names nothing this can tell, and counts as alive. An exited process its
+ * parent never collected is gone too.
+ */
+function processGone(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return isZombieProcess(pid);
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
+/** The claim of a worker that holds the lock. */
+function holdLock(
+  store: string,
+  identity: string,
+  publication: string,
+  lock: string,
+  token: string,
+): Extract<TtscSharedCompileClaim, { kind: "compile" }> {
+  // Only while this claim still owns the lock: touching the path after a
+  // waiter took it over would keep the successor's lock alive in this holder's
+  // name.
+  const heartbeat = setInterval(() => {
+    if (!owns(lock, token)) return;
+    const now = new Date();
+    fs.promises.utimes(lock, now, now).catch(() => undefined);
+  }, HEARTBEAT_MS);
+  heartbeat.unref();
+  let released = false;
+  return {
+    kind: "compile",
+    publish: async (value) => {
+      const temporary = `${publication}.${process.pid}.${crypto.randomUUID()}.tmp`;
+      try {
+        const serialized = JSON.stringify(value);
+        if (Buffer.byteLength(serialized, "utf8") > KEPT_STORE_BYTES) {
+          await prunePublications(store, identity);
+          return;
+        }
+        await fs.promises.writeFile(temporary, serialized, "utf8");
+        // A holder that lost the lock while it compiled no longer speaks for
+        // the store: its successor may already have published a newer answer,
+        // which this one must not replace. Checked after the write, right
+        // before the rename, so the window a takeover can still slip into is
+        // the rename itself; an adopter proves whatever it adopts regardless.
+        if (!owns(lock, token)) {
+          await fs.promises.rm(temporary, { force: true });
+          return;
+        }
+        try {
+          await fs.promises.rename(temporary, publication);
+        } catch {
+          // Windows refuses to replace a file another worker has open.
+          await fs.promises.rm(publication, { force: true });
+          await fs.promises.rename(temporary, publication);
+        }
+        await prunePublications(store, identity);
+      } catch {
+        await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
+      }
+    },
+    release: () => {
+      if (released) return;
+      released = true;
+      clearInterval(heartbeat);
+      if (owns(lock, token)) {
+        try {
+          fs.rmSync(lock, { force: true, recursive: true });
+        } catch {
+          // Cleanup is best effort: a failed removal must not prevent the
+          // caller's independent generation resources from being released.
+        }
+      }
+    },
+  };
+}
+
+/**
+ * Keep the most recently used publications of `identity` within the store's
+ * count and byte budgets, and remove abandoned locks and partial writes.
+ */
+async function prunePublications(
+  store: string,
+  identity: string,
+): Promise<void> {
+  const entries = await fs.promises.readdir(store);
+  const dated = await Promise.all(
+    entries
+      .filter((entry) => entry.endsWith(".json"))
+      .map(async (entry) => {
+        const file = path.join(store, entry);
+        try {
+          const stat = await fs.promises.stat(file);
+          return { entry, file, size: stat.size, used: stat.mtimeMs };
+        } catch {
+          return { entry, file, size: 0, used: -1 };
+        }
+      }),
+  );
+  dated.sort((left, right) => right.used - left.used);
+  const own = dated.filter(({ entry }) => entry.startsWith(`${identity}-`));
+  const removed = new Set([
+    ...own.slice(KEPT_PUBLICATIONS).map(({ file }) => file),
+    ...dated.slice(KEPT_STORE_PUBLICATIONS).map(({ file }) => file),
+  ]);
+  let keptBytes = 0;
+  for (const { file, size } of dated) {
+    if (removed.has(file)) continue;
+    if (size > KEPT_STORE_BYTES - keptBytes) removed.add(file);
+    else keptBytes += size;
+  }
+  for (const file of removed) {
+    await fs.promises.rm(file, { force: true }).catch(() => undefined);
+  }
+  for (const entry of entries) {
+    const file = path.join(store, entry);
+    const stale = entry.endsWith(".lock") ? await abandoned(file) : undefined;
+    if (stale !== undefined) {
+      await reclaim(file, stale);
+    } else if (
+      entry.endsWith(".tmp") &&
+      // A partial write outlives only a writer that died before renaming it,
+      // and its name carries the writer's process id, before the random part
+      // (`<publication>.<pid>.<uuid>.tmp`). A live writer's is left to it,
+      // however long it takes to write.
+      processGone(Number(entry.split(".").at(-3)))
+    ) {
+      await fs.promises.rm(file, { force: true }).catch(() => undefined);
+    } else if (
+      entry.endsWith(".retired") &&
+      // A lock moved aside by a reclaimer that died before removing it; the
+      // name carries that reclaimer's process id the same way.
+      processGone(Number(entry.split(".").at(-3)))
+    ) {
+      await fs.promises
+        .rm(file, { force: true, recursive: true })
+        .catch(() => undefined);
+    }
+  }
+}
+
+/**
+ * Mark a publication used, so the store keeps the ones its processes still
+ * adopt. Best effort: an unmarked publication is only pruned sooner.
+ */
+async function markUsed(file: string): Promise<void> {
+  const now = new Date();
+  await fs.promises.utimes(file, now, now).catch(() => undefined);
+}
+
+/** Read a publication, or `undefined` when it is absent or unusable. */
+async function readPublication(
+  file: string,
+): Promise<
+  { value: TtscSharedCompilePublication; fingerprint: string } | undefined
+> {
+  let bytes: Buffer;
+  try {
+    bytes = await fs.promises.readFile(file);
+  } catch {
+    return undefined;
+  }
+  try {
+    const value: unknown = JSON.parse(bytes.toString("utf8"));
+    // A compile that ended in diagnostics is published like one that
+    // succeeded (samchon/ttsc#1458); an exception never is.
+    if (
+      !isPublicationRecord(value) ||
+      !isPublicationResult(value.result) ||
+      !isPublicationRecord(value.externalInputHashes) ||
+      !Object.values(value.externalInputHashes).every(
+        (hash) => typeof hash === "string",
+      ) ||
+      !isPublicationRecord(value.externalInputRealpaths) ||
+      !Object.values(value.externalInputRealpaths).every(
+        (realpath) => realpath === null || typeof realpath === "string",
+      ) ||
+      typeof value.scratchDirectory !== "string" ||
+      (value.temporaryTsconfig !== undefined &&
+        typeof value.temporaryTsconfig !== "string")
+    ) {
+      return undefined;
+    }
+    return {
+      value: value as unknown as TtscSharedCompilePublication,
+      fingerprint: crypto.createHash("sha256").update(bytes).digest("hex"),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Persisted dictionary values must not be arrays or null. */
+function isPublicationRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Check consumed envelope fields, including the complete environment witness. */
+function isPublicationResult(value: unknown): boolean {
+  if (
+    !isPublicationRecord(value) ||
+    (value.type !== "success" && value.type !== "failure") ||
+    !isPublicationRecord(value.typescript) ||
+    !Object.values(value.typescript).every(
+      (source) => typeof source === "string",
+    ) ||
+    (value.environmentInputs !== undefined &&
+      !isEnvironmentInputs(value.environmentInputs))
+  )
+    return false;
+  // Neither an explicit incomplete observer nor failed per-input authority can
+  // certify cross-worker reuse. Unsupported marker shapes are not ignored.
+  if (
+    value.observationsComplete !== undefined ||
+    (value.hostInputProofFailures !== undefined &&
+      (!isPublicationRecord(value.hostInputProofFailures) ||
+        Object.keys(value.hostInputProofFailures).length !== 0))
+  )
+    return false;
+  if (value.diagnostics !== undefined) {
+    if (
+      !Array.isArray(value.diagnostics) ||
+      !value.diagnostics.every(
+        (diagnostic) =>
+          isPublicationRecord(diagnostic) &&
+          typeof diagnostic.messageText === "string" &&
+          (diagnostic.file === undefined ||
+            typeof diagnostic.file === "string") &&
+          (diagnostic.line === undefined ||
+            typeof diagnostic.line === "number") &&
+          (diagnostic.character === undefined ||
+            typeof diagnostic.character === "number"),
+      )
+    )
+      return false;
+  } else if (value.type === "failure") return false;
+  if (value.graph !== undefined && !isPublicationRecord(value.graph))
+    return false;
+  if (
+    value.sourceMaps !== undefined &&
+    (!isPublicationRecord(value.sourceMaps) ||
+      !Object.values(value.sourceMaps).every(isPublicationSourceMap))
+  )
+    return false;
+  return true;
+}
+
+/** Source maps must support the native source/provenance projection safely. */
+function isPublicationSourceMap(value: unknown): boolean {
+  if (
+    !isPublicationRecord(value) ||
+    value.version !== 3 ||
+    typeof value.mappings !== "string" ||
+    !Array.isArray(value.sources) ||
+    !value.sources.every((source) => typeof source === "string") ||
+    !Array.isArray(value.names) ||
+    !value.names.every((name) => typeof name === "string") ||
+    (value.sourceRoot !== undefined && typeof value.sourceRoot !== "string")
+  )
+    return false;
+  return (
+    value.sourcesContent === undefined ||
+    (Array.isArray(value.sourcesContent) &&
+      value.sourcesContent.every(
+        (source) => source === null || typeof source === "string",
+      ))
+  );
+}

@@ -37,6 +37,11 @@ import { createWorkerCompilerService } from "./internal/createWorkerCompilerServ
  * };
  * void main();
  * ```
+ *
+ * @evidence contracts/common.md#principled-implementation The wrapper supplies the real WASM boot and result parser to the same typed service core exposed over tgrid.
+ * @evidence contracts/common.md#clear-and-simple-design Runtime binding stays in this thin factory while pipeline state and serialization remain in the service core.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Dependency injection is a supported binding seam, without replacement of foreign APIs or test-only production paths.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc demonstrates WorkerServer registration and required runtime identity, with descriptive text separated from tags under the documentation skill.
  */
 export function createWorkerCompiler(
   options: ICreateWorkerCompilerOptions,

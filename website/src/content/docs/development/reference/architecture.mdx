@@ -1,6 +1,6 @@
 # Internals: Build and Cache
 
-This page is for debugging source plugin builds.
+This page is for maintainers debugging source plugin builds and cache behavior.
 
 ## Cold Build Path
 
@@ -9,12 +9,12 @@ When `ttsc` sees a plugin `source` descriptor:
 1. Resolve `source`.
 2. Hash the plugin source and host versions.
 3. Reuse the cached binary on hit.
-4. Copy source into a scratch directory on miss.
-5. Generate a `go.work` overlay pointing at `ttsc` and its shims, plus (when the plugin's `go.mod` does not declare `github.com/samchon/ttsc/packages/ttsc`) a synthesized `replace github.com/samchon/ttsc/packages/ttsc v0.0.0 => <workspace overlay>` block. The `replace` block is the seam that lets a plugin's bare `require github.com/samchon/ttsc/packages/ttsc v0.0.0` resolve to the workspace `ttsc` source at build time.
+4. Copy source into a scratch directory on miss, and copy each overlay and each `replace` target outside the module beside it, in their original layout below the scratch directory. Require every copy to be the source the key digested before Go reads it, so a source edited during the build cannot reach the binary. Each `replace` target outside the module is rewritten in the copy's `go.mod` to its copy.
+5. Generate a `go.work` overlay pointing at the copies of `ttsc` and its shims, plus (when the plugin's `go.mod` does not declare `github.com/samchon/ttsc/packages/ttsc`) a synthesized `replace github.com/samchon/ttsc/packages/ttsc v0.0.0 => <workspace overlay>` block. The `replace` block is the seam that lets a plugin's bare `require github.com/samchon/ttsc/packages/ttsc v0.0.0` resolve to the workspace `ttsc` source at build time.
 6. Classify the source package. A `package main` source is an executable sidecar. A non-`main` transform source is a linked plugin package that must register through `driver.RegisterPlugin`.
 7. For executable sidecars, run `go build -o .ttsc-plugin <entry>` in the scratch directory. The leading-dot placeholder name makes the in-progress binary easy to spot in `go build` stderr; the cache move renames it to `plugin` (or `plugin.exe` on Windows).
 8. For linked transform sources, synthesize or select a native host that blank-imports the copied package, then build that host binary instead.
-9. Move the built binary into the cache.
+9. Move the built binary into the cache. Go read only copies proven against the key, and a source that changed before its copy was taken fails the build naming it, so a binary is never cached under the key of a state it was not built from.
 10. Invoke executable sidecars with `check`, `transform`, `build`, `fix`, or `format`. Linked transform packages do not receive argv directly; the native host receives the subcommand and dispatches to registered driver hooks.
 
 ## Cache Key Inputs
@@ -28,8 +28,11 @@ The cache key for a built plugin binary is `sha256` of, in order:
 5. `go=${resolveGoCompilerIdentity(goBinary)}`: the resolved Go binary's file content hash and `go version` text, not the install path.
 6. Every effective Go build env value in `GO_BUILD_ENV_KEYS`: `GOOS`, `GOARCH`, `GOAMD64`, `GOARM`, `GOARM64`, `GO386`, `GOMIPS`, `GOMIPS64`, `GOPPC64`, `GORISCV64`, `GOWASM`, `GOFLAGS`, `GOEXPERIMENT`, `GOFIPS140`, `GO_EXTLINK_ENABLED`, `GCCGO`, `GCCGOTOOLDIR`, `CGO_ENABLED`, the cgo compiler/linker variables, `GOTOOLCHAIN`, and `GOROOT` by toolchain-content fingerprint. Command-valued cgo settings also include the resolved tool binary identity.
 7. Plugin source-directory hash. Skipped paths: `node_modules`, `.git`, `.ttsc`, `go.work`, `go.work.sum`, `*.tgz`, `*.tar.gz`, `.DS_Store`, `Thumbs.db`, and editor backup files ending in `~`.
-8. Overlay-directory hashes, sorted by directory name (`ttsc` and shim source under the host's `node_modules`).
-9. Contributor source-directory hashes, sorted by contributor name.
+8. The hash of every directory outside the module that the plugin's `go.mod` replaces a module with (`replace example.com/dep => ../dep`), sorted by module path. `go build` compiles such a directory, so it is keyed, reported among `pluginSources`, and watched like the module itself. A relative target resolves from the module's own directory, as it does for `go build` there; a module without such a target keys exactly as before.
+9. Overlay-directory hashes, sorted by directory name (`ttsc` and shim source under the host's `node_modules`).
+10. Contributor source-directory hashes, sorted by contributor name.
+
+A link (a symbolic link or a Windows junction) inside a plugin source directory, outside the skipped paths, is refused before any build. The build would compile what it names, which no key or watch covers, and a Go module zip excludes links from a module's content for the same reason. Replace the link with the files it names, or give the linked directory a `go.mod` of its own and name it through a `replace` directive.
 
 The Go-binary identity (5) and `GO_BUILD_ENV_KEYS` (6) are the load-bearing reason `GOOS=linux GOARCH=arm64 ttsc` does not poison the native-platform cache slot. Pathless Go identity also lets pnpm installs with different virtual-store paths share the same cached binary when the bundled compiler content is identical.
 
@@ -50,7 +53,7 @@ Default (project-local, the `find-cache-dir` convention):
 <workspaceRoot>/node_modules/.cache/ttsc/go-build               (GOCACHE while building)
 ```
 
-`<workspaceRoot>` is the nearest enclosing workspace root: the nearest ancestor holding a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field, else the nearest ancestor containing a `node_modules`, else the project root. Every package in a monorepo therefore shares ONE cache and a plugin builds once per workspace, not once per package. `rm -rf node_modules` (or deleting the repo) reclaims it. ttsc keeps **no** machine-global cache — a user-wide cache silently grew to hundreds of GB across tsgo/plugin version bumps, so it was removed outright.
+`<workspaceRoot>` is the nearest enclosing workspace root: the nearest ancestor holding a `pnpm-workspace.yaml` or a `package.json` with a `workspaces` field, else the nearest ancestor containing a `node_modules`, else the project root. Packages with the same workspace root and cache inputs share one binary cache. Removing `node_modules` also removes its default cache. ttsc keeps no machine-global plugin binary cache.
 
 Override:
 
@@ -59,18 +62,20 @@ TTSC_CACHE_DIR=/tmp/ttsc-cache npx ttsc --emit
 TTSC_GO_CACHE_DIR=/tmp/ttsc-go-build npx ttsc --emit
 ```
 
-`--cache-dir` and `TTSC_CACHE_DIR` set the cache root for source-plugin binaries. A relative `--cache-dir` resolves from the effective ttsc working directory (`--cwd` when set); a relative `TTSC_CACHE_DIR` resolves from the project root; both store plugin binaries below `<root>/plugins`. The Go object cache used while building source plugins defaults to `<root>/go-build`; `TTSC_GO_CACHE_DIR` overrides that path, and an existing user `GOCACHE` is honored (and never treated as ttsc-owned) when `TTSC_GO_CACHE_DIR` is unset. For `ttsx`, only an explicit `--cache-dir` also anchors temporary runtime output below `<cache-dir>/project/<pid>`.
+`--cache-dir` and `TTSC_CACHE_DIR` set the cache root for source-plugin binaries. A relative `--cache-dir` resolves from the effective ttsc working directory (`--cwd` when set); a relative `TTSC_CACHE_DIR` resolves from the project root; both store plugin binaries below `<root>/plugins`. The Go object cache used while building source plugins defaults to `<root>/go-build`; `TTSC_GO_CACHE_DIR` overrides that path, and an existing user `GOCACHE` is honored (and never treated as ttsc-owned) when `TTSC_GO_CACHE_DIR` is unset. For `ttsx`, only an explicit `--cache-dir` also anchors temporary runtime output below `<cache-dir>/project/<pid>-<nonce>`, one directory per run.
 
 `ttsc cache paths --json` prints the active cache root, plugin binary cache root, Go build cache root, and `cacheableRoots`. Use that command in CI when the workflow wants to persist the right directories without hardcoding paths.
 
-Clean. Removes the ttsc-owned cache subdirectories (`plugins/`, `go-build/`, and an external `TTSC_GO_CACHE_DIR`) plus the legacy project-local caches (`node_modules/.ttsc`, `.ttsc`) — never the parent cache root (it may be shared with other tools) and never a user `GOCACHE`:
+Clean. Removes the ttsc-owned cache subdirectories (`plugins/`, `descriptors/`, `capabilities/`, `identities/`, `answers/`, `ttsx-orphan/`, the `ttsx/` runtime directories of runs that have ended, `go-build/`, and an external `TTSC_GO_CACHE_DIR`) plus the legacy project-local caches (`node_modules/.ttsc`, `.ttsc`). A run that may still be in progress keeps its runtime directory. It never removes the parent cache root, which may be shared with other tools, or a user `GOCACHE`:
 
 ```bash
 npx ttsc clean
 npx ttsc clean --cache-dir /tmp/ttsc-cache
 ```
 
-An explicit `--cache-dir` is removed wholesale and must name a directory dedicated to ttsc. Before deleting anything, the command validates every resolved target, including `TTSC_GO_CACHE_DIR` and pre-0.17 global-cache locations, and refuses a filesystem root or any directory that equals or contains the project. The check follows physical aliases, so values such as `.`, `..`, a workspace ancestor, or a symlink/junction to one cannot turn cache cleanup into project deletion.
+An explicit `--cache-dir` selects the whole directory for cleanup and must name a directory dedicated to ttsc. Before deleting anything, the command validates every resolved target, including `TTSC_GO_CACHE_DIR` and pre-0.17 global-cache locations, and refuses a filesystem root or any directory that equals or contains the project. The check follows physical aliases, so values such as `.`, `..`, a workspace ancestor, or a symlink/junction to one cannot turn cache cleanup into project deletion.
+
+Caller-owned `GOCACHE` is protected even with an explicit cache directory. Targets that contain it, lie inside it, or have an uncertain physical overlap are preserved.
 
 The cache is content-addressed, so it is not tied to a package-manager layout: npm installs, pnpm virtual-store paths, and workspace packages share a binary whenever the source plugin, contributors, ttsc overlay, Go toolchain content, platform, and build environment produce the same cache key.
 
@@ -82,7 +87,9 @@ The plugin builder reads Go's effective build environment for the cache key. It 
 
 ### Cache-key inputs: `GO_BUILD_ENV_KEYS`
 
-These effective Go build env values fold into the cache key when non-empty, so cross-compile targets, build-tag tweaks, cgo compiler/linker choices, FIPS mode, and toolchain roots never collide with the native build slot. `ttsc` reads them through `go env`, so `go env -w` settings are covered too. `GOROOT` is normalized to a toolchain-content fingerprint instead of the install path, preserving pnpm path sharing for identical bundled toolchains. Within one process, an unchanged GOROOT reuses that fingerprint after a fresh file-metadata manifest check; an added, removed, replaced, or modified toolchain file recomputes the same content fingerprint, so this skips repeated SDK reads without changing key bytes or freshness. Command-valued entries such as `CC`, `CXX`, `AR`, `GCCGO`, and `PKG_CONFIG` include the resolved executable content hash as well as the command string.
+These effective Go build env values fold into the cache key when non-empty. `ttsc` reads them through `go env`, covering `go env -w` settings. `GOROOT` contributes a toolchain-content fingerprint instead of its install path, preserving pnpm path sharing for identical bundled toolchains. Command-valued entries such as `CC`, `CXX`, `AR`, `GCCGO`, and `PKG_CONFIG` include the resolved executable content hash as well as the command string.
+
+Within one process, a fresh file-metadata manifest check can reuse the GOROOT fingerprint. A new process reuses it, the plugin source and overlay digests, and the Go compiler's content hash from records under `<root>/identities`, but only while the recorded metadata matches and every modification time precedes a reference that process writes on the same drive, into the cache or into its per-user directory below the system temporary directory. A changed or unseparable manifest triggers a full content rehash. This reuse requires contributing changes to alter the captured identity or timestamps; an edit reproducing the entire metadata signature falls outside that proof. `go env` and `go version` still run on every load, because they report which toolchain the environment selects, which no file metadata shows.
 
 ```text
 GOOS GOARCH GOAMD64 GOARM GOARM64 GO386 GOMIPS GOMIPS64 GOPPC64
@@ -98,7 +105,7 @@ GOTOOLCHAIN GOROOT
 
 `ttsc` also folds selected external cgo/pkg-config environment values into the key when they are set, including include/library search path variables (`CPATH`, `LIBRARY_PATH`, `INCLUDE`, `LIB`, `LIBPATH`), pkg-config search variables (`PKG_CONFIG_PATH`, `PKG_CONFIG_LIBDIR`, `PKG_CONFIG_SYSROOT_DIR`), and Apple SDK/deployment variables (`SDKROOT`, `MACOSX_DEPLOYMENT_TARGET`).
 
-Source: `packages/ttsc/src/plugin/internal/buildSourcePlugin.ts` (`GO_BUILD_ENV_KEYS` and `EXTERNAL_GO_BUILD_ENV_KEYS`; the cache-key loop folds each non-empty effective value into the hash).
+Source: `packages/ttsc/src/plugin/internal/source/computeCacheKey.ts` (`GO_BUILD_ENV_KEYS` and `EXTERNAL_GO_BUILD_ENV_KEYS`; the cache-key loop folds each non-empty effective value into the hash).
 
 ### Injected into the plugin process
 
@@ -109,7 +116,7 @@ Before spawning a plugin, `ttsc` sets three env vars (`TTSC_NODE_BINARY`, `TTSC_
 - `TTSC_TTSX_BINARY`: resolved `ttsx` launcher.
 - `TTSC_PLUGIN_CONFIG_DIR` (only when the embedding sets `pluginConfigDir`): the directory that plugin config-file discovery and relative `configFile` resolution anchor at. Build integrations that compile through a generated wrapper tsconfig set it to the real project root (the bundler adapters write such a wrapper into the system temp directory for aliases and `compilerOptions` overlays); absent it, plugins anchor at the tsconfig's own directory.
 
-A plugin that wants to re-spawn `ttsx` or `tsgo` (for example to type-check a generated file) should call these vars rather than re-resolving from `$PATH`. They guarantee the same helper toolchain selected by the host. A plugin that discovers its own config file should anchor at `TTSC_PLUGIN_CONFIG_DIR` when set; the shipped utility plugins do this through `driver.PluginConfigBaseDir`. Sources: `runBuild.ts` and `transformProjectInMemory.ts`. See [Recipes → Re-spawn ttsx or tsgo from a plugin](/docs/development/authoring/recipes#re-spawn-ttsx-or-tsgo-from-a-plugin) for usage.
+A plugin that wants to re-spawn `ttsx` or `tsgo` (for example to type-check a generated file) should call these vars rather than re-resolving from `$PATH`. They guarantee the same helper toolchain selected by the host. A plugin that discovers its own config file should anchor at `TTSC_PLUGIN_CONFIG_DIR` when set; the shipped utility plugins do this through `driver.PluginConfigBaseDir`. Sources: `compiler/internal/build/BuildExecution.ts` and `compiler/internal/transformProjectInMemory.ts`. See [Recipes → Re-spawn ttsx or tsgo from a plugin](/docs/development/authoring/recipes#re-spawn-ttsx-or-tsgo-from-a-plugin) for usage.
 
 ### `GOROOT` is auto-injected only when unset
 
@@ -129,6 +136,12 @@ When the resolved Go binary is the bundled SDK shipped by `@ttsc/{platform}-{arc
 Published consumer installs should land on step 2. Steps 3–5 exist for development workflows; step 6 should only fire when none of the above are present.
 
 ## Debugging Build Failures
+
+Maintained config-recovery tests apply a 120-second failure budget to their prepared compiler's original contained lifetime, including startup and cleanup. Retained Vite tests use the existing 900-second cold-build allowance because the actor calls `TtscCompiler.prepare()`, observes three publication generations and closes the original host. Materialized fixture files do not prove that the linked native artifacts are cached.
+
+The parent creates one absolute deadline that caps child observation without restarting for a new phase. A missing publication or stalled operation fails and cancels the original native owner; the test still awaits that owner's actual retirement receipt before releasing inputs. Unknown retirement retains the original allocation and remains failure. Original body, clock and disposal failures survive independently; a refused disposal grants no release authority. These failure budgets prove neither readiness nor termination, and the general observation helper retains its caller-owned cancellation policy.
+
+`TestFailureLedger.run` awaits a test body and each admitted final cleanup before reporting their original failures in order. A refused cleanup cannot replace an earlier scenario cause or skip another cleanup. Callers still own actual native closure and directory retention; collecting a failure grants no release authority.
 
 If `go build` fails, `ttsc` prints the Go stderr:
 
@@ -150,7 +163,13 @@ Check:
 
 Concurrent `ttsc` processes serialize a cold build per cache key. The persistent `<key>.lock.v2` coordination directory publishes a uniquely generated, non-empty `current` directory with an atomic rename. Waiters reuse the published binary; when an owner dies or times out, one waiter atomically retires that exact generation before acquiring its successor.
 
-Retired generations remain as non-empty tombstones inside the lock directory. Both reclaim and normal release rename `current` to the generation's fixed tombstone path, so a delayed observer or old holder cannot remove a newer generation: its destination already exists and a directory rename cannot replace it. The adjacent `<key>.lock` path is reserved exclusively for legacy pre-generation holders. It is fenced and retired before v2 acquisition, but is never reused for v2 ownership, so a delayed legacy release or reclaim cannot delete a v2 successor. Scratch directories remain unique and binary publication remains atomic as defense in depth.
+Retired generations remain as non-empty tombstones inside the lock directory. Both reclaim and normal release rename `current` to the generation's fixed tombstone path, so a delayed observer or old holder cannot remove a newer generation: its destination already exists and a directory rename cannot replace it.
+
+Every waiter reads the holder's record inside `current`, and Windows refuses to rename a directory while a file below it is open, so a retire refused that way renames an empty probe between the same two directories: when the probe renames, a peer's read is what refused it, and the retire waits one poll and tries again, while a refusal the probe shares is thrown.
+
+A release that still fails never replaces the outcome of the build the lock protected; it is reported, and the generation it left is reclaimed as abandoned once its owner exits.
+
+The adjacent `<key>.lock` path is reserved exclusively for legacy pre-generation holders. It is fenced and retired before v2 acquisition, but is never reused for v2 ownership, so a delayed legacy release or reclaim cannot delete a v2 successor. Scratch directories remain unique and binary publication remains atomic as defense in depth.
 
 ## See also
 

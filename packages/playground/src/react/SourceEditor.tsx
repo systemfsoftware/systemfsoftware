@@ -6,6 +6,16 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DEFAULT_PLAYGROUND_COMPILER_OPTIONS } from "../compiler/DEFAULT_PLAYGROUND_COMPILER_OPTIONS";
 import type { ISourceEditorProps } from "../structures/ISourceEditorProps";
 
+/**
+ * Bind controlled source text to Monaco and replace declaration libraries when
+ * their map changes. Owned extra-lib registrations are disposed on replacement
+ * and unmount; this component uses Monaco's shared TypeScript defaults.
+ *
+ * @evidence contracts/common.md#principled-implementation Controlled changes publish full text, virtual URIs identify models, and supported extra-lib disposables replace prior declarations. Monaco preview suppresses unresolved-module diagnostics; the real Worker compile remains authoritative.
+ * @evidence contracts/common.md#clear-and-simple-design Editor presentation and declaration registration stay local while source state and compiler execution remain with the parent.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Monaco's documented defaults and disposable registration APIs provide the integration boundary; suppression is preview policy rather than a change to real compiler errors.
+ * @evidence contracts/common.md#meaningful-documentation Native prose states registration lifetime and shared defaults; inline comments explain preview limitations under the documentation skill.
+ */
 export function SourceEditor({
   value,
   onChange,

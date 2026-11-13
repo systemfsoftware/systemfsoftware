@@ -34,39 +34,101 @@ const (
   inputProofUnsupportedInputKind     inputProofFailure = "unsupported-input-kind"
 )
 
-// TransformInputReadObservation is the exact result of one compiler ReadFile
-// predicate. A failed read carries OK=false and no guessed filesystem kind.
+// TransformInputReadObservation reports one compiler ReadFile predicate's
+// success and the digest of its returned text. This is not necessarily a raw
+// disk-byte digest: the native VFS decodes UTF-16 and removes a UTF-8 BOM before
+// returning text. A failed read carries OK=false and no guessed filesystem kind.
+//
+// @evidence contracts/common.md#principled-implementation Failed reads and returned compiler text remain distinct rather than turning an unreadable path into a guessed file kind or claiming a decoded-text hash proves raw disk-byte equality.
+// @evidence contracts/common.md#clear-and-simple-design Read success and content digest form one predicate value.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No later file read manufactures missing evaluation-time content proof.
+// @evidence contracts/common.md#meaningful-documentation Native prose distinguishes failure from file-kind inference following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation The boundary value records the actual filesystem read result without assuming OS-specific absence semantics.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The filesystem observer owns hashing; this type describes a read result.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This predicate value does not coordinate reusable work.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The value owns no resource or independently retained collection.
 type TransformInputReadObservation struct {
-  OK   bool   `json:"ok"`
+  // OK reports whether the compiler's ReadFile call successfully returned text.
+  OK bool `json:"ok"`
+
+  // Hash is lowercase SHA-256 of the returned string's bytes, absent on failure.
   Hash string `json:"hash,omitempty"`
 }
 
-// TransformInputRealpathObservation is the exact result of one compiler
-// Realpath predicate or an identity read already performed beside a successful
-// existence predicate.
+// TransformInputRealpathObservation reports the filesystem adapter's Realpath
+// result, either queried directly or beside a successful existence predicate.
+// A nonempty result is cleaned and marked OK; the native VFS can return the
+// requested spelling when physical resolution fails, so OK alone is not an
+// independent certificate that every alias resolved physically.
+//
+// @evidence contracts/common.md#principled-implementation Reported Realpath identity remains separate from the lexical input; successful physical resolution can expose symlink/junction identity, while adapter fallback remains a reported spelling rather than proven physical identity.
+// @evidence contracts/common.md#clear-and-simple-design Success and resolved path form one identity predicate.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts An empty adapter result remains failed; a nonempty lexical fallback follows the adapter's actual result and is not independently relabeled as proven physical resolution.
+// @evidence contracts/common.md#meaningful-documentation Native prose specifies Realpath and adjacent existence observation following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Path carries the cleaned native adapter result, distinct from slash-normalized envelope keys. OK distinguishes empty from nonempty results, not every native resolution error: the pinned OS VFS returns its requested spelling on resolution/absolute-path error. No OS-name guess upgrades that fallback into a physical capability proof.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The observer owns native identity lookup; the type is its result.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work An identity value does not coordinate artifact reuse.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The value owns no resource or resident cache.
 type TransformInputRealpathObservation struct {
-  OK   bool   `json:"ok"`
+  // OK reports a nonempty adapter path, including any adapter lexical fallback.
+  OK bool `json:"ok"`
+
+  // Path is the cleaned native adapter result, not independent physical proof.
   Path string `json:"path,omitempty"`
 }
 
 // TransformInputEntriesObservation is the exact result of one compiler
-// GetAccessibleEntries predicate. Both lists retain TypeScript-Go's sorted
-// lexical child names, including followed directory links and junctions.
+// GetAccessibleEntries predicate. Both lists retain returned lexical child
+// names. The native VFS returns sorted entries and follows recognizable links
+// when target stat succeeds; errors or unclassifiable entries can be omitted.
+// An empty list pair is not an independent successful-enumeration certificate.
+//
+// @evidence contracts/common.md#principled-implementation Files and directories preserve the compiler enumeration result, including followed native links, as separate membership constraints.
+// @evidence contracts/common.md#clear-and-simple-design Two returned name lists represent one enumeration without collapsing file and directory membership or inventing an enumeration-success flag.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Directory members come from the observed native predicate rather than a later guessed glob.
+// @evidence contracts/common.md#meaningful-documentation Native prose states ordering, lexical names, and followed-link behavior following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Lists preserve returned native child names, not joined paths or physical identities. The native VFS distinguishes file/directory targets through stat for recognized links/reparse points; failed enumeration or target classification can omit names. Neither empty lists nor discarded link metadata certify complete native membership or an OS-default case policy.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The filesystem observer owns enumeration and copying; this type carries the result.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Membership data does not itself coordinate computation reuse.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The caller-owned predicate value owns no separate resource lifecycle.
 type TransformInputEntriesObservation struct {
+  // Directories contains the observed accessible child-directory names.
   Directories []string `json:"directories"`
-  Files       []string `json:"files"`
+
+  // Files contains the observed accessible child-file names.
+  Files []string `json:"files"`
 }
 
 // TransformInputObservation preserves independent compiler filesystem
 // predicates for one lexical path. False FileExists and true DirectoryExists
 // are compatible constraints, not a path-kind race.
+//
+// @evidence contracts/common.md#principled-implementation Independent FileExists, DirectoryExists, ReadFile, enumeration, stat, and identity predicates preserve compatible native answers without false kind conflicts.
+// @evidence contracts/common.md#clear-and-simple-design Optional fields distinguish unasked predicates from observed false values.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Missing predicates remain absent rather than being reconstructed from a collapsed hash projection.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains independent constraints and the nonconflicting example following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Actual native predicate results are represented explicitly without guessed filesystem capabilities or OS case policy.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The observer owns merge and compatibility algorithms; this type defines their proof representation.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The representation provides evidence to reuse owners without coordinating artifacts itself.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The proof value acquires no lease or independent resident cache.
 type TransformInputObservation struct {
-  AccessibleEntries *TransformInputEntriesObservation  `json:"accessibleEntries,omitempty"`
-  DirectoryExists   *bool                              `json:"directoryExists,omitempty"`
-  FileExists        *bool                              `json:"fileExists,omitempty"`
-  ReadFile          *TransformInputReadObservation     `json:"readFile,omitempty"`
-  Realpath          *TransformInputRealpathObservation `json:"realpath,omitempty"`
-  Stat              *string                            `json:"stat,omitempty"`
+  // AccessibleEntries records a requested directory-membership predicate.
+  AccessibleEntries *TransformInputEntriesObservation `json:"accessibleEntries,omitempty"`
+
+  // DirectoryExists records the requested directory predicate, including false.
+  DirectoryExists *bool `json:"directoryExists,omitempty"`
+
+  // FileExists records the requested file predicate, including false.
+  FileExists *bool `json:"fileExists,omitempty"`
+
+  // ReadFile records read success and the digest of returned compiler text.
+  ReadFile *TransformInputReadObservation `json:"readFile,omitempty"`
+
+  // Realpath records the adapter result, including any nonempty lexical fallback.
+  Realpath *TransformInputRealpathObservation `json:"realpath,omitempty"`
+
+  // Stat records "missing" for a null adapter result, otherwise directory/file.
+  Stat *string `json:"stat,omitempty"`
 }
 
 type observedInput struct {
@@ -80,7 +142,7 @@ type observedInput struct {
 // of attaching post-compile disk hashes to an earlier result.
 type inputObservationFS struct {
   vfs.FS
-  caseSensitive        bool
+  caseSensitivity      shimtspath.CaseSensitivity
   mu                   sync.Mutex
   observations         map[string]observedInput
   observationOrder     []string
@@ -90,14 +152,15 @@ type inputObservationFS struct {
 func newInputObservationFS(inner vfs.FS) *inputObservationFS {
   return &inputObservationFS{
     FS:                   inner,
-    caseSensitive:        inner.UseCaseSensitiveFileNames(),
+    caseSensitivity:      vfs.CaseSensitivityOf(inner),
     observations:         map[string]observedInput{},
     observationSpellings: map[string]string{},
   }
 }
 
-func (fs *inputObservationFS) FileExists(path string) bool {
-  exists := fs.FS.FileExists(path)
+func (fs *inputObservationFS) FileExists(file shimtspath.RootedFilePath) bool {
+  exists := fs.FS.FileExists(file)
+  path := shimtspath.RootedPath(file)
   proof := TransformInputObservation{FileExists: boolPointer(exists)}
   if exists {
     // Existence participates in resolution, but only ReadFile returns bytes
@@ -109,8 +172,9 @@ func (fs *inputObservationFS) FileExists(path string) bool {
   return exists
 }
 
-func (fs *inputObservationFS) ReadFile(path string) (string, bool) {
-  contents, ok := fs.FS.ReadFile(path)
+func (fs *inputObservationFS) ReadFile(file shimtspath.RootedFilePath) (string, bool) {
+  contents, ok := fs.FS.ReadFile(file)
+  path := shimtspath.RootedPath(file)
   if ok {
     digest := sha256.Sum256([]byte(contents))
     hash := hex.EncodeToString(digest[:])
@@ -130,8 +194,9 @@ func (fs *inputObservationFS) ReadFile(path string) (string, bool) {
   return contents, ok
 }
 
-func (fs *inputObservationFS) DirectoryExists(path string) bool {
-  exists := fs.FS.DirectoryExists(path)
+func (fs *inputObservationFS) DirectoryExists(directory shimtspath.RootedDirectoryPath) bool {
+  exists := fs.FS.DirectoryExists(directory)
+  path := shimtspath.RootedPath(directory)
   proof := TransformInputObservation{DirectoryExists: boolPointer(exists)}
   if exists {
     proof.Realpath = fs.currentRealpath(path)
@@ -140,9 +205,9 @@ func (fs *inputObservationFS) DirectoryExists(path string) bool {
   return exists
 }
 
-func (fs *inputObservationFS) GetAccessibleEntries(path string) vfs.Entries {
-  entries := fs.FS.GetAccessibleEntries(path)
-  fs.observe(path, observedInput{
+func (fs *inputObservationFS) GetAccessibleEntries(directory shimtspath.RootedDirectoryPath) vfs.Entries {
+  entries := fs.FS.GetAccessibleEntries(directory)
+  fs.observe(shimtspath.RootedPath(directory), observedInput{
     proof: TransformInputObservation{
       AccessibleEntries: &TransformInputEntriesObservation{
         Directories: append([]string{}, entries.Directories...),
@@ -153,7 +218,7 @@ func (fs *inputObservationFS) GetAccessibleEntries(path string) vfs.Entries {
   return entries
 }
 
-func (fs *inputObservationFS) Stat(path string) vfs.FileInfo {
+func (fs *inputObservationFS) Stat(path shimtspath.RootedPath) vfs.FileInfo {
   info := fs.FS.Stat(path)
   kind := "missing"
   if info == nil {
@@ -180,16 +245,16 @@ func (fs *inputObservationFS) Stat(path string) vfs.FileInfo {
   return info
 }
 
-func (fs *inputObservationFS) Realpath(path string) string {
+func (fs *inputObservationFS) Realpath(path shimtspath.RootedPath) shimtspath.RootedPath {
   realpath := fs.FS.Realpath(path)
   fs.observe(path, observedInput{
-    proof: TransformInputObservation{Realpath: realpathObservation(realpath)},
+    proof: TransformInputObservation{Realpath: realpathObservation(string(realpath))},
   })
   return realpath
 }
 
-func (fs *inputObservationFS) currentRealpath(path string) *TransformInputRealpathObservation {
-  return realpathObservation(fs.FS.Realpath(path))
+func (fs *inputObservationFS) currentRealpath(path shimtspath.RootedPath) *TransformInputRealpathObservation {
+  return realpathObservation(string(fs.FS.Realpath(path)))
 }
 
 func realpathObservation(realpath string) *TransformInputRealpathObservation {
@@ -206,17 +271,31 @@ func boolPointer(value bool) *bool {
   return &value
 }
 
+// readPaths snapshots the lexical reads already made through this observer.
+// LoadProgram calls it immediately after upstream argument parsing, before
+// configuration or source reads can enter the population. It performs no new
+// filesystem query and keeps failed/conflicting observations for graph proof.
+func (fs *inputObservationFS) readPaths() []string {
+  fs.mu.Lock()
+  defer fs.mu.Unlock()
+  paths := make([]string, 0, len(fs.observationOrder))
+  for _, key := range fs.observationOrder {
+    if fs.observations[key].proof.ReadFile != nil {
+      paths = append(paths, fs.observationSpellings[key])
+    }
+  }
+  return paths
+}
+
 func (fs *inputObservationFS) observationKey(path string) string {
   if !filepath.IsAbs(path) {
     return ""
   }
-  return shimtspath.GetCanonicalFileName(
-    shimtspath.NormalizePath(path),
-    fs.caseSensitive,
-  )
+  return shimtspath.Canonicalize(fs.caseSensitivity, shimtspath.NormalizePath(path))
 }
 
-func (fs *inputObservationFS) observe(path string, next observedInput) {
+func (fs *inputObservationFS) observe(rooted shimtspath.RootedPath, next observedInput) {
+  path := string(rooted)
   key := fs.observationKey(path)
   if key == "" {
     return
@@ -491,4 +570,52 @@ func (fs *inputObservationFS) proof(path string) (hash, realpath *string, failur
     return nil, nil, ""
   }
   return nil, nil, inputProofUnsupportedInputKind
+}
+
+// CompilerObservations reports every filesystem predicate the compiler asked
+// while this Program was loaded, checked and emitted, keyed by the native
+// absolute spelling each path was first asked under, and whether that
+// population is a complete proof of the Program's inputs.
+//
+// The compiler reads the disk only through this Program's observed filesystem,
+// so a later process that finds every reported predicate still answering as it
+// did would load the same Program: the same configuration, root files, resolved
+// modules and source text. A host can therefore prove a stored result from the
+// reported paths alone, without asking the compiler again, which a graph
+// projection cannot offer because it keeps only the predicates of the input
+// classes it names. Files embedded in the compiler binary are not filesystem
+// inputs and are not reported.
+//
+// complete is false when any path's predicates conflicted or failed, since the
+// Program was then built from more than one filesystem state, and when a
+// content mapper declared dependencies, which are declarations rather than
+// observed reads. An incomplete population authorizes no reuse.
+//
+// Call it after the last compiler operation whose reads must be covered. The
+// returned map is the caller's; later compiler reads do not change it.
+//
+// @evidence contracts/common.md#principled-implementation The observer wraps the only filesystem the compiler host is given, so its population is every question the compiler asked; equal answers to all of them reproduce the Program's inputs. Conflicting answers and declared, unobserved dependencies withdraw completeness instead of being reported as proof.
+// @evidence contracts/common.md#clear-and-simple-design One accessor projects the existing observer through its existing per-path proof; no second recorder or path class is introduced.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No path is re-read to repair a failed observation and no predicate is inferred for a path the compiler did not ask about.
+// @evidence contracts/common.md#meaningful-documentation Native prose states what the population proves, why a graph projection cannot stand for it, both incompleteness causes and when to call it.
+// @evidence contracts/portability.md#os-neutral-implementation Keys keep the native spelling the compiler asked under, cleaned by filepath; identity predicates carry the adapter's reported physical path, and no case policy is applied here.
+// @evidence contracts/performance.md#efficient-algorithms One pass over the P observed paths in first-observation order, each a keyed lookup under the observer's mutex; no filesystem request is made.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The accessor reports evidence; hosts decide reuse from it.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The returned map holds one predicate record per observed path and transfers to the caller; the observer keeps its own population for the Program's lifetime and no handle is acquired.
+func (p *Program) CompilerObservations() (observations map[string]TransformInputObservation, complete bool) {
+  if p == nil || p.inputObserver == nil {
+    return nil, false
+  }
+  paths := p.inputObserver.observedPaths()
+  observations = make(map[string]TransformInputObservation, len(paths))
+  complete = len(p.mapperDependencies) == 0 && p.mapperDependencyError == nil
+  for _, path := range paths {
+    observation, failure := p.inputObserver.predicateProof(path)
+    if failure != "" {
+      complete = false
+      continue
+    }
+    observations[path] = observation
+  }
+  return observations, complete
 }

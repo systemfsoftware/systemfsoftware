@@ -1,22 +1,36 @@
-import child_process from "node:child_process";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
-// Every temp dir handed out by this module is tracked here and removed on
-// process exit. Without this, each test case leaks one or more directories
+import { SidecarEnvironment } from "../../../packages/ttsc/lib/compiler/internal/sharedHost/SidecarEnvironment.js";
+import { E2eProcessTrace } from "./E2eProcessTrace";
+
+// Every temp dir handed out by this module is tracked here for process-exit
+// cleanup unless its owner explicitly retains unresolved process inputs.
+// Without this, each test case leaks one or more directories
 // under /tmp — across the full suite that runs into thousands of stale dirs
 // (the symptom that surfaced as Go-build ENOSPC when /tmp is a small tmpfs).
 const TRACKED_TEMP_DIRS = new Set<string>();
+const TEMP_IDENTITIES = new Map<string, readonly ITemporaryIdentity[]>();
+const RETAINED_TEMP_DIRS = new Set<string>();
 let cleanupHookRegistered = false;
 let sharedPluginCacheDir: string | undefined;
+
+interface ITemporaryIdentity {
+  readonly location: string;
+  readonly dev: number;
+  readonly ino: number;
+  readonly birthtimeMs: number;
+}
 
 function ensureCleanupHook(): void {
   if (cleanupHookRegistered) return;
   cleanupHookRegistered = true;
   process.on("exit", () => {
     for (const dir of TRACKED_TEMP_DIRS) {
+      if (RETAINED_TEMP_DIRS.has(dir)) continue;
       try {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch {
@@ -25,6 +39,7 @@ function ensureCleanupHook(): void {
       }
     }
     TRACKED_TEMP_DIRS.clear();
+    TEMP_IDENTITIES.clear();
   });
 }
 
@@ -35,14 +50,21 @@ function ensureCleanupHook(): void {
  * The helpers deliberately create project-shaped temporary directories because
  * many ttsc and ttsx behaviors depend on tsconfig discovery, package roots,
  * native binary resolution, and plugin-relative paths.
+ *
+ * @evidence contracts/common.md#principled-implementation Native filesystem and process operations construct real isolated compiler projects; recorded allocation identities distinguish owned roots from later aliases or replacements.
+ * @evidence contracts/common.md#clear-and-simple-design One namespace owns shared cache allocation, temporary-root tracking and the toolchain paths used by fixture consumers.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts These helpers execute real tools and use explicit fixture inputs; retained unknown-reader roots are refused for reuse rather than treated as closed.
+ * @evidence contracts/common.md#meaningful-documentation The namespace explains project-shaped roots; member documentation describes cache, cleanup and launcher ownership.
+ * @evidence contracts/portability.md#os-neutral-implementation Node native path, realpath and process APIs represent platform paths; native executable suffixes and platform package names are selected at the tool boundary.
+ * @evidence contracts/performance.md#efficient-algorithms Fixture materialization scales with file count and bytes, while allocation identity tracking visits only directory ancestors. Exit cleanup visits tracked allocations.
+ * @evidence contracts/performance.md#reuse-equivalent-work One process cache shares ordinary native builds while production content witnesses validate artifacts; cold and mutation cases select their own roots.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Tracked allocations last until process exit unless sticky retention transfers unresolved inputs to callers. Shared path strings persist for the process; immediate fixture removal does not prune allocation records.
  */
 export namespace TestProject {
   /** Repository root discovered from the caller's current working directory. */
   export const WORKSPACE_ROOT = findWorkspaceRoot(process.cwd());
   /** Root of the shared `@ttsc/testing` helper package. */
   export const TEST_PACKAGE_ROOT = path.join(WORKSPACE_ROOT, "tests", "utils");
-  /** Canonical fixture tree copied by project-shaped regression tests. */
-  export const PROJECTS_ROOT = path.join(WORKSPACE_ROOT, "tests", "projects");
   /** Require function scoped to `tests/utils` so helper deps resolve stably. */
   export const REQUIRE_FROM_TEST = createRequire(
     path.join(TEST_PACKAGE_ROOT, "package.json"),
@@ -82,17 +104,274 @@ export namespace TestProject {
   export const TSGO_BINARY = resolveTsgoBinary();
 
   /**
-   * Create a tracked temp directory under the OS temp root.
+   * Bind test children to an ignored physical temporary parent in the checkout.
    *
-   * The returned path is removed on process exit so the suite doesn't pile up
-   * stale directories under `/tmp` (each test typically needs a project root
-   * plus a plugin cache dir, and there are hundreds of cases).
+   * E2E startup calls this before entering the suite's native carrier. An
+   * already ignored repository parent retains its authority. Other inherited
+   * roots select the checkout's ignored cache directory, keeping junctioned
+   * workspace declarations on the same filesystem root as their consumers. The
+   * physical parent also fences implicit Git discovery so standalone fixtures
+   * do not inherit the checkout's ignore rules. Existing ceiling entries and
+   * explicit Git directory/work-tree selectors retain authority. Individual
+   * allocations retain their existing cleanup and retention owners; this
+   * operation does not remove the shared cache infrastructure directory.
+   *
+   * @evidence contracts/common.md#principled-implementation Native realpath and relative containment validate physical coordinates, and Git verifies ignore policy before fallback creation. Temporary names and a supported Git discovery ceiling bind before child inheritance; explicit Git selectors remain caller-owned.
+   * @evidence contracts/common.md#clear-and-simple-design The existing temporary allocation owner selects one parent; startup delegates here without adding an allocation registry or changing fixture populations.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Physical containment and actual Git ignore results govern selection without drive, dependency or fixture exceptions. Graph path semantics and real imported declarations are unchanged.
+   * @evidence contracts/common.md#meaningful-documentation The native paragraphs explain startup ordering, inherited authority, fallback and the retained per-allocation cleanup ownership.
+   * @evidence contracts/portability.md#os-neutral-implementation Native realpath observes aliases and junctions, path.relative checks checkout containment, and separate Git arguments avoid shell interpretation. The new Git-owned entry uses forward separators even after a caller's empty no-realpath sentinel, while POSIX literal backslashes remain unchanged. Native path.delimiter preserves list boundaries and the shared environment owner handles Windows name aliases without inferring filesystem case policy.
+   * @evidence contracts/performance.md#efficient-algorithms Startup resolves at most two candidate paths and runs bounded-output Git ignore queries without traversing a fixture tree. Ceiling lookup visits environment names and list text; exact-entry membership prevents repeated calls from growing the list with the same physical parent.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Selection observes the current inherited parent and ignore policy on each call and caches no validity claim.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Synchronous filesystem and Git observations settle before environment publication. The shared ignored cache directory remains infrastructure; children stay with their existing allocation and native retirement owners.
    */
-  export function tmpdir(prefix: string): string {
+  export function configureTemporaryEnvironment(
+    env: NodeJS.ProcessEnv = process.env,
+    inheritedRoot: string = os.tmpdir(),
+  ): string {
+    const workspace = fs.realpathSync.native(WORKSPACE_ROOT);
+    const ignored = (candidate: string): boolean => {
+      const relative = path.relative(workspace, candidate);
+      if (
+        !relative ||
+        path.isAbsolute(relative) ||
+        relative === ".." ||
+        relative.startsWith(".." + path.sep)
+      )
+        return false;
+      const result = spawnSync(
+        "git",
+        ["check-ignore", "--quiet", "--", relative],
+        {
+          cwd: workspace,
+          encoding: "utf8",
+          windowsHide: true,
+        },
+      );
+      if (result.error) throw result.error;
+      if (result.status !== 0 && result.status !== 1)
+        throw new Error(
+          "Unable to verify test temporary ignore policy: " + result.stderr,
+        );
+      return result.status === 0;
+    };
+    const physical = (candidate: string): string | undefined => {
+      try {
+        return fs.realpathSync.native(candidate);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR") return undefined;
+        throw error;
+      }
+    };
+    let parent = physical(inheritedRoot);
+    if (
+      parent === undefined ||
+      !fs.statSync(parent).isDirectory() ||
+      !ignored(parent)
+    ) {
+      const fallback = path.join(workspace, ".cache");
+      if (!ignored(fallback))
+        throw new Error(
+          "Test temporary parent must be Gitignored: " + fallback,
+        );
+      const existing = physical(fallback);
+      if (existing !== undefined && !ignored(existing))
+        throw new Error(
+          "Test temporary parent escapes ignored checkout storage: " + fallback,
+        );
+      fs.mkdirSync(fallback, { recursive: true });
+      parent = fs.realpathSync.native(fallback);
+      if (!ignored(parent))
+        throw new Error(
+          "Created test temporary parent escapes ignored checkout storage: " +
+            fallback,
+        );
+    }
+    env.TEMP = parent;
+    env.TMP = parent;
+    env.TMPDIR = parent;
+    const gitParent = parent.split(path.sep).join("/");
+    const ceiling = SidecarEnvironment.read(env, "GIT_CEILING_DIRECTORIES");
+    SidecarEnvironment.write(
+      env,
+      "GIT_CEILING_DIRECTORIES",
+      ceiling === undefined
+        ? gitParent
+        : ceiling.split(path.delimiter).includes(gitParent)
+          ? ceiling
+          : ceiling + path.delimiter + gitParent,
+    );
+    return parent;
+  }
+
+  /**
+   * Create a tracked temp directory under the supplied or OS temp root.
+   *
+   * The returned path is removed on process exit unless unresolved process
+   * ownership explicitly retains it or a nested tracked root. This prevents
+   * ordinary cases from leaving stale directories under the temporary root.
+   *
+   * @evidence contracts/common.md#principled-implementation mkdtemp creates an exclusive native directory; its physical root and ancestor identities are recorded for later retention validation.
+   * @evidence contracts/common.md#clear-and-simple-design Allocation, exit cleanup enrollment and identity capture share one owner, preventing unrelated helpers from independently claiming the same root.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The prefix and parent are caller inputs; native allocation supplies uniqueness instead of a fixture-specific fixed directory.
+   * @evidence contracts/common.md#meaningful-documentation The comment states parent selection, exit removal and the unresolved-reader retention exception.
+   * @evidence contracts/portability.md#os-neutral-implementation Node mkdir, mkdtemp, native realpath and lstat use the actual filesystem; no case policy is inferred from an OS name.
+   * @evidence contracts/performance.md#efficient-algorithms One allocation performs parent creation and O(depth) ancestor observations without reading fixture contents.
+   * @evidence contracts/performance.md#reuse-equivalent-work The process exit hook is installed once; allocation identities are captured once and later retention revalidates actual native objects.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The registry retains one entry and ancestor chain per allocation until process exit. Normal roots are removed best-effort on exit; sticky retained roots transfer reclamation to callers. Capture failure after allocation can leave a tracked root until exit.
+   */
+  export function tmpdir(prefix: string, parent: string = os.tmpdir()): string {
     ensureCleanupHook();
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    fs.mkdirSync(parent, { recursive: true });
+    const dir = fs.mkdtempSync(path.join(parent, prefix));
     TRACKED_TEMP_DIRS.add(dir);
+    const identities: ITemporaryIdentity[] = [];
+    let location = fs.realpathSync.native(dir);
+    while (true) {
+      const stat = fs.lstatSync(location);
+      identities.push({
+        location,
+        dev: stat.dev,
+        ino: stat.ino,
+        birthtimeMs: stat.birthtimeMs,
+      });
+      const next = path.dirname(location);
+      if (next === location) break;
+      location = next;
+    }
+    TEMP_IDENTITIES.set(dir, identities);
     return dir;
+  }
+
+  /**
+   * Keep an allocated root when a process may still read its inputs.
+   *
+   * Only the exact returned spelling and its original native directory and
+   * ancestor identities can transfer out of exit cleanup. Retention is sticky:
+   * the caller reports the unresolved descendant and owns later reclamation
+   * after joining it. This operation never allocates or follows a foreign root.
+   * Tracked ancestors are withheld too, so their recursive cleanup cannot erase
+   * retained inputs. Failed identity validation also withdraws cleanup
+   * authority over the obsolete spelling without accepting retention identity.
+   * Existing one-argument fixture owners use an explicit pending-closure
+   * reason; neither that default nor a supplied reason certifies a live process
+   * or join.
+   *
+   * @evidence contracts/common.md#principled-implementation Allocation records the physical directory and ancestor identities; retention checks the same native objects before withholding that exact owned root from exit cleanup.
+   * @evidence contracts/common.md#clear-and-simple-design One explicit transfer changes only an existing tracked allocation; ordinary allocations retain their exit cleanup behavior.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Aliases, links, replaced or removed directories and untracked inputs cannot acquire retention authority. It does not manufacture process-join evidence.
+   * @evidence contracts/common.md#meaningful-documentation States the exact spelling requirement, sticky transfer, diagnostic reason and caller's unresolved reclamation responsibility.
+   * @evidence contracts/portability.md#os-neutral-implementation Native realpath and lstat distinguish actual directories from path aliases and reparse links; dev, ino and birth time compare the recorded filesystem identity without assuming case policy.
+   * @evidence contracts/performance.md#efficient-algorithms Captures directory ancestors once per allocation. Retention validates that depth and scans the finite tracked allocation population to withhold actual ancestor owners without traversing fixture contents.
+   * @evidence contracts/performance.md#reuse-equivalent-work The recorded identity can authorize repeated retention only while every original directory and ancestor remains the same native object; changed identities are refused rather than reused.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Normal roots remain exit-owned; unresolved roots and tracked ancestors transfer to caller-owned later reclamation. The retained population grows with unresolved allocations, and no automatic release is claimed before descendant closure is established.
+   */
+  export function retainTemporaryDirectory(
+    root: string,
+    reason: string = "Caller retains fixture inputs pending process closure observation",
+  ): void {
+    const identities = TEMP_IDENTITIES.get(root);
+    if (!TRACKED_TEMP_DIRS.has(root) || !identities || !reason.trim())
+      throw new Error(
+        "Temporary retention requires an owned allocation and reason: " + root,
+      );
+    try {
+      const rootStat = fs.lstatSync(root);
+      if (
+        rootStat.isSymbolicLink() ||
+        fs.realpathSync.native(root) !== identities[0]!.location
+      )
+        throw new Error(
+          "Temporary retention refuses an aliased or linked root: " + root,
+        );
+      for (const identity of identities) {
+        const stat = fs.lstatSync(identity.location);
+        if (
+          !stat.isDirectory() ||
+          stat.isSymbolicLink() ||
+          fs.realpathSync.native(identity.location) !== identity.location ||
+          stat.dev !== identity.dev ||
+          stat.ino !== identity.ino ||
+          stat.birthtimeMs !== identity.birthtimeMs
+        )
+          throw new Error(
+            "Temporary retention identity changed: " + identity.location,
+          );
+      }
+    } catch (error) {
+      // An obsolete allocation spelling cannot authorize later removal of the
+      // occupant either. Ancestor allocations must not remove it indirectly.
+      withholdTemporaryCleanup(identities, reason, "Cleanup authority refused");
+      throw error;
+    }
+    withholdTemporaryCleanup(
+      identities,
+      reason,
+      "Retained owned temporary directory",
+    );
+  }
+
+  function withholdTemporaryCleanup(
+    identities: readonly ITemporaryIdentity[],
+    reason: string,
+    description: string,
+  ): void {
+    const ancestors = new Set(identities.map((identity) => identity.location));
+    for (const [allocation, recorded] of TEMP_IDENTITIES) {
+      if (
+        !ancestors.has(recorded[0]!.location) ||
+        RETAINED_TEMP_DIRS.has(allocation)
+      )
+        continue;
+      RETAINED_TEMP_DIRS.add(allocation);
+      console.error(description + ": " + allocation + "\nReason: " + reason);
+    }
+  }
+
+  /**
+   * Retain an already allocated shared cache without creating one.
+   *
+   * Environment-selected cache roots belong to their external owner. This
+   * operation cannot retain or release those paths; subsequent reuse of an
+   * internally retained cache is refused.
+   *
+   * @evidence contracts/common.md#principled-implementation Only the module's recorded allocation can transfer through native directory identity validation; an environment path supplies no allocation authority.
+   * @evidence contracts/common.md#clear-and-simple-design Delegates the single existing cache root to the allocation owner without creating a second lifecycle registry.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Does not allocate replacement work or mutate a foreign cache to conceal unknown descendant completion.
+   * @evidence contracts/common.md#meaningful-documentation Describes the no-allocation boundary, foreign ownership and refusal of later internally retained cache reuse.
+   *
+   * @evidence contracts/portability.md#os-neutral-implementation The delegated retention owner checks native directory and ancestor identities; this wrapper does not infer identity from spelling.
+   * @evidence contracts/performance.md#efficient-algorithms The wrapper performs one optional delegation; retention cost scales with its recorded ancestors and tracked allocations.
+   * @evidence contracts/performance.md#reuse-equivalent-work Repeated retention uses the same owned allocation and its original identity checks, not a new cache or closure claim.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources No new resource is acquired. Existing cache cleanup transfers to the unresolved reader's caller and future shared-cache consumers are refused.
+   */
+  export function retainSharedPluginCache(reason: string): void {
+    if (sharedPluginCacheDir !== undefined)
+      retainTemporaryDirectory(sharedPluginCacheDir, reason);
+  }
+
+  /**
+   * Return the spelling the filesystem names an existing path by.
+   *
+   * The OS temp root is often reached through another spelling: `/var` links to
+   * `/private/var` on macOS, and Windows can hand out an 8.3 short name such as
+   * `RUNNER~1`. ttsc reports a project by its physical location, so a case that
+   * compares a reported path with the fixture root it created starts from this
+   * spelling. `.native` also expands a Windows short component that plain
+   * `fs.realpathSync` can retain.
+   *
+   * @evidence contracts/common.md#principled-implementation Native realpath resolves the actual existing filesystem entry, including native aliases and linked ancestors.
+   * @evidence contracts/common.md#clear-and-simple-design One operation owns physical spelling conversion for fixture comparisons.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Actual resolution failures propagate; no lexical normalization pretends to observe an existing object.
+   * @evidence contracts/common.md#meaningful-documentation The native paragraph explains macOS temp aliases and Windows short-name expansion needed for reported-path comparisons.
+   * @evidence contracts/portability.md#os-neutral-implementation realpathSync.native obtains platform filesystem spelling without lowercasing or assuming case sensitivity.
+   * @evidence contracts/performance.md#efficient-algorithms One native realpath operation follows the supplied path; it does not enumerate fixture contents.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work This path observation coordinates no shared computation; each call resolves the current filesystem.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The synchronous realpath operation retains no handle, task or cache after return.
+   */
+  export function physicalPath(location: string): string {
+    return fs.realpathSync.native(location);
   }
 
   /**
@@ -102,12 +381,53 @@ export namespace TestProject {
    * directories in one process. Keeping this owner here prevents each helper
    * module from allocating a different "shared" cache and paying the same Go
    * plugin build again. Tests that observe cold builds or cache lifecycle still
-   * pass their own explicit `tmpdir`.
+   * pass their own explicit `tmpdir`. A retained internally owned cache has
+   * unresolved readers and cannot serve a new consumer in this process. The
+   * first caller can select the existing tmpdir parent contract when its owned
+   * project and relative cache arguments must share a filesystem root. An
+   * existing allocation or externally selected cache is never relocated.
+   *
+   * @evidence contracts/common.md#principled-implementation The first ordinary consumer selects an allocated cache unless an external environment root is supplied; retained internally owned inputs refuse later consumers.
+   * @evidence contracts/common.md#clear-and-simple-design One process-level slot prevents distinct fixture helpers from allocating separate ordinary native caches.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Cold scenarios retain explicit separate roots; the shared slot does not certify artifact validity or substitute cached compiler output.
+   * @evidence contracts/common.md#meaningful-documentation The paragraphs explain caller parent selection, external cache precedence and refusal after unresolved ownership.
+   * @evidence contracts/portability.md#os-neutral-implementation Native tmpdir and join operations locate the cache; external paths retain their supplied spelling and belong to their external owner.
+   * @evidence contracts/performance.md#efficient-algorithms Selection is constant work after the first allocation; first allocation captures directory ancestors through tmpdir.
+   * @evidence contracts/performance.md#reuse-equivalent-work Consumers share the same selected cache location. Production native build witnesses, rather than this path memo, establish artifact equivalence. The environment is consulted on every call.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources At most one internally allocated cache path is retained per process and is exit-owned unless retained for unresolved readers. External caches are not removed here.
    */
-  export function sharedPluginCache(): string {
+  export function sharedPluginCache(parent?: string): string {
+    if (
+      sharedPluginCacheDir !== undefined &&
+      RETAINED_TEMP_DIRS.has(sharedPluginCacheDir)
+    )
+      throw new Error(
+        "Shared plugin cache has an unresolved process owner: " +
+          sharedPluginCacheDir,
+      );
     return (
       process.env.TTSC_TEST_CACHE_DIR ??
-      (sharedPluginCacheDir ??= tmpdir("ttsc-shared-plugin-cache-"))
+      (sharedPluginCacheDir ??= tmpdir("ttsc-shared-plugin-cache-", parent))
+    );
+  }
+
+  /**
+   * Share Go objects even when a case deliberately uses a cold plugin root.
+   *
+   * @evidence contracts/common.md#principled-implementation Explicit test Go cache, inherited GOCACHE and a shared fixture cache form the documented precedence for actual Go object storage.
+   * @evidence contracts/common.md#clear-and-simple-design One expression centralizes Go cache selection for compiler-spawning helpers.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts No Go result or source identity is fabricated; Go owns admission of cached objects.
+   * @evidence contracts/common.md#meaningful-documentation The headline explains reuse even when a scenario deliberately chooses a cold plugin cache.
+   * @evidence contracts/portability.md#os-neutral-implementation Native join constructs the default subdirectory; explicit environment values are passed to Go without shell rewriting.
+   * @evidence contracts/performance.md#efficient-algorithms Selection is constant work aside from first shared-plugin-cache allocation.
+   * @evidence contracts/performance.md#reuse-equivalent-work Equivalent Go compilations may share the selected GOCACHE under Go's own object validation; changing the environment changes the selected location.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources This returns a path and owns no Go process. The internally allocated parent is exit-owned; externally selected Go cache contents remain externally owned.
+   */
+  export function sharedGoBuildCache(): string {
+    return (
+      process.env.TTSC_GO_CACHE_DIR ||
+      process.env.GOCACHE ||
+      path.join(sharedPluginCache(), "go-build")
     );
   }
 
@@ -116,6 +436,15 @@ export namespace TestProject {
    *
    * The project directory survives until the test process exits so assertions
    * can still inspect output files after the command under test returns.
+   *
+   * @evidence contracts/common.md#principled-implementation A unique tracked root is populated with the caller's UTF-8 file map, yielding a real writable fixture.
+   * @evidence contracts/common.md#clear-and-simple-design Allocation and writing delegate to the existing temporary-root and file-map owners.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Caller-authored inputs are written as supplied; no compiler output is synthesized.
+   * @evidence contracts/common.md#meaningful-documentation The paragraph states isolation and process-exit lifetime for later output assertions.
+   * @evidence contracts/portability.md#os-neutral-implementation Native tmpdir and file-map writing construct filesystem paths; callers must supply trusted relative names.
+   * @evidence contracts/performance.md#efficient-algorithms Materialization visits each map entry and writes its content once, with parent creation per entry.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each call intentionally allocates distinct mutable fixture inputs and shares no completed materialization.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The root remains tracked until process exit, including when writing fails; the caller may remove it earlier and exit cleanup tolerates absence.
    */
   export function createProject(files: Record<string, string>) {
     const root = tmpdir("ttsc-smoke-");
@@ -124,19 +453,22 @@ export namespace TestProject {
   }
 
   /**
-   * Copy a checked-in fixture project into a writable temp directory.
+   * Recursively copy a fixture tree into a writable temp project.
    *
-   * Project fixtures cover behaviors where directory layout matters more than a
-   * small synthetic file map, such as entry discovery or package boundaries.
+   * Regular-file bytes are copied and directories are recreated. Nested links
+   * and nonregular entries are skipped; file metadata is not part of this
+   * helper's contract. The caller owns the destination and any partial copy
+   * left after an error.
+   *
+   * @evidence contracts/common.md#principled-implementation Dirent kinds select directories for recursive copy and regular files for byte-preserving copy; other entry kinds are omitted.
+   * @evidence contracts/common.md#clear-and-simple-design One recursive copier owns ordinary fixture-tree materialization without dependency-installation policy.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The actual source tree supplies every copied byte; no expected output or global filesystem method is replaced.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies recursive copying; nested links and nonregular entries are intentionally not copied, so callers needing them must supply a separate native boundary.
+   * @evidence contracts/portability.md#os-neutral-implementation Native joins and copyFile use real entry names; nested symlinks are skipped rather than followed, and copyFile does not promise metadata preservation.
+   * @evidence contracts/performance.md#efficient-algorithms Each visited directory is enumerated once and each regular file copied once; recursion space grows with depth and active directory listings.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Every call copies current mutable source input; this copier establishes no cross-call cache identity.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Synchronous operations settle before return; destination files belong to the caller and partial copies remain after failure. No persistent handle or background task is retained.
    */
-  export function copyProject(name: string) {
-    const source = path.join(PROJECTS_ROOT, name);
-    const root = tmpdir(`ttsc-${name}-`);
-    copyDirectory(source, root);
-    return root;
-  }
-
-  /** Recursively copy a fixture tree into a writable temp project. */
   export function copyDirectory(source: string, target: string) {
     fs.mkdirSync(target, { recursive: true });
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
@@ -150,7 +482,42 @@ export namespace TestProject {
     }
   }
 
-  /** Materialize a relative-path file map under the target project root. */
+  /**
+   * Rename an owned fixture path and await the native operation's result.
+   *
+   * Native refusal is an actual failed filesystem transition. The caller owns
+   * its watcher or process cleanup; elapsed age neither converts a pending
+   * operation into failure nor certifies that a held native path was released.
+   *
+   * @evidence contracts/common.md#principled-implementation The native promise settles only from the filesystem rename result, preserving its actual success or error.
+   * @evidence contracts/common.md#clear-and-simple-design One awaited native operation leaves watcher and process lifetime authority with the caller that owns those resources.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts No elapsed deadline, renamed retry budget or inferred handle release changes the native result.
+   * @evidence contracts/common.md#meaningful-documentation States native completion and the caller's independent resource cleanup responsibility.
+   * @evidence contracts/portability.md#os-neutral-implementation Node's filesystem promise uses native paths and reports the platform's actual rename errors without classifying them by OS name.
+   * @evidence contracts/performance.md#efficient-algorithms One native rename performs the filesystem transition without repeated pathname polling.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Rename is an effectful transition and is never cached or shared between requests.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The awaited native operation owns its pending request until settlement; the caller retains ownership of source, destination and any active watchers.
+   */
+  export async function rename(from: string, to: string): Promise<void> {
+    await fs.promises.rename(from, to);
+  }
+
+  /**
+   * Materialize a relative-path file map under the target project root.
+   *
+   * Keys are trusted authored fixture input. This helper does not reject path
+   * traversal or stop existing symlinks from leaving root. Writes replace
+   * existing contents sequentially and leave earlier writes after an error.
+   *
+   * @evidence contracts/common.md#principled-implementation Each trusted map key is joined to the caller root, its parent is created and its UTF-8 contents replace the named file.
+   * @evidence contracts/common.md#clear-and-simple-design One loop keeps parent creation and writing beside the fixture map it materializes.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The map is authored test input, not product output; no compiler or foreign function is substituted.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies relative file-map materialization; callers own path containment and the destination tree.
+   * @evidence contracts/portability.md#os-neutral-implementation Native join and mkdir preserve platform separators. This helper accepts trusted authored keys and does not enforce traversal or symlink containment.
+   * @evidence contracts/performance.md#efficient-algorithms Each entry is visited once and each content written once; mkdir may revisit shared parents, with work proportional to total key and content size.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Writes are mutable fixture effects and are not reused across calls; recursive mkdir handles already existing parents natively.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources All writes are synchronous; the caller owns created files and partial writes remain on failure. Entry arrays last only through this invocation.
+   */
   export function writeFiles(root: string, files: Record<string, string>) {
     for (const [name, contents] of Object.entries(files) as [
       string,
@@ -162,7 +529,20 @@ export namespace TestProject {
     }
   }
 
-  /** Serialize the standard minimal tsconfig shape used by synthetic projects. */
+  /**
+   * Serialize the standard minimal tsconfig shape used by synthetic projects.
+   *
+   * Extra fields override the standard compilerOptions and include fields.
+   *
+   * @evidence contracts/common.md#principled-implementation Object spread gives explicit extra fields precedence over the standard compilerOptions and include fields before JSON serialization.
+   * @evidence contracts/common.md#clear-and-simple-design One serializer owns the minimal synthetic tsconfig shape.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Caller options control the fixture; no consumer identity or expected compiler result changes serialization.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies the minimal config serializer; extra fields may deliberately override include or compilerOptions.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation This operation serializes ordinary JavaScript values and performs no native path or process operation.
+   * @evidence contracts/performance.md#efficient-algorithms Serialization visits the supplied JSON-shaped value graph and allocates its encoded text; circular inputs fail through JSON.stringify.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each call serializes its current options without retained results or shared requests.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources No handles or retained state are acquired; the returned string belongs to the caller.
+   */
   export function tsconfig(
     compilerOptions: Record<string, unknown>,
     extra: any = {},
@@ -184,6 +564,15 @@ export namespace TestProject {
    * all: `commonJsProject(files, { compilerOptions: { rootDir: undefined } })`.
    * That shape is not a variation on the defaults but the one every default
    * hides — a project whose output layout the compiler has to infer.
+   *
+   * @evidence contracts/common.md#principled-implementation Defaults are merged below caller compiler options and undefined-valued options are removed, so explicit omission reaches native compiler inference.
+   * @evidence contracts/common.md#clear-and-simple-design One fixture constructor delegates JSON serialization and materialization while the private filter owns undefined removal.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts ES2022/CommonJS defaults are the test helper contract; caller overrides preserve cases those defaults would otherwise hide.
+   * @evidence contracts/common.md#meaningful-documentation The native paragraphs explain strict defaults and how undefined removes rootDir or outDir.
+   * @evidence contracts/portability.md#os-neutral-implementation The delegated project owner uses native filesystem paths; file names remain trusted caller-authored inputs.
+   * @evidence contracts/performance.md#efficient-algorithms Option filtering is linear in compiler option count, then serialization and writing scale with the fixture map's bytes.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Every invocation creates a distinct mutable project; no authored input or output is reused as a prior fixture result.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The delegated project root is tracked for process-exit cleanup and partial preparation remains under that same owner.
    */
   export function commonJsProject(
     files: Record<string, string>,
@@ -231,32 +620,161 @@ export namespace TestProject {
    * Passing launcher paths runs them through the current Node executable, which
    * keeps shebang and executable-bit differences from affecting cross-platform
    * test results.
+   *
+   * @evidence contracts/common.md#principled-implementation Built JS launchers run through the current Node executable; native commands run directly with explicit argument arrays and toolchain environment defaults.
+   * @evidence contracts/common.md#clear-and-simple-design One traced synchronous process boundary centralizes binary selection, environment merging and captured output.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Real child execution supplies status and output; errors are exposed through stderr only when no native stderr exists, and no success is fabricated.
+   * @evidence contracts/common.md#meaningful-documentation The paragraph explains Node launcher selection and cross-platform executable semantics; caller env overrides tool defaults.
+   * @evidence contracts/portability.md#os-neutral-implementation Node receives separate executable and argv values with windowsHide; the native binary package and .exe suffix are selected explicitly without shell quoting.
+   * @evidence contracts/performance.md#efficient-algorithms One process is started per call; captured output is bounded by the 64MiB maxBuffer and actual child work dominates.
+   * @evidence contracts/performance.md#reuse-equivalent-work Shared Go cache selection avoids duplicate equivalent object builds under Go's validation; process results are never reused.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources spawnSync waits for the direct child and closes its pipes; this wrapper does not join arbitrary descendants. Caller owners retain fixture inputs when descendant closure is unknown.
    */
   export function spawn(command: string, args: string[], options: any = {}) {
-    const usesNodeLauncher = command === TTSC_BIN || command === TTSX_BIN;
-    const result = child_process.spawnSync(
-      usesNodeLauncher ? process.execPath : command,
-      [...(usesNodeLauncher ? [command] : []), ...args],
-      {
-        ...options,
-        env: {
-          ...process.env,
-          TTSC_BINARY: NATIVE_BINARY,
-          TTSC_TSGO_BINARY: TSGO_BINARY,
-          ...options.env,
-        },
-        encoding: "utf8",
-        maxBuffer: 1024 * 1024 * 64,
-        windowsHide: true,
-      },
-    );
+    const selected = processInputs(command, args, options);
+    const result = E2eProcessTrace.spawnSync(selected.command, selected.args, {
+      ...selected.options,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024 * 64,
+      windowsHide: true,
+    });
     if (result.error && !result.stderr) {
       result.stderr = result.error.message;
     }
     return result;
   }
 
-  /** Execute a built JavaScript file through the same spawn wrapper. */
+  /**
+   * Capture a real command while allowing the caller's event loop to serve
+   * authenticated descendants. Launcher selection and environment precedence
+   * are shared with spawn. Each pipe is bounded to 64MiB; overflow requests the
+   * original direct child's termination and still awaits its actual close.
+   * Arbitrary descendant lifetime remains the caller's responsibility.
+   *
+   * @evidence contracts/common.md#principled-implementation The original traced spawn runs exact argv and shared environment selection; byte-bounded pipes decode once after actual close and error/status/signal remain separate.
+   * @evidence contracts/common.md#clear-and-simple-design One asynchronous sibling reuses the original process-input owner rather than copying tool defaults into consumers.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts No process result or descendant certificate is synthesized; overflow/abort requests termination but cannot settle before the returned ChildProcess closes.
+   * @evidence contracts/common.md#meaningful-documentation Explains live event-loop purpose, per-pipe cap, actual direct-child join and caller-owned descendants.
+   * @evidence contracts/portability.md#os-neutral-implementation Separate executable/argv and windowsHide preserve the synchronous wrapper's native launch representation; supported ChildProcess events supply actual status and signal.
+   * @evidence contracts/performance.md#efficient-algorithms Each captured chunk is retained once up to the per-stream cap, concatenated and decoded once at close; memory scales with bounded captured bytes.
+   * @evidence contracts/performance.md#reuse-equivalent-work Shared launcher/environment selection and Go cache authority serve sync/async callers; each command executes independently.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Error/close listeners are installed immediately, streams remain owned until actual close, and overflow retains the original error while awaiting termination; no process-duration deadline or descendant proof is introduced.
+   */
+  export async function spawnAsync(
+    command: string,
+    args: string[],
+    options: any = {},
+  ): Promise<SpawnSyncReturns<string>> {
+    const selected = processInputs(command, args, options);
+    if (
+      options.input !== undefined &&
+      typeof options.input !== "string" &&
+      !ArrayBuffer.isView(options.input)
+    )
+      throw new TypeError("Command input must be a string or byte view");
+    const input = ArrayBuffer.isView(options.input)
+      ? Buffer.from(
+          options.input.buffer,
+          options.input.byteOffset,
+          options.input.byteLength,
+        )
+      : options.input;
+    return await new Promise<SpawnSyncReturns<string>>((resolve) => {
+      const chunks: Buffer[][] = [[], []];
+      const sizes = [0, 0];
+      let error: Error | undefined;
+      let overflowRequested = false;
+      const child = E2eProcessTrace.spawn(selected.command, selected.args, {
+        ...selected.options,
+        windowsHide: true,
+      });
+      const capture = (index: number, value: Buffer): void => {
+        const limit = 64 * 1024 * 1024;
+        const available = limit - sizes[index]!;
+        if (available > 0) chunks[index]!.push(value.subarray(0, available));
+        sizes[index] = sizes[index]! + Math.min(value.length, available);
+        if (value.length > available && !overflowRequested) {
+          overflowRequested = true;
+          const overflow = Object.assign(
+            new Error("Command output exceeds 64MiB"),
+            { code: "ENOBUFS" },
+          );
+          error = error
+            ? new AggregateError([error, overflow], "Command output overflow")
+            : overflow;
+          try {
+            child.kill(options.killSignal ?? "SIGTERM");
+          } catch (cause) {
+            error = new AggregateError(
+              [error, cause],
+              "Output overflow termination failed",
+            );
+          }
+        }
+      };
+      child.stdout?.on("data", (value: Buffer) => capture(0, value));
+      child.stderr?.on("data", (value: Buffer) => capture(1, value));
+      child.stdout?.on("error", (cause) => {
+        error ??= cause;
+      });
+      child.stderr?.on("error", (cause) => {
+        error ??= cause;
+      });
+      child.once("error", (cause) => {
+        error ??= cause;
+      });
+      child.once("close", (status, signal) => {
+        const stdout = Buffer.concat(chunks[0]!).toString("utf8");
+        const stderr =
+          Buffer.concat(chunks[1]!).toString("utf8") || error?.message || "";
+        resolve({
+          pid: child.pid ?? 0,
+          status,
+          signal,
+          error,
+          stdout,
+          stderr,
+          output: [null, stdout, stderr],
+        });
+      });
+      child.stdin?.on("error", (cause) => {
+        error ??= cause;
+      });
+      child.stdin?.end(input);
+    });
+  }
+
+  /** Common launcher representation and caller-over-tool environment authority. */
+  function processInputs(command: string, args: string[], options: any) {
+    const usesNodeLauncher = command === TTSC_BIN || command === TTSX_BIN;
+    return {
+      command: usesNodeLauncher ? process.execPath : command,
+      args: [...(usesNodeLauncher ? [command] : []), ...args],
+      options: {
+        ...options,
+        env: {
+          ...process.env,
+          TTSC_BINARY: NATIVE_BINARY,
+          TTSC_TSGO_BINARY: TSGO_BINARY,
+          GOCACHE: sharedGoBuildCache(),
+          ...options.env,
+        },
+      },
+    };
+  }
+
+  /**
+   * Execute a built JavaScript file through the same spawn wrapper.
+   *
+   * @evidence contracts/common.md#principled-implementation The current Node executable receives the exact built file as its first argument through the existing spawn boundary.
+   * @evidence contracts/common.md#clear-and-simple-design One adapter delegates toolchain environment and result capture to spawn.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The actual JavaScript child executes; the helper does not fabricate its output or status.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies built-file execution through the common spawn wrapper.
+   * @evidence contracts/portability.md#os-neutral-implementation process.execPath and separate argv avoid shebang and executable-bit differences on native platforms.
+   * @evidence contracts/performance.md#efficient-algorithms One delegation starts one child; output and execution costs follow spawn.
+   * @evidence contracts/performance.md#reuse-equivalent-work The common Go-cache selection remains shared; each requested Node execution still runs independently.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources The synchronous child result returns after direct-child termination; fixture and descendant lifetime remain with the calling case.
+   */
   export function runNode(file: string, options: any = {}) {
     return spawn(process.execPath, [file], options);
   }
@@ -264,6 +782,15 @@ export namespace TestProject {
   /**
    * Resolve the pinned native TypeScript `tsc` binary through the `typescript`
    * package.
+   *
+   * @evidence contracts/common.md#principled-implementation Resolution starts at the actual typescript manifest and resolves its matching platform dependency before choosing the native tsc file.
+   * @evidence contracts/common.md#clear-and-simple-design One resolver owns package-root discovery and platform executable spelling for shared tests.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Actual package resolution failures propagate; a guessed fallback compiler cannot replace the pinned dependency.
+   * @evidence contracts/common.md#meaningful-documentation The comment identifies the pinned native TypeScript executable and package-based resolution.
+   * @evidence contracts/portability.md#os-neutral-implementation Platform and architecture select the native package contract, and win32 selects its .exe filename; path construction uses native joins.
+   * @evidence contracts/performance.md#efficient-algorithms Two Node package resolutions and a constant number of path operations locate the compiler without scanning the workspace.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work The resolver itself caches no result; module constants choose their own stable process input lifetime.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Package resolution and path calculation retain no open handle, child or mutable cache here.
    */
   export function resolveTsgoBinary() {
     const packageJson = REQUIRE_FROM_TEST.resolve("typescript/package.json", {

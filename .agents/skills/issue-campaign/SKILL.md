@@ -1,83 +1,31 @@
 ---
 name: issue-campaign
-description: "Defines the default solo repository-wide issue campaign for ttsc: repeated full-scope discovery to an empty round before each unified CI-validated implementation pull request, lead-vetted issue publication, mandatory Individual and Overall Self-Review, and renewed cycles until a cycle discovers nothing. Use for broad audits, many issue candidates, or repeated issue-to-pull-request campaigns unless the user explicitly requests parallel or multi-agent execution; do not use for one already-defined issue or an ordinary pull request."
+description: Runs ttsc's issue campaign, repeating full discovery rounds until one finds nothing new, publishing the issues, and landing them in one pull request per cycle. Use for a broad audit or repeated issue-to-pull-request work, not for one defined issue.
 ---
 
 # Issue Campaign
 
-An issue campaign is a repeatable solo sequence. Each cycle saturates exhaustive discovery against one integrated repository state, publishes the accepted issues, and opens one unified implementation pull request only after a complete fresh discovery round is empty. A merge starts the next cycle against the new integrated state. The main agent owns every phase and spawns no subagent other than the mandatory read-only Individual Self-Review that [development.md](development.md#implement-and-write-tests) defines for each coherent pushed issue-implementation commit.
+A cycle audits the target branch until a discovery round finds nothing new, then lands every accepted issue in one pull request whose merge starts the next cycle. Stay within the phases the user authorized; an audit-only request publishes and pushes nothing. Discover and fix only within the campaign's named topic, and say so at once if the work must reach beyond it.
 
-Use the [multi-agent skill](../multi-agent/SKILL.md) and its issue-campaign procedure instead only when the user explicitly asks for a parallel or multi-agent issue campaign.
+## Discovery
 
-The user's requested phase boundary controls how far to proceed. Do not infer permission to publish issues, push branches, open pull requests, or merge from an audit-only request.
+1. Run a complete round under the [review law](../review/SKILL.md) over the declared scope, including real workflows, related issues and pull requests, and the [contracts](../contracts/SKILL.md) even where tests pass.
+2. Check each candidate's owner, history, and duplicates, then accept, merge, split, or reject it.
+3. Repeat complete rounds on the same baseline until one finds nothing meaningful. That freezes the accepted set; a target-branch change restarts discovery.
 
-Apply [AGENTS.md's **Choose the principled course** rule](../../../AGENTS.md#attitude) to every admission, disposition, implementation, and review decision.
+## Issues
 
-Read the project and review skills before starting. Use the review skill's Solo Issue Discovery Rounds. Read [development.md](development.md) in full only when implementation is authorized.
+With publication authority, write each accepted issue so a fresh agent can start from it alone: the problem, reproduction and root cause, consequence surface and case matrix, the invariant to restore, acceptance cases with commands, and dependencies.
 
-## Campaign Knowledge Base
+## Pull Request
 
-Create `.wiki/<campaign>/` with a short filesystem-safe campaign name. Preserve and reconcile an existing campaign directory.
+1. Branch from the baseline, push an empty commit (`git commit --allow-empty`), and open one draft pull request listing every cycle issue, with no closing keywords.
+2. Implement every issue in dependency order with its tests. Drop an issue only as a duplicate, invalid, out of scope, or externally blocked, and say so on the issue.
+3. End each resolving commit with `Close #n: <title>` per issue. A revert must drop that line, and a squash still carries the reverted commit's line.
+4. After each pushed commit, run [Individual Self-Review](../review/SKILL.md#individual-self-review) and record it as a `COMMENT` review.
+5. On the integrated head, run [Overall Self-Review](../review/SKILL.md#overall-self-review) while CI runs. Fix every failed check, pre-existing ones included, and repeat on the new head.
+6. Read the [development validation guide](../development/validation.md) and format, then [merge](../pull-request/SKILL.md) with authority once one head is green and review-clean. First read `git log origin/master..HEAD` to confirm each closed issue keeps its fix, and reopen any that does not.
+7. After merge and any release authorized for the delivery, comment on each resolved issue with a brief description of its fix and, when applicable, the released version.
+8. Then `git pull --ff-only` on `master`, delete the topic branch, remove only the temporary paths the campaign created, and start the next cycle.
 
-Keep concise, current Markdown documents for:
-
-- repository provenance, architecture, validation ownership, and product boundaries;
-- experiments, reproductions, dogfooding, and related issue or pull-request history;
-- every discovery round's integrated baseline, every raw candidate, its evidence, dependencies, and final disposition;
-- candidate combinations, splits, rejections, deferrals, and the evidence supporting each decision; and
-- each cycle's final empty-round gate, published-issue DAG, internal implementation order, unified pull request, CI and Self-Review iterations, external blockers, campaign timing, and cleanup state.
-
-Record raw candidates before fact-checking. The knowledge base is the durable place to collect overlapping observations, then combine, split, rewrite, reject, or defer them without losing why.
-
-The knowledge base supports the campaign but is not the final issue body. A published issue must stand alone without access to `.wiki`.
-
-## Discover Issues
-
-Perform a complete Solo Issue Discovery Round over the entire declared campaign scope. Source is only one evidence layer. Exercise real workflows and inspect relevant upstream behavior, history, generated artifacts, consumers, fixtures, public documentation, and closed decisions.
-
-Treat the development skill's [Forbidden](../development/SKILL.md#forbidden) section as a retrospective audit contract, not only a rule for future changes. In every complete round, inspect the implementation and history for a verified violation, even when existing tests pass. Prove the classification from purpose, control flow, consequence, and history. Resemblance or stylistic preference is not evidence.
-
-Do not stop after finding enough work for a pull request. Complete the entire scope, adjudicate the full candidate pool, and publish only the surviving issues when authorized. Any surviving candidate makes the round nonempty and requires another complete fresh round before development.
-
-### Every Round Is Full-Scope
-
-Every round re-audits the entire declared scope against the cycle's recorded pre-development integrated state. A round is never partitioned: not by package, concern, or validation lane, not by the areas the last round or cycle happened to touch, and not by splitting the scope across rounds so that each one covers a slice. The [review skill's Non-Negotiable Review Law](../review/SKILL.md#non-negotiable-review-law) states the same rule for every round and review the campaign runs.
-
-### Development Starts Only After An Empty Round
-
-Keep implementation closed throughout the cycle's discovery saturation. After each round, adjudicate the full candidate pool and publish its surviving issues when authorized. If any meaningful candidate survives, accumulate every accepted issue in the cycle ledger and begin another complete fresh full-scope round against the same pre-development integrated state. Do not claim an implementation branch, write code, or substitute candidate rechecks for the required new round.
-
-Open development only after one complete fresh round produces no meaningful candidate after fact-checking. That empty round freezes the accumulated accepted issue set for the unified cycle pull request. Any integrated-state change before the implementation claim invalidates the gate and requires a new saturation sequence against the new state. An empty round with accepted issues ends only the discovery phase; the campaign remains active until those issues are resolved.
-
-After merge, start a new cycle and repeat the same saturation process against the new integrated state. Report the campaign complete only when that process reaches an empty round with no accepted campaign issue left unresolved.
-
-## Vet And Publish Issues
-
-The same main agent owns every publication decision. For each candidate:
-
-1. Reopen its evidence and reproduce the behavior.
-2. Verify ownership, provenance, and any claimed classification under the development skill's **Forbidden** section.
-3. Trace the full consequence surface.
-4. Compare open and closed issues and pull requests.
-5. Record accept, partial acceptance, rewrite, combine, split, reject, or defer with the supporting evidence.
-
-Publish only the adjudicated form and only with user authorization.
-
-### Self-Contained Issue Body
-
-Write enough context for a fresh AI agent to begin implementation from the issue alone. Do not require access to local `.wiki`, the discovery conversation, or unstated repository knowledge. Cover these sections when they apply:
-
-- **Problem:** current and expected behavior, impact, and affected users.
-- **Evidence:** exact reproduction, outputs or artifacts, stable symbols, verified root cause, ownership, and provenance. For a violation of the development skill's **Forbidden** section, prove the classification from behavior, control flow, and history instead of merely naming the prohibition. Line numbers are navigation, not proof.
-- **Consequence surface:** affected consumers, states, platforms, compatibility and failure paths, plus the complete case matrix for the cause.
-- **Approach:** the invariant and architectural owner, without prescribing an unverified implementation.
-- **Acceptance and verification:** positive, negative, boundary, and regression outcomes with narrow and broader proving commands.
-- **Coordination:** dependencies, exclusions, migration concerns, external blockers, and related open, closed, accepted, or rejected work.
-
-Use tables for repeated case mappings. Read the rendered issue back and keep its body as the current operative handoff; use comments only for chronology.
-
-## Develop And Repeat The Campaign
-
-Read [development.md](development.md) in full when the user authorizes implementation pull requests or the end of a campaign that entered implementation. It owns the single cycle pull request, empty claim, internal DAG order, test authoring, formatting, ordinary CI, Individual and Overall Self-Review, red-CI repair, merge, branch and temporary-asset cleanup, and renewed discovery. Do not take a development action until the cycle's empty-round gate has passed.
-
-An audit-only or issue-publication-only campaign does not load the development procedure or mutate repository or GitHub state beyond the authorized publications.
+The campaign is complete when a round on the latest baseline finds nothing, no accepted issue is open, and no campaign branch, pull request, or temporary asset remains.

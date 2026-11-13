@@ -1,106 +1,54 @@
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type ITtscCapabilityPlugin, resolveCapabilityPlugins } from "ttsc";
+import {
+  type CapabilityPluginResolver,
+  type ITtscCapabilityPlugin,
+  type ITtscCapabilityPluginResolution,
+  resolveCapabilityPluginResolution,
+} from "ttsc";
 
+import { GraphProcessTrace } from "../internal/GraphProcessTrace";
+import type { IArtifactDirectory } from "./IArtifactDirectory";
+import type { IArtifactInputs } from "./IArtifactInputs";
+import type { IPublishedArtifacts } from "./IPublishedArtifacts";
+import type { IPublishedArtifactsResident } from "./IPublishedArtifactsResident";
+import { TtscGraphNativeArguments } from "./TtscGraphNativeArguments";
 import { TtscLintDaemon } from "./TtscLintDaemon";
 
 /**
- * Ask the project's `@ttsc/lint` for the artifacts a citation can name, and
- * write them where `ttscgraph dump --artifacts` reads them.
+ * Discover configured publishers and synchronously publish their artifact set.
+ * Input identity is captured before the graph-nodes verbs to avoid accepting a
+ * concurrent document edit as already represented by an older answer. Both
+ * verbs use one captured compiler environment; exchange paths distinguish
+ * compiler argument and permission contexts for the same project.
  *
- * A project that configures no such plugin gets `file: null`, which is the
- * common case and not an error: the graph it produces is the graph it produced
- * before this existed, and the dump says so by not claiming the capability.
- *
- * ## Why this runs here and not in the compiler host
- *
- * The addresses a citation names — a Markdown anchor, `prisma:Sale.price`,
- * `POST:/orders` — are produced by parsers that live in the rule that owns
- * them, and re-deriving any of them in the graph producer would be a second
- * implementation of a published contract. So the units have to arrive from the
- * rule.
- *
- * They cannot arrive in-process. `ttscgraph` is the shipped per-platform
- * binary, never a per-project native host, so it can never have a linked
- * plugin; and `packages/lint` is its own Go module that deliberately carries no
- * requirement on the compiler host. What is left is the channel the host
- * already has: a plugin declares a capability and its sidecar answers a verb,
- * exactly as `lsp-hints` does. `resolveCapabilityPlugins` is what builds and
- * locates those sidecars, and it is the seam `ttscserver` already uses for
- * `capabilities.lsp`, published so a consumer outside the compiler can ask
- * too.
- *
- * Nothing here knows what `@ttsc/evidence` is. It asks a lint install for
- * whatever its configured rules published, and a project that configured none
- * gets an empty answer.
+ * @evidence contracts/common.md#principled-implementation Capability discovery and each sidecar's project-inputs/graph-nodes verbs remain the authorities for plugin selection and artifact meaning.
+ * @evidence contracts/common.md#clear-and-simple-design The one-shot path composes discovery, input capture and publication through helpers also used by resident requests.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Unavailable sidecars do not produce fabricated artifacts; no evidence-rule-specific parser or private compiler mutation substitutes for the publisher.
+ * @evidence contracts/common.md#meaningful-documentation Native prose documents synchronous ownership and the freshness snapshot's required ordering.
+ * @evidence contracts/performance.md#efficient-algorithms Discovery runs once per publication, distinct input paths are merged and fingerprinted once, and publisher JSON is concatenated in one pass.
+ * @evidence contracts/performance.md#reuse-equivalent-work This one-shot caller has no resident sidecar owner; resident consumers use publishArtifactsResident and session freshness reuse instead of repeatedly spawning this path.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources SpawnSync owns each child through completion; the exchange file is overwritten per process/project/compiler context, but historical context files have no explicit reclamation yet.
+ * @evidence contracts/portability.md#os-neutral-implementation Native paths and temporary storage use Node path/os APIs; sidecars receive argument arrays and hidden Windows child windows without shell composition.
  */
-export interface IPublishedArtifacts {
-  /**
-   * Path to the JSON the native producer reads, or `null` when no configured
-   * plugin publishes one.
-   *
-   * `null` is a state rather than an absence, which is why it still carries
-   * {@link inputs}. A project that adds an evidence plugin while a session is
-   * running would otherwise never be reconsidered: nothing would be watched, so
-   * nothing could report that the answer had changed from "none" to "some".
-   */
-  file: string | null;
-  /**
-   * Everything the answer was derived from, as paths this process can state for
-   * itself.
-   *
-   * The artifacts describe documents the compiler's Program never read, so a
-   * source edit does not move them and a document edit does not move the code
-   * graph. Refreshing them is therefore a second invalidation with its own
-   * inputs, and these are those inputs.
-   */
-  inputs: IArtifactInputs;
-  /**
-   * The state of {@link inputs} when the answer was produced.
-   *
-   * Compared against a freshly taken one to decide whether the answer is stale.
-   * When it moved, nothing else in the session can tell: the compiler's own
-   * invalidation watches the build universe, and none of this is in it.
-   */
-  fingerprint: string;
-}
-
-/** Paths an answer was derived from, split by how they are watched. */
-export interface IArtifactInputs {
-  /** Files stated one by one. */
-  files: string[];
-  /** Directories walked, which is what notices an added or deleted file. */
-  directories: IArtifactDirectory[];
-}
-
-/** A directory watched on behalf of the pattern that named it. */
-export interface IArtifactDirectory {
-  /** Absolute path of the directory to walk. */
-  path: string;
-  /**
-   * Whether the walk descends.
-   *
-   * Taken from the pattern rather than assumed, because assuming it is
-   * expensive in exactly the case that looks harmless: a rule declaring `*.md`
-   * has the project root for its fixed prefix, and treating that as recursive
-   * would state every file in the repository before every graph request.
-   */
-  recursive: boolean;
-}
-
 export function publishArtifacts(options: {
   cwd: string;
   tsconfig: string;
+  runExternalCode?: boolean;
 }): IPublishedArtifacts {
-  const plugins = resolveCapabilityPlugins({
+  const invocation = {
+    ...options,
+    environment: TtscGraphNativeArguments.environment(options.runExternalCode),
+  };
+  const discovery = resolveCapabilityPluginResolution({
     capability: "graphNodes",
     cwd: options.cwd,
     tsconfig: options.tsconfig,
   });
-  if (plugins.length === 0) return unpublished(options);
+  const plugins = discovery.plugins;
+  if (plugins.length === 0) return unpublished(options, discovery);
   // The inputs are stated before the set is asked for, never after. A document
   // edited between the two calls has to read as a change next time, and only
   // this order gives that: a fingerprint taken first describes a state at least
@@ -109,13 +57,16 @@ export function publishArtifacts(options: {
   // the set, and the edit that landed in the gap would read as already
   // accounted for — the exact staleness this exists to remove.
   const inputs = readInputs(
-    plugins.map((plugin) => runVerb(plugin, "project-inputs", options)),
+    plugins.map((plugin) => runVerb(plugin, "project-inputs", invocation)),
     options,
   );
+  const fingerprint = fingerprintInputs(inputs);
   return assemble(
-    options,
+    invocation,
     inputs,
-    plugins.map((plugin) => runVerb(plugin, "graph-nodes", options)),
+    fingerprint,
+    plugins.map((plugin) => runVerb(plugin, "graph-nodes", invocation)),
+    discovery,
   );
 }
 
@@ -132,41 +83,119 @@ export function publishArtifacts(options: {
  * so the answer is the same one either way and only its cost differs. The
  * fallback matters more here than most: a daemon that quietly answered nothing
  * would be indistinguishable from a project that publishes nothing.
+ *
+ * Compiler environment capture precedes asynchronous discovery. The optional
+ * environment supplies inherited invocation context; explicit permission is
+ * applied once, and the daemon and fallback receive that same captured value.
+ *
+ * @evidence contracts/common.md#principled-implementation Both paths ask the same configured sidecar verbs; input identity is captured before publication and invalidation clears the daemon's stale Program first.
+ * @evidence contracts/common.md#clear-and-simple-design The caller supplies daemon and asynchronous resolver ownership while this function owns ordered input and artifact phases and the shared result assembly.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts A failed daemon falls back to the public direct verb, not an invented empty-success result or a reimplementation of its parser.
+ * @evidence contracts/common.md#meaningful-documentation Native prose explains resident reuse, direct-command fallback and the reason to invalidate the Program before input collection.
+ * @evidence contracts/performance.md#efficient-algorithms Independent publishers run concurrently within each of two ordered phases; deduplication avoids repeatedly hashing the same declared file path.
+ * @evidence contracts/performance.md#reuse-equivalent-work Session-owned daemons reuse process and plugin loading only while binary, manifest, project and compiler argument contexts match; changed inputs rebuild the publication.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources The session owns the resolver and daemons. Failed publication joins every selected verb and releases its proof; successful publication transfers proof release to the session. Cancellation closes and joins an active daemon or supervised direct command. One exchange file per process/project/compiler context still has no historical-file reclamation.
+ * @evidence contracts/portability.md#os-neutral-implementation The fallback preserves native argument-vector invocation and Node path resolution; daemon ownership uses the same cross-platform process boundary.
  */
 export async function publishArtifactsResident(
-  options: { cwd: string; tsconfig: string },
-  daemon: (plugin: ITtscCapabilityPlugin) => TtscLintDaemon | undefined,
-): Promise<IPublishedArtifacts> {
-  const plugins = resolveCapabilityPlugins({
-    capability: "graphNodes",
-    cwd: options.cwd,
-    tsconfig: options.tsconfig,
-  });
-  if (plugins.length === 0) return unpublished(options);
-  // The first request of a republish drops the daemon's warm Program. The
-  // artifacts depend on which sources exist and what they declare — that is
-  // what activates a claim — and between two republishes the developer has
-  // been editing code as well as documents. Reusing a Program from before
-  // those edits would deactivate a claim whose files now exist, which is a
-  // stale answer of exactly the kind this whole mechanism removes. What the
-  // daemon still saves is the process, the plugin load, and the configuration
-  // evaluation, which is most of the cost.
-  const inputs = readInputs(
-    await Promise.all(
-      plugins.map((plugin) =>
-        askVerb(plugin, "project-inputs", options, daemon(plugin), true),
-      ),
+  options: {
+    cwd: string;
+    tsconfig: string;
+    runExternalCode?: boolean;
+    environment?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
+  },
+  daemon: (
+    plugin: ITtscCapabilityPlugin,
+    environment: NodeJS.ProcessEnv,
+  ) =>
+    | Pick<TtscLintDaemon, "ask" | "close">
+    | undefined
+    | Promise<Pick<TtscLintDaemon, "ask" | "close"> | undefined>,
+  resolver: Pick<CapabilityPluginResolver, "resolve" | "runCommand">,
+): Promise<IPublishedArtifactsResident> {
+  options.signal?.throwIfAborted();
+  const invocation = {
+    ...options,
+    environment: TtscGraphNativeArguments.environment(
+      options.runExternalCode,
+      options.environment,
     ),
-    options,
+  };
+  const discovery = await resolver.resolve(
+    { capability: "graphNodes", cwd: options.cwd, tsconfig: options.tsconfig },
+    { signal: options.signal },
   );
-  return assemble(
-    options,
-    inputs,
-    await Promise.all(
-      plugins.map((plugin) =>
-        askVerb(plugin, "graph-nodes", options, daemon(plugin), false),
+  try {
+    options.signal?.throwIfAborted();
+    const plugins = discovery.plugins;
+    if (plugins.length === 0) return unpublished(options, discovery);
+    // The first request of a republish drops the daemon's warm Program. The
+    // artifacts depend on which sources exist and what they declare — that is
+    // what activates a claim — and between two republishes the developer has
+    // been editing code as well as documents. Reusing a Program from before
+    // those edits would deactivate a claim whose files now exist, which is a
+    // stale answer of exactly the kind this whole mechanism removes. What the
+    // daemon still saves is the process, the plugin load, and the configuration
+    // evaluation, which is most of the cost.
+    const inputs = readInputs(
+      await joinedPublications(
+        plugins.map(async (plugin) =>
+          askVerb(
+            plugin,
+            "project-inputs",
+            invocation,
+            await daemon(plugin, invocation.environment),
+            true,
+            resolver,
+          ),
+        ),
       ),
-    ),
+      options,
+    );
+    const fingerprint = fingerprintInputs(inputs);
+    const outputs = await joinedPublications(
+      plugins.map(async (plugin) =>
+        askVerb(
+          plugin,
+          "graph-nodes",
+          invocation,
+          await daemon(plugin, invocation.environment),
+          false,
+          resolver,
+        ),
+      ),
+    );
+    options.signal?.throwIfAborted();
+    return assemble(invocation, inputs, fingerprint, outputs, discovery);
+  } catch (error) {
+    try {
+      await discovery.release();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        "@ttsc/graph: discovery release failed",
+      );
+    }
+    throw error;
+  }
+}
+
+/** Join every publisher before releasing a failed publication's proof. */
+async function joinedPublications(
+  outputs: Promise<string | null>[],
+): Promise<(string | null)[]> {
+  const results = await Promise.allSettled(outputs);
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures.map((result) => result.reason),
+      "@ttsc/graph: artifact publication failed",
+    );
+  return results.map(
+    (result) => (result as PromiseFulfilledResult<string | null>).value,
   );
 }
 
@@ -174,9 +203,9 @@ export async function publishArtifactsResident(
 function runVerb(
   plugin: ITtscCapabilityPlugin,
   verb: string,
-  options: { cwd: string; tsconfig: string },
+  options: { cwd: string; tsconfig: string; environment: NodeJS.ProcessEnv },
 ): string | null {
-  const result = spawnSync(
+  const result = GraphProcessTrace.spawnSync(
     plugin.binary,
     [
       verb,
@@ -196,6 +225,7 @@ function runVerb(
       // bounded by the project's own documentation, not by its source — so the
       // default pipe ceiling is raised rather than removed.
       maxBuffer: 256 * 1024 * 1024,
+      env: options.environment,
       encoding: "utf8",
       windowsHide: true,
     },
@@ -214,34 +244,102 @@ function runVerb(
 async function askVerb(
   plugin: ITtscCapabilityPlugin,
   verb: string,
-  options: { cwd: string; tsconfig: string },
-  daemon: TtscLintDaemon | undefined,
+  options: {
+    cwd: string;
+    tsconfig: string;
+    environment: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
+  },
+  daemon: Pick<TtscLintDaemon, "ask" | "close"> | undefined,
   invalidate: boolean,
+  resolver: Pick<CapabilityPluginResolver, "runCommand">,
 ): Promise<string | null> {
-  const served = await daemon?.ask(verb, invalidate);
-  return served ?? runVerb(plugin, verb, options);
+  options.signal?.throwIfAborted();
+  let closing: Promise<void> | undefined;
+  const abort = () => {
+    closing = daemon?.close();
+    void closing?.catch(() => undefined);
+  };
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  let served: string | null | undefined;
+  let failure: unknown;
+  try {
+    served = await daemon?.ask(verb, invalidate);
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", abort);
+    try {
+      await closing;
+    } catch (cleanup) {
+      throw new AggregateError(
+        [
+          ...(failure === undefined ? [] : [failure]),
+          ...(options.signal?.aborted ? [options.signal.reason] : []),
+          cleanup,
+        ],
+        "@ttsc/graph: cancelled daemon cleanup failed",
+      );
+    }
+  }
+  options.signal?.throwIfAborted();
+  if (served !== undefined && served !== null) return served;
+  const result = await resolver.runCommand(
+    plugin.binary,
+    [
+      verb,
+      "--cwd",
+      options.cwd,
+      "--tsconfig",
+      options.tsconfig,
+      `--plugins-json=${plugin.manifest}`,
+      ...projectContextArgs(plugin),
+    ],
+    {
+      maxBuffer: 256 * 1024 * 1024,
+      encoding: "utf8",
+      windowsHide: true,
+      env: options.environment,
+    },
+    { signal: options.signal },
+  );
+  options.signal?.throwIfAborted();
+  return result.error ||
+    result.status !== 0 ||
+    typeof result.stdout !== "string"
+    ? null
+    : result.stdout;
 }
 
 /** The artifact answer, from each sidecar's `graph-nodes` output. */
-function assemble(
-  options: { cwd: string; tsconfig: string },
+function assemble<
+  Discovery extends
+    | ITtscCapabilityPluginResolution
+    | CapabilityPluginResolver.Resolution,
+>(
+  options: { cwd: string; tsconfig: string; environment: NodeJS.ProcessEnv },
   inputs: IArtifactInputs,
+  fingerprint: string,
   outputs: readonly (string | null)[],
-): IPublishedArtifacts {
-  const fingerprint = fingerprintInputs(inputs);
+  discovery: Discovery,
+): Omit<IPublishedArtifacts, "discovery"> & { discovery: Discovery } {
   const published: unknown[] = [];
   for (const output of outputs) {
     if (output === null) continue;
     try {
       const parsed: unknown = JSON.parse(output);
-      if (Array.isArray(parsed)) published.push(...parsed);
+      if (Array.isArray(parsed))
+        for (const entryToAppend of parsed) published.push(entryToAppend);
     } catch {
       continue;
     }
   }
-  if (published.length === 0) return { file: null, fingerprint, inputs };
+  if (published.length === 0)
+    return { file: null, fingerprint, inputs, discovery };
 
-  // One file per process and project, overwritten, rather than a fresh temp
+  // One file per process, project and compiler context, overwritten, rather than a fresh temp
   // directory per call. A directory per call is a leak nothing here is
   // positioned to clean — the path outlives this function by design, since the
   // native producer reads it after we return — and `loadGraph` is a library
@@ -259,24 +357,65 @@ function assemble(
     `ttsc-graph-artifacts-${String(process.pid)}-${projectKey(options)}.json`,
   );
   fs.writeFileSync(file, JSON.stringify(published));
-  return { file, fingerprint, inputs };
+  return { file, fingerprint, inputs, discovery };
 }
 
 /**
  * Whether the inputs an answer was derived from have moved since.
  *
- * Answered by stating paths this process already knows, not by asking the
- * plugin again. The question is asked before every graph request in a resident
- * session, and re-running plugin discovery per request would cost more than the
- * refresh it guards — while a `stat` per document costs less than reading one
- * of them.
+ * Published documents are compared by content identity. The owning resolver
+ * separately qualifies discovery, including successful absence. Unavailable,
+ * incomplete or changed discovery proof requires another lookup.
  *
- * The cost of being wrong in the cheap direction is what makes this worth
- * paying at all: a developer who edited only a spec section, and nothing the
- * compiler reads, otherwise saw the graph keep answering with the headings that
- * section used to have.
+ * @evidence contracts/common.md#principled-implementation The owning discovery query must still qualify this exact lookup, and exchange-file existence plus declared input identity must also hold before any publication or successful absence is reused.
+ * @evidence contracts/common.md#clear-and-simple-design Discovery freshness stays with the resolver and downstream document identity stays with fingerprintInputs; this predicate combines their independent authority.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Equal size and modification time cannot substitute for file-content equivalence, and a partial no-plugin watch list cannot prove discovery stability.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain content-based publication freshness, successful absence and conservative relookup for incomplete discovery proof.
+ * @evidence contracts/performance.md#efficient-algorithms Freshness hashes the distinct declared inputs and traverses watch roots once per inventory entry; its cost grows with watched bytes and entries rather than only stat count.
+ * @evidence contracts/performance.md#reuse-equivalent-work The resolver's original complete discovery proof authorizes sharing populated or empty results; changed or unproved selection requires relookup, and document fingerprints separately qualify overlay reuse.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources This predicate borrows an inventory and returns a boolean; the publication and session own their storage and sidecars.
+ * @evidence contracts/portability.md#os-neutral-implementation Existence and fingerprints use Node filesystem APIs and native absolute paths without assumptions about platform shell commands.
  */
 export function artifactsAreStale(published: IPublishedArtifacts): boolean {
+  // Discovery remains the loader's authority, including successful absence.
+  // A downstream input list cannot replace an unavailable or incomplete proof.
+  if (
+    published.discovery?.status !== "resolved" ||
+    !published.discovery.isCurrent()
+  )
+    return true;
+  return artifactInputsAreStale(published);
+}
+
+/**
+ * Check the exact resident discovery proof before reusing its overlay.
+ * Discovery runs off the request thread; declared artifact bytes remain an
+ * independent freshness premise after that authority has answered.
+ *
+ * @evidence contracts/common.md#principled-implementation The original asynchronous proof must authorize reuse before exchange existence and declared input fingerprints are compared.
+ * @evidence contracts/common.md#clear-and-simple-design Resolver proof and artifact-input validation retain their separate owners in one ordered predicate.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Unavailable or invalid proof requires relookup; no partial inventory substitutes for SDK authority.
+ * @evidence contracts/common.md#meaningful-documentation Native prose distinguishes off-thread discovery from this consumer's independent artifact inputs.
+ * @evidence contracts/performance.md#efficient-algorithms The owner validates discovery once and fingerprintInputs hashes each declared file and directory inventory, scaling with declared entries and bytes.
+ * @evidence contracts/performance.md#reuse-equivalent-work Only this exact publication's current proof plus unchanged artifact inputs authorizes reuse, including resolved absence.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources This predicate borrows the session-owned publication and acquires no lasting proof or process.
+ * @evidence contracts/portability.md#os-neutral-implementation SDK process observation remains with its owner and artifact checks use Node native filesystem APIs.
+ */
+export async function artifactsAreStaleResident(
+  published: IPublishedArtifactsResident,
+  options: { signal?: AbortSignal } = {},
+): Promise<boolean> {
+  options.signal?.throwIfAborted();
+  if (published.discovery.status !== "resolved") return true;
+  const current = await published.discovery.isCurrent(options);
+  options.signal?.throwIfAborted();
+  if (!current) return true;
+  return artifactInputsAreStale(published);
+}
+
+function artifactInputsAreStale(
+  published: Omit<IPublishedArtifacts, "discovery">,
+): boolean {
   // The written set is one of its own inputs, by existence alone. It lives in
   // the system temp directory, which is swept on a schedule this session has no
   // say in, and the server is handed the path on every request — so once it is
@@ -295,21 +434,19 @@ export function artifactsAreStale(published: IPublishedArtifacts): boolean {
  * The answer for a project that publishes nothing, and what to watch so that
  * answer can change.
  *
- * Configuring a plugin means editing the project's tsconfig or installing a
- * package that declares one, so those two files are what could turn this answer
- * into a different one. They are stated rather than the whole discovery being
- * re-run, because re-running it walks the dependency closure — the cost
- * samchon/ttsc#1276 is about — and paying that per request to learn nothing
- * would be worse than the staleness it prevents.
- *
- * Bounded, and deliberately: a tsconfig that inherits its plugins from an
- * extended config is not tracked here, because naming the whole extends chain
- * means asking the loader that is itself the expense.
+ * The direct config and package manifest are useful provenance, but do not
+ * cover inherited configuration or dependency installation. The attached owning
+ * discovery proof supplies that independent authority; direct paths do not
+ * stand in for it.
  */
-function unpublished(options: {
-  cwd: string;
-  tsconfig: string;
-}): IPublishedArtifacts {
+function unpublished<
+  Discovery extends
+    | ITtscCapabilityPluginResolution
+    | CapabilityPluginResolver.Resolution,
+>(
+  options: { cwd: string; tsconfig: string },
+  discovery: Discovery,
+): Omit<IPublishedArtifacts, "discovery"> & { discovery: Discovery } {
   const inputs: IArtifactInputs = {
     directories: [],
     files: [
@@ -317,7 +454,12 @@ function unpublished(options: {
       path.resolve(options.cwd, "package.json"),
     ],
   };
-  return { file: null, fingerprint: fingerprintInputs(inputs), inputs };
+  return {
+    file: null,
+    fingerprint: fingerprintInputs(inputs),
+    inputs,
+    discovery,
+  };
 }
 
 /**
@@ -399,16 +541,28 @@ function readInputs(
  * Two readings have to be right here, and both are cheap to get wrong. A
  * pattern carrying no wildcard is a path, not a tree: watching its parent
  * instead would state every sibling on every request to learn about the one
- * file that was declared. And a pattern that does not say `**` does not descend
- * — treating it as though it did is unbounded in exactly the case that looks
- * harmless, because a bare `*.md` has the project root for its prefix.
+ * file that was declared. A bare filename wildcard stays shallow; globstar or a
+ * wildcard directory component requires descent from the fixed prefix.
+ *
+ * @evidence contracts/common.md#principled-implementation Literal paths remain individual inputs; wildcard paths use their fixed directory prefix and descend when remaining path components can contain matched files.
+ * @evidence contracts/common.md#clear-and-simple-design A single fixed-prefix calculation and descent decision produce the directory descriptor consumed by fingerprinting.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Descent is not inferred solely from globstar, which would miss wildcard directory components followed by a filename.
+ * @evidence contracts/common.md#meaningful-documentation Native prose documents literal paths, bare wildcards and wildcard-directory descent.
+ * @evidence contracts/performance.md#efficient-algorithms Pattern scanning is linear in pattern length and avoids directory traversal at selection time; a bare filename wildcard keeps the walk shallow.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work This pure descriptor calculation has no cross-request producer or validation coordinator; publication owns reuse.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The returned descriptor transfers to its caller and owns no handle or retained task.
+ * @evidence contracts/portability.md#os-neutral-implementation Both slash forms are recognized at the native-path boundary and relative roots resolve through Node path APIs.
  */
 export function watchedBy(
   pattern: string,
   cwd: string,
 ): IArtifactDirectory | null {
   if (pattern.search(GLOB_MAGIC) < 0) return null;
-  return { path: globRoot(pattern, cwd), recursive: pattern.includes("**") };
+  const magic = pattern.search(GLOB_MAGIC);
+  return {
+    path: globRoot(pattern, cwd),
+    recursive: pattern.includes("**") || /[/\\]/u.test(pattern.slice(magic)),
+  };
 }
 
 /**
@@ -432,17 +586,27 @@ function projectContextArgs(plugin: {
 }
 
 /**
- * The project a published set belongs to, as a filename-safe tag.
+ * The project and compiler context a published set belongs to, as a
+ * filename-safe tag.
  *
  * Short rather than the whole digest: it distinguishes the projects one process
  * drives, which is a handful, and the process id beside it already separates
  * two runs.
  */
-function projectKey(options: { cwd: string; tsconfig: string }): string {
+function projectKey(options: {
+  cwd: string;
+  tsconfig: string;
+  environment: NodeJS.ProcessEnv;
+}): string {
   return createHash("sha256")
-    .update(path.resolve(options.cwd))
-    .update(SEPARATOR)
-    .update(options.tsconfig)
+    .update(
+      JSON.stringify([
+        path.resolve(options.cwd),
+        options.tsconfig,
+        options.environment.TTSC_TSGO_ARGS,
+        options.environment.TTSC_TSGO_ARGS_CWD,
+      ]),
+    )
     .digest("hex")
     .slice(0, 16);
 }
@@ -458,35 +622,70 @@ function absolute(target: string, cwd: string): string {
 /**
  * The state of every input, as one comparable string.
  *
- * Files are stated by size and modification time rather than content: this runs
- * before every graph request, and hashing a documentation corpus per request
- * would cost more than the refresh it guards. Directories are walked for the
- * same pair, which is what notices a section added or a document deleted rather
- * than edited.
+ * Files are hashed by content so same-size edits with restored modification
+ * times remain observable. Directory membership is walked conservatively from
+ * declared roots; matching remains the sidecar's responsibility.
+ *
+ * @evidence contracts/common.md#principled-implementation The fingerprint includes input paths and regular-file bytes; sorted records make enumeration order irrelevant while missing paths retain an explicit marker.
+ * @evidence contracts/common.md#clear-and-simple-design File state and conservative directory traversal share one record representation before the final digest.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Metadata equality, hidden-directory skipping and arbitrary depth limits do not stand in for declared input identity.
+ * @evidence contracts/common.md#meaningful-documentation Native prose states content hashing, conservative membership and sidecar ownership of actual matching.
+ * @evidence contracts/performance.md#efficient-algorithms Cost is linear in watched regular-file bytes plus O(N log N) record sorting; broad recursive globs conservatively over-read and may invalidate unrelated edits.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work This computes one validation identity; the session compares it with the publication snapshot and decides reuse.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Synchronous reads close their descriptors internally, and the record array exists only for this computation; no historical fingerprint state is retained here.
+ * @evidence contracts/portability.md#os-neutral-implementation Native stat, read and directory APIs handle platform paths; NUL-separated fields prevent filename ambiguity without shell serialization.
  */
 export function fingerprintInputs(inputs: IArtifactInputs): string {
   const parts: string[] = [];
-  for (const file of inputs.files) parts.push(stateOf(file));
+  const states = new Map<string, string>();
+  for (const file of inputs.files) parts.push(stateOf(file, states));
   for (const directory of inputs.directories)
-    parts.push(...walkState(directory.path, directory.recursive));
+    for (const entryToAppend of walkState(
+      directory.path,
+      directory.recursive,
+      states,
+    ))
+      parts.push(entryToAppend);
   parts.sort();
   return createHash("sha256").update(parts.join("\n")).digest("hex");
 }
 
 /**
- * A path's size and modification time, or a marker when it is absent.
+ * A regular file's content identity, physical directory identity, or absence.
  *
  * The fields are joined on a character a path cannot contain. Separated by a
  * space, a file literally named `a 1 2` states the same string as a one-byte
  * file named `a`, and an edit to either would then read as no edit at all.
  */
-function stateOf(file: string): string {
+function stateOf(file: string, states: Map<string, string>): string {
+  const existing = states.get(file);
+  if (existing !== undefined) return existing;
   try {
     const stat = fs.statSync(file);
-    return [file, String(stat.size), String(stat.mtimeMs)].join(SEPARATOR);
-  } catch {
-    return [file, "absent"].join(SEPARATOR);
+    const identity = stat.isFile()
+      ? createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+      : stat.isDirectory()
+        ? ["directory", fs.realpathSync.native(file)].join(SEPARATOR)
+        : ["other", String(stat.size), String(stat.mtimeMs)].join(SEPARATOR);
+    const state = [file, identity].join(SEPARATOR);
+    states.set(file, state);
+    return state;
+  } catch (error) {
+    if (!missingPath(error)) throw error;
+    const state = [file, "absent"].join(SEPARATOR);
+    states.set(file, state);
+    return state;
   }
+}
+
+/** Missing paths are inputs; unreadable existing inputs are failures. */
+function missingPath(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR")
+  );
 }
 
 /**
@@ -509,40 +708,67 @@ function globRoot(pattern: string, cwd: string): string {
   const magic = pattern.search(GLOB_MAGIC);
   const head = magic < 0 ? pattern : pattern.slice(0, magic);
   const slash = Math.max(head.lastIndexOf("/"), head.lastIndexOf("\\"));
-  const root = slash < 0 ? "" : head.slice(0, slash);
+  const root =
+    slash < 0
+      ? ""
+      : head.slice(0, Math.max(slash, path.parse(head).root.length));
   return root === "" ? cwd : absolute(root, cwd);
 }
 
 /**
  * Every entry below `directory`, stated.
  *
- * Bounded three ways, because this runs before every graph request: it descends
- * only when the pattern that named the directory descends, it never enters
- * `node_modules`, and it stops at a depth no documentation tree reaches. Dotted
- * directories are skipped below the declared root, which is what the glob that
- * named it would have matched anyway.
+ * Descent follows the declared pattern rather than a guessed maximum depth or
+ * excluded directory name. Symlink directories are followed with a physical
+ * ancestor set so their declared contents are watched without creating cycles.
  *
  * A directory that does not exist states itself absent, which is what notices
  * one being created.
  */
-function walkState(directory: string, recursive: boolean, depth = 0): string[] {
-  if (depth > 12) return [];
+function walkState(
+  directory: string,
+  recursive: boolean,
+  inputStates: Map<string, string>,
+  ancestors: ReadonlySet<string> = new Set(),
+): string[] {
   let entries: fs.Dirent[];
+  let physical: string;
   try {
+    physical = fs.realpathSync.native(directory);
+    if (ancestors.has(physical)) return [stateOf(directory, inputStates)];
     entries = fs.readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return [stateOf(directory)];
+  } catch (error) {
+    if (!missingPath(error)) throw error;
+    return [stateOf(directory, inputStates)];
   }
+  const nextAncestors = new Set(ancestors);
+  nextAncestors.add(physical);
   const states: string[] = [];
   for (const entry of entries) {
     const child = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (!recursive) continue;
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-      states.push(...walkState(child, recursive, depth + 1));
+    let directoryEntry = entry.isDirectory();
+    if (entry.isSymbolicLink()) {
+      try {
+        directoryEntry = fs.statSync(child).isDirectory();
+      } catch (error) {
+        if (!missingPath(error)) throw error;
+      }
+    }
+    if (directoryEntry) {
+      if (!recursive) {
+        states.push(stateOf(child, inputStates));
+        continue;
+      }
+      for (const entryToAppend of walkState(
+        child,
+        recursive,
+        inputStates,
+        nextAncestors,
+      ))
+        states.push(entryToAppend);
       continue;
     }
-    states.push(stateOf(child));
+    states.push(stateOf(child, inputStates));
   }
   return states;
 }

@@ -28,7 +28,7 @@ func (g *Graph) collectLiterals(checker *shimchecker.Checker, file *shimast.Sour
   if file.Statements == nil {
     return
   }
-  g.collectLiteralsIn(checker, file.FileName(), file.Statements.Nodes)
+  g.collectLiteralsIn(checker, string(file.FileName()), file.Statements.Nodes)
 }
 
 // collectLiteralsIn walks a statement list — a file's top level, or a namespace
@@ -54,7 +54,7 @@ func (g *Graph) collectLiteralsIn(checker *shimchecker.Checker, path string, sta
 // left alone rather than given a partial one.
 func (g *Graph) putLiterals(checker *shimchecker.Checker, path string, statement *shimast.Node, kind NodeKind) {
   symbol := statement.Symbol()
-  if symbol == nil || symbol.Name == "" {
+  if symbol == nil || shimast.SymbolNameOf(symbol) == "" {
     return
   }
   node, ok := g.Nodes[nodeID(path, qualifiedName(symbol), kind)]
@@ -77,17 +77,16 @@ func (g *Graph) putLiterals(checker *shimchecker.Checker, path string, statement
 //
 // The names are the half a caller writes. `literals` answers which values the
 // enum admits, the question a serializer asks, but the code says `Colors.Red`
-// and never `"red"` — so an enum whose node the graph already held still sent a
-// caller to the file to learn what to type (#738).
+// and never `"red"` — so a caller who already holds the enum's node would still
+// open the file to learn what to type.
 //
 // The list comes from the declaration, not from the declared type's
 // constituents, and that is not a detail. A type is a set, so the checker folds
 // two members carrying one value into one constituent: `enum Dup { A = 'x', B =
 // 'x' }` resolves to a single type, and reading names off it reports `A` and
-// loses `B` — the same silent under-report as #732, out of the same instinct to
-// take a declaration fact from a type. The value set really is one value, which
-// is why `literals` is right to say `"x"` once; the member list is two members,
-// and only the declaration says so.
+// loses `B`, a silent under-report from taking a declaration fact from a type.
+// The value set really is one value, which is why `literals` is right to say
+// `"x"` once; the member list is two members, and only the declaration says so.
 //
 // Each member's value still comes from the checker, per member, so an implicit
 // `First` reports 0 with nothing reading the source. A member the checker
@@ -101,10 +100,10 @@ func enumMembers(checker *shimchecker.Checker, statement *shimast.Node) []EnumMe
   out := make([]EnumMember, 0, len(declaration.Members.Nodes))
   for _, node := range declaration.Members.Nodes {
     symbol := node.Symbol()
-    if symbol == nil || symbol.Name == "" {
+    if symbol == nil {
       continue
     }
-    member := EnumMember{Name: symbol.Name}
+    member := EnumMember{Name: shimast.SymbolNameOf(symbol)}
     if t := shimchecker.Checker_getTypeOfSymbol(checker, symbol); t != nil {
       if value, ok := literalValue(t); ok {
         member.Value = value

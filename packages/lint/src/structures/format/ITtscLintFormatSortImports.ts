@@ -5,22 +5,28 @@
  * separation, and special groups all by position. By default, declaration-level
  * sorting and merging are limited to erased `import type` blocks. Runtime
  * imports retain source order unless {@link unsafeSortRuntimeImports} is set.
+ *
+ * @evidence contracts/common.md#principled-implementation Group expressions and explicit unsafe opt-in distinguish erased type-import ordering from runtime module evaluation order.
+ * @evidence contracts/common.md#clear-and-simple-design Group order, comparison, merging and runtime permission remain separate options within one import-sorting record.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Runtime reordering requires the supported explicit option rather than assuming every consumer's imports are pure.
+ * @evidence contracts/common.md#meaningful-documentation Native comments document placeholders, blank-group syntax, examples, defaults and side-effect risk; paragraphs and member boundaries follow documentation guidance.
  */
 export interface ITtscLintFormatSortImports {
   /**
    * Group order. Each entry is a regular expression matched against a
    * declaration's module specifier, or one of these placeholders:
    *
-   * - `<BUILTIN_MODULES>` — Node built-in modules (`fs`, `node:path`, ...).
-   * - `<THIRD_PARTY_MODULES>` — catch-all for specifiers that match no other
+   * - `<BUILTIN_MODULES>`: Node built-in modules (`fs`, `node:path`, ...).
+   * - `<THIRD_PARTY_MODULES>`: catch-all for specifiers that match no other
    *   group. Injected implicitly at the front when omitted.
-   * - `<TYPES>` — `import type` declarations. Combine with a regex to scope it,
+   * - `<TYPES>`: `import type` declarations. Combine with a regex to scope it,
    *   e.g. `<TYPES>^[.]` groups type-only relative imports.
-   * - `""` (empty string) — emit one blank line at this position. An array with
-   *   no `""` entry produces no blank lines between groups.
+   * - `""` (empty string): emit one blank line at this position. An array with no
+   *   `""` entry produces no blank lines between groups.
    *
-   * Named specifiers inside each declaration are always sorted. Omit for the
-   * default grouping. Example:
+   * Named specifiers inside each eligible declaration are sorted; comments
+   * between specifiers preserve their order. Omit for the default grouping.
+   * Example:
    *
    * ```ts
    * order: [
@@ -43,7 +49,7 @@ export interface ITtscLintFormatSortImports {
 
   /**
    * Case-sensitive comparison. `false` (the default) sorts case-insensitively,
-   * so `React` and `react` order together; `true` uses raw ASCII order
+   * so `React` and `react` order together; `true` uses raw lexicographic order
    * (uppercase before lowercase).
    *
    * @default false

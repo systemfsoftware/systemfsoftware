@@ -27,6 +27,20 @@ import { createStringLiteral } from "../literals/createStringLiteral";
  * @param importClause The import clause; omitted for a side-effect-only import.
  * @param moduleSpecifier The module specifier (the `from` target).
  * @returns The created {@link ImportDeclaration}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Undefined importClause represents a side-effect import. String module
+ *   targets become StringLiteral while supplied expression nodes stay unchanged.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Bindings are delegated to ImportClause and quote representation to the
+ *   string builder; this node only joins them into the import statement.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   A module target describes source syntax, not a loader or resolution patch.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native prose explains omitted bindings and string normalization, with a
+ *   concrete import example and separate acknowledgment paragraphs.
  */
 export const createImportDeclaration = (
   modifiers: readonly ModifierLike[] | undefined,

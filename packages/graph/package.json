@@ -1,6 +1,6 @@
 {
   "name": "@ttsc/graph",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "Checker-resolved architecture graph over MCP for coding agents, backed by ttsc's in-process TypeScript-Go compiler.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -15,7 +15,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "rimraf lib && node node_modules/ttsc/lib/launcher/ttsc.js && node build/bundle-viewer.mjs"
+    "build": "rimraf lib && node node_modules/ttsc/lib/launcher/ttsc.js && node build/bundle-viewer.mjs",
+    "evidence": "evidence"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -24,6 +25,15 @@
   },
   "peerDependencies": {
     "ttsc": "workspace:^"
+  },
+  "optionalDependencies": {
+    "@ttsc/graph-linux-x64": "workspace:*",
+    "@ttsc/graph-linux-arm": "workspace:*",
+    "@ttsc/graph-linux-arm64": "workspace:*",
+    "@ttsc/graph-darwin-x64": "workspace:*",
+    "@ttsc/graph-darwin-arm64": "workspace:*",
+    "@ttsc/graph-win32-x64": "workspace:*",
+    "@ttsc/graph-win32-arm64": "workspace:*"
   },
   "keywords": [
     "ttsc",
@@ -38,6 +48,7 @@
     "src"
   ],
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@types/node": "catalog:utils",
     "@types/three": "^0.184.1",
     "esbuild": "^0.25.12",

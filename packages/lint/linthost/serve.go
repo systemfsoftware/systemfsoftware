@@ -10,6 +10,8 @@ import (
   "sync"
 
   shimast "github.com/microsoft/typescript-go/shim/ast"
+  "github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
+  "github.com/microsoft/typescript-go/shim/vfs/osvfs"
 )
 
 // residentPrograms is the warm-Program cache the resident lsp-serve loop
@@ -21,7 +23,8 @@ import (
 var residentPrograms *residentProgramCache
 
 // residentProgramCache holds one loaded Program per (cwd, tsconfig, checker)
-// key. A resident daemon pays the cold NewProgram parse+bind and the standalone
+// slot, qualified by the current argument observation. A resident daemon pays
+// the cold NewProgram parse+bind and the standalone
 // checker build once, then reuses them across LSP verbs until a document change
 // invalidates the cache. The expensive work is the parse+bind+checker; the
 // per-verb rule walk is re-run each time (see acquire) because different verbs
@@ -56,13 +59,29 @@ func residentProgramKey(opts *lspCommandOptions, needsChecker bool) string {
 // needs no checker, and a verb that does need one releases the checker-free
 // entry it supersedes, so the daemon's memory does not depend on which verb the
 // editor happened to ask for first.
+// Argument and response-file observations are refreshed before a hit; a changed
+// or incomplete profile retires the old slot instead of accumulating versions.
 func (c *residentProgramCache) acquire(
   opts *lspCommandOptions,
   needsChecker bool,
 ) (*program, []*shimast.Diagnostic, func(), error) {
+  arguments, err := prepareCompilerArguments(opts.cwd, cachedvfs.From(osvfs.FS()), nil, "")
+  if err != nil {
+    return nil, nil, noopClose, err
+  }
+  if len(arguments.diagnostics) != 0 {
+    return nil, arguments.diagnostics, noopClose, nil
+  }
   key := residentProgramKey(opts, needsChecker)
   c.mu.Lock()
   defer c.mu.Unlock()
+  for _, candidate := range []string{residentProgramKey(opts, false), residentProgramKey(opts, true)} {
+    if previous := c.entries[candidate]; previous != nil &&
+      (!arguments.reusable || !previous.argumentsReusable || previous.argumentIdentity != arguments.identity) {
+      previous.close()
+      delete(c.entries, candidate)
+    }
+  }
   if prog, ok := c.entries[key]; ok {
     // Drop the prior verb's project-cycle memo so this verb's engine re-runs.
     prog.projectCycle = nil
@@ -80,6 +99,7 @@ func (c *residentProgramCache) acquire(
     }
   }
   prog, diags, err := loadProgram(opts.cwd, opts.tsconfig, loadProgramOptions{
+    arguments:          arguments,
     forceNoEmit:        true,
     needsRuleChecker:   needsChecker,
     projectIdentity:    opts.projectIdentity,
@@ -224,13 +244,30 @@ type serveLSPResponse struct {
 //
 // Only the read verbs run resident here. lsp-diagnostics and lsp-hints (one per
 // save) and lsp-code-actions (one per cursor) are the hot path and reuse the
-// warm Program; lsp-command-ids and lsp-code-action-kinds answer their static
-// lists; an invalidate control drops the Program. lsp-execute-command is
-// deliberately left to the spawn-per-verb path — it is user-initiated and its
-// temp-workspace fix cascade does not fit the resident cache.
+// warm Program, as do lsp-project-diagnostics and graph-nodes; project-inputs
+// builds no Program and reuses only the rule memo; lsp-command-ids and
+// lsp-code-action-kinds answer their static lists; an invalidate control drops
+// the Program. lsp-execute-command is deliberately left
+// to the spawn-per-verb path — it is user-initiated and its temp-workspace fix
+// cascade does not fit the resident cache.
 //
 // in and out are explicit so the loop is testable; dispatch wires them to
 // os.Stdin and os.Stdout.
+//
+// Requests run serially under fixed project options. Only one resident session
+// may install these process-global caches at a time. The daemon drops warm
+// Program references when invalidated, superseded or stopped. Callers supply nonnil
+// streams. Startup, input and reply-write failures return 2; verb failures are
+// returned in the reply.
+//
+// @evidence contracts/common.md#principled-implementation Explicit read verbs preserve one-shot result semantics while fixed project options and compiler-compatible source transitions determine warm Program reuse; write commands keep their separate temporary-workspace ownership.
+// @evidence contracts/common.md#clear-and-simple-design One serial protocol loop owns caches and dispatch; per-verb computation retains its existing responsibility and project-cycle state is reset at acquisition.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Compiler incremental updates and explicit reloads handle supported source transitions; a checker-bearing Program legitimately serves checker-free requests without disguising missing checker capability.
+// @evidence contracts/common.md#meaningful-documentation Native prose distinguishes resident read verbs, one-shot writes, streams, resource release and failure channels; paragraphs and tags follow documentation guidance.
+// @evidence contracts/portability.md#os-neutral-implementation Changed file URIs pass through native URI conversion and physical project identity helpers, so source matching uses compiler paths instead of assumed drive spelling or case folding.
+// @evidence contracts/performance.md#efficient-algorithms Each line is read/parsed and changed/external URI bytes are normalized before the chosen verb. For each retained Program, changed-source membership scans its source-file list, repeats during application and adds physical-name/path work; compiler updates and the chosen acquisition/rule/projection/diagnostic workload remain input-dependent. Result marshaling and response encoding add payload bytes and buffers. No globally linear transition or fixed complete-session cost is claimed.
+// @evidence contracts/performance.md#reuse-equivalent-work Fixed session options define Program keys, and caller-reported compatible changed sources use compiler updates; unknown non-external topology changes drop entries and checker-bearing entries satisfy checker-free requests. Acquisition clears the previous project-cycle memo before each reused evaluation. Rule-config memo reuse separately validates recorded dependency fingerprints. Omitted changes or incorrect external classifications are not independently discovered by this protocol, and effectful verb results have no address-only cache.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Within the supported single fixed-project session, one current Program entry is retained; upgrades/invalidation/exit drop standalone checkers and references. The latest project-cycle memo can remain until the next acquisition/update/invalidation. The rule memo holds one resolver snapshot, while executable config caches retain separate process/disk history without eviction here. Deferred session cleanup clears the global caches, and streams remain caller-owned. Input/response, Program and dependency bytes have no fixed cap or caller deadline; blocked streams/evaluators can keep the synchronous session alive.
 func RunLSPServe(in io.Reader, out io.Writer, args []string) int {
   base, ok := parseLSPCommandOptions("lsp-serve", args)
   if !ok {
@@ -251,7 +288,10 @@ func RunLSPServe(in io.Reader, out io.Writer, args []string) int {
   for {
     raw, err := reader.ReadString('\n')
     if line := strings.TrimSpace(raw); line != "" {
-      handleServeLSPLine(line, base, encoder)
+      if err := handleServeLSPLine(line, base, encoder); err != nil {
+        fmt.Fprintf(os.Stderr, "@ttsc/lint lsp-serve: write error: %v\n", err)
+        return 2
+      }
     }
     if err != nil {
       if err != io.EOF {
@@ -267,17 +307,16 @@ func RunLSPServe(in io.Reader, out io.Writer, args []string) int {
 // contained so one bad request drops to a nonzero code rather than taking down
 // the daemon and every document with it — the resident analog of the one-shot
 // process's isolation.
-func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Encoder) {
+func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Encoder) (writeErr error) {
   defer func() {
     if recovered := recover(); recovered != nil {
       fmt.Fprintf(os.Stderr, "@ttsc/lint lsp-serve: request panicked: %v\n", recovered)
-      _ = encoder.Encode(serveLSPResponse{Code: 2})
+      writeErr = encoder.Encode(serveLSPResponse{Code: 2})
     }
   }()
   var req serveLSPRequest
   if err := json.Unmarshal([]byte(line), &req); err != nil {
-    _ = encoder.Encode(serveLSPResponse{Code: 2})
-    return
+    return encoder.Encode(serveLSPResponse{Code: 2})
   }
   if req.Invalidate {
     // The Program only. The rule memo validates itself against the files it was
@@ -310,16 +349,16 @@ func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Enco
   switch req.Verb {
   case "lsp-diagnostics":
     result, code := computeLSPDiagnostics(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "lsp-project-diagnostics":
     result, code := computeLSPProjectDiagnostics(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "lsp-code-actions":
     result, code := computeLSPCodeActions(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "lsp-hints":
     result, code := computeLSPHints(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "graph-nodes":
     // Neither of these describes a document, so neither carries a uri. They
     // describe the project, and they join the daemon for the reason the other
@@ -327,34 +366,32 @@ func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Enco
     // watches moves would otherwise pay a process, a plugin load, and a Program
     // for every edit.
     result, code := computeGraphNodes(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "project-inputs":
     result, code := computeProjectInputs(&opts)
-    encodeServeResult(encoder, result, code)
+    return encodeServeResult(encoder, result, code)
   case "lsp-command-ids":
-    encodeServeResult(encoder, lspCommandIDs(), 0)
+    return encodeServeResult(encoder, lspCommandIDs(), 0)
   case "lsp-code-action-kinds":
-    encodeServeResult(encoder, lspCodeActionKinds(), 0)
+    return encodeServeResult(encoder, lspCodeActionKinds(), 0)
   case "":
     // A bare invalidate carries no verb; acknowledge it.
-    _ = encoder.Encode(serveLSPResponse{Code: 0})
+    return encoder.Encode(serveLSPResponse{Code: 0})
   default:
     fmt.Fprintf(os.Stderr, "@ttsc/lint lsp-serve: unknown verb %q\n", req.Verb)
-    _ = encoder.Encode(serveLSPResponse{Code: 2})
+    return encoder.Encode(serveLSPResponse{Code: 2})
   }
 }
 
 // encodeServeResult marshals a verb result and writes it with its code. A
 // marshal failure degrades to a nonzero code rather than a malformed line.
-func encodeServeResult(encoder *json.Encoder, result any, code int) {
+func encodeServeResult(encoder *json.Encoder, result any, code int) error {
   if code != 0 {
-    _ = encoder.Encode(serveLSPResponse{Code: code})
-    return
+    return encoder.Encode(serveLSPResponse{Code: code})
   }
   raw, err := json.Marshal(result)
   if err != nil {
-    _ = encoder.Encode(serveLSPResponse{Code: 2})
-    return
+    return encoder.Encode(serveLSPResponse{Code: 2})
   }
-  _ = encoder.Encode(serveLSPResponse{Result: raw, Code: 0})
+  return encoder.Encode(serveLSPResponse{Result: raw, Code: 0})
 }

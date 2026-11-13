@@ -1,0 +1,117 @@
+{
+  "severity": "error",
+  "claims": [
+    {
+      "name": "TypeScript production declarations",
+      "type": "typescript",
+      "files": [
+        "src/**/*.ts"
+      ],
+      "symbol": [
+        "type",
+        "function"
+      ],
+      "reference": {
+        "type": "markdown",
+        "files": [
+          "contracts/common.md",
+          "contracts/portability.md",
+          "contracts/performance.md"
+        ],
+        "symbol": "h2",
+        "checklist": true,
+        "root": "../../.agents/skills"
+      }
+    },
+    {
+      "name": "JavaScript production declarations",
+      "type": "javascript",
+      "files": [
+        "driver/**/*.cjs"
+      ],
+      "symbol": [
+        "type",
+        "function"
+      ],
+      "reference": {
+        "type": "markdown",
+        "files": [
+          "contracts/common.md",
+          "contracts/portability.md",
+          "contracts/performance.md"
+        ],
+        "symbol": "h2",
+        "checklist": true,
+        "root": "../../.agents/skills"
+      }
+    },
+    {
+      "name": "Go production declarations",
+      "type": "go",
+      "files": [
+        "cmd/**/*.go",
+        "driver/**/*.go",
+        "internal/**/*.go",
+        "utility/**/*.go",
+        "shim/**/*.go",
+        "targets/7.1/bridge/**/*.go",
+        "!**/*_test.go",
+        "!**/*_gen.go",
+        "!shim/ast/surface.go",
+        "!shim/bundled/shim.go",
+        "!shim/compiler/shim.go",
+        "!shim/parser/shim.go",
+        "!shim/scanner/shim.go",
+        "!shim/stringutil/shim.go",
+        "!shim/tsoptions/shim.go",
+        "!shim/tspath/shim.go",
+        "!shim/vfs/shim.go",
+        "!shim/vfs/cachedvfs/shim.go",
+        "!shim/vfs/osvfs/shim.go",
+        "!targets/7.1/bridge/ast/surface.go",
+        "!targets/7.1/bridge/bundled/shim.go",
+        "!targets/7.1/bridge/compiler/shim.go",
+        "!targets/7.1/bridge/parser/shim.go",
+        "!targets/7.1/bridge/scanner/shim.go",
+        "!targets/7.1/bridge/stringutil/shim.go",
+        "!targets/7.1/bridge/tsoptions/shim.go",
+        "!targets/7.1/bridge/tspath/shim.go",
+        "!targets/7.1/bridge/vfs/shim.go",
+        "!targets/7.1/bridge/vfs/cachedvfs/shim.go",
+        "!targets/7.1/bridge/vfs/osvfs/shim.go"
+      ],
+      "symbol": [
+        "type",
+        "function"
+      ],
+      "reference": {
+        "type": "markdown",
+        "files": [
+          "contracts/common.md",
+          "contracts/portability.md",
+          "contracts/performance.md"
+        ],
+        "symbol": "h2",
+        "checklist": true,
+        "root": "../../.agents/skills"
+      }
+    },
+    {
+      "name": "Go tests",
+      "type": "go",
+      "files": [
+        "**/*_test.go"
+      ],
+      "symbol": "function",
+      "reference": {
+        "type": "markdown",
+        "files": [
+          "contracts/testing.md"
+        ],
+        "symbol": "h2",
+        "checklist": true,
+        "root": "../../.agents/skills"
+      }
+    }
+  ]
+}

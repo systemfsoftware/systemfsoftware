@@ -1,20 +1,22 @@
 {
   "private": true,
   "name": "@ttsc/test-ttsc",
-  "version": "0.30.4",
-  "description": "Compiler, API, plugin host, platform, and utility plugin integration tests for ttsc.",
+  "version": "0.37.0",
+  "description": "Unit tests for ttsc source operations.",
   "type": "module",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning --import ../../scripts/register-extensionless-ts-loader.mjs --experimental-transform-types src/index.ts"
+    "start": "node --import ../../config/register-unit-loader.mjs src/index.ts",
+    "evidence": "evidence"
   },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@ttsc/banner": "workspace:*",
     "@ttsc/lint": "workspace:*",
     "@ttsc/paths": "workspace:*",
     "@ttsc/strip": "workspace:*",
     "@ttsc/testing": "workspace:*",
     "@types/node": "catalog:utils",
-    "mocha": "^11",
+    "mocha": "^12.0.2",
     "tslib": "2.8.1",
     "ttsc": "workspace:*",
     "typescript": "catalog:typescript"

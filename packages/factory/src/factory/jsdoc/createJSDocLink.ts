@@ -20,6 +20,10 @@ import { make } from "../internal/make";
  * @param name The linked name, if any.
  * @param text The trailing link text.
  * @returns The created {@link JSDocLink}.
+ * @evidence contracts/common.md#principled-implementation Storing the optional structured target and verbatim suffix preserves named and text-only link forms without resolving the target or inventing a separator.
+ * @evidence contracts/common.md#clear-and-simple-design Two direct fields separate name structure from label text, while the link kind fixes the supported inline spelling.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Supplied targets and labels use the normal link node rather than consumer-specific destinations or patched symbol lookup.
+ * @evidence contracts/common.md#meaningful-documentation Native prose explains omitted targets and caller-owned leading spaces, illustrated by a label example; paragraph and native-tag structure follows the documentation guidance.
  */
 export const createJSDocLink = (
   name: EntityName | JSDocMemberName | undefined,

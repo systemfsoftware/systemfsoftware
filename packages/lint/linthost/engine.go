@@ -11,10 +11,10 @@
 //   - `Context` is what a rule receives when it fires; it owns the
 //     report channel back to the engine.
 //
-// Rules are stateless across files: each invocation gets a fresh `Context`
+// Rules are stateless across files: each file/rule pair gets a fresh Context
 // and may not retain references to the previous file. This keeps the
-// engine concurrent-friendly even though the v0 implementation runs
-// serially.
+// file walks independent. AST-only rules may run across files in parallel;
+// a shared type checker requires serial execution.
 package linthost
 
 import (
@@ -34,36 +34,105 @@ import (
 )
 
 // Rule is the contract every lint rule satisfies.
+//
+// Metadata must remain stable after registration. Check may run concurrently
+// for different files and must not retain a Context after the file's walk.
+//
+// @evidence contracts/common.md#principled-implementation Stable names and AST kind subscriptions identify a rule and the nodes on which its Check operation has meaning.
+// @evidence contracts/common.md#clear-and-simple-design The interface separates identity, subscriptions and checking; options and checker requirements remain optional capabilities.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Rules enter through registration and explicit callbacks rather than replacing compiler methods or dispatch globals.
+// @evidence contracts/common.md#meaningful-documentation The native comment states metadata stability, concurrent calls and Context lifetime; each method explains its role with separated prose and tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Rule is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Rule is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Rule is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Rule is a declaration of data shape; the code that holds its values owns their lifetime.
 type Rule interface {
-  // Name is the identifier that users put in their `rules` map. Use
-  // the same names as `eslint` / `@typescript-eslint` where possible —
-  // this plugin is a host, not a renaming exercise.
+  // Name is the stable identifier used in configuration and diagnostics.
+  // Existing rule families keep their documented identifiers; registration
+  // does not translate ESLint namespaces or aliases.
+  //
+  // @evidence contracts/common.md#principled-implementation A stable string gives configuration, registry lookup and findings the same rule identity.
+  // @evidence contracts/common.md#clear-and-simple-design Identity is one metadata operation independent of checking or option decoding.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts The identifier belongs to the rule contract rather than a consumer or fixture-specific mapping.
+  // @evidence contracts/common.md#meaningful-documentation The comment distinguishes the registered identity from configuration alias normalization and requires stability.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation Rule.Name is a method signature without a body; each implementation owns any filesystem or process behavior.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms Rule.Name is a method signature without a body; each implementation chooses its own algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work Rule.Name is a method signature without a body; each implementation decides what, if anything, to share.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Rule.Name is a method signature without a body; each implementation owns any retained state.
   Name() string
 
   // Visits returns the AST kinds the rule cares about. The engine only
   // dispatches to rules that registered for the visited node's kind,
   // which keeps the per-node hot path linear in active rules rather
   // than total rules.
+  //
+  // The returned metadata is read during engine construction and must stay
+  // stable after registration; duplicate kinds are accepted and deduplicated.
+  //
+  // @evidence contracts/common.md#principled-implementation Subscriptions use the compiler's Kind discriminants, which match the visited AST node's Kind without textual inference.
+  // @evidence contracts/common.md#clear-and-simple-design The method declares dispatch interests separately from Check, allowing the engine to bind fixed kind buckets once.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts Subscription is a supported extension point; no AST or foreign visitor method is replaced.
+  // @evidence contracts/common.md#meaningful-documentation Native prose explains dispatch cost, metadata lifetime and duplicate-kind treatment before the tags.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation Rule.Visits is a method signature without a body; each implementation owns any filesystem or process behavior.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms Rule.Visits is a method signature without a body; each implementation chooses its own algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work Rule.Visits is a method signature without a body; each implementation decides what, if anything, to share.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Rule.Visits is a method signature without a body; each implementation owns any retained state.
   Visits() []shimast.Kind
 
-  // Check is invoked once per relevant node. Use `ctx.Report` to emit
-  // findings.
+  // Check is invoked once per subscribed node while this file/rule binding
+  // remains active. Use `ctx.Report` to emit findings.
+  //
+  // The host reports a panic and quarantines this rule for the rest of the
+  // current file, including its other subscribed kinds. The next file starts
+  // with a fresh binding. A rule must not rewrite the shared AST or replace
+  // the engine-owned Context fields.
+  // Checker access must use its supported query operations.
+  //
+  // @evidence contracts/common.md#principled-implementation Check receives an actual subscribed AST node and its file-resolved Context, so reports retain compiler positions and rule policy.
+  // @evidence contracts/common.md#clear-and-simple-design One callback owns checking while Context owns diagnostics, leaving traversal and failure containment in the host.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts The supported callback reports through Context and does not authorize mutation of compiler internals.
+  // @evidence contracts/common.md#meaningful-documentation The comment supplies invocation, reporting, mutation and panic-lifetime constraints with paragraph separation.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation Rule.Check is a method signature without a body; each implementation owns any filesystem or process behavior.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms Rule.Check is a method signature without a body; each implementation chooses its own algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work Rule.Check is a method signature without a body; each implementation decides what, if anything, to share.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Rule.Check is a method signature without a body; each implementation owns any retained state.
   Check(ctx *Context, node *shimast.Node)
 }
 
 // FormatRule is an optional marker interface that tags a Rule as a
-// formatter. `ttsc fix` is the run-everything entry point — it applies
-// edits from BOTH lint-class rules and FormatRule rules. `ttsc format`
+// formatter. `ttsc fix` applies edits from both lint and format rules.
+// `ttsc format`
 // is the format-only convenience: it filters to FormatRule findings so
 // lint-class rewrites are skipped. The marker exists so the format
 // filter can pick the right half; fix needs no filter.
 //
-// FormatRule.IsFormat must return true unconditionally — the method
-// exists as a structural marker, not a runtime toggle. Returning false
+// FormatRule.IsFormat must return true unconditionally because the method
+// is a structural marker. Returning false
 // is treated by the engine as "not a format rule" and is equivalent to
 // not implementing the interface at all.
+//
+// @evidence contracts/common.md#principled-implementation Embedding Rule plus an explicit true marker preserves the rule contract while distinguishing format findings for the format command.
+// @evidence contracts/common.md#clear-and-simple-design The optional capability adds one classification operation rather than a separate registry or checking protocol.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Command filtering uses the declared capability rather than special-casing formatter names.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain fix versus format, unconditional true and false-marker semantics before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation FormatRule is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms FormatRule is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work FormatRule is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources FormatRule is a declaration of data shape; the code that holds its values owns their lifetime.
 type FormatRule interface {
   Rule
+
+  // IsFormat identifies a formatting rule. The value is stable after
+  // registration; false keeps findings in the ordinary lint category.
+  //
+  // @evidence contracts/common.md#principled-implementation A boolean capability supplies the classification consumed when a file-rule Context is bound.
+  // @evidence contracts/common.md#clear-and-simple-design The marker adds category information without changing Check or report signatures.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts Classification is explicit metadata rather than inferred from rule names or expected edits.
+  // @evidence contracts/common.md#meaningful-documentation The method comment states value stability and false behavior, separated from its tags.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation FormatRule.IsFormat is a method signature without a body; each implementation owns any filesystem or process behavior.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms FormatRule.IsFormat is a method signature without a body; each implementation chooses its own algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work FormatRule.IsFormat is a method signature without a body; each implementation decides what, if anything, to share.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources FormatRule.IsFormat is a method signature without a body; each implementation owns any retained state.
   IsFormat() bool
 }
 
@@ -109,7 +178,8 @@ func ruleNeedsTypeChecker(r Rule) bool {
 
 // ruleDiagnosticTags returns the diagnostic tags a rule classifies its findings
 // with, or nil when the rule implements no marker or returns none. Read once per
-// (file, rule) at dispatch and copied onto every finding the rule produces.
+// (file, rule) at dispatch and shared by its findings. TaggedRule metadata must
+// remain immutable after registration.
 func ruleDiagnosticTags(r Rule) []publicrule.DiagnosticTag {
   tagged, ok := r.(publicrule.TaggedRule)
   if !ok {
@@ -138,15 +208,36 @@ func validateRuleOptions(r Rule, options json.RawMessage) error {
 //
 // `Options` is the raw JSON payload resolved for this source file from the
 // same config entries as Severity. One option slot preserves its scalar or
-// object shape; multiple positional options are an array. It is nil for a
-// bare severity. Rules decode the payload according to their public option
-// type and fall back to defaults on nil.
+// object shape; multiple positional options are an array. A severity-only
+// override may retain a matching earlier entry's payload. Nil means no effective
+// payload was supplied; rules then use their supported defaults.
+//
+// Engine-owned fields are read-only to rules. The Context and its file memo
+// live for one file walk; Checker may be nil for an AST-only invocation.
+//
+// @evidence contracts/common.md#principled-implementation The handle binds source identity, checker, resolved severity and raw options to one file/rule pair, keeping reports under that pair's policy.
+// @evidence contracts/common.md#clear-and-simple-design Public inputs describe rule evaluation; private collector, capability flags and memo keep dispatch and retention ownership inside the engine.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts File-invariant data is shared through an owned memo, not patched onto foreign AST nodes or global compiler objects.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains options shape, read-only ownership and lifetime; member comments describe nil checker, directory origin and severity.
+// @evidence contracts/portability.md#os-neutral-implementation CurrentDirectory carries the host's native directory spelling, not a URL; path-consuming rules use native filepath abstractions and own identity/capability resolution. This handle preserves that input without inferring filesystem case policy from an OS name or constructing process arguments.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Context is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Context is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Context is a declaration of data shape; the code that holds its values owns their lifetime.
 type Context struct {
-  File             *shimast.SourceFile
-  Checker          *shimchecker.Checker
+  // File is the source whose text and byte positions reports use.
+  File *shimast.SourceFile
+
+  // Checker is the shared checker when required; AST-only calls may omit it.
+  Checker *shimchecker.Checker
+
+  // CurrentDirectory is the compiler's directory for resolving project paths.
   CurrentDirectory string
-  Severity         Severity
-  Options          json.RawMessage
+
+  // Severity is this file's resolved diagnostic policy for the current rule.
+  Severity Severity
+
+  // Options is the resolved JSON payload; nil selects the rule's defaults.
+  Options json.RawMessage
 
   rule           Rule
   isFormat       bool
@@ -155,16 +246,17 @@ type Context struct {
   collect        func(*Finding)
   projectResults publicrule.ProjectResultReader
   fileMemo       *fileMemo
+  patterns       *userPatternCache
 }
 
 // fileMemo caches file-invariant values that rules would otherwise
 // recompute once per visited node. The engine binds one instance per
 // source file and shares it across every Context it builds for that
-// file's rules, so a whole-file table — the security binding table, the
-// set of top-level declared JSX names — is computed once per file
-// instead of once per matching node, collapsing an O(nodes × matches)
-// rule to O(nodes). Each file's walk is serial and gets its own
-// instance, so the map needs no locking.
+// file's rules. Whole-file tables, such as security bindings or top-level
+// JSX declarations, can be computed once instead of rescanned at every
+// matching node. Each file's walk is serial and gets its own instance,
+// so the map needs no locking. The memo becomes collectible after the walk;
+// it is not reused across changed files or later runs.
 //
 // Keys are sentinel zero-size struct values whose distinct types make
 // collisions impossible without a central registry; the engine never
@@ -187,7 +279,7 @@ func (c *Context) fileValue(key any) (any, bool) {
 
 // setFileValue records value under key for the rest of this file's walk.
 // A nil memo drops the write, leaving the caller to recompute on the next
-// request — behavior-preserving, just uncached.
+// request. Missing cache storage changes cost rather than rule meaning.
 func (c *Context) setFileValue(key, value any) {
   if c == nil || c.fileMemo == nil {
     return
@@ -198,13 +290,23 @@ func (c *Context) setFileValue(key, value any) {
   c.fileMemo.values[key] = value
 }
 
-// DecodeOptions unmarshals the rule's options blob into `out`. Returns
-// nil with no side effect when the rule was configured with severity
-// alone, so callers can write
+// DecodeOptions unmarshals the effective options blob into out. A nil Context
+// or absent bytes returns nil without changing out, so initialized defaults
+// remain intact. A severity-only override may still have inherited bytes.
 //
-//  var opts myRuleOptions
-//  ctx.DecodeOptions(&opts)
-//  // opts now holds either the user's settings or the zero value.
+// Decoding uses encoding/json semantics, including any destination unmarshaler;
+// this adapter does not validate the rule's option schema. An invalid payload
+// or destination returns the decoder's error. A type error may leave out partly
+// updated, so callers must handle the error before using the decoded result.
+//
+// @evidence contracts/common.md#principled-implementation encoding/json decodes the preserved payload into the rule's chosen schema; absent options leave initialized defaults intact.
+// @evidence contracts/common.md#clear-and-simple-design The adapter owns JSON transport only, leaving schema defaults and validation with the rule.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts It uses the ordinary decoder and propagates its error rather than rewriting malformed input to satisfy a particular rule.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs distinguish absent and inherited payloads, initialized defaults, supported decoding hooks, schema ownership and partial updates on errors before separate tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.DecodeOptions performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Absent bytes return immediately; otherwise encoding/json scans payload bytes and decodes destination fields, allocating required maps, slices and pointers. Custom unmarshaler work is additional; delegation is not fixed-step merely because this wrapper has no loop.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Decoding mutates a caller-supplied destination and may invoke its unmarshaler, so equivalent bytes alone do not establish a shareable completed effect.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Decoded values belong to the caller's destination, including partial updates on type errors. This wrapper retains no additional result, handle or task; any custom unmarshaler's resources remain its owner's responsibility.
 func (c *Context) DecodeOptions(out interface{}) error {
   if c == nil || len(c.Options) == 0 {
     return nil
@@ -215,26 +317,56 @@ func (c *Context) DecodeOptions(out interface{}) error {
 // Finding is one rule-emitted diagnostic before it gets converted into a
 // driver Diagnostic. `IsFormat` mirrors the dispatching rule's category
 // so the `format` subcommand's filter can route findings without
-// re-querying the registry. The `fix` subcommand applies findings from
-// both categories — no filter — because `ttsc fix` is the
-// run-everything entry point.
+// re-querying the registry. The `fix` subcommand applies automatic edits
+// from both categories.
+//
+// File is nil for project-wide diagnostics. Fixes and suggestions remain
+// separate because only fixes participate in automatic rewriting.
+//
+// @evidence contracts/common.md#principled-implementation The record distinguishes rule identity, severity, source range, automatic edits, opt-in edits and project diagnostics without conflating their meanings.
+// @evidence contracts/common.md#clear-and-simple-design One diagnostic record carries rendering and editing data; the private failure flag keeps host failures out of inline suppression.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Category and failure status come from dispatch and recovery, not inferred message text or consumer-specific rule names.
+// @evidence contracts/common.md#meaningful-documentation Native prose and separated member comments explain byte units, nil file, edit ownership and command treatment.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Finding is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Finding is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Finding is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Finding is a declaration of data shape; the code that holds its values owns their lifetime.
 type Finding struct {
-  Rule        string
-  Severity    Severity
-  File        *shimast.SourceFile
-  Pos         int
-  End         int
-  Message     string
-  Fix         []TextEdit
+  // Rule is the registered identity attached to the diagnostic.
+  Rule string
+
+  // Severity is the reporting policy, including errors produced by the host.
+  Severity Severity
+
+  // File owns the range; nil identifies a project-wide diagnostic.
+  File *shimast.SourceFile
+
+  // Pos is the inclusive starting byte offset within File.
+  Pos int
+
+  // End is the exclusive ending byte offset within File.
+  End int
+
+  // Message explains the finding to the user.
+  Message string
+
+  // Fix contains automatic replacements copied from the reporting rule.
+  Fix []TextEdit
+
+  // Suggestions contains separately selected editor actions with owned edits.
   Suggestions []Suggestion
-  IsFormat    bool
+
+  // IsFormat marks findings eligible for the format-only command.
+  IsFormat bool
+
   // Tags classify what the finding is (unnecessary, deprecated), for an editor
   // to render it distinctively. Populated from the rule's TaggedRule marker at
-  // dispatch, so every finding a tagged rule produces carries its tags.
+  // dispatch and shared by that rule's findings; treat this metadata as read-only.
   Tags []publicrule.DiagnosticTag
+
   // RelatedInformation are secondary locations this finding points at, each with
-  // a message. Positions are byte offsets into File — already normalized against
-  // it at report time — so the LSP renderer resolves them against File's text
+  // a message. Positions are byte offsets into File, normalized against it at
+  // report time, so the LSP renderer resolves them against File's text
   // and attaches File's own URI.
   RelatedInformation []publicrule.RelatedInformation
 
@@ -244,17 +376,45 @@ type Finding struct {
 // TextEdit is one byte-range source replacement used by a fix or suggestion.
 // Positions use the same byte offsets as shim AST nodes and must point inside
 // the finding's source file.
+//
+// @evidence contracts/common.md#principled-implementation A half-open byte interval and replacement text express deletion, insertion and replacement in the same units as compiler positions.
+// @evidence contracts/common.md#clear-and-simple-design Three fields describe one edit without coupling it to automatic or user-selected application.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Edits target explicit source ranges rather than mutating foreign AST objects or substituting expected output.
+// @evidence contracts/common.md#meaningful-documentation Native prose and separated member comments define interval bounds, insertion and replacement units.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation TextEdit is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms TextEdit is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work TextEdit is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources TextEdit is a declaration of data shape; the code that holds its values owns their lifetime.
 type TextEdit struct {
-  Pos  int
-  End  int
+  // Pos is the inclusive starting byte offset; Pos == End inserts text.
+  Pos int
+
+  // End is the exclusive ending byte offset in the finding's source file.
+  End int
+
+  // Text replaces the selected bytes; empty text deletes the interval.
   Text string
 }
 
 // Suggestion is an opt-in editor action attached to a finding. Unlike Fix,
 // suggestion edits are never consumed by `ttsc fix` or source.fixAll.ttsc;
 // the LSP host exposes them as individual quick fixes selected by the user.
+//
+// Reporting omits actions with an empty title or edit list.
+//
+// @evidence contracts/common.md#principled-implementation A title and source edits represent a user-selected action, distinct from the diagnostic's automatic fix.
+// @evidence contracts/common.md#clear-and-simple-design The record contains only editor presentation and replacements; reporting owns copying and omission of unusable actions.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Suggestions use the supported quick-fix path rather than disguising optional transformations as automatic fixes.
+// @evidence contracts/common.md#meaningful-documentation Native prose states opt-in application, excluded automatic commands and member ownership with separated comments.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Suggestion is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Suggestion is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Suggestion is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Suggestion is a declaration of data shape; the code that holds its values owns their lifetime.
 type Suggestion struct {
+  // Title is the nonempty label presented for this quick fix.
   Title string
+
+  // Edits are replacements in the finding's file, copied during reporting.
   Edits []TextEdit
 }
 
@@ -262,13 +422,35 @@ type Suggestion struct {
 // trimmed past leading trivia (whitespace + comments) so the renderer's
 // `path:line:col` banner points at the offending token, not the start of
 // the surrounding indentation. A finding is silently dropped if the
-// configured severity is `off` (defensive — the engine already filters
+// configured severity is `off` (defensive: the engine already filters
 // by severity before calling Check, but Report is the final gate).
+// A nil node is also dropped. Use an engine-bound Context for collection.
+//
+// @evidence contracts/common.md#principled-implementation Delegating to ReportFix without edits preserves node range normalization and the current rule's severity gate.
+// @evidence contracts/common.md#clear-and-simple-design The diagnostic-only convenience shares the node reporting implementation instead of duplicating collection policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Reports use compiler positions and the bound collector; no guessed location or special expected diagnostic is inserted.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains trivia trimming and disabled-rule behavior, with tags separated from the description.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.Report performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Delegation clamps the node range in constant work and scans t leading-trivia bytes before collection, O(t) plus the rule-name and collector callbacks. No edit list is copied for this diagnostic-only call.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Collection emits a new finding for this invocation; equal messages or nodes alone do not prove that suppressing a later report preserves effects.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The new finding transfers to the bound collector, whose host owns the per-file/run population. This wrapper retains no separate history, handle or task.
 func (c *Context) Report(node *shimast.Node, message string) {
   c.ReportFix(node, message)
 }
 
 // ReportFix records a node-scoped finding with optional autofix edits.
+// The diagnostic range is bounded to File and trimmed past leading trivia.
+// Edits are copied but their ranges are validated by the edit application path.
+// A nil node or off severity drops the report; collection requires an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation nodeFindingRange bounds positions before reading trivia; collection preserves the configured severity and copies caller-owned edits.
+// @evidence contracts/common.md#clear-and-simple-design One operation owns node diagnostics with automatic edits; the helper owns coordinate normalization independently of edit applicability.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The operation reports the actual node under the bound rule, leaving invalid edit rejection to its supported application boundary.
+// @evidence contracts/common.md#meaningful-documentation The native comment distinguishes diagnostic normalization, edit copying and application-time validation before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportFix performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Range clamping is constant work; trivia scanning examines t source bytes and edit cloning copies m records, O(t+m) plus the rule-name and collector callbacks. The finding stores O(m) copied edit records while immutable replacement strings remain shared.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Reporting mutates the bound collector for one invocation; this operation owns no identity or protocol for sharing or suppressing equivalent reporting effects.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The finding and copied edit slice transfer to the bound collector; the host owns the accumulated population. This method retains no separate historical result, handle or task.
 func (c *Context) ReportFix(node *shimast.Node, message string, edits ...TextEdit) {
   if c.Severity == SeverityOff || node == nil {
     return
@@ -290,6 +472,18 @@ func (c *Context) ReportFix(node *shimast.Node, message string, edits ...TextEdi
 // ReportSuggestion records a node-scoped finding with one opt-in editor
 // action. The diagnostic is still reported when edits is empty, but no quick
 // fix is advertised.
+//
+// An empty title also omits the action. Edits are copied when retained.
+// A nil node or off severity drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation The node range is normalized independently of newSuggestions, which retains only titled actions with copied edits while preserving the diagnostic.
+// @evidence contracts/common.md#clear-and-simple-design The single-action method separates user-selected edits from automatic fixes and delegates action construction to one helper.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Optional edits are explicitly suggestions and never promoted to automatic fixes to satisfy a consumer.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains diagnostic retention, omitted actions and edit copying, with separate descriptive and tag blocks.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportSuggestion performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Range clamping is constant work; scanning t trivia bytes and copying m retained edit records costs O(t+m) plus rule-name and collector callbacks. Empty titles or edits allocate no action, and immutable strings remain shared.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Each invocation emits a diagnostic with opt-in actions; equal inputs alone do not permit suppressing its collector effect.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The finding and copied action edits transfer to the host collector. This operation owns no separate history, handle or task; the host owns the accumulated findings.
 func (c *Context) ReportSuggestion(node *shimast.Node, message string, title string, edits ...TextEdit) {
   if c.Severity == SeverityOff || node == nil {
     return
@@ -312,6 +506,16 @@ func (c *Context) ReportSuggestion(node *shimast.Node, message string, title str
 // automatic fix and any number of opt-in editor suggestions. Each slice is
 // cloned before collection so a rule cannot mutate a previously reported
 // finding through retained backing storage.
+// A nil node or off severity drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation One normalized node range anchors the diagnostic, while independent copies preserve automatic and opt-in edits under their distinct application semantics.
+// @evidence contracts/common.md#clear-and-simple-design The combined report assembles one Finding using shared normalization and cloning helpers instead of emitting duplicate diagnostics.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Fix and suggestion channels remain explicit; optional actions are not hidden in automatic rewrite data.
+// @evidence contracts/common.md#meaningful-documentation The comment explains the combined diagnostic and caller-slice ownership; Suggestion documents which empty actions cloning omits.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportFixSuggestions performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms With t trivia bytes, f fix records, s supplied suggestions and e retained suggestion edit records, normalization and cloning cost O(t+f+s+e) plus callbacks. Storage is O(f+s+e), including capacity reserved for omitted actions; immutable strings remain shared.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The collector receives one effectful diagnostic per invocation; no operation-owned identity or protocol establishes that repeated reports may be shared or suppressed.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Copied fix and suggestion records transfer with the finding to the host collector. This operation retains no separate history or native resource; the host owns the per-file/run population.
 func (c *Context) ReportFixSuggestions(
   node *shimast.Node,
   message string,
@@ -353,11 +557,33 @@ func (c *Context) nodeFindingRange(node *shimast.Node) (int, int) {
 // ReportRange records a finding at an explicit byte range inside the
 // current file. Use this when the rule wants to highlight a sub-token of
 // a node (e.g. an operator inside a BinaryExpression).
+// Off severity or a missing File drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation Delegating without edits to ReportRangeFix preserves half-open byte range normalization and severity handling for sub-node diagnostics.
+// @evidence contracts/common.md#clear-and-simple-design The range-only convenience reuses the range collector rather than introducing another reporting policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The caller supplies actual source byte positions; reporting does not infer ranges from expected message text.
+// @evidence contracts/common.md#meaningful-documentation The native comment defines explicit byte ranges and a sub-token use case before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRange performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Delegation normalizes the supplied byte range in constant work with no trivia scan or edit copy, plus the rule-name and collector callbacks.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Each invocation emits a new diagnostic; equal ranges and messages alone do not establish permission to suppress its collector effect.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The new finding transfers to the host collector, which owns the per-file/run population. This wrapper owns no separate history, handle or task.
 func (c *Context) ReportRange(pos, end int, message string) {
   c.ReportRangeFix(pos, end, message)
 }
 
 // ReportRangeFix records an explicit-range finding with optional autofix edits.
+// A missing File drops the report. Diagnostic coordinates are normalized;
+// edit ranges are copied unchanged for validation during application.
+// Off severity also drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation NormalizeLintRange bounds the explicit diagnostic to its file while copied replacements retain their own coordinates and application validation.
+// @evidence contracts/common.md#clear-and-simple-design Explicit range reporting avoids constructing synthetic AST nodes and retains the same Finding transport as node reports.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Source coordinates pass through the supported normalization helper rather than patched compiler node positions.
+// @evidence contracts/common.md#meaningful-documentation Native prose distinguishes missing-file behavior, diagnostic bounds and edit validation with separated tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRangeFix performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Range clamping is constant work and cloning m edit records costs O(m), plus rule-name and collector callbacks. Stored edit records occupy O(m) space; replacement strings remain shared and no trivia scan runs.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Reporting mutates the bound collector for one invocation, without an operation-owned identity or protocol for sharing equivalent effects.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Finding and copied edits transfer to the host collector. This method owns no separate history or native resource; the host owns accumulated findings.
 func (c *Context) ReportRangeFix(pos, end int, message string, edits ...TextEdit) {
   if c.Severity == SeverityOff || c.File == nil {
     return
@@ -379,6 +605,17 @@ func (c *Context) ReportRangeFix(pos, end int, message string, edits ...TextEdit
 // ReportRangeSuggestion records an explicit-range finding with one opt-in
 // editor action. Suggestion edits stay separate from automatic fixes and are
 // ignored by `ttsc fix` and source.fixAll.ttsc.
+// Empty titles or edit lists omit the action while retaining the diagnostic.
+// Off severity or a missing File drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation Normalized source coordinates and a separately copied titled action preserve diagnostic location and opt-in rewrite meaning.
+// @evidence contracts/common.md#clear-and-simple-design The explicit-range counterpart uses the common suggestion constructor without fabricating a node or automatic fix.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The action stays in the supported suggestion channel; no command-specific automatic rewrite exception is added.
+// @evidence contracts/common.md#meaningful-documentation Native prose states source scope, automatic-command exclusion and empty-action behavior before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRangeSuggestion performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Constant range clamping and copying m retained edit records cost O(m) plus callbacks, without scanning trivia. Empty titles or edits allocate no action; retained edit storage is O(m) with shared immutable strings.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Each invocation collects one diagnostic; matching coordinates or action payloads alone do not permit suppressing the reporting effect.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The finding and copied action transfer to the host collector. This method owns no historical cache, handle or task; the host owns the per-file/run population.
 func (c *Context) ReportRangeSuggestion(pos, end int, message string, title string, edits ...TextEdit) {
   if c.Severity == SeverityOff || c.File == nil {
     return
@@ -401,6 +638,19 @@ func (c *Context) ReportRangeSuggestion(pos, end int, message string, title stri
 // candidate suggestions. It is the range counterpart of ReportFixSuggestions,
 // added so the public contributor surface can offer a choice at a sub-token
 // range and not only at a whole node.
+//
+// Unusable actions with an empty title or edit list are omitted; retained
+// actions own copies of their edits.
+// Off severity or a missing File drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation Normalizing the primary range and cloning each usable action preserves a single diagnostic with independent user-selected alternatives.
+// @evidence contracts/common.md#clear-and-simple-design A range report plus the shared multi-action cloning helper expresses alternatives without duplicate diagnostics or synthetic nodes.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Alternative edits remain explicit suggestions rather than a sequence of compensating automatic transformations.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain sub-token alternatives, omitted actions and owned edits with a separate tag block.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRangeSuggestions performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms With s supplied suggestions and e retained edit records, constant range clamping and ordered action cloning cost O(s+e) plus callbacks. Storage is O(s+e), including capacity reserved for omitted actions; strings remain shared and trivia is not scanned.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work One invocation produces one collector effect with its ordered choices; no operation-owned sharing identity or protocol permits suppressing later reports.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Copied choices and edit records transfer with the finding to the host collector. This method owns no separate historical state, handle or task; the host controls accumulated finding lifetime.
 func (c *Context) ReportRangeSuggestions(pos, end int, message string, suggestions ...Suggestion) {
   if c.Severity == SeverityOff || c.File == nil {
     return
@@ -420,9 +670,20 @@ func (c *Context) ReportRangeSuggestions(pos, end int, message string, suggestio
 }
 
 // ReportRelated records a node-scoped finding with related source locations.
-// Each related location's Pos/End is normalized against the current file — the
-// same bounding a range finding gets — so a rule that miscomputed an offset
+// Each related location's Pos/End is normalized against the current file,
+// like a range finding, so a rule that miscomputed an offset
 // cannot point the editor outside the file.
+// Related records are copied. A nil node or off severity drops the report;
+// use an engine-bound Context for collection.
+//
+// @evidence contracts/common.md#principled-implementation The primary node and copied secondary ranges are independently bounded to the same source, matching the renderer's single-file related-location model.
+// @evidence contracts/common.md#clear-and-simple-design One Finding carries the primary message and related locations; normalizeRelated owns copying and coordinate policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Related locations use actual supplied positions and supported normalization rather than patched source identities.
+// @evidence contracts/common.md#meaningful-documentation Native prose states same-file ownership, byte bounds and the reason for normalization before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRelated performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Node normalization scans t trivia bytes and copying r related records clamps each in constant work, O(t+r) plus rule-name and collector callbacks. Stored records occupy O(r) space while immutable messages remain shared.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Each invocation emits a new diagnostic with related locations; equal messages or ranges do not establish permission to suppress its collector effect.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The finding and copied related records transfer to the host collector. This method owns no separate history, handle or task; the host owns accumulated findings.
 func (c *Context) ReportRelated(node *shimast.Node, message string, related ...publicrule.RelatedInformation) {
   if c.Severity == SeverityOff || node == nil {
     return
@@ -444,6 +705,19 @@ func (c *Context) ReportRelated(node *shimast.Node, message string, related ...p
 // ReportRangeRelated records an explicit-range finding with related source
 // locations. Both the primary range and each related range are normalized
 // against the current file.
+//
+// Related locations are copied; locations in other files require a different
+// reporting API and cannot be represented by this method.
+// Off severity or a missing File drops the report; use an engine-bound Context.
+//
+// @evidence contracts/common.md#principled-implementation Independent normalization bounds primary and secondary byte intervals to the renderer's common file identity, and copied locations isolate caller storage.
+// @evidence contracts/common.md#clear-and-simple-design The explicit-range method reuses the related-location helper while keeping node-dependent trivia trimming out of this path.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The method exposes its single-file limitation rather than compensating with guessed foreign-file coordinates.
+// @evidence contracts/common.md#meaningful-documentation Native prose supplies normalization, copying and the unsupported cross-file distinction before its separated tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Context.ReportRangeRelated performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Primary clamping is constant work and copying r related records normalizes each in constant work, O(r) plus callbacks. Stored records occupy O(r) space with shared immutable messages; no trivia scan runs.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Reporting mutates the collector for one invocation; matching primary or secondary ranges alone do not make repeated reporting effects shareable.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Finding and related-record ownership transfers to the host collector. This method retains no separate historical state or native resource; the host controls the per-file/run population.
 func (c *Context) ReportRangeRelated(pos, end int, message string, related ...publicrule.RelatedInformation) {
   if c.Severity == SeverityOff || c.File == nil {
     return
@@ -496,11 +770,10 @@ func cloneTextEdits(edits []TextEdit) []TextEdit {
 }
 
 func newSuggestions(title string, edits []TextEdit) []Suggestion {
-  cloned := cloneTextEdits(edits)
-  if title == "" || len(cloned) == 0 {
+  if title == "" || len(edits) == 0 {
     return nil
   }
-  return []Suggestion{{Title: title, Edits: cloned}}
+  return []Suggestion{{Title: title, Edits: cloneTextEdits(edits)}}
 }
 
 func cloneSuggestions(suggestions []Suggestion) []Suggestion {
@@ -509,11 +782,10 @@ func cloneSuggestions(suggestions []Suggestion) []Suggestion {
   }
   cloned := make([]Suggestion, 0, len(suggestions))
   for _, suggestion := range suggestions {
-    edits := cloneTextEdits(suggestion.Edits)
-    if suggestion.Title == "" || len(edits) == 0 {
+    if suggestion.Title == "" || len(suggestion.Edits) == 0 {
       continue
     }
-    cloned = append(cloned, Suggestion{Title: suggestion.Title, Edits: edits})
+    cloned = append(cloned, Suggestion{Title: suggestion.Title, Edits: cloneTextEdits(suggestion.Edits)})
   }
   if len(cloned) == 0 {
     return nil
@@ -531,14 +803,28 @@ var registered = &registry{rules: map[string]Rule{}}
 
 // Register adds a rule to the global registry. Called from each rule's
 // `init()`. Duplicate names are a programmer error and panic.
+//
+// Registration must finish before engines or registry readers run; the
+// registry does not synchronize concurrent mutation. A nil rule interface panics.
+// Registered implementations and names remain in this process-wide registry;
+// there is no public unregister operation.
+//
+// @evidence contracts/common.md#principled-implementation Checking and inserting the same captured name establishes unique rule identity; new contributor names invalidate the derived diagnostic-code table.
+// @evidence contracts/common.md#clear-and-simple-design The init-time registry owns identity and cache invalidation together, leaving per-run configuration to Engine.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Registration is the declared extension boundary, with duplicate identities rejected rather than silently replacing an implementation.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain initialization ownership, duplicate panic and the absence of concurrent mutation support before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Register performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms Capturing Name once and using keyed membership/insertion avoids a registry scan. Hashing costs depend on name bytes; map insertion is amortized, with the contributor Name callback and optional diagnostic-table mutex acquisition as additional work.
+// @evidence contracts/performance.md#reuse-equivalent-work A new name absent from the frozen built-in code ledger marks runtime assignments dirty. RuleCode reuses its table only while the registered contributor set remains equivalent; invalidation does not replace the unsupported-concurrent-registry-mutation premise.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The process-wide registry retains one implementation and name per accepted identity for process lifetime, with no public removal or cardinality cap. Derived runtime codes retain registered contributor entries and are replaced on recomputation; the invalidation mutex is unlocked immediately, and this function creates no handle or task.
 func Register(rule Rule) {
   if rule == nil {
     panic("@ttsc/lint: Register called with nil rule")
   }
-  if _, exists := registered.rules[rule.Name()]; exists {
-    panic("@ttsc/lint: rule " + rule.Name() + " registered twice")
-  }
   name := rule.Name()
+  if _, exists := registered.rules[name]; exists {
+    panic("@ttsc/lint: rule " + name + " registered twice")
+  }
   registered.rules[name] = rule
   if _, builtIn := builtInRuleCodes[name]; !builtIn {
     invalidateRuntimeRuleCodes()
@@ -546,10 +832,33 @@ func Register(rule Rule) {
 }
 
 // LookupRule returns the registered rule by name, or nil if missing.
+// The returned implementation is shared and must preserve its registered
+// metadata; callers must not register rules concurrently with lookup.
+//
+// @evidence contracts/common.md#principled-implementation A map lookup retrieves the exact registered identity and Go's absent-entry zero value expresses a missing implementation.
+// @evidence contracts/common.md#clear-and-simple-design The accessor performs identity lookup only, without configuration policy or rule instantiation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts It consults the owned registry rather than translating consumer-specific names or patching foreign implementations.
+// @evidence contracts/common.md#meaningful-documentation Native prose supplies absence, shared implementation and registration-lifetime semantics before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation LookupRule performs no filesystem or process operation of its own.
+// @evidence contracts/performance.md#efficient-algorithms One keyed registry lookup avoids enumeration; string hashing depends on name bytes, with no rule construction or copied output population.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This accessor retrieves an already-registered implementation; it coordinates no request computation or invalidation protocol of its own.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The returned implementation remains owned by the process-wide registry; this accessor retains no separate history and acquires no handle or task.
 func LookupRule(name string) Rule { return registered.rules[name] }
 
 // AllRuleNames returns the registry sorted alphabetically. Useful for
 // `--list-rules` style introspection and stable test snapshots.
+//
+// The returned slice is owned by the caller. The registry must be frozen
+// during enumeration, as it is during ordinary engine execution.
+//
+// @evidence contracts/common.md#principled-implementation Enumerating map keys and sorting strings produces the complete registered identity set in deterministic lexical order.
+// @evidence contracts/common.md#clear-and-simple-design One enumeration operation returns an owned slice, keeping registry storage private and ordering policy local.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Names come from actual registrations rather than a copied list of known rules or expected snapshots.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs state ordering, caller ownership and the frozen-registry premise before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation AllRuleNames lists registered rule names and touches no filesystem path or process.
+// @evidence contracts/performance.md#efficient-algorithms For r registrations, one key scan and O(r log r) lexical comparisons produce the sorted output, with comparison cost depending on shared name prefixes. The new slice stores O(r) string headers and shares immutable name bytes.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Enumeration owns no registration-generation key or request coordination; each call returns an independently mutable slice for the current stable registry.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The returned slice is new and owned by the caller; no handle or task is acquired.
 func AllRuleNames() []string {
   names := make([]string, 0, len(registered.rules))
   for n := range registered.rules {
@@ -563,11 +872,22 @@ func AllRuleNames() []string {
 // per source file, dispatching each visited node to its interested rules.
 //
 // `rules` is a fixed-size slice indexed by `shimast.Kind` value rather
-// than a map. `KindCount` (~350) is small and bounded, and the slice
-// removes a per-node map hash from the hot path — a `walk(node)` over a
-// 50k-node file performs 50k dispatch lookups. The conversion is
-// equivalent in semantics; entries for unused kinds are nil and the
-// per-rule slice still grows by append.
+// than a map. `KindCount` bounds the table, and each node selects its
+// subscribed rules directly by kind. Entries for unused kinds are nil.
+//
+// The registry and resolver must remain stable while this engine is used;
+// configure execution settings before Run and do not overlap runs.
+// Option regex results belong to the parsed configuration when available;
+// other resolvers use this engine's cache. A live engine keeps that owner alive.
+//
+// @evidence contracts/common.md#principled-implementation Kind-indexed subscriptions preserve the compiler's discriminants; separate configuration error, project settings and file-rule state distinguish binding failure from execution policy.
+// @evidence contracts/common.md#clear-and-simple-design Engine owns immutable dispatch metadata and run settings; per-file Contexts own transient checking state, with a mutex confined to cross-file unknown-name collection.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Rules bind through the registry and resolver; no consumer-specific compiler mutation or expected-result table drives execution.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain dispatch representation, stable inputs and nonoverlapping execution, separating these usage premises from the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Engine is a declaration of data shape and performs no filesystem, path or process operation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Engine is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Engine is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Engine is a declaration of data shape; the code that holds its values owns their lifetime.
 type Engine struct {
   config             RuleResolver
   rules              [][]Rule
@@ -580,6 +900,7 @@ type Engine struct {
   projectSettings    map[string]ProjectRuleSetting
   configError        error
   currentDirectory   string
+  patterns           *userPatternCache
 }
 
 // SetSerial forces Engine.Run to walk files one at a time. The host calls
@@ -588,6 +909,17 @@ type Engine struct {
 // out of file-level parallelism. Type-aware rule sets always run serial
 // regardless of this flag because their standalone checker is not concurrent,
 // so callers do not need to force serial execution themselves.
+//
+// Set this flag before execution; concurrent changes are unsupported.
+//
+// @evidence contracts/common.md#principled-implementation The flag requests serial file execution while runsSerial retains the independent checker-safety requirement.
+// @evidence contracts/common.md#clear-and-simple-design A single setting expresses caller scheduling policy without changing rule binding or checker detection.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Serial execution uses the same checking path and does not substitute a benchmark-specific implementation.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains mandatory checker serialization, caller choice and configuration timing before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Engine.SetSerial performs no filesystem or process operation of its own.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Engine.SetSerial has no loop of its own and runs a fixed number of steps.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Engine.SetSerial keeps no cache and shares no in-flight computation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Engine.SetSerial acquires no handle or task and retains nothing beyond the receiver's own fields.
 func (e *Engine) SetSerial(serial bool) {
   if e == nil {
     return
@@ -597,6 +929,18 @@ func (e *Engine) SetSerial(serial bool) {
 
 // SetCurrentDirectory supplies the compiler Program's current directory for
 // rule options whose relative paths are project-rooted.
+//
+// Set the directory before execution. Empty leaves Run's working-directory
+// fallback active; this setter neither resolves nor changes the process cwd.
+//
+// @evidence contracts/common.md#principled-implementation Retaining the compiler-supplied directory preserves the project origin used by rule path options instead of treating the launch directory as the project.
+// @evidence contracts/common.md#clear-and-simple-design The setter carries directory context only; Run owns fallback and rules own resolution of their path options.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts It transports an explicit origin without changing global cwd or inserting machine-specific paths.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain project rooting, empty behavior, configuration timing and absence of process mutation before the tags.
+// @evidence contracts/portability.md#os-neutral-implementation Carries the compiler Program's native directory spelling unchanged into the per-file rule Context. It does not convert native paths to URL spelling, infer filesystem case policy or change global cwd; Run owns native cwd fallback and each rule owns relative-path resolution.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Engine.SetCurrentDirectory has no loop of its own and runs a fixed number of steps.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Engine.SetCurrentDirectory keeps no cache and shares no in-flight computation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Engine.SetCurrentDirectory acquires no handle or task and retains nothing beyond the receiver's own fields.
 func (e *Engine) SetCurrentDirectory(currentDirectory string) {
   if e != nil {
     e.currentDirectory = currentDirectory
@@ -611,27 +955,60 @@ func (e *Engine) runsSerial() bool {
 }
 
 // NewEngine returns an engine configured for `config`. Rules whose
-// severity is `off` are skipped entirely. Configuration entries that name
-// an unknown rule are recorded so the caller can surface them as a
-// configuration warning rather than a silent typo.
+// severity is `off` have no file subscriptions; option validation still considers
+// declared variants. Active unknown names are recorded so the caller can surface
+// them as a configuration warning rather than a silent typo.
+//
+// Call ConfigError before execution; invalid declarations do not form a
+// usable engine. The registry and configuration must remain stable afterward.
+//
+// @evidence contracts/common.md#principled-implementation RuleConfig implements the resolver contract, so delegation preserves flat severity semantics under the same validation and binding rules.
+// @evidence contracts/common.md#clear-and-simple-design The flat-config constructor delegates to the single resolver-based constructor, avoiding a second dispatch implementation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Flat configuration uses the supported resolver interface without exceptions for particular callers or rule names.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains disabled and unknown rules, the ConfigError requirement and input stability before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation The flat-config adapter introduces no native path or process policy; resolver-based construction and rule callbacks own their supported input operations.
+// @evidence contracts/performance.md#efficient-algorithms Delegation includes resolver construction over the whole file/project registry, config names, option validation and subscribed kinds; the wrapper does not make that work constant. RuleConfig supplies flat severity metadata without options payloads.
+// @evidence contracts/performance.md#reuse-equivalent-work The delegated constructor deduplicates identical per-rule option bytes within this construction. Each call returns a distinct configurable engine; this wrapper coordinates no cross-call sharing.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The newly created engine transfers to its caller with registry subscriptions, configuration and binding state; validation-only tables end at construction. The wrapper retains no history of returned engines and owns no native handle or task.
 func NewEngine(config RuleConfig) *Engine {
   return NewEngineWithResolver(config)
 }
 
 // NewEngineWithResolver returns an engine configured by a resolver that can
 // vary rule severities per file.
+//
+// ResolveProjectRules failure stops construction before subsequent resolver
+// and rule metadata calls. Option validation failures are collected in
+// ConfigError; callers must reject that engine before execution.
+//
+// The resolver and registry must remain stable for the engine's lifetime.
+// Identical option payloads for one rule are validated once. Deduplication
+// tables exist only during construction; dispatch buckets live with Engine.
+//
+// @evidence contracts/common.md#principled-implementation Project resolution establishes valid global state before metadata projection; option validation excludes invalid bindings, and deduplicated Kind subscriptions preserve one invocation per rule/node.
+// @evidence contracts/common.md#clear-and-simple-design Construction owns resolver validation, checker requirements and dispatch binding; per-file resolution remains in runFile rather than copied into global settings.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Invalid project resolution returns at the owning boundary rather than deriving metadata from an invalid configuration; legacy option fallback is restricted to resolvers lacking per-file option resolution.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs state file-scoped policy, initial failure effects, accumulated option errors and stable-input ownership before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Construction defines name, option and kind binding without its own native path or process policy. Resolver and rule callbacks own any supported native input operations they perform.
+// @evidence contracts/performance.md#efficient-algorithms For r registered file rules, p project rules, v returned option variants, b payload bytes, a active names, k requested kinds and u unknown names, local work is O(r log r+p log p+u log u+v+b+a+k) sorting, scans and set operations. String hashing/comparison examines name bytes; resolver, display-severity lookup, metadata and unique-option validator costs are additional. A display-severity alias lookup may scan the returned map entries. All registered file rules are considered for options, not only enabled subscriptions.
+// @evidence contracts/performance.md#reuse-equivalent-work Stable registered rule metadata and identical option bytes define one validation input within construction; a per-rule seen set invokes validation once per distinct byte payload. Sets are not shared across rules or engine constructions; per-file resolution remains separate. Parsed configurations share their synchronized regex result cache across engines and command wrappers; other resolvers have an engine-owned cache because no stable shared owner is available.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The caller receives the engine with its resolver, project settings, enabled/unknown names, KindCount-indexed subscriptions and regex-cache owner. Validation-only sets end at constructor return. Retained dispatch/configuration grows with registered rules, configured names, project payloads and subscribed kinds; regex results grow with patterns requested from the stable live configuration. Replacing a resolver leaves its cache collectible after its last engine/context owner ends, with no process-global historical-pattern cache, native handle or task owned here.
 func NewEngineWithResolver(config RuleResolver) *Engine {
   if config == nil {
     config = RuleConfig{}
   }
   eng := &Engine{
     config:            config,
+    patterns:          patternCacheForResolver(config),
     rules:             make([][]Rule, int(shimast.KindCount)),
     enabled:           make(map[string]Severity),
     unknownDirectives: make(map[string]struct{}),
   }
   projectRuleNames := allProjectRuleNames()
   eng.projectSettings, eng.configError = config.ResolveProjectRules(projectRuleNames)
+  if eng.configError != nil {
+    return eng
+  }
   for _, name := range projectRuleNames {
     setting := eng.projectSettings[name]
     if setting.Declared && len(setting.Options) > 0 && !registeredProjectRules[name].acceptsOptions {
@@ -709,6 +1086,18 @@ func NewEngineWithResolver(config RuleResolver) *Engine {
 // config or in an inline `eslint-disable*` directive but have no
 // registered implementation. Directive-side unknowns are deduped so the
 // same misspelling on every page doesn't flood the warning channel.
+//
+// Callers must treat the returned slice as read-only: when no directive
+// names have been collected, it may share the engine's configuration list.
+//
+// @evidence contracts/common.md#principled-implementation A locked snapshot of directive names is unioned with construction-time unknowns and sorted, preserving one warning identity per collected name.
+// @evidence contracts/common.md#clear-and-simple-design The accessor merges the two sources of unknown identity while mutation remains in the narrowly locked directive collector.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Unknown names come from resolver entries and parsed directives, not a whitelist of expected diagnostics.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains both sources, deduplication and borrowed-slice ownership before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation UnknownRules merges rule-name lists and touches no filesystem path or process.
+// @evidence contracts/performance.md#efficient-algorithms Copies m directive names under the lock and borrows the already sorted configured list when m is zero. Otherwise a hash-set union over n+m names sorts u unique names, requiring O(n+m+u log u) name operations and O(n+m) temporary entries; hashing and comparison also examine name bytes.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work UnknownRules reads the current engine state for one warning snapshot; it does not coordinate a shared producer across requests or consumers. With no directive additions it directly reuses the construction-time sorted list.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The directive mutex is held only while the discovered names are copied and is released before the merge; the returned slice is new when extras exist.
 func (e *Engine) UnknownRules() []string {
   if e == nil {
     return nil
@@ -779,12 +1168,36 @@ func (e *Engine) recordUnknownDirectiveRule(name string) {
 }
 
 // NeedsTypeChecker reports whether any active rule requires Context.Checker.
+//
+// A nil receiver reports false. Project and file rules both contribute to
+// the construction-time decision; invalid engines must be rejected first.
+//
+// @evidence contracts/common.md#principled-implementation The stored decision combines active project and file rule capabilities so callers construct the shared checker only when needed.
+// @evidence contracts/common.md#clear-and-simple-design The accessor exposes the binding result without repeating capability inspection during file execution.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Checker demand derives from declared rule capabilities rather than a hardcoded family or consumer list.
+// @evidence contracts/common.md#meaningful-documentation Native prose identifies both contributors, nil behavior and invalid-engine preconditions before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Engine.NeedsTypeChecker performs no filesystem or process operation of its own.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Engine.NeedsTypeChecker has no loop of its own and runs a fixed number of steps.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Engine.NeedsTypeChecker keeps no cache and shares no in-flight computation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Engine.NeedsTypeChecker acquires no handle or task and retains nothing beyond the receiver's own fields.
 func (e *Engine) NeedsTypeChecker() bool {
   return e != nil && e.needsTypeChecker
 }
 
 // ConfigError reports an invalid project-rule declaration or rule option
 // payload discovered while binding the resolver.
+//
+// Callers must check this result before execution. A nil receiver has no
+// stored error; absence of an Engine is not proof of valid configuration.
+//
+// @evidence contracts/common.md#principled-implementation Returning the retained resolver or joined option-validation error preserves the failed construction state for the host's explicit rejection boundary.
+// @evidence contracts/common.md#clear-and-simple-design One accessor exposes binding failure without mixing configuration errors into ordinary rule findings.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Errors remain visible to callers instead of being discarded or converted into default configuration.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains validation sources, required timing and nil-receiver meaning before the tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Engine.ConfigError performs no filesystem or process operation of its own.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Engine.ConfigError has no loop of its own and runs a fixed number of steps.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Engine.ConfigError keeps no cache and shares no in-flight computation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Engine.ConfigError acquires no handle or task and retains nothing beyond the receiver's own fields.
 func (e *Engine) ConfigError() error {
   if e == nil {
     return nil
@@ -792,8 +1205,18 @@ func (e *Engine) ConfigError() error {
   return e.configError
 }
 
-// EnabledRules returns the active rule set keyed by name. Mostly for
-// tests + introspection.
+// EnabledRules returns the engine's file-rule binding summary by name.
+// Severities describe the resolver's display projection, not necessarily
+// every file's resolved policy. The map is borrowed and must not be mutated.
+//
+// @evidence contracts/common.md#principled-implementation The stored display projection identifies bound file rules while per-file severity stays with ResolveRules, preserving the distinction between introspection and execution policy.
+// @evidence contracts/common.md#clear-and-simple-design The accessor exposes the existing binding summary without resolving synthetic files or mixing project-rule settings into it.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Introspection uses the actual bound metadata rather than a separately maintained rule list.
+// @evidence contracts/common.md#meaningful-documentation Native prose states file-rule scope, projected severity and borrowed-map ownership before its tags.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation EnabledRules returns a rule map and touches no filesystem path or process.
+// @evidenceExclude contracts/performance.md#efficient-algorithms EnabledRules is a single field read with no loop.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work EnabledRules keeps no cache and shares no computation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources EnabledRules returns the engine's own map without copying; the engine owns it.
 func (e *Engine) EnabledRules() map[string]Severity { return e.enabled }
 
 // Run walks the source files supplied by the caller and returns the collected
@@ -802,6 +1225,26 @@ func (e *Engine) EnabledRules() map[string]Severity { return e.enabled }
 // SetSerial(true) was called or when a type-aware rule is active. Findings are
 // merged in source-file order so the diagnostic stream is deterministic across
 // runs even when the per-file work happens out of order.
+//
+// Call ConfigError first and supply a live checker when NeedsTypeChecker is
+// true. Configure settings before execution and do not overlap calls.
+// An unset directory uses os.Getwd; failure leaves directory context empty.
+//
+// Each file binds rule Contexts once and shares a memo for file-invariant
+// work. Its pre-order walk costs one visit per node plus subscribed checks;
+// rule algorithms add their own costs. No effectful Check result is cached.
+// All host file workers finish before return. Run retains no file bindings or
+// memos after return; externally retained contributor contexts have their own
+// lifetime. Returned findings remain owned by the caller.
+//
+// @evidence contracts/common.md#principled-implementation A project cycle precedes file checks so file rules can read its results; per-file buckets are merged in input order, and shared checker use forces serial execution.
+// @evidence contracts/common.md#clear-and-simple-design Run coordinates project evaluation, directory context and file execution; runFiles owns scheduling and runFile owns one walk's bindings and directives.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Serial and parallel paths invoke the same rules; os.Getwd supplies native cwd without platform-specific constants or global cwd mutation.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain scheduling, ordering, checker and configuration preconditions, cwd fallback, file memo validity and returned-data lifetime before the tags.
+// @evidence contracts/portability.md#os-neutral-implementation The working directory comes from SetCurrentDirectory or, when unset, os.Getwd and is passed to the per-file pass as native path data; Run itself compares and normalizes no path.
+// @evidence contracts/performance.md#efficient-algorithms With f file slots, b binding subscriptions scanned across files, n walked nodes, c subscribed checks and d findings, local scheduling/binding/dispatch/merge work is O(f+b+n+c+d). Resolver calls, directive processing, rule and memo algorithms add their costs; project evaluation/finalization sorts registered names and each reporter's unique messages. Delegating those operations does not remove their cost.
+// @evidence contracts/performance.md#reuse-equivalent-work One project cycle for the supplied source set, checker and stable settings precedes file dispatch; every file reads that same cycle-scoped result population, with live reporting until finalization. New Run calls evaluate again. Per-file invariant memos share only within that file's bound source/checker context, never effectful Check results.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Host parallel file workers are bounded by max(1, runtime.NumCPU()) and all are joined before normal return. Per-file buckets retain O(f+d) slots/findings plus in-flight bindings/memos; project reporters close after file dispatch and their state/messages belong to one cycle. Returned findings transfer to the caller; externally retained contributor contexts/state remain their owner's responsibility, and Run owns no historical-cycle cache or native handle. The Engine separately retains unique discovered unknown-directive names across calls without a per-run reset or explicit cardinality cap.
 func (e *Engine) Run(files []*shimast.SourceFile, checker *shimchecker.Checker) []*Finding {
   cycle := e.evaluateProject(publicrule.ProjectIdentity{}, files, checker)
   currentDirectory := e.currentDirectory
@@ -884,12 +1327,9 @@ func (b boundRule) check(node *shimast.Node, collect func(*Finding)) {
   }
 }
 
-// lintFileWalker drives the per-file AST traversal. The struct exists so
-// the `ForEachChild` callback can be a method value cached in
-// `childCB`. A naive nested-closure walker re-allocates one callback
-// per recursive call (it captures the walking function variable),
-// which on a 50 k-node file is 50 k throwaway closure allocations.
-// Caching the method value reduces that to one allocation per file.
+// lintFileWalker drives the per-file AST traversal. The ForEachChild callback
+// is bound once as childCB and reused throughout the walk, keeping callback
+// construction out of recursion.
 type lintFileWalker struct {
   byKind  [][]boundRule
   collect func(*Finding)
@@ -919,8 +1359,7 @@ func (w *lintFileWalker) visitChild(child *shimast.Node) bool {
 }
 
 // runFile is the per-file driver. The visitor is allocated once per file
-// to keep the per-node hot path branch-free; it visits children
-// post-order so parents see their already-checked subtrees.
+// to reuse its child callback; it dispatches each parent before its children.
 func (e *Engine) runFile(
   file *shimast.SourceFile,
   checker *shimchecker.Checker,
@@ -929,7 +1368,7 @@ func (e *Engine) runFile(
 ) []*Finding {
   var collected []*Finding
   collect := func(f *Finding) { collected = append(collected, f) }
-  resolved := e.config.ResolveRules(file.FileName())
+  resolved := e.config.ResolveRules(string(file.FileName()))
   if resolved.Ignored {
     return collected
   }
@@ -938,13 +1377,10 @@ func (e *Engine) runFile(
     return collected
   }
 
-  // Bind every active rule to a Context once per file. A Context's fields
-  // — File, Checker, the file-resolved Severity, the rule's Options blob,
-  // and the format marker — are all invariant across the file's nodes, so
-  // the engine builds them here. The earlier shape allocated a fresh
-  // Context for every (node, rule) pair, which on a large program meant
-  // millions of short-lived heap allocations and the GC pressure they
-  // carry. Rules never mutate their Context, so reuse is safe.
+  // Bind each active rule to one Context per file. Its source, checker,
+  // resolved policy, options and metadata remain invariant during that walk,
+  // so each kind bucket can reuse the binding. Quarantine is the shared
+  // per-file state that the host updates after a Check panic.
   //
   // Declaration files only bind rules that opt into them (see
   // declaration_rules.go): value-level rules can never fire on a `.d.ts`,
@@ -988,6 +1424,7 @@ func (e *Engine) runFile(
             collect:          collect,
             projectResults:   results,
             fileMemo:         memo,
+            patterns:         e.patterns,
           }
         }
         // A nil entry memoizes "off for this file" so a rule registered
@@ -1002,12 +1439,7 @@ func (e *Engine) runFile(
     }
   }
 
-  // Use a struct-based walker so the per-node ForEachChild callback is
-  // allocated once (stored as `w.childCB`) instead of once per Walk
-  // call. Closures that capture a recursive local function escape to
-  // the heap on every invocation; converting to a method value with a
-  // cached function field removes that allocation from the hot path —
-  // ~38 % of pre-Opt-4 CPU was in the inner ForEachChild closure.
+  // Bind the child callback once and reuse it for the whole walk.
   //
   // With no bound rules at all (every active rule was filtered out, e.g.
   // a declaration file where nothing opted in) the walk cannot produce a

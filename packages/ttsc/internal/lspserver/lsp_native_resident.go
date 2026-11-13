@@ -2,6 +2,7 @@ package lspserver
 
 import (
   "bufio"
+  "context"
   "encoding/json"
   "fmt"
   "io"
@@ -9,6 +10,10 @@ import (
   "os/exec"
   "strings"
   "sync"
+  "sync/atomic"
+  "time"
+
+  "github.com/samchon/ttsc/packages/ttsc/internal/e2etrace"
 )
 
 // The serve verbs below are routed to the resident daemon because they load a
@@ -46,21 +51,30 @@ type serveClientResponse struct {
 // serialized stream of verb requests over stdin/stdout, holding a warm Program
 // across them, instead of the source respawning the sidecar per verb.
 type residentSidecar struct {
-  mu         sync.Mutex
-  cmd        *exec.Cmd
-  stdin      io.WriteCloser
-  stdout     *bufio.Reader
-  everServed bool
+  mu               sync.Mutex
+  pendingMu        sync.Mutex
+  cmd              *exec.Cmd
+  stdin            io.WriteCloser
+  stdout           *bufio.Reader
+  everServed       atomic.Bool
+  output           io.ReadCloser
+  stopClosingPipes func() bool
+  observation      *e2etrace.Command
+
   // invalidate piggybacks a full "drop the warm Program" onto the next request,
   // set for a change the proxy cannot localize.
   invalidate bool
+
   // changed piggybacks the document URIs that changed on disk onto the next
   // request, so the daemon updates the warm Program incrementally rather than
   // rebuilding it.
-  changed []string
+  changed    []string
+  changedSet map[string]struct{}
+
   // external identifies changed entries that are declared ProjectRule inputs,
   // allowing an unknown non-Program path to retain the warm Program.
-  external []string
+  external    []string
+  externalSet map[string]struct{}
 }
 
 // serveRun routes a serve-able verb through the plugin's resident daemon.
@@ -75,6 +89,10 @@ func (s *NativePluginSource) serveRun(plugin NativeLSPPluginEntry, verb string, 
   }
   key := pluginKey(plugin, s.projectContextJSON)
   s.residentMu.Lock()
+  if s.closed {
+    s.residentMu.Unlock()
+    return nil, true, context.Canceled
+  }
   if s.serveUnsupported[key] {
     s.residentMu.Unlock()
     return nil, false, nil
@@ -98,7 +116,7 @@ func (s *NativePluginSource) serveRun(plugin NativeLSPPluginEntry, verb string, 
     // call. Either way this call falls back to a fresh spawn so the verb still
     // works.
     s.residentMu.Lock()
-    if !sc.everServed {
+    if !sc.everServed.Load() {
       if s.serveUnsupported == nil {
         s.serveUnsupported = map[string]bool{}
       }
@@ -107,17 +125,13 @@ func (s *NativePluginSource) serveRun(plugin NativeLSPPluginEntry, verb string, 
     s.residentMu.Unlock()
     return nil, false, nil
   }
-  if code != 0 {
-    return nil, true, fmt.Errorf("ttscserver: %s %s (resident) exit %d", pluginLabel(plugin), verb, code)
-  }
-  return body, true, nil
+  return nativeResidentResult(plugin, verb, body, code)
 }
 
 // call sends one request to the daemon and reads its reply, serializing access
 // to the single pipe. It spawns the child on first use or after a death. The
-// read is unbounded — the rule is the user's own code — and the mutex is held
-// only as long as the sidecar is alive, because its death closes stdout and
-// ends the read.
+// computation has no deadline, but replies have a byte limit and session
+// cancellation closes the pipes independently of this mutex.
 func (sc *residentSidecar) call(s *NativePluginSource, plugin NativeLSPPluginEntry, req serveClientRequest) ([]byte, int, error) {
   sc.mu.Lock()
   defer sc.mu.Unlock()
@@ -126,6 +140,7 @@ func (sc *residentSidecar) call(s *NativePluginSource, plugin NativeLSPPluginEnt
       return nil, 0, err
     }
   }
+  sc.pendingMu.Lock()
   if sc.invalidate {
     req.Invalidate = true
     sc.invalidate = false
@@ -138,6 +153,9 @@ func (sc *residentSidecar) call(s *NativePluginSource, plugin NativeLSPPluginEnt
     req.External = sc.external
     sc.external = nil
   }
+  sc.changedSet = nil
+  sc.externalSet = nil
+  sc.pendingMu.Unlock()
   line, err := json.Marshal(req)
   if err != nil {
     return nil, 0, err
@@ -148,30 +166,33 @@ func (sc *residentSidecar) call(s *NativePluginSource, plugin NativeLSPPluginEnt
     return nil, 0, err
   }
 
-  type readResult struct {
-    line []byte
-    err  error
+  // Include a bounded envelope allowance around the one-shot result limit.
+  // ReadSlice avoids retaining arbitrary output from a malformed daemon.
+  const replyLimit = nativePluginCommandStdoutLimit + 1024
+  var reply []byte
+  for {
+    fragment, readErr := sc.stdout.ReadSlice('\n')
+    if len(reply)+len(fragment) > replyLimit {
+      sc.kill()
+      return nil, 0, fmt.Errorf("resident reply exceeds %d bytes", replyLimit)
+    }
+    reply = append(reply, fragment...)
+    if readErr == bufio.ErrBufferFull {
+      continue
+    }
+    if readErr != nil {
+      sc.kill()
+      return nil, 0, readErr
+    }
+    break
   }
-  done := make(chan readResult, 1)
-  go func() {
-    raw, err := sc.stdout.ReadBytes('\n')
-    done <- readResult{line: raw, err: err}
-  }()
-  // No deadline: a rule that takes a long time is the user's own code running,
-  // and the read still ends the moment the sidecar dies, because closing its
-  // stdout surfaces here as a read error.
-  res := <-done
-  if res.err != nil {
-    sc.kill()
-    return nil, 0, res.err
-  }
-  var resp serveClientResponse
-  if err := json.Unmarshal(res.line, &resp); err != nil {
+  body, code, err := decodeNativeResidentReply(reply)
+  if err != nil {
     sc.kill()
     return nil, 0, err
   }
-  sc.everServed = true
-  return resp.Result, resp.Code, nil
+  sc.everServed.Store(true)
+  return body, code, nil
 }
 
 // spawn starts the resident child with the base project args and the lsp-serve
@@ -186,7 +207,9 @@ func (sc *residentSidecar) spawn(s *NativePluginSource, plugin NativeLSPPluginEn
   if plugin.ProjectContextArgs && strings.TrimSpace(s.projectContextJSON) != "" {
     allArgs = append(allArgs, "--project-context-json="+s.projectContextJSON)
   }
-  cmd := exec.Command(plugin.Binary, allArgs...)
+  ctx := s.commandContext()
+  cmd := exec.CommandContext(ctx, plugin.Binary, allArgs...)
+  cmd.WaitDelay = time.Second
   cmd.Dir = s.cwd
   cmd.Env = os.Environ()
   // Drain the child's stderr to the source log so its pipe cannot fill and block
@@ -201,37 +224,66 @@ func (sc *residentSidecar) spawn(s *NativePluginSource, plugin NativeLSPPluginEn
     _ = stdin.Close()
     return err
   }
-  if err := cmd.Start(); err != nil {
+  observation := e2etrace.BeginCommand(cmd, "Start")
+  err = cmd.Start()
+  observation.Result(err)
+  if err != nil {
     _ = stdin.Close()
+    _ = stdout.Close()
     return err
   }
   sc.cmd = cmd
+  sc.observation = observation
   sc.stdin = stdin
   sc.stdout = bufio.NewReader(stdout)
+  sc.output = stdout
+  sc.stopClosingPipes = context.AfterFunc(ctx, func() {
+    _ = stdin.Close()
+    _ = stdout.Close()
+  })
   return nil
 }
 
 // kill terminates the child and clears its handles so the next call respawns.
 // The caller holds sc.mu.
 func (sc *residentSidecar) kill() {
+  if sc.stopClosingPipes != nil {
+    sc.stopClosingPipes()
+    sc.stopClosingPipes = nil
+  }
   if sc.stdin != nil {
     _ = sc.stdin.Close()
   }
+  if sc.output != nil {
+    _ = sc.output.Close()
+  }
   if sc.cmd != nil && sc.cmd.Process != nil {
     _ = sc.cmd.Process.Kill()
-    _ = sc.cmd.Wait()
+    sc.observation.BeginWait()
+    waitErr := sc.cmd.Wait()
+    sc.observation.Result(waitErr)
   }
   sc.cmd = nil
+  sc.observation = nil
   sc.stdin = nil
   sc.stdout = nil
+  sc.output = nil
 }
 
-// InvalidateResidentPrograms tells every live resident daemon that documents
-// changed on disk, so the next request refreshes the warm Program before
-// serving. Given the changed URIs, the daemon updates those files incrementally;
-// given none, it drops the whole Program (a change the proxy could not
-// localize). It mirrors how the proxy already invalidates the symbol provider on
-// the same editor signals.
+// InvalidateResidentPrograms queues supplied changed URIs for existing residents,
+// or queues full invalidation when no URI was supplied. The next serialized
+// request carries this state; daemon processing determines whether updates apply.
+// This method sends no immediate message and does not certify URI validity,
+// saved bytes, a successful reload or notifications for every changed input.
+//
+// @evidence contracts/common.md#principled-implementation Supplied URIs queue incremental notifications; no supplied URI queues the full-invalidation flag for the next serialized request. These transitions do not independently validate URI contents, saved bytes or successful daemon updates.
+// @evidence contracts/common.md#clear-and-simple-design A pending-state lock lets notifications queue invalidation independently of the serialized request stream.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Absent localization explicitly selects full invalidation instead of inventing a changed-file list. Callers and daemon processing still determine whether supplied URIs describe topology changes requiring a reload.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain empty versus localized invalidation, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Protocol URIs pass to the native daemon unchanged; daemon processing owns native file updates and executable argv remains platform-neutral exec input.
+// @evidence contracts/performance.md#efficient-algorithms The resident table is copied once, then every resident examines the supplied URI list under its pending lock. Hashing depends on URI bytes even for repeated entries; absent dedup maps can also reindex existing queue contents. Full invalidation clears a fixed set of fields per resident and neither branch waits on the rule-execution lock.
+// @evidence contracts/performance.md#reuse-equivalent-work Pending notifications piggyback on a later read; exact URI-string deduplication is not physical alias merging or proof of fresh Program state. Caller notification coverage and daemon update semantics authorize any retained Program reuse.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Lists/sets are detached when a request is prepared, not after an acknowledged update, or cleared by full invalidation. Unique URI bytes/count have no independent cap; repeated entries are still processed without accumulating duplicate keys. Detached requests can retain their strings while waiting. Close requests cancellation and resident cleanup rather than certifying all work has terminated.
 func (s *NativePluginSource) InvalidateResidentPrograms(changedURIs ...string) {
   if s == nil {
     return
@@ -243,19 +295,32 @@ func (s *NativePluginSource) InvalidateResidentPrograms(changedURIs ...string) {
   }
   s.residentMu.Unlock()
   for _, sc := range residents {
-    sc.mu.Lock()
     if len(changedURIs) > 0 {
-      sc.changed = append(sc.changed, changedURIs...)
+      sc.queueChanges(changedURIs, nil)
     } else {
+      sc.pendingMu.Lock()
       sc.invalidate = true
+      sc.changed = nil
+      sc.external = nil
+      sc.changedSet = nil
+      sc.externalSet = nil
+      sc.pendingMu.Unlock()
     }
-    sc.mu.Unlock()
   }
 }
 
 // InvalidateResidentProgramsForWatchedChanges distinguishes declared external
 // inputs from ordinary watched files so the sidecar can retain its Program for
 // data-only changes while still rebuilding fresh ProjectRule state.
+//
+// @evidence contracts/common.md#principled-implementation Nil ownership for each external URI preserves the legacy all-transport invalidation meaning.
+// @evidence contracts/common.md#clear-and-simple-design The owner-aware operation implements routing for both legacy and scoped entries.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Missing owner information is treated conservatively rather than guessed from a filename.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains external versus Program input meaning, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation The delegated operation keeps protocol URIs separate from daemon-native path resolution.
+// @evidence contracts/performance.md#efficient-algorithms The wrapper builds and hashes an external-URI-to-nil-owner map, then performs the owner-aware delegate's descriptor/URI/resident routing and queue work. Delegation does not remove string-byte, copied-list or lock costs.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The delegated operation owns warm Program validity.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Resident queues belong to the delegated operation.
 func (s *NativePluginSource) InvalidateResidentProgramsForWatchedChanges(
   changedURIs []string,
   externalURIs []string,
@@ -272,9 +337,20 @@ func (s *NativePluginSource) InvalidateResidentProgramsForWatchedChanges(
 }
 
 // InvalidateResidentProgramsForOwnedWatchedChanges sends data-only external
-// changes only to resident binaries that own the matching snapshot. A path that
-// can also belong to the Program reaches every resident, because each daemon
-// must decide whether its own Program contains that source.
+// changes to existing transports selected by the supplied owner map; missing or
+// nil owners select all, and an empty owner list selects none. Recognized source
+// and JSON extensions override narrower ownership and reach every resident.
+// Selection does not certify physical snapshot ownership or successful updates;
+// each daemon decides how the queued change affects its own Program.
+//
+// @evidence contracts/common.md#principled-implementation Supplied owner keys scope external data notifications; missing/nil keys select all and empty lists select none. Source/JSON extension heuristics broaden routing across all residents rather than certifying actual compiler membership or snapshot ownership.
+// @evidence contracts/common.md#clear-and-simple-design External URI and transport sets separate ownership filtering from each resident's serialized update queue.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Conservative extension-based routing does not use expected producer answers. It is a notification policy, not an independently complete measurement of every compiler input kind.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains why Program inputs override narrower external ownership, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation file URI parsing and native extension APIs classify inputs while the daemon resolves filesystem identity; no blind OS-based path folding is used.
+// @evidence contracts/performance.md#efficient-algorithms Costs include descriptor/context-mode keys, URI/owner string hashing, URI parsing/extension scans, resident-map copies and per-resident ordinary-list copies plus external routing scans. queueChanges reprocesses selected URI bytes even when duplicate keys are already retained; the method uses pending locks rather than the native rule-execution lock.
+// @evidence contracts/performance.md#reuse-equivalent-work Unselected external notifications leave unrelated queues untouched; selected lists are transmitted with a later read. Native freshness still depends on complete caller notifications and daemon processing, not merely on owner-map membership or equal URI strings.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Local owner/routing maps and copied lists grow with descriptors, URI bytes, owner pairs and resident count. Pending unique URI bytes have no independent cap and are detached before an update is acknowledged; in-flight requests can retain them. Source.Close requests cancellation and resident cleanup without an overall join of all callers or descendants.
 func (s *NativePluginSource) InvalidateResidentProgramsForOwnedWatchedChanges(
   changedURIs []string,
   externalURIs []string,
@@ -337,24 +413,62 @@ func (s *NativePluginSource) InvalidateResidentProgramsForOwnedWatchedChanges(
     if len(changed) == 0 {
       continue
     }
-    sc.mu.Lock()
-    sc.changed = append(sc.changed, changed...)
-    sc.external = append(sc.external, selectedExternal...)
-    sc.mu.Unlock()
+    sc.queueChanges(changed, selectedExternal)
   }
 }
 
-// shutdownResidents kills every resident child. Called on server teardown; the
-// children also exit on their own when the parent closes their stdin at process
-// exit, so this is the graceful path, not the only one.
+// queueChanges records first-seen URI order without blocking on an executing
+// rule. A queued full invalidation supersedes incremental notifications; actual
+// disk capture and reload success belong to the daemon handling that request.
+func (sc *residentSidecar) queueChanges(changed, external []string) {
+  sc.pendingMu.Lock()
+  defer sc.pendingMu.Unlock()
+  if sc.invalidate {
+    return
+  }
+  if sc.changedSet == nil {
+    sc.changedSet = make(map[string]struct{}, len(sc.changed)+len(changed))
+    for _, uri := range sc.changed {
+      sc.changedSet[uri] = struct{}{}
+    }
+  }
+  if sc.externalSet == nil {
+    sc.externalSet = make(map[string]struct{}, len(sc.external)+len(external))
+    for _, uri := range sc.external {
+      sc.externalSet[uri] = struct{}{}
+    }
+  }
+  for _, uri := range changed {
+    if _, exists := sc.changedSet[uri]; !exists {
+      sc.changedSet[uri] = struct{}{}
+      sc.changed = append(sc.changed, uri)
+    }
+  }
+  for _, uri := range external {
+    if _, exists := sc.externalSet[uri]; !exists {
+      sc.externalSet[uri] = struct{}{}
+      sc.external = append(sc.external, uri)
+    }
+  }
+}
+
+// shutdownResidents revokes starts and requests cancellation before attempting
+// each detached resident's cleanup. Closing protocol pipes does not certify
+// completion of one-shot work, refresh tasks or descendant processes.
 func (s *NativePluginSource) shutdownResidents() {
   if s == nil {
     return
   }
   s.residentMu.Lock()
+  s.closed = true
+  if s.cancelProcesses != nil {
+    s.cancelProcesses()
+  }
   residents := s.residents
   s.residents = map[string]*residentSidecar{}
   s.residentMu.Unlock()
+  s.hintsRefresh.close()
+  s.projectInputsRefresh.close()
   for _, sc := range residents {
     sc.mu.Lock()
     sc.kill()

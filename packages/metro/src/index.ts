@@ -27,19 +27,22 @@
  *   module.exports = withTtsc(getDefaultConfig(__dirname));
  *   ```
  */
-import { readFileSync, realpathSync } from "node:fs";
+import { openTtscTransformSession } from "@ttsc/unplugin/api";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFilesystemPathIdentityContext } from "ttsc/path-identity";
 
+import type { TtscMetroOptions } from "./core/TtscMetroOptions";
 import { prepareSnapshot } from "./core/fingerprint";
-import type { TtscMetroOptions } from "./core/options";
 import { ENV_KEY, serializeOptions } from "./core/options";
+import { locateProjectUpstreamTransformer } from "./core/upstream";
 
 export type {
   ResolvedTtscMetroOptions,
   TtscMetroOptions,
-} from "./core/options";
+} from "./core/TtscMetroOptions";
 
 /**
  * Minimal structural type for a Metro config object, avoids a hard dependency
@@ -74,6 +77,54 @@ interface MetroConfigLike {
  * `.svg` to the auto-detected Expo default instead, with the build still
  * succeeding (samchon/ttsc#1321). An explicit `upstreamTransformer` option
  * still wins, since that is the caller saying it outright.
+ *
+ * The call also has side effects beyond the returned config, all before Metro
+ * forks its workers. It prepares the cache-key snapshot under
+ * `<projectRoot>/node_modules/.cache/ttsc-metro` (creating it, merging the
+ * previous workers' records into it under a lock, and sweeping stale files),
+ * and it opens the shared compile session whose path the workers inherit
+ * through the environment. A snapshot that cannot be prepared never fails the
+ * call: the run takes a private token that makes its cache key non-reusable.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Metro's supported babelTransformerPath boundary installs this adapter by
+ *   cloning the config. Node project resolution preserves an existing upstream
+ *   unless explicitly overridden, and realpath/package ownership filters
+ *   inherited self-selection; explicit upstream choices remain caller-owned.
+ *   Only the owned option/session environment channels are published before
+ *   workers start; foreign loaders and methods are not patched.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The entry point prepares run ownership and worker transport, then clones
+ *   the config's transformer field. Separate helpers own upstream inheritance
+ *   and module identity instead of repeating those policies in workers.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Decision values come from the documented inputs and product protocol
+ *   rather than expected test answers. No compensating path is introduced to
+ *   make a known example pass.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node paths, createRequire and fileURLToPath resolve native paths and module
+ *   URLs. The shared filesystem-identity resolver handles links and actual
+ *   directory case capabilities in the recursion guard, instead of folding
+ *   all names by OS. Worker options use JSON environment inheritance.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains config preservation, upstream precedence, JSON
+ *   worker transport and preparation side effects. Checked against the
+ *   documentation skill: separate paragraphs state the contract and why its
+ *   nonobvious boundary matters; field comments retain their own useful
+ *   facts.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   The compaction lock it takes is released in prepareSnapshot's finally block and the session store is owned by its opener; withTtsc retains no handle itself.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   Constant work per call besides the snapshot preparation that prepareSnapshot owns.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   Runs once per Metro config load; the snapshot and compile session it opens are what the workers share.
  */
 export function withTtsc<T extends MetroConfigLike>(
   config: T,
@@ -81,8 +132,8 @@ export function withTtsc<T extends MetroConfigLike>(
 ): T {
   // Prepare the reference-graph snapshot backing the transformer's cache-key
   // fingerprint (see `core/fingerprint.ts`). This runs in the single Metro
-  // config process before any worker exists, so it is the race-free moment to
-  // mint the snapshot epoch and compact the previous run's worker files.
+  // config process before its workers exist. The snapshot owner serializes
+  // concurrent config processes while compacting the previous worker records.
   const snapshotRunId = prepareSnapshot(
     typeof config.projectRoot === "string" ? config.projectRoot : undefined,
   );
@@ -90,6 +141,9 @@ export function withTtsc<T extends MetroConfigLike>(
     inheritConfiguredTransformer(config, options),
     snapshotRunId,
   );
+  // The workers Metro forks next inherit the session, so the pool compiles
+  // each generation once between them (samchon/ttsc#1390).
+  openTtscTransformSession();
   return {
     ...config,
     transformer: {
@@ -116,13 +170,31 @@ function inheritConfiguredTransformer(
   config: MetroConfigLike,
   options: TtscMetroOptions,
 ): TtscMetroOptions {
-  const declared = config.transformer?.babelTransformerPath;
+  // An explicit option is the caller's module, so it resolves from the project
+  // as a declared `babelTransformerPath` does; an empty one asks for detection.
   if (
-    options.upstreamTransformer !== undefined ||
-    typeof declared !== "string" ||
-    declared.length === 0
+    options.upstreamTransformer !== undefined &&
+    options.upstreamTransformer.length !== 0
   ) {
-    return options;
+    return {
+      ...options,
+      upstreamTransformer: resolveFromProject(
+        options.upstreamTransformer,
+        config,
+      ),
+    };
+  }
+  const declared = config.transformer?.babelTransformerPath;
+  if (typeof declared !== "string" || declared.length === 0) {
+    // Automatic detection belongs here too: the candidates are the app's
+    // packages, and only this process knows the project to look in. Nothing
+    // found leaves the worker's own probe to report it.
+    const located = locateProjectUpstreamTransformer((specifier) =>
+      projectRequire(config).resolve(specifier),
+    );
+    return located === undefined
+      ? options
+      : { ...options, upstreamTransformer: located };
   }
   // Resolve before judging. Ownership is a property of the module, not of the
   // string, and every spelling has to become one absolute path before either
@@ -161,15 +233,20 @@ function inheritConfiguredTransformer(
  * somewhere less legible.
  */
 function resolveFromProject(declared: string, config: MetroConfigLike): string {
+  try {
+    return projectRequire(config).resolve(declared);
+  } catch {
+    return declared;
+  }
+}
+
+/** A `require` rooted in the Metro project, the owner of its transformers. */
+function projectRequire(config: MetroConfigLike): NodeJS.Require {
   const base =
     typeof config.projectRoot === "string" && config.projectRoot.length !== 0
       ? config.projectRoot
       : process.cwd();
-  try {
-    return createRequire(join(resolve(base), "package.json")).resolve(declared);
-  } catch {
-    return declared;
-  }
+  return createRequire(join(resolve(base), "package.json"));
 }
 
 /**
@@ -209,21 +286,15 @@ function isOwnTransformer(declared: string): boolean {
 /**
  * Whether two paths name the same file on disk.
  *
- * Resolved through `realpath` so a symlinked install and its target compare
- * equal, and case-folded on Windows, where `D:\` and `d:\` and a differently
- * cased base name all address one file.
+ * The shared resolver observes physical spelling and directory capabilities
+ * within this comparison. Symlinks can identify the same installed file while
+ * case-sensitive native names remain distinct.
  */
 function sameRealPath(left: string, right: string): boolean {
-  const identity = (file: string): string => {
-    let resolved = resolve(file);
-    try {
-      resolved = realpathSync.native(resolved);
-    } catch {
-      // Not on disk: the resolved spelling is the best identity available.
-    }
-    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-  };
-  return identity(left) === identity(right);
+  const identities = createFilesystemPathIdentityContext({
+    throwOnRealpathError: false,
+  });
+  return identities.resolve(left).key === identities.resolve(right).key;
 }
 
 /**

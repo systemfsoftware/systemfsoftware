@@ -1,0 +1,67 @@
+import path from "node:path";
+
+import type { ResolvedTtscUnpluginOptions } from "../../options/ResolvedTtscUnpluginOptions";
+import { createHostPathIdentityContext } from "../filesystem/createHostPathIdentityContext";
+import { pathIdentityKey } from "../filesystem/pathIdentityKey";
+import { compilerEnvironmentIdentity } from "../tsconfig/compilerEnvironmentIdentity";
+import { stableStringify } from "../utils/stableStringify";
+
+/**
+ * Build the key one project generation is cached under.
+ *
+ * The declared compile configuration is represented by: the selected tsconfig's
+ * filesystem identity, common source-root identity, compiler overlay, plugin
+ * list, effective compiler argument transport, and translated aliases. Two
+ * adapter configurations that have different supported JSON representations
+ * therefore receive different keys; native spellings resolving to one config
+ * identity may share a key. A key does not encode current filesystem content or
+ * prove freshness. Compiler overlays, plugin payloads and alias mappings retain
+ * their JSON declaration order: tied compiler path patterns and arbitrary
+ * plugin payloads can observe it. Only the host-owned outer manifest is
+ * serialized with sorted keys.
+ *
+ * @evidence contracts/common.md#principled-implementation Native config and source-root identities plus actual JSON representations of compiler overlays, plugin payloads and alias mappings distinguish requested compiles, retaining declaration order that path-pattern ties or plugins can observe.
+ * @evidence contracts/common.md#clear-and-simple-design Existing path identity and stable JSON encoding define the key; filesystem state remains the generation validator's responsibility.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Equivalent configuration spelling is normalized without dropping semantically relevant plugin order or pretending a matching key proves current inputs.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs name every key dimension and distinguish host-owned canonical manifest order from semantically observable external configuration order.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Returns a string and retains nothing.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Three payload serializations preserve supported JSON order; the outer
+ *   fixed-field manifest sorts only its own keys and serializes their text
+ *   again, with escaping/output space proportional to the payload text.
+ *   One path-identity transaction for config and root observes uncached native
+ *   aliases, ancestors and directory case policy; that work is not constant
+ *   or bounded by option size alone. The caller builds this key per delivery.
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   Supported JSON configuration representation plus native config/root identities
+ *   selects a shared generation within the cache. Declaration order remains
+ *   observable; equal keys do not replace recorded-input validation. This
+ *   function retains no serialized payload or native observation across calls.
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   The config and root components use the actual host path-identity resolver's native
+ *   alias and directory case observations instead of lowercasing by OS. It is
+ *   a comparison address, not a replacement for the spelling passed to reads.
+ */
+export function createTransformCacheKey(props: {
+  aliasPaths: Record<string, string[]>;
+  compilerOptions: Record<string, unknown>;
+  /** Effective compiler argument snapshot selected before cache lookup. */
+  compilerEnvironment?: NodeJS.ProcessEnv;
+  plugins?: ResolvedTtscUnpluginOptions["plugins"];
+  /** Common source root; omission defaults to the config directory. */
+  projectRoot?: string;
+  tsconfig: string;
+}): string {
+  const identities = createHostPathIdentityContext();
+  return stableStringify({
+    aliasPaths: JSON.stringify(props.aliasPaths),
+    compilerOptions: JSON.stringify(props.compilerOptions),
+    compilerEnvironment: compilerEnvironmentIdentity(props.compilerEnvironment),
+    plugins: JSON.stringify(props.plugins),
+    projectRoot: pathIdentityKey(
+      props.projectRoot ?? path.dirname(props.tsconfig),
+      identities,
+    ),
+    tsconfig: pathIdentityKey(props.tsconfig, identities),
+  });
+}

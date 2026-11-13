@@ -1,0 +1,1 @@
+export { resolveCompilerEnvironment } from "ttsc";

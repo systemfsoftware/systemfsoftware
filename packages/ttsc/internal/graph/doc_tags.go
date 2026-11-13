@@ -8,7 +8,7 @@ import (
 )
 
 // DocTag is one documentation tag TypeScript itself does not recognize, written
-// on a workspace declaration and captured verbatim.
+// on a workspace declaration, with comment text rendered into one line.
 //
 // A convention attaches a declaration to something outside the type system — a
 // specification section, an API operation, a reference document — and writes
@@ -21,28 +21,41 @@ import (
 // tags the parser had no meaning for, so it kept them as
 // KindJSDocUnknownTag. A known tag — `@param`, `@returns`, `@deprecated` — has
 // its own AST shape and its own meaning and is not this. Naming particular tags
-// here would make the compiler host know one convention, and would have left
-// out the 767 `@reference` tags this repository's own sources carry.
+// here would make the compiler host know one convention and leave out every
+// other convention's tags.
 //
 // Nothing is interpreted. Target is not split out of Text, because which part
 // of a tag's text names a thing is a convention's rule and this pass enforces
 // none; a consumer that ranks on a leading token does so in the layer that
 // declares its selection heuristic. This is the contract Decorator already
 // keeps for `@Controller`/`@Get`.
+//
+// @evidence contracts/common.md#principled-implementation Unknown-tag AST nodes preserve their written name and text while target identity associates the fact with its declaration.
+// @evidence contracts/common.md#clear-and-simple-design Source coordinates support collection deduplication without adding convention judgments to the record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The collector admits usable compiler-classified unknown tags without a handpicked convention allowlist; recognized tag kinds remain outside this population.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain unknown versus recognized tags, uninterpreted text and collection-only positions, using the documentation skill's separated members and tags.
+// @evidenceExclude contracts/performance.md#efficient-algorithms This record represents tag facts; traversal and deduplication belong to collection operations.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The enclosing graph build owns shared AST reads.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The record does not own retention or native resources.
+// @evidence contracts/portability.md#os-neutral-implementation The path-bearing Target uses graph node-ID encoding and later shared dump projection; this record does not resolve native aliases or certify physical identity.
 type DocTag struct {
   // Target is the id of the graph node the tag was written on.
   Target string
+
   // Name is the tag name without its `@` (`evidence`, `evidenceExclude`,
   // `reference`).
   Name string
+
   // Text is everything after the tag name, with the comment's leading asterisks
   // and per-line indentation removed and its lines joined by single spaces.
   // Empty when the tag carries no text.
   Text string
+
   // Pos and End bound the written tag. They are not published — a tag rides its
   // target node, which carries the span a reader cites — and exist so one
   // declaration presented to the node pass twice contributes its tags once.
   Pos int
+
   End int
 }
 
@@ -105,7 +118,7 @@ func collectDocTags(g *Graph, targetID string, declaration *shimast.Node) {
 // the parser attached the documentation to are different. TypeScript attaches
 // one leading block to the variable *statement*, while the graph records a node
 // per binding, so asking the binding directly finds nothing and every citation
-// written on a `const` was lost. The statement is reached through its
+// written on a `const` would be lost. The statement is reached through its
 // declaration list, and both hops are checked rather than assumed.
 //
 // One statement can declare several bindings (`export const a = 1, b = 2`), and
@@ -248,8 +261,7 @@ func joinDocTagLines(text string) string {
 //
 // The checker resolves such a name and counts it as a use — a `noUnusedLocals`
 // project keeps an import that exists only to support a link — so this is a
-// compiler fact, not a text match, and it was the one class of resolved
-// reference the graph held no edge for. The link node carries an EntityName,
+// compiler fact, not a text match. The link node carries an EntityName,
 // which is the node class typeRefEdge already resolves, so the resolution and
 // the external-boundary and self-reference rules are the existing ones.
 //
@@ -258,7 +270,7 @@ func joinDocTagLines(text string) string {
 // relation, and privileging a tag would put one convention's name inside the
 // compiler host.
 func (g *Graph) collectDocRefs(checker *shimchecker.Checker, file *shimast.SourceFile) {
-  for _, host := range g.docHosts[file.FileName()] {
+  for _, host := range g.docHosts[string(file.FileName())] {
     for _, doc := range documentationOf(host.declaration, file) {
       g.docRefsWithin(checker, host.target, doc)
     }
@@ -270,15 +282,14 @@ func (g *Graph) collectDocRefs(checker *shimchecker.Checker, file *shimast.Sourc
 // attributed documentation to.
 //
 // The two passes cannot share a walk — one runs before the checker exists and
-// the other needs it — so they would otherwise share only a convention, and a
-// convention is what drifted. The container walk the edge pass would naturally
-// reuse never visits a class, an interface, or a namespace as a node of its
-// own: it descends straight into their members. So a link written on a class's
-// own documentation resolved to nothing while the tag beside it was indexed,
-// and the two halves a reader is meant to compose disagreed exactly where a
-// type is documented. Recording the host here means the edge pass covers every
-// declaration form the node pass records, including forms nobody has written
-// yet.
+// the other needs it — so they would otherwise share only a convention. The
+// container walk the edge pass would naturally reuse never visits a class, an
+// interface, or a namespace as a node of its own: it descends straight into
+// their members. A link written on a class's own documentation would then
+// resolve to nothing while the tag beside it was indexed, and the two halves a
+// reader is meant to compose would disagree exactly where a type is documented.
+// Recording the host here means the edge pass covers every declaration form the
+// node pass records.
 //
 // It also fixes the attribution: the container walk hands a property member's
 // subtree to the property *and* to its class, which is deliberate for the
@@ -301,7 +312,7 @@ func (g *Graph) recordDocHost(target string, declaration *shimast.Node) {
     g.docHosts = map[string][]docHost{}
   }
   path := file.FileName()
-  g.docHosts[path] = append(g.docHosts[path], docHost{
+  g.docHosts[string(path)] = append(g.docHosts[string(path)], docHost{
     target:      target,
     declaration: declaration,
   })
@@ -327,13 +338,11 @@ type docHost struct {
 // tag a consumer invents, which is the rule this edge is defined by.
 //
 // The JSDoc node itself reports no children, so its prose comment is walked
-// explicitly beside the tags; that is the same reason the existing edge passes
-// never reached a link.
+// explicitly beside the tags.
 func (g *Graph) docRefsWithin(checker *shimchecker.Checker, from string, doc *shimast.Node) {
   // Guarded on the kind before the conversion, the way the tag walk is. A
   // documentation block is what this is handed and an AsJSDoc on anything else
-  // panics rather than returning nil — which is exactly how reading a tag's
-  // comment through its own struct crashed on the first `@param`.
+  // panics rather than returning nil.
   if doc == nil || doc.Kind != shimast.KindJSDoc {
     return
   }

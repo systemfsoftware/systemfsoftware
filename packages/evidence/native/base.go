@@ -3,7 +3,6 @@ package evidence
 import (
   "errors"
   "io/fs"
-  "os"
   "path"
   "path/filepath"
   "sort"
@@ -28,6 +27,7 @@ import (
 // does: moving the base moves the address space with it (`graph.go`,
 // `materializePackageGlobReference`).
 type populationBase struct {
+  inputs evidenceInputReader
   // Absolute is the canonical directory, and the identity two populations are
   // judged the same base by.
   Absolute string
@@ -226,9 +226,11 @@ func resolveGraphBases(root string, config *graphConfig) {
   for claimIndex := range config.Claims {
     claim := &config.Claims[claimIndex]
     claim.Base = resolvePopulationBase(root, claim.Root)
+    claim.Base.inputs = config.inputs
     for referenceIndex := range claim.References {
       reference := &claim.References[referenceIndex]
       reference.Base = resolvePopulationBase(root, reference.Root)
+      reference.Base.inputs = config.inputs
     }
   }
 }
@@ -288,13 +290,14 @@ func configuredBases(config graphConfig, kind artifactKind) []populationBase {
 //
 // The absolute fallback belongs to the default base alone, which is the only
 // base with no declared spelling, and the project root is then the only thing
-// left to name. Of the four callers, two reach it: `unlistableBaseProblem` and
-// `unresolvedBaseProblem`, both of which a base with no declared root can arrive
-// at. `describePopulation` returns on the default base before it names anything,
-// and `describeBaseDirectoryProblem` is only ever entered through
-// `baseDirectoryProblem`, which does the same. Neither of the two that reach it
-// asks for an edit to a property that is not there, which is what makes the
-// spelling usable where no property exists.
+// left to name. `unlistableBaseProblem`, `unresolvedBaseProblem`, and the two
+// rooted TypeScript reference messages can arrive there with a default base,
+// because `root: "."` resolves back onto the project root.
+// `describePopulation` returns on the default base before it names anything, and
+// `describeBaseDirectoryProblem` is only ever entered through
+// `baseDirectoryProblem`, which does the same. None of the callers that reach
+// the fallback asks for an edit to a property that is not there, which is what
+// makes the spelling usable where no property exists.
 func populationRootLabel(base populationBase) string {
   if base.Declared == "" {
     return filepath.ToSlash(base.Absolute)
@@ -322,7 +325,7 @@ func baseDirectoryProblem(base populationBase, kind artifactKind) string {
   if base.Default {
     return ""
   }
-  info, err := os.Stat(base.Absolute)
+  info, err := base.inputs.Stat(base.Absolute)
   if err == nil && info.IsDir() {
     return ""
   }
@@ -349,7 +352,7 @@ func baseDirectoryProblem(base populationBase, kind artifactKind) string {
   // is that a path means the same thing on both.
   occupied := err == nil
   if errors.Is(err, fs.ErrNotExist) {
-    if _, linkErr := os.Lstat(base.Absolute); linkErr == nil {
+    if _, linkErr := base.inputs.Lstat(base.Absolute); linkErr == nil {
       occupied = true
     }
   }
@@ -510,8 +513,7 @@ func describeBaseDirectoryProblem(
 // Every component is resolved, not only the leaf. A link on an ancestor is
 // exactly what `os.Lstat` of the leaf cannot see, and it is the shape a package
 // manager installs: the workspace dependency is the link and the root an author
-// declares is a directory inside it. Resolving only the leaf left that silent,
-// which is what #1269 recorded.
+// declares is a directory inside it. Resolving only the leaf leaves that silent.
 //
 // The answer is verified rather than trusted, at every component and not only
 // at the last. `resolveLinkedDirectory` gives up after a fixed number of hops
@@ -529,19 +531,18 @@ func describeBaseDirectoryProblem(
 // A base that is not a link costs one `os.Lstat` per path component plus one
 // for this answer, where resolving the leaf alone cost two. It is paid per call
 // rather than per file, and the call count is the graph's own shape rather than
-// this function's: claim-side populations are materialized before the whole
-// configuration, so a base is asked once for each load it appears in. That is
-// at most twice for a Markdown or Prisma claim base and once for its reference
-// bases, and twice those numbers for TypeScript, whose gate asks beside the
+// this function's. Markdown captures the first resolution for each base within
+// one Check. Prisma resolves each load, at most twice for a claim base and once
+// for a reference base. TypeScript asks twice those numbers: its gate asks beside the
 // pass that builds its match table and whose governance pass builds one more
 // from the configuration as declared. All of it stays off the loop this feeds,
 // which is every source file of the project.
 func resolvedBaseDirectory(base populationBase) (string, bool) {
-  from, resolved := resolveLinkedPath(base.Absolute)
+  from, resolved := resolveLinkedPath(base.Absolute, base.inputs)
   if !resolved {
     return from, false
   }
-  info, err := os.Lstat(from)
+  info, err := base.inputs.Lstat(from)
   return from, err == nil && info.IsDir()
 }
 
@@ -564,9 +565,10 @@ func resolvedBaseDirectory(base populationBase) (string, bool) {
 //
 // A component whose chain outran the resolver ends the walk. Joining the rest
 // onto it would produce a path the filesystem opens and every string
-// comparison misses, which is #1269 exactly, one component further up than the
-// case that opened it.
-func resolveLinkedPath(absolute string) (string, bool) {
+// comparison misses, which is the same silent failure as an unresolved leaf, one component
+// further up.
+func resolveLinkedPath(absolute string, readers ...evidenceInputReader) (string, bool) {
+  inputs := inputReader(readers)
   volume := filepath.VolumeName(absolute)
   rest := absolute[len(volume):]
   current := volume + string(filepath.Separator)
@@ -576,7 +578,7 @@ func resolveLinkedPath(absolute string) (string, bool) {
       continue
     }
     walked = true
-    resolved, settled := resolveLinkedDirectory(filepath.Join(current, segment))
+    resolved, settled := resolveLinkedDirectory(filepath.Join(current, segment), inputs)
     if !settled {
       return filepath.FromSlash(resolved), false
     }
@@ -748,7 +750,7 @@ func unreadableWalkEntryProblem(
 // path such as `C:docs` is not absolute by the path API yet resolves against
 // whatever directory that drive is currently on, so it names a different
 // location on two machines while looking superficially safe — the rationale
-// `glob_honors_public_path_contract_test.go` records for the same rejection in
+// `glob_rejects_windows_drive_paths_test.go` records for the same rejection in
 // `files`.
 //
 // `..` is accepted here, and that is the whole point of the property. It is

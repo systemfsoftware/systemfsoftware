@@ -12,8 +12,45 @@
  * Every field is optional and defaults to `false`. Plugin authors opt in by
  * setting only the capabilities their sidecar actually implements; ttsc keeps
  * the conservative default for everything else.
+ *
+ * @evidence contracts/common.md#principled-implementation Optional booleans represent independent descriptor opt-ins; an omitted capability means the host must not send a protocol the sidecar has not declared.
+ * @evidence contracts/common.md#clear-and-simple-design Each supported protocol has its own named field so callers can negotiate one behavior without inferring unrelated support.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Capability declarations replace plugin-name special cases; false defaults are the conservative protocol contract rather than test accommodations.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc explains each protocol, its false default and relevant independence from other capabilities; documented members and descriptive prose are separated according to the documentation skill.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
+ * @evidence contracts/portability.md#os-neutral-implementation These opt-ins describe a native sidecar's accepted argv and process protocols, including private absolute artifact paths and separate lexical/physical project identities; omission leaves the optional protocol unsupported on every platform rather than inferring it from an OS or plugin name.
  */
 export interface ITtscPluginCapabilities {
+  /**
+   * Whether a check-stage host accepts `--check-observations-json=<absolute
+   * private path>` and writes the host input observations from that same check
+   * Program to the private channel. This opt-in applies to the actual check
+   * verb, not effectful fix/format verbs exposed by a check-stage descriptor.
+   *
+   * The channel preserves input paths, content and physical-identity witnesses,
+   * and explicit observation incompleteness independently of text diagnostics
+   * and process status. Hosts report it for unsuccessful checks as well. A
+   * missing capability keeps the option out of strict hosts' argv; it does not
+   * imply that their input population was completely observed.
+   *
+   * @default false
+   */
+  checkObservations?: true;
+
+  /**
+   * Whether the host consumes `TTSC_TSGO_ARGS_CWD` with its forwarded compiler
+   * payload. Upstream response and CLI option parsing use that directory;
+   * Program, plugin and rule-input roots retain the selected `--cwd`.
+   *
+   * Only invocations requiring a distinct compiler argument base need this
+   * protocol. An omitted capability retains same-directory legacy behavior.
+   *
+   * @default false
+   */
+  compilerArgsCwd?: true;
+
   /**
    * Whether the sidecar accepts `--diagnostics` and `--extendedDiagnostics` on
    * its command line and may print plugin-owned timing detail to stdout.
@@ -36,6 +73,51 @@ export interface ITtscPluginCapabilities {
    * @default false
    */
   lsp?: boolean;
+
+  /**
+   * Whether the sidecar supports the compiler-owned emit provenance protocol.
+   *
+   * An opted-in host accepts `--emit-provenance-json=<absolute private path>`
+   * and reports the physical source identities of outputs it actually wrote.
+   * Runtime consumers use that ledger instead of inferring source ownership
+   * from an output filename or configuration prediction.
+   *
+   * When omitted, ttsc does not pass the option to a strict third-party host. A
+   * runtime operation then uses the existing externally observed provenance
+   * adapter, whose incomplete proof remains visible to the runtime consumer.
+   *
+   * @default false
+   */
+  emitProvenance?: true;
+
+  /**
+   * Whether build accepts `--emit-observations-json=<absolute private path>`
+   * and publishes its generation's compiler and native input observations.
+   * Missing support keeps runtime emits fresh rather than assuming reusable
+   * input completeness. This protocol is independent of output ownership. Hosts
+   * publish the same observation envelope as checkObservations, including
+   * failures, before releasing their Program.
+   *
+   * @default false
+   */
+  emitObservations?: true;
+
+  /**
+   * Whether every environment variable that can change this host's result is
+   * read through `PluginContext.Env`, or through `Program.Env` in a host that
+   * loads its own Program, which records the read with its value in the
+   * generation's `environmentInputs`.
+   *
+   * A persistent runtime emit is then keyed only by the variables its processes
+   * read, and a recorded value that changed withdraws it. Without the
+   * capability ttsc cannot know which variables a host reads with `os.Getenv`,
+   * so a project that uses it stays keyed by the complete environment: any
+   * changed variable, including the program arguments a package manager
+   * exports, builds it again.
+   *
+   * @default false
+   */
+  environmentInputs?: true;
 
   /**
    * Whether the sidecar accepts ttsc's `--project-context-json` identity
@@ -82,13 +164,13 @@ export interface ITtscPluginCapabilities {
 
   /**
    * Whether the sidecar accepts `--singleThreaded` and `--checkers` on its
-   * command line. The lint sidecar parses both flags via `parseSubcommandFlags`
-   * and threads them into `loadProgram` (parse phase) and `engine.SetSerial`
-   * (rule walk); other check-stage hosts may not.
+   * command line. The lint sidecar parses both flags in its shared subcommand
+   * flag parser and threads them into program loading (parse phase) and
+   * `engine.SetSerial` (rule walk); other check-stage hosts may not.
    *
    * When `false` (the default), ttsc strips both flags from the sidecar's arg
-   * list — the conservative behavior that ad3443a restored after `#113`
-   * over-forwarded them to typia/nestia hosts.
+   * list, because a host that does not declare the capability has an unknown
+   * flag set and would reject an undeclared flag.
    *
    * @default false
    */

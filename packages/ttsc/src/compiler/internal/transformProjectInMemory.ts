@@ -1,74 +1,155 @@
 import path from "node:path";
 
 import { resolveNodeBinary } from "../../internal/resolveNodeBinary";
-import {
-  collectProjectHostInputs,
-  hashHostInputPaths,
-  loadProjectPlugins,
-  realpathHostInputPaths,
-} from "../../plugin/internal/loadProjectPlugins";
+import { collectProjectHostInputs } from "../../plugin/internal/load/collectProjectHostInputs";
+import { hashHostInputPaths } from "../../plugin/internal/load/hashHostInputPaths";
+import { loadProjectPlugins } from "../../plugin/internal/load/loadProjectPlugins";
+import { realpathHostInputPaths } from "../../plugin/internal/load/realpathHostInputPaths";
+import type { PluginContentIdentities } from "../../plugin/internal/source/PluginContentIdentities";
 import type { ITtscCompilerContext } from "../../structures/ITtscCompilerContext";
-import type { ITtscCompilerDiagnostic } from "../../structures/ITtscCompilerDiagnostic";
 import type { ITtscCompilerTransformation } from "../../structures/ITtscCompilerTransformation";
 import type { ITtscLoadedNativePlugin } from "../../structures/internal/ITtscLoadedNativePlugin";
 import type { ITtscParsedProjectConfig } from "../../structures/internal/ITtscParsedProjectConfig";
 import type { TtscBuildResult } from "../../structures/internal/TtscBuildResult";
+import { CompilationSnapshot } from "./CompilationSnapshot";
+import { appendBuildOutput, mergeCheckGraphs } from "./build/appendBuildOutput";
+import { mergeEnvironmentInputs } from "./build/mergeEnvironmentInputs";
+import { normalizeBuildOutput } from "./build/normalizeBuildOutput";
 import { buildNativeCompiler } from "./buildNativeCompiler";
-import { packageRootDir } from "./paths";
+import { outputText } from "./outputText";
+import { packageRootDir } from "./packageRootDir";
+import { parseNativeTransformOutput } from "./parseNativeTransformOutput";
 import { createNativeProjectContextArgs } from "./project/createNativeProjectContextArgs";
 import { resolveBinary } from "./resolveBinary";
 import { resolveTsgo } from "./resolveTsgo";
-import { appendBuildOutput, normalizeBuildOutput } from "./runBuild";
-import {
-  assertSharedHostCompatibility,
-  clearInheritedSemanticConfigPath,
-  clearInheritedTsgoArgs,
-  inheritedSidecarEnv,
-  linkedTransformPlugins,
-  resolvePluginConfigDir,
-  selectSharedHostPlugin,
-} from "./sharedHostHelpers";
-import { outputText, spawnNative } from "./spawnNative";
+import { runNativeCheckWithObservations } from "./runNativeCheckWithObservations";
+import { SidecarEnvironment } from "./sharedHost/SidecarEnvironment";
+import { assertSharedHostCompatibility } from "./sharedHost/assertSharedHostCompatibility";
+import { clearInheritedSemanticConfigPath } from "./sharedHost/clearInheritedSemanticConfigPath";
+import { clearInheritedTsgoArgs } from "./sharedHost/clearInheritedTsgoArgs";
+import { inheritedSidecarEnv } from "./sharedHost/inheritedSidecarEnv";
+import { linkedTransformPlugins } from "./sharedHost/linkedTransformPlugins";
+import { publishLinkedTransformPlugins } from "./sharedHost/publishLinkedTransformPlugins";
+import { resolvePluginConfigDir } from "./sharedHost/resolvePluginConfigDir";
+import { selectSharedHostPlugin } from "./sharedHost/selectSharedHostPlugin";
+import { spawnNative } from "./spawnNative";
 
 /**
  * Transform a project and capture TypeScript source output in memory.
  *
- * When no plugins are configured the fast path spawns the native ttsc compiler
- * host (`cmd/ttsc api-transform`) which returns a JSON map of transformed
- * TypeScript sources. When plugins are present:
+ * When no plugins are configured the native path spawns the native ttsc
+ * compiler host (`cmd/ttsc api-transform`) which returns a JSON map of
+ * transformed TypeScript sources. When plugins are present:
  *
- * 1. Check-stage plugins run first and abort on failure.
+ * 1. Check-stage plugins run first and stop on a nonzero accumulated status.
  * 2. If there are no transform-stage plugins the host is used as the transformer.
  * 3. If transform plugins exist they are dispatched through the shared-host binary
  *    with linked plugins passed via `TTSC_LINKED_PLUGINS_JSON`.
  *
+ * Explicit unavailable-observation reports survive every lane so consumers can
+ * use a fresh successful result while withholding reuse. They cannot excuse a
+ * content or physical witness that changed or conflicted across stages.
+ * Environment variables read by the check and transform stages are unioned into
+ * `environmentInputs`. Opted-in checks supply their same-generation
+ * observations through a private sidecar on failure as well as success. A later
+ * transform cannot restore a check's rejected proof or replace it with an
+ * unavailable-input exemption. Other check hosts retain their existing
+ * descriptor and declared-input observation contract rather than inheriting the
+ * driver's protocol.
+ *
  * @returns A `{ result, typescript }` pair where `typescript` maps output paths
- *   to their transformed TypeScript source text.
+ *   to their transformed TypeScript source text, and `pluginSources` the state
+ *   of every Go source directory the plugins supplied to their binaries.
+ * @evidence contracts/common.md#principled-implementation Discovery and check/transform stages use their owning native binaries; evaluation-time witnesses are revalidated, explicit observation limits survive every lane, and changed or conflicting proven inputs lose their unavailable exemption rather than gaining admission.
+ * @evidence contracts/common.md#clear-and-simple-design One router composes built-in and plugin-backed transforms; envelope parsers, environment construction, proof merging and negative-only observation limits have separate shared helpers.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Missing input proof cannot be repaired by a postcompile baseline; conventional deferred config reads accept only the actual native consumer's proof, while malformed required TypeScript output is a protocol error.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs describe transform lanes and stage ordering; separated result members distinguish output, advisory graph/dependency data, evaluation witnesses and unstable source markers under documentation guidance.
+ * @evidence contracts/performance.md#efficient-algorithms Stage filtering, declared-input Sets and proof maps scale with plugin/input counts; merged paths are sorted with path-text comparison costs. Each stage can rehash/re-realpath declared inputs, serialize plugin/config records and parse complete output; discovery, native capability probes, source builds and child execution remain delegated costs of this call. The invocation snapshot adds full captured-population parsing and dirty document encoding/writes per native stage. No byte/work ceiling or measured dominant-cost ranking is asserted.
+ * @evidence contracts/performance.md#reuse-equivalent-work Descriptor/source discovery precedes snapshot allocation so invocation-private paths do not vary its environment cache identity. Source-plugin artifacts are shared by their owning loader; this transform intentionally produces a current generation and gives downstream consumers the graph, source states and host witnesses required to qualify reuse.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources This router retains discovery records, per-stage proof maps and accumulated diagnostics/output until synchronous stage completion, then transfers the returned envelope. The invocation coordinator attempts identity-checked snapshot removal and propagates or aggregates removal failure. Other native capture/observation owners attempt their own cleanup; suppressed cleanup failures and descendant release remain unconfirmed where those owners do not join them. Artifact-cache retention belongs to the builder, and no stage timeout or input/output byte ceiling is supplied here.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation Native paths remain filesystem coordinates, child argv are arrays, and environment helpers preserve Windows key equivalence and explicit Node/tsgo/config anchors without shell parsing or native method patching.
  */
 export function transformProjectInMemory(options: ITtscCompilerContext): {
+  /** Optional plugin-reported per-file dependencies used as advisory inputs. */
   dependencies?: Record<string, string[]>;
+
+  /** Files for which the producer declares dependency reporting complete. */
   dependenciesComplete?: string[];
+
+  /** Environment variables the native plugins read, with the value or null. */
+  environmentInputs?: Record<string, string | null>;
+
+  /** Compiler reference graph with its independently recorded input proof. */
   graph?: ITtscCompilerTransformation.IReferenceGraph;
+
+  /** Evaluation-time raw-content or unavailable-state host witnesses. */
   hostInputHashes?: Record<string, string | null>;
+
+  /** Evaluation-time native targets under exact host-input spellings. */
   hostInputRealpaths?: Record<string, string | null>;
+
+  /** Explicitly unavailable observations; changed proven inputs are not excused. */
+  hostInputProofFailures?: Record<string, "observation-unavailable">;
+
+  /** Universal host paths whose proof downstream reuse must validate. */
   hostInputs?: string[];
+
+  /** Source states of Go plugins that produced this generation. */
+  pluginSources?: Record<string, string>;
+
+  /** False withdraws complete observation authority; absence asserts nothing. */
+  observationsComplete?: false;
+
+  /** Compiler diagnostics and native process outcome. */
   result: TtscBuildResult;
+
+  /** Optional per-output maps that refer only to returned TypeScript texts. */
+  sourceMaps?: Record<string, ITtscCompilerTransformation.ISourceMap>;
+
+  /** Required transformed TypeScript text under compiler output keys. */
   typescript: Record<string, string>;
+
+  /** Sources the producer identifies as unsuitable for stable reuse. */
   volatile?: string[];
 } {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const loaded = loadProjectPlugins({
-    binary: resolveBinary(options) ?? "",
-    cacheDir: options.cacheDir ?? options.env?.TTSC_CACHE_DIR,
+    binary:
+      resolveBinary({
+        env: SidecarEnvironment.merge(process.env, options.env),
+      }) ?? "",
+    cacheDir:
+      options.cacheDir ??
+      SidecarEnvironment.read(options.env, "TTSC_CACHE_DIR"),
     cwd,
     entries: options.plugins,
-    env: inheritedSidecarEnv(options.env),
+    env: inheritedSidecarEnv(options.env, options.binary),
     pluginConfigDir: options.pluginConfigDir,
     projectRoot: options.projectRoot,
     tsconfig: options.tsconfig,
   });
+  return CompilationSnapshot.run(options.env, (env) =>
+    transformWithSnapshot({ ...options, env }, loaded),
+  );
+}
+
+/** Run native checks and transformation after descriptor/source discovery. */
+function transformWithSnapshot(
+  options: ITtscCompilerContext,
+  loaded: ReturnType<typeof loadProjectPlugins>,
+): ReturnType<typeof transformProjectInMemory> {
   if (loaded.nativePlugins.length !== 0) {
-    return transformProjectWithPlugins(options, loaded);
+    // Every step below runs binaries built from these sources, so the output
+    // is a function of their state, which the envelope carries for a consumer
+    // to prove.
+    return {
+      ...transformProjectWithPlugins(options, loaded),
+      ...(Object.keys(loaded.pluginSources).length === 0
+        ? {}
+        : { pluginSources: loaded.pluginSources }),
+    };
   }
   return transformProjectWithNativeHost(options, loaded.project, loaded);
 }
@@ -85,15 +166,21 @@ function transformProjectWithNativeHost(
     hostInputHashes: Readonly<Record<string, string | null>>;
     hostInputRealpaths: Readonly<Record<string, string | null>>;
     hostInputs: readonly string[];
+    observationsComplete?: false;
+    hostInputProofFailures?: Record<string, "observation-unavailable">;
   },
 ): {
   dependencies?: Record<string, string[]>;
   dependenciesComplete?: string[];
+  environmentInputs?: Record<string, string | null>;
   graph?: ITtscCompilerTransformation.IReferenceGraph;
   hostInputHashes?: Record<string, string | null>;
   hostInputRealpaths?: Record<string, string | null>;
+  hostInputProofFailures?: Record<string, "observation-unavailable">;
   hostInputs?: string[];
+  observationsComplete?: false;
   result: TtscBuildResult;
+  sourceMaps?: Record<string, ITtscCompilerTransformation.ISourceMap>;
   typescript: Record<string, string>;
   volatile?: string[];
 } {
@@ -122,9 +209,13 @@ function transformProjectWithNativeHost(
     baseline?.hostInputs ?? [],
     projectHostInputs,
   );
+  const env = inheritedSidecarEnv(options.env);
   const binary = buildNativeCompiler({
     cacheBaseDir: project.root,
-    cacheDir: options.cacheDir ?? options.env?.TTSC_CACHE_DIR,
+    cacheDir:
+      options.cacheDir ??
+      SidecarEnvironment.read(options.env, "TTSC_CACHE_DIR"),
+    env,
     packageRoot: packageRootDir(),
   });
   const res = spawnNative(
@@ -132,7 +223,7 @@ function transformProjectWithNativeHost(
     ["api-transform", "--cwd", project.root, "--tsconfig", project.path],
     {
       cwd: project.root,
-      env: inheritedSidecarEnv(options.env),
+      env,
     },
   );
   if (res.error) {
@@ -161,20 +252,35 @@ function transformProjectWithNativeHost(
     output.hostInputRealpaths ?? {},
     output.hostInputs ?? [],
   );
+  const hostInputHashes = mergeCompatibleHostInputHashes(
+    finalObservedHostInputHashes,
+    finalOutputHostInputHashes,
+    observedHostInputs,
+    output.hostInputs,
+  );
+  const hostInputRealpaths = mergeCompatibleHostInputHashes(
+    finalObservedHostInputRealpaths,
+    finalOutputHostInputRealpaths,
+    observedHostInputs,
+    output.hostInputs,
+  );
   return {
     ...envelopeSideChannels(output),
-    hostInputHashes: mergeCompatibleHostInputHashes(
-      finalObservedHostInputHashes,
-      finalOutputHostInputHashes,
-      observedHostInputs,
-      output.hostInputs,
+    ...mergeEnvironmentInputs(output.environmentInputs),
+    ...observationLimitations(
+      [
+        baseline,
+        {
+          hostInputHashes: projectHostInputHashes,
+          hostInputRealpaths: projectHostInputRealpaths,
+        },
+        output,
+      ],
+      hostInputHashes,
+      hostInputRealpaths,
     ),
-    hostInputRealpaths: mergeCompatibleHostInputHashes(
-      finalObservedHostInputRealpaths,
-      finalOutputHostInputRealpaths,
-      observedHostInputs,
-      output.hostInputs,
-    ),
+    hostInputHashes,
+    hostInputRealpaths,
     hostInputs: mergeHostInputs(observedHostInputs, output.hostInputs),
     result: {
       diagnostics: output.diagnostics,
@@ -192,11 +298,15 @@ function transformProjectWithPlugins(
 ): {
   dependencies?: Record<string, string[]>;
   dependenciesComplete?: string[];
+  environmentInputs?: Record<string, string | null>;
   graph?: ITtscCompilerTransformation.IReferenceGraph;
   hostInputHashes?: Record<string, string | null>;
   hostInputRealpaths?: Record<string, string | null>;
+  hostInputProofFailures?: Record<string, "observation-unavailable">;
   hostInputs?: string[];
+  observationsComplete?: false;
   result: TtscBuildResult;
+  sourceMaps?: Record<string, ITtscCompilerTransformation.ISourceMap>;
   typescript: Record<string, string>;
   volatile?: string[];
 } {
@@ -210,25 +320,72 @@ function transformProjectWithPlugins(
   const tsgoBinary =
     loaded.nativePlugins.length === 0
       ? ""
-      : resolveTsgo({ ...options, cwd: project.root }).binary;
+      : resolveTsgo({
+          ...options,
+          cwd: project.root,
+          env: SidecarEnvironment.merge(process.env, options.env),
+        }).binary;
   const checked = runNativeChecks(
     options,
     project,
     tsgoBinary,
     loaded.nativePlugins,
     checks,
+    loaded.identities,
+  );
+  const checkedHostInputs = mergeHostInputs(
+    loaded.hostInputs,
+    checked.hostInputs,
+  );
+  const checkedHostInputHashes = mergeCompatibleHostInputHashes(
+    revalidateHostInputHashes(loaded.hostInputHashes, loaded.hostInputs),
+    revalidateHostInputHashes(
+      checked.hostInputHashes ?? {},
+      checked.hostInputs ?? [],
+    ),
+    loaded.hostInputs,
+    checked.hostInputs,
+    loaded.deferredHostInputs,
+  );
+  const checkedHostInputRealpaths = mergeCompatibleHostInputHashes(
+    revalidateHostInputRealpaths(loaded.hostInputRealpaths, loaded.hostInputs),
+    revalidateHostInputRealpaths(
+      checked.hostInputRealpaths ?? {},
+      checked.hostInputs ?? [],
+    ),
+    loaded.hostInputs,
+    checked.hostInputs,
+    loaded.deferredHostInputs,
+  );
+  // A forwarded config may await its first consuming native stage, but a
+  // check's missing or conflicting proof cannot be replaced by a later stage.
+  const checkDeclaredInputs = new Set(
+    (checked.hostInputs ?? []).map((input) => path.resolve(input)),
+  );
+  const deferredTransformInputs = loaded.deferredHostInputs.filter(
+    (input) => !checkDeclaredInputs.has(path.resolve(input)),
+  );
+  const unprovenCheckInputs = [...checkDeclaredInputs].filter(
+    (input) =>
+      !Object.hasOwn(checkedHostInputHashes, input) ||
+      !Object.hasOwn(checkedHostInputRealpaths, input),
   );
   if (checked.status !== 0) {
     return {
-      hostInputHashes: revalidateHostInputHashes(
-        loaded.hostInputHashes,
-        loaded.hostInputs,
+      ...(checked.graph === undefined ? {} : { graph: checked.graph }),
+      ...mergeEnvironmentInputs(checked.environmentInputs),
+      ...observationLimitations(
+        [loaded, checked],
+        checkedHostInputHashes,
+        checkedHostInputRealpaths,
+        unprovenCheckInputs,
       ),
-      hostInputRealpaths: revalidateHostInputRealpaths(
-        loaded.hostInputRealpaths,
-        loaded.hostInputs,
-      ),
-      hostInputs: loaded.hostInputs,
+      ...(checked.graph === undefined
+        ? { observationsComplete: false as const }
+        : {}),
+      hostInputHashes: checkedHostInputHashes,
+      hostInputRealpaths: checkedHostInputRealpaths,
+      hostInputs: checkedHostInputs,
       result: checked,
       typescript: {},
     };
@@ -236,28 +393,45 @@ function transformProjectWithPlugins(
   if (transformers.length === 0) {
     const transformed = transformProjectWithNativeHost(options, project);
     const finalLoadedHostInputHashes = revalidateHostInputHashes(
-      loaded.hostInputHashes,
-      loaded.hostInputs,
+      checkedHostInputHashes,
+      checkedHostInputs,
     );
     const finalLoadedHostInputRealpaths = revalidateHostInputRealpaths(
-      loaded.hostInputRealpaths,
-      loaded.hostInputs,
+      checkedHostInputRealpaths,
+      checkedHostInputs,
+    );
+    const hostInputHashes = mergeCompatibleHostInputHashes(
+      finalLoadedHostInputHashes,
+      transformed.hostInputHashes,
+      checkedHostInputs,
+      transformed.hostInputs,
+    );
+    const hostInputRealpaths = mergeCompatibleHostInputHashes(
+      finalLoadedHostInputRealpaths,
+      transformed.hostInputRealpaths,
+      checkedHostInputs,
+      transformed.hostInputs,
     );
     return {
       ...envelopeSideChannels(transformed),
-      hostInputHashes: mergeCompatibleHostInputHashes(
-        finalLoadedHostInputHashes,
-        transformed.hostInputHashes,
-        loaded.hostInputs,
-        transformed.hostInputs,
+      ...mergeEnvironmentInputs(
+        checked.environmentInputs,
+        transformed.environmentInputs,
       ),
-      hostInputRealpaths: mergeCompatibleHostInputHashes(
-        finalLoadedHostInputRealpaths,
-        transformed.hostInputRealpaths,
-        loaded.hostInputs,
-        transformed.hostInputs,
+      graph: mergeTransformGraphs(
+        checked.graph,
+        transformed.graph,
+        checks.length,
       ),
-      hostInputs: mergeHostInputs(loaded.hostInputs, transformed.hostInputs),
+      ...observationLimitations(
+        [loaded, checked, transformed],
+        hostInputHashes,
+        hostInputRealpaths,
+        unprovenCheckInputs,
+      ),
+      hostInputHashes,
+      hostInputRealpaths,
+      hostInputs: mergeHostInputs(checkedHostInputs, transformed.hostInputs),
       result: appendBuildOutput(checked, transformed.result),
       typescript: transformed.typescript,
     };
@@ -280,6 +454,7 @@ function transformProjectWithPlugins(
         tsgoBinary,
         loaded.nativePlugins,
         plugin,
+        loaded.identities,
       ),
     },
   );
@@ -299,38 +474,51 @@ function transformProjectWithPlugins(
     stderr: outputText(res.stderr),
   };
   const finalLoadedHostInputHashes = revalidateHostInputHashes(
-    loaded.hostInputHashes,
-    loaded.hostInputs,
+    checkedHostInputHashes,
+    checkedHostInputs,
   );
   const finalOutputHostInputHashes = revalidateHostInputHashes(
     output.hostInputHashes ?? {},
     output.hostInputs ?? [],
   );
   const finalLoadedHostInputRealpaths = revalidateHostInputRealpaths(
-    loaded.hostInputRealpaths,
-    loaded.hostInputs,
+    checkedHostInputRealpaths,
+    checkedHostInputs,
   );
   const finalOutputHostInputRealpaths = revalidateHostInputRealpaths(
     output.hostInputRealpaths ?? {},
     output.hostInputs ?? [],
   );
+  const hostInputHashes = mergeCompatibleHostInputHashes(
+    finalLoadedHostInputHashes,
+    finalOutputHostInputHashes,
+    checkedHostInputs,
+    output.hostInputs,
+    deferredTransformInputs,
+  );
+  const hostInputRealpaths = mergeCompatibleHostInputHashes(
+    finalLoadedHostInputRealpaths,
+    finalOutputHostInputRealpaths,
+    checkedHostInputs,
+    output.hostInputs,
+    deferredTransformInputs,
+  );
   return {
     ...envelopeSideChannels(output),
-    hostInputHashes: mergeCompatibleHostInputHashes(
-      finalLoadedHostInputHashes,
-      finalOutputHostInputHashes,
-      loaded.hostInputs,
-      output.hostInputs,
-      loaded.deferredHostInputs,
+    ...mergeEnvironmentInputs(
+      checked.environmentInputs,
+      output.environmentInputs,
     ),
-    hostInputRealpaths: mergeCompatibleHostInputHashes(
-      finalLoadedHostInputRealpaths,
-      finalOutputHostInputRealpaths,
-      loaded.hostInputs,
-      output.hostInputs,
-      loaded.deferredHostInputs,
+    graph: mergeTransformGraphs(checked.graph, output.graph, checks.length),
+    ...observationLimitations(
+      [loaded, checked, output],
+      hostInputHashes,
+      hostInputRealpaths,
+      unprovenCheckInputs,
     ),
-    hostInputs: mergeHostInputs(loaded.hostInputs, output.hostInputs),
+    hostInputHashes,
+    hostInputRealpaths,
+    hostInputs: mergeHostInputs(checkedHostInputs, output.hostInputs),
     result: appendBuildOutput(checked, result),
     typescript: output.typescript,
   };
@@ -371,20 +559,78 @@ function revalidateHostInputRealpaths(
 }
 
 /**
+ * Retain explicit observation limits without excusing a changed proven input. A
+ * known content or physical witness that was dropped by revalidation or
+ * incompatible-stage merging withdraws that path's unavailable exemption. The
+ * independent global false marker still forbids complete reuse. Earlier check
+ * declarations whose proof was lost also withhold a later stage's exemption.
+ */
+function observationLimitations(
+  groups: readonly (
+    | {
+        observationsComplete?: false;
+        hostInputProofFailures?: Readonly<
+          Record<string, "observation-unavailable">
+        >;
+        hostInputHashes?: Readonly<Record<string, string | null>>;
+        hostInputRealpaths?: Readonly<Record<string, string | null>>;
+      }
+    | undefined
+  )[],
+  retainedHashes: Readonly<Record<string, string | null>>,
+  retainedRealpaths: Readonly<Record<string, string | null>>,
+  rejectedInputs: readonly string[] = [],
+): {
+  observationsComplete?: false;
+  hostInputProofFailures?: Record<string, "observation-unavailable">;
+} {
+  const failures: Record<string, "observation-unavailable"> =
+    Object.create(null);
+  for (const group of groups) {
+    Object.assign(failures, group?.hostInputProofFailures);
+  }
+  for (const file of Object.keys(failures)) {
+    if (
+      groups.some(
+        (group) =>
+          (Object.hasOwn(group?.hostInputHashes ?? {}, file) &&
+            group!.hostInputHashes![file] !== retainedHashes[file]) ||
+          (Object.hasOwn(group?.hostInputRealpaths ?? {}, file) &&
+            group!.hostInputRealpaths![file] !== retainedRealpaths[file]),
+      )
+    )
+      delete failures[file];
+  }
+  // Earlier checks retain declarations after any witness conflict or loss.
+  // A later stage cannot relabel that rejected proof as API unavailability.
+  for (const input of rejectedInputs) delete failures[input];
+  return {
+    ...(groups.some((group) => group?.observationsComplete === false)
+      ? { observationsComplete: false as const }
+      : {}),
+    ...(Object.keys(failures).length === 0
+      ? {}
+      : { hostInputProofFailures: failures }),
+  };
+}
+
+/**
  * Collect the optional advisory envelope fields (`dependencies`,
- * `dependenciesComplete`, `graph`, `volatile`) into a spreadable object,
- * omitting absent fields so downstream result shapes stay free of `undefined`
- * keys.
+ * `dependenciesComplete`, `graph`, `sourceMaps`, `volatile`) into a spreadable
+ * object, omitting absent fields so downstream result shapes stay free of
+ * `undefined` keys.
  */
 function envelopeSideChannels(output: {
   dependencies?: Record<string, string[]>;
   dependenciesComplete?: string[];
   graph?: ITtscCompilerTransformation.IReferenceGraph;
+  sourceMaps?: Record<string, ITtscCompilerTransformation.ISourceMap>;
   volatile?: string[];
 }): {
   dependencies?: Record<string, string[]>;
   dependenciesComplete?: string[];
   graph?: ITtscCompilerTransformation.IReferenceGraph;
+  sourceMaps?: Record<string, ITtscCompilerTransformation.ISourceMap>;
   volatile?: string[];
 } {
   return {
@@ -395,6 +641,9 @@ function envelopeSideChannels(output: {
       ? {}
       : { dependenciesComplete: output.dependenciesComplete }),
     ...(output.graph === undefined ? {} : { graph: output.graph }),
+    ...(output.sourceMaps === undefined
+      ? {}
+      : { sourceMaps: output.sourceMaps }),
     ...(output.volatile === undefined ? {} : { volatile: output.volatile }),
   };
 }
@@ -484,6 +733,7 @@ function runNativeChecks(
   tsgoBinary: string,
   nativePlugins: readonly ITtscLoadedNativePlugin[],
   checks: readonly ITtscLoadedNativePlugin[],
+  identities: PluginContentIdentities.Store | undefined,
 ): TtscBuildResult {
   let result: TtscBuildResult = {
     diagnostics: [],
@@ -491,42 +741,53 @@ function runNativeChecks(
     stdout: "",
     stderr: "",
   };
+  let snapshotsComplete = true;
   for (const plugin of checks) {
-    const res = spawnNative(
-      plugin.binary,
-      createNativeCheckArgs(
-        project,
-        nativePlugins,
-        plugin,
-        resolvePluginConfigDir(options),
-      ),
-      {
-        cwd: project.root,
-        env: nativePluginEnv(
-          options,
-          project.root,
-          tsgoBinary,
-          nativePlugins,
-          plugin,
-        ),
-      },
-    );
-    if (res.error) {
-      throw new Error(
-        `ttsc.transform.check: failed to spawn ${plugin.binary}: ${res.error.message}`,
+    const checked = runNativeCheckWithObservations(plugin, (extraArgs) => {
+      const res = spawnNative(
+        plugin.binary,
+        [
+          ...createNativeCheckArgs(
+            project,
+            nativePlugins,
+            plugin,
+            resolvePluginConfigDir(options),
+          ),
+          ...extraArgs,
+        ],
+        {
+          cwd: project.root,
+          env: nativePluginEnv(
+            options,
+            project.root,
+            tsgoBinary,
+            nativePlugins,
+            plugin,
+            identities,
+          ),
+        },
       );
-    }
-    result = appendBuildOutput(
-      result,
-      normalizeBuildOutput(
+      if (res.error) {
+        throw new Error(
+          `ttsc.transform.check: failed to spawn ${plugin.binary}: ${res.error.message}`,
+        );
+      }
+      return normalizeBuildOutput(
         {
           status: res.status ?? 1,
+          processCompletedNormally: res.status !== null && res.signal === null,
           stdout: outputText(res.stdout),
           stderr: outputText(res.stderr),
         },
         project.root,
-      ),
-    );
+      );
+    });
+    snapshotsComplete &&= checked.graph?.compilationSnapshot !== undefined;
+    result = appendBuildOutput(result, checked);
+    if (!snapshotsComplete && result.graph?.compilationSnapshot !== undefined) {
+      const { compilationSnapshot: _snapshot, ...unqualified } = result.graph;
+      result.graph = unqualified;
+    }
     if (result.status !== 0) {
       return result;
     }
@@ -596,7 +857,12 @@ function serializeNativePlugins(
  * the caller declared a plugin config anchor (an embedder compiling through a
  * generated wrapper tsconfig) so config-file discovery walks the real project
  * instead of the wrapper's temp-dir ancestry. For transform plugins, also
- * passes `TTSC_LINKED_PLUGINS_JSON` when linked sources are present.
+ * passes `TTSC_LINKED_PLUGINS_JSON` when linked sources are present. The load's
+ * record store proves the Node runtime from metadata instead of streaming it
+ * before every spawn of every generation (#1723). Its preexisting identity
+ * directory is offered to native config loaders as scratch storage on the
+ * project's volume; a nested ttsx descriptor load does not inherit the
+ * descriptor-only record-root channel.
  */
 function nativePluginEnv(
   options: ITtscCompilerContext,
@@ -604,539 +870,69 @@ function nativePluginEnv(
   tsgoBinary: string,
   nativePlugins?: readonly ITtscLoadedNativePlugin[],
   plugin?: ITtscLoadedNativePlugin,
+  identities?: PluginContentIdentities.Store,
 ): NodeJS.ProcessEnv {
   const pluginConfigDir = resolvePluginConfigDir(options);
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...(pluginConfigDir === undefined
-      ? {}
-      : { TTSC_PLUGIN_CONFIG_DIR: pluginConfigDir }),
-    TTSC_TSGO_BINARY: process.env.TTSC_TSGO_BINARY ?? tsgoBinary,
-    TTSC_TTSX_BINARY:
-      process.env.TTSC_TTSX_BINARY ??
-      path.join(__dirname, "..", "..", "launcher", "ttsx.js"),
-    ...options.env,
-  };
-  const node = resolveNodeBinary(env, projectRoot);
-  if (node === undefined) delete env.TTSC_NODE_BINARY;
-  else env.TTSC_NODE_BINARY = node;
+  const env = SidecarEnvironment.merge(
+    process.env,
+    {
+      ...(pluginConfigDir === undefined
+        ? {}
+        : { TTSC_PLUGIN_CONFIG_DIR: pluginConfigDir }),
+      TTSC_TTSX_BINARY:
+        process.env.TTSC_TTSX_BINARY ??
+        path.join(__dirname, "..", "..", "launcher", "ttsx.js"),
+    },
+    options.env,
+    { TTSC_TSGO_BINARY: tsgoBinary },
+  );
+  const node = resolveNodeBinary(env, projectRoot, identities);
+  SidecarEnvironment.write(env, "TTSC_NODE_BINARY", node);
+  SidecarEnvironment.write(
+    env,
+    "TTSC_NATIVE_PLUGIN_RECORD_ROOT",
+    identities?.root,
+  );
   // The anchor is per-invocation state owned by this host: when this run
   // declared none (and the caller's env does not name one), drop any value
   // inherited from an ancestor ttsc process so a nested build never
   // mis-anchors its plugins at the outer project.
-  if (
-    pluginConfigDir === undefined &&
-    options.env?.TTSC_PLUGIN_CONFIG_DIR === undefined
-  ) {
-    delete env.TTSC_PLUGIN_CONFIG_DIR;
-  }
+  SidecarEnvironment.write(
+    env,
+    "TTSC_PLUGIN_CONFIG_DIR",
+    SidecarEnvironment.read(options.env, "TTSC_PLUGIN_CONFIG_DIR") ??
+      pluginConfigDir,
+  );
   // This lane forwards no tsgo argv of its own, so anything inherited belongs
   // to an outer ttsc run and must not reach these sidecars.
   clearInheritedTsgoArgs(env, options.env);
   clearInheritedSemanticConfigPath(env, options.env);
-  if (plugin?.stage === "transform") {
-    const linked = linkedTransformPlugins(nativePlugins ?? []);
-    if (linked.length !== 0) {
-      env.TTSC_LINKED_PLUGINS_JSON = serializeNativePlugins(linked);
-    }
-  }
+  publishLinkedTransformPlugins(
+    env,
+    options.env,
+    plugin?.stage === "transform"
+      ? linkedTransformPlugins(nativePlugins ?? [])
+      : [],
+  );
   return env;
 }
 
 /**
- * Parse the JSON envelope written by the native transform host to stdout.
- *
- * The `typescript` field must be a `Record<string, string>`. Any other shape is
- * treated as a protocol error and throws with the stderr/stdout context. JSON
- * parse errors are also wrapped with the same context message.
- *
- * The optional `dependencies`, `dependenciesComplete`, `graph`, and `volatile`
- * fields (see `ITtscCompilerTransformation`) are forwarded when well-formed;
- * entries that do not match the expected shape are dropped rather than failing
- * the transform — the fields are advisory invalidation metadata, not output.
- *
- * Dropping a malformed `dependenciesComplete` member is the safe direction on
- * purpose: an unlisted file keeps the sound host-owned bound, so a garbled
- * declaration costs over-invalidation, never a stale output.
+ * A legacy check with no graph cannot certify the transform's shared input
+ * view.
  */
-function parseNativeTransformOutput(
-  stdout: string,
-  stderr: string,
-): {
-  dependencies?: Record<string, string[]>;
-  dependenciesComplete?: string[];
-  diagnostics: ITtscCompilerDiagnostic[];
-  graph?: ITtscCompilerTransformation.IReferenceGraph;
-  hostInputHashes?: Record<string, string | null>;
-  hostInputRealpaths?: Record<string, string | null>;
-  hostInputs?: string[];
-  typescript: Record<string, string>;
-  volatile?: string[];
-} {
-  try {
-    const parsed = JSON.parse(stdout) as {
-      dependencies?: Record<string, string[]>;
-      dependenciesComplete?: string[];
-      diagnostics?: ITtscCompilerDiagnostic[];
-      graph?: ITtscCompilerTransformation.IReferenceGraph;
-      hostInputHashes?: Record<string, string | null>;
-      hostInputRealpaths?: Record<string, string | null>;
-      hostInputs?: string[];
-      typescript?: Record<string, string>;
-      volatile?: string[];
-    };
-    if (!isTextRecord(parsed.typescript)) {
-      throw new Error(
-        "ttsc: native transform host did not return a TypeScript source map",
-      );
-    }
-    const dependencies = parseDependencyLists(parsed.dependencies);
-    const dependenciesComplete = parseFileList(parsed.dependenciesComplete);
-    const graph = parseReferenceGraph(parsed.graph);
-    const hostInputHashes = parseHostInputHashes(parsed.hostInputHashes);
-    const hostInputRealpaths = parseHostInputRealpaths(
-      parsed.hostInputRealpaths,
-    );
-    const hostInputs = parseFileList(parsed.hostInputs);
-    const volatile = parseFileList(parsed.volatile);
-    return {
-      ...(dependencies === undefined ? {} : { dependencies }),
-      ...(dependenciesComplete === undefined ? {} : { dependenciesComplete }),
-      ...(graph === undefined ? {} : { graph }),
-      ...(hostInputHashes === undefined ? {} : { hostInputHashes }),
-      ...(hostInputRealpaths === undefined ? {} : { hostInputRealpaths }),
-      ...(hostInputs === undefined ? {} : { hostInputs }),
-      ...(volatile === undefined ? {} : { volatile }),
-      diagnostics: Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [],
-      typescript: parsed.typescript,
-    };
-  } catch (error) {
-    if (error instanceof Error && !(error instanceof SyntaxError)) {
-      throw error;
-    }
-    throw new Error(
-      (stderr || stdout).trim() ||
-        "ttsc: native transform host returned no output",
-    );
-  }
-}
-
-/** Parse native evaluation-time SHA-256/null host-input fingerprints. */
-function parseHostInputHashes(
-  value: unknown,
-): Record<string, string | null> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string | null> = {};
-  for (const [file, hash] of Object.entries(value)) {
-    if (
-      !path.isAbsolute(file) ||
-      (hash !== null &&
-        (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)))
-    ) {
-      continue;
-    }
-    output[path.resolve(file)] = hash;
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/** Parse native evaluation-time realpath/null host-input identities. */
-function parseHostInputRealpaths(
-  value: unknown,
-): Record<string, string | null> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string | null> = {};
-  for (const [file, realpath] of Object.entries(value)) {
-    if (
-      !path.isAbsolute(file) ||
-      (realpath !== null &&
-        (typeof realpath !== "string" || !path.isAbsolute(realpath)))
-    ) {
-      continue;
-    }
-    output[path.resolve(file)] =
-      realpath === null ? null : path.resolve(realpath as string);
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/**
- * Normalize the optional `dependencies` envelope field into a record of string
- * arrays, or `undefined` when absent or carrying nothing usable.
- */
-function parseDependencyLists(
-  value: unknown,
-): Record<string, string[]> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string[]> = {};
-  for (const [key, entries] of Object.entries(value)) {
-    if (!Array.isArray(entries)) {
-      continue;
-    }
-    const files = entries.filter(
-      (entry): entry is string => typeof entry === "string",
-    );
-    if (files.length !== 0) {
-      output[key] = files;
-    }
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/**
- * Normalize graph adjacency while retaining every well-formed node key.
- *
- * A leaf is intentionally encoded as an empty target array. Its key still
- * declares graph membership and lets persistent hosts bind the compiler-time
- * input proof for that source. A node needs a non-empty source key and an array
- * value; invalid array members are filtered without erasing a valid node.
- */
-function parseGraphEdges(value: unknown): Record<string, string[]> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string[]> = {};
-  for (const [key, entries] of Object.entries(value)) {
-    if (key.length === 0 || !Array.isArray(entries)) {
-      continue;
-    }
-    output[key] = entries.filter(
-      (entry): entry is string => typeof entry === "string",
-    );
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/**
- * Normalize the optional `graph` envelope section with the same tolerance as
- * `dependencies`: non-object sections are dropped, empty source keys and edge
- * entries that are not arrays are dropped, and non-string list members are
- * filtered. Empty arrays remain as graph nodes because leaf membership binds
- * compiler input proof. A section carrying nothing usable collapses to
- * `undefined`.
- *
- * Optional resolver-input members are left off when empty. A consumer that
- * narrows on their declared optional types therefore sees the same shape from
- * the decoded envelope and the wire.
- */
-function parseReferenceGraph(
-  value: unknown,
-): ITtscCompilerTransformation.IReferenceGraph | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const section = value as {
-    candidates?: unknown;
-    configs?: unknown;
-    edges?: unknown;
-    globals?: unknown;
-    inputHashes?: unknown;
-    inputObservations?: unknown;
-    inputProofFailures?: unknown;
-    inputRealpaths?: unknown;
-    resolutionInputs?: unknown;
-  };
-  const candidates = parseDependencyLists(section.candidates) ?? {};
-  const edges = parseGraphEdges(section.edges) ?? {};
-  const globals = parseFileList(section.globals) ?? [];
-  const configs = parseFileList(section.configs) ?? [];
-  const resolutionInputs = parseFileList(section.resolutionInputs) ?? [];
-  const inputHashes = parseGraphInputHashes(section.inputHashes);
-  const parsedInputObservations = parseGraphInputObservations(
-    section.inputObservations,
-  );
-  const reportedInputProofFailures = parseGraphInputProofFailures(
-    section.inputProofFailures,
-  );
-  const inputProofFailures = {
-    ...reportedInputProofFailures,
-    ...parsedInputObservations.failures,
-  };
-  const inputRealpaths = parseGraphInputRealpaths(section.inputRealpaths);
+function mergeTransformGraphs(
+  checked: TtscBuildResult["graph"],
+  transformed: TtscBuildResult["graph"],
+  checks: number,
+): TtscBuildResult["graph"] {
+  const graph = mergeCheckGraphs(checked, transformed);
   if (
-    Object.keys(candidates).length === 0 &&
-    Object.keys(edges).length === 0 &&
-    globals.length === 0 &&
-    configs.length === 0 &&
-    resolutionInputs.length === 0
-  ) {
-    return undefined;
-  }
-  return {
-    ...(Object.keys(candidates).length === 0 ? {} : { candidates }),
-    configs,
-    edges,
-    globals,
-    ...(resolutionInputs.length === 0 ? {} : { resolutionInputs }),
-    ...(inputHashes === undefined ? {} : { inputHashes }),
-    ...(parsedInputObservations.observations === undefined
-      ? {}
-      : { inputObservations: parsedInputObservations.observations }),
-    ...(Object.keys(inputProofFailures).length === 0
-      ? {}
-      : { inputProofFailures }),
-    ...(inputRealpaths === undefined ? {} : { inputRealpaths }),
-  };
-}
-
-/**
- * Parse graph-keyed predicate observations and retain malformed entries as
- * failures.
- */
-function parseGraphInputObservations(value: unknown): {
-  failures?: Record<string, string>;
-  observations?: Record<string, ITtscCompilerTransformation.IInputObservation>;
-} {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
-  }
-  const failures: Record<string, string> = {};
-  const observations: Record<
-    string,
-    ITtscCompilerTransformation.IInputObservation
-  > = {};
-  for (const [file, entry] of Object.entries(value)) {
-    if (file.length === 0) continue;
-    const parsed = parseGraphInputObservation(entry);
-    if (parsed === "malformed" || parsed === "conflicting") {
-      failures[file] = `${parsed}-observation`;
-    } else {
-      observations[file] = parsed;
-    }
-  }
-  return {
-    ...(Object.keys(failures).length === 0 ? {} : { failures }),
-    ...(Object.keys(observations).length === 0 ? {} : { observations }),
-  };
-}
-
-/** Parse one predicate observation without guessing around a malformed member. */
-function parseGraphInputObservation(
-  value: unknown,
-): ITtscCompilerTransformation.IInputObservation | "conflicting" | "malformed" {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return "malformed";
-  }
-  const entry = value as Record<string, unknown>;
-  const observation: ITtscCompilerTransformation.IInputObservation = {};
-  if (Object.prototype.hasOwnProperty.call(entry, "accessibleEntries")) {
-    const accessible = entry.accessibleEntries;
-    if (
-      typeof accessible !== "object" ||
-      accessible === null ||
-      Array.isArray(accessible)
-    ) {
-      return "malformed";
-    }
-    const lists = accessible as Record<string, unknown>;
-    if (
-      !Array.isArray(lists.directories) ||
-      !lists.directories.every(
-        (name): name is string => typeof name === "string",
-      ) ||
-      !Array.isArray(lists.files) ||
-      !lists.files.every((name): name is string => typeof name === "string")
-    ) {
-      return "malformed";
-    }
-    observation.accessibleEntries = {
-      directories: [...lists.directories],
-      files: [...lists.files],
-    };
-  }
-  if (Object.prototype.hasOwnProperty.call(entry, "fileExists")) {
-    if (typeof entry.fileExists !== "boolean") return "malformed";
-    observation.fileExists = entry.fileExists;
-  }
-  if (Object.prototype.hasOwnProperty.call(entry, "directoryExists")) {
-    if (typeof entry.directoryExists !== "boolean") return "malformed";
-    observation.directoryExists = entry.directoryExists;
-  }
-  if (Object.prototype.hasOwnProperty.call(entry, "stat")) {
-    if (!["directory", "file", "missing"].includes(entry.stat as string)) {
-      return "malformed";
-    }
-    observation.stat = entry.stat as "directory" | "file" | "missing";
-  }
-  if (Object.prototype.hasOwnProperty.call(entry, "readFile")) {
-    const read = entry.readFile;
-    if (typeof read !== "object" || read === null || Array.isArray(read)) {
-      return "malformed";
-    }
-    const result = read as Record<string, unknown>;
-    if (result.ok === false && result.hash === undefined) {
-      observation.readFile = { ok: false };
-    } else if (
-      result.ok === true &&
-      typeof result.hash === "string" &&
-      /^[0-9a-f]{64}$/.test(result.hash)
-    ) {
-      observation.readFile = { hash: result.hash, ok: true };
-    } else {
-      return "malformed";
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(entry, "realpath")) {
-    const realpath = entry.realpath;
-    if (
-      typeof realpath !== "object" ||
-      realpath === null ||
-      Array.isArray(realpath)
-    ) {
-      return "malformed";
-    }
-    const result = realpath as Record<string, unknown>;
-    if (result.ok === false && result.path === undefined) {
-      observation.realpath = { ok: false };
-    } else if (
-      result.ok === true &&
-      typeof result.path === "string" &&
-      path.isAbsolute(result.path)
-    ) {
-      observation.realpath = { ok: true, path: path.resolve(result.path) };
-    } else {
-      return "malformed";
-    }
-  }
-  if (Object.keys(observation).length === 0) return "malformed";
-  return graphInputObservationCompatible(observation)
-    ? observation
-    : "conflicting";
-}
-
-/** Whether one predicate set can describe a single stable filesystem state. */
-function graphInputObservationCompatible(
-  observation: ITtscCompilerTransformation.IInputObservation,
-): boolean {
-  const { accessibleEntries, directoryExists, fileExists, readFile, stat } =
-    observation;
-  const hasAccessibleEntries =
-    accessibleEntries !== undefined &&
-    (accessibleEntries.directories.length !== 0 ||
-      accessibleEntries.files.length !== 0);
-  if (
-    hasAccessibleEntries &&
-    (fileExists === true ||
-      directoryExists === false ||
-      (stat !== undefined && stat !== "directory") ||
-      readFile?.ok === true)
-  ) {
-    return false;
-  }
-  if (fileExists === true && directoryExists === true) return false;
-  if (
-    stat === "directory" &&
-    (fileExists === true || directoryExists === false)
-  ) {
-    return false;
-  }
-  if (stat === "file" && (fileExists === false || directoryExists === true)) {
-    return false;
-  }
-  if (stat === "missing" && (fileExists === true || directoryExists === true)) {
-    return false;
-  }
-  if (
-    readFile?.ok === true &&
-    (fileExists === false ||
-      directoryExists === true ||
-      (stat !== undefined && stat !== "file"))
-  ) {
-    return false;
-  }
-  return true;
-}
-
-/** Parse graph-keyed machine-readable compiler proof-failure reasons. */
-function parseGraphInputProofFailures(
-  value: unknown,
-): Record<string, string> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string> = {};
-  for (const [file, reason] of Object.entries(value)) {
-    if (
-      file.length === 0 ||
-      typeof reason !== "string" ||
-      !/^[a-z0-9-]{1,64}$/.test(reason)
-    ) {
-      continue;
-    }
-    output[file] = reason;
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/** Parse graph-keyed compiler-time content/null observations. */
-function parseGraphInputHashes(
-  value: unknown,
-): Record<string, string | null> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string | null> = {};
-  for (const [file, hash] of Object.entries(value)) {
-    if (
-      file.length === 0 ||
-      (hash !== null &&
-        (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)))
-    ) {
-      continue;
-    }
-    output[file] = hash;
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/** Parse graph-keyed compiler-time physical/null identities. */
-function parseGraphInputRealpaths(
-  value: unknown,
-): Record<string, string | null> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const output: Record<string, string | null> = {};
-  for (const [file, realpath] of Object.entries(value)) {
-    if (
-      file.length === 0 ||
-      (realpath !== null &&
-        (typeof realpath !== "string" || !path.isAbsolute(realpath)))
-    ) {
-      continue;
-    }
-    output[file] = realpath === null ? null : path.resolve(realpath);
-  }
-  return Object.keys(output).length === 0 ? undefined : output;
-}
-
-/**
- * Normalize an optional string-list envelope field (`dependenciesComplete`,
- * `hostInputs`, `volatile`, and the `globals`/`configs` graph sections), or
- * `undefined` when absent or carrying nothing usable.
- */
-function parseFileList(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const files = value.filter(
-    (entry): entry is string => typeof entry === "string" && entry.length !== 0,
-  );
-  return files.length === 0 ? undefined : files;
-}
-
-/** Type guard: true when `value` is a non-null, non-array object of strings. */
-function isTextRecord(value: unknown): value is Record<string, string> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value).every((entry) => typeof entry === "string")
-  );
+    graph === undefined ||
+    checks === 0 ||
+    checked?.compilationSnapshot !== undefined
+  )
+    return graph;
+  const { compilationSnapshot: _snapshot, ...unqualified } = graph;
+  return unqualified;
 }

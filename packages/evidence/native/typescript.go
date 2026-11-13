@@ -1,6 +1,7 @@
 package evidence
 
 import (
+  "os"
   "path/filepath"
   "sort"
   "strings"
@@ -32,14 +33,14 @@ func extendTypeScriptInventories(
   inventories map[string]*artifactInventory,
   governed map[string]bool,
 ) {
-  bases := typeScriptMatchBases(config)
+  bases := typeScriptMatchBases(config, root)
   for _, file := range sources {
-    if file == nil || !isTypeScriptPath(file.FileName()) {
+    if file == nil || !isTypeScriptPath(string(file.FileName())) {
       continue
     }
     for _, entry := range bases {
       base := entry.base
-      relative, ok := entry.relativeOf(file.FileName())
+      relative, ok := entry.relativeOf(string(file.FileName()))
       if !ok || !isTypeScriptPath(relative) {
         continue
       }
@@ -129,51 +130,154 @@ func isTypeScriptPath(path string) bool {
 // typeScriptMatchBase pairs a configured base with the directory a Program
 // source path is measured against.
 //
-// This kind walks nothing, so the link asymmetry #1258 removed from the two
-// walkers looked like a walk problem and was left here. It is not: `os.Stat`
+// This kind walks nothing, so link resolution can look like a problem for the
+// walkers alone. It is not: `os.Stat`
 // accepts a linked root as a directory, and a Program reports whatever path its
 // tsconfig resolved, so when the two disagree about the link every source fails
 // the comparison, the claim selects nothing, and it deactivates without a word.
 // Measured before the repair: a claim rooted at a junction over its own project
 // produced no diagnostic at all.
 //
-// Both spellings are tried, because the Program may report either, and the
-// address is composed from the declared base in both cases, so a source reached
-// through a link is identified exactly as it would be without one. The
-// resolution is per base and the comparison is per source, so the extra spelling
-// costs nothing where no link is involved.
+// A Program may report a source through a link at the project root, at a
+// configured base, or inside it. Resolve the source and base through the same
+// filesystem rule, then compare once. Addresses still use the declared base.
+// Source directories are memoized for the whole population pass, so multiple
+// configured bases do not each traverse the same chain for every source.
 type typeScriptMatchBase struct {
   base     populationBase
   resolved string
+  paths    *typeScriptSourcePaths
 }
 
-func typeScriptMatchBases(config graphConfig) []typeScriptMatchBase {
+func typeScriptMatchBases(
+  config graphConfig,
+  root string,
+) []typeScriptMatchBase {
   bases := configuredBases(config, artifactTypeScript)
   entries := make([]typeScriptMatchBase, 0, len(bases))
+  paths := &typeScriptSourcePaths{
+    inputs:      config.inputs,
+    directories: map[string]string{},
+    files:       map[string]string{},
+  }
+  if root != "" {
+    paths.directories[filepath.Clean(root)] = canonicalTypeScriptDirectory(root, config.inputs)
+  }
   for _, base := range bases {
-    // An unresolved chain is reported by the gate for a declared root, and this
-    // comparison then has only the declared spelling to offer: keeping the link
-    // the resolver stopped on would spend a second comparison against a path no
-    // source can sit under, and the guard in `relativeOf` reads exactly this
-    // equality to skip it. For the default base nothing reports it here, which is
-    // the trade the gate's own comment states.
+    // The declared-root gate reports a chain it cannot finish. A partial
+    // resolution is not a comparison base, so keep the declared spelling when
+    // the resolver stops short.
     resolved, ok := resolvedBaseDirectory(base)
     if !ok {
       resolved = base.Absolute
     }
-    entries = append(entries, typeScriptMatchBase{base: base, resolved: resolved})
+    entries = append(entries, typeScriptMatchBase{
+      base:     base,
+      resolved: canonicalTypeScriptDirectory(resolved, config.inputs),
+      paths:    paths,
+    })
   }
   return entries
 }
 
 func (entry typeScriptMatchBase) relativeOf(name string) (string, bool) {
-  if relative, ok := relativeProjectPath(entry.base.Absolute, name); ok {
-    return relative, true
+  return relativeProjectPath(entry.resolved, entry.paths.resolve(name))
+}
+
+// typeScriptSourcePaths resolves each Program path once and each parent
+// directory once per population pass. The Program may spell the same file
+// through another link, while a base has already resolved to its target.
+type typeScriptSourcePaths struct {
+  inputs      evidenceInputReader
+  directories map[string]string
+  files       map[string]string
+}
+
+func (paths *typeScriptSourcePaths) resolve(name string) string {
+  cleaned := filepath.Clean(filepath.FromSlash(name))
+  if resolved, ok := paths.files[cleaned]; ok {
+    return resolved
   }
-  if entry.resolved == entry.base.Absolute {
-    return "", false
+  directory := filepath.Dir(cleaned)
+  physical, ok := paths.directories[directory]
+  if !ok {
+    physical = canonicalTypeScriptDirectory(directory, paths.inputs)
+    paths.directories[directory] = physical
   }
-  return relativeProjectPath(entry.resolved, name)
+  candidate := filepath.Join(filepath.FromSlash(physical), filepath.Base(cleaned))
+  if evaluated, err := paths.inputs.EvalSymlinks(candidate); err == nil {
+    candidate = evaluated
+  }
+  resolved := filepath.ToSlash(candidate)
+  paths.files[cleaned] = resolved
+  return resolved
+}
+
+// canonicalTypeScriptDirectory follows every linked ancestor as the base
+// resolver does. EvalSymlinks then expands native aliases such as Windows 8.3
+// spelling. A host may open a long link chain while refusing EvalSymlinks of a
+// descendant; in that case an ancestor's successful native expansion supplies
+// the prefix and the unchanged suffix keeps the unresolved lexical path. This
+// does not claim that the bounded resolver followed the entire link chain.
+// A missing directory likewise keeps its existing prefix and missing suffix,
+// which lets an unsaved Program source still match its base.
+func canonicalTypeScriptDirectory(directory string, readers ...evidenceInputReader) string {
+  inputs := inputReader(readers)
+  current := filepath.Clean(filepath.FromSlash(directory))
+  missing := []string{}
+  for {
+    info, err := inputs.Stat(current)
+    if err == nil {
+      if !info.IsDir() {
+        return filepath.ToSlash(directory)
+      }
+      resolved, settled := resolveLinkedPath(current, inputs)
+      if !settled {
+        // The bounded resolver protects declared roots, but a Program base
+        // can still be reached through a longer chain the host itself opens.
+        // Ask the host to resolve that full chain before falling back to the
+        // declared spelling.
+        resolved = current
+      }
+      if evaluated, err := inputs.EvalSymlinks(filepath.FromSlash(resolved)); err == nil {
+        resolved = evaluated
+      } else if !settled {
+        // Native expansion may succeed for the base but fail below the same
+        // chain. Normalize the prefix through that successful observation so
+        // one Program's base and sources do not disagree only about aliases.
+        prefix := filepath.Dir(current)
+        suffix := []string{filepath.Base(current)}
+        for {
+          if evaluated, err := inputs.EvalSymlinks(prefix); err == nil {
+            resolved = filepath.Join(append([]string{evaluated}, suffix...)...)
+            break
+          }
+          parent := filepath.Dir(prefix)
+          if parent == prefix {
+            return filepath.ToSlash(directory)
+          }
+          suffix = append([]string{filepath.Base(prefix)}, suffix...)
+          prefix = parent
+        }
+      }
+      parts := append([]string{filepath.FromSlash(resolved)}, missing...)
+      return filepath.ToSlash(filepath.Join(parts...))
+    }
+    if !os.IsNotExist(err) {
+      return filepath.ToSlash(directory)
+    }
+    // A broken link is present but does not name a directory. Do not treat it
+    // as a missing segment that can be placed below another physical parent.
+    if _, linkErr := inputs.Lstat(current); linkErr == nil || !os.IsNotExist(linkErr) {
+      return filepath.ToSlash(directory)
+    }
+    parent := filepath.Dir(current)
+    if parent == current {
+      return filepath.ToSlash(directory)
+    }
+    missing = append([]string{filepath.Base(current)}, missing...)
+    current = parent
+  }
 }
 
 func relativeProjectPath(root string, absolute string) (string, bool) {
@@ -800,8 +904,7 @@ func collectClassDeclarationNames(
 // Its own withdrawal tag is read here for a separate fault rather than the same
 // one: the statement wrapper's tag was taken for every declarator it holds, so
 // `@internal` written on an inner declarator withdrew nothing. Recording the
-// node closes the first two and leaves this one standing, which is why #1126
-// states them apart.
+// node closes the first two and leaves this one standing, which is why they are stated apart.
 func collectTypeScriptVariables(
   file *shimast.SourceFile,
   statement *shimast.Node,
@@ -1937,6 +2040,7 @@ func matchesConfiguredTypeScriptFile(
 // silenced a file whose declarations were all commented out, which is exactly
 // the shape the diagnostic's second repair clause exists for.
 func recordGovernedTypeScriptFiles(
+  root string,
   sources []*shimast.SourceFile,
   declared graphConfig,
   governed map[string]bool,
@@ -1944,13 +2048,13 @@ func recordGovernedTypeScriptFiles(
   if governed == nil {
     return
   }
-  bases := typeScriptMatchBases(declared)
+  bases := typeScriptMatchBases(declared, root)
   for _, file := range sources {
-    if file == nil || !isTypeScriptPath(file.FileName()) {
+    if file == nil || !isTypeScriptPath(string(file.FileName())) {
       continue
     }
     for _, entry := range bases {
-      relative, ok := entry.relativeOf(file.FileName())
+      relative, ok := entry.relativeOf(string(file.FileName()))
       if !ok || !isTypeScriptPath(relative) {
         continue
       }

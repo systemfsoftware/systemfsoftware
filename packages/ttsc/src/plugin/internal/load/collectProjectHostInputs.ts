@@ -1,0 +1,94 @@
+import { createRequire } from "node:module";
+import path from "node:path";
+
+import type { ITtscParsedProjectConfig } from "../../../structures/internal/ITtscParsedProjectConfig";
+import { PluginPackageResolution } from "./PluginPackageResolution";
+import { ProjectPluginEntries } from "./ProjectPluginEntries";
+import { moduleResolutionBaseSelects } from "./moduleResolutionBaseSelects";
+
+/**
+ * Return config ancestry and package-discovery manifest inputs, including
+ * missing nearer candidates that could redirect the selected package later.
+ * Discovery uses the selected config directory or explicit pluginConfigDir,
+ * matching the entry resolver independently of the compiler's source root.
+ *
+ * @evidence contracts/common.md#principled-implementation Config ancestry, lexical selection and missing config candidates influence selection; automatic discovery additionally observes nearest manifest and dependency search candidates through the selecting root. The project reader separately states whether these config observations are complete.
+ * @evidence contracts/common.md#clear-and-simple-design The collector obtains package resolution from its owner and assembles universal loader inputs, leaving source Program dependencies to the native reference graph.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Missing candidates are real future selection inputs; farther unconsulted roots are not added as compensating guesses, and explicit plugin lists can avoid automatic discovery.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc identifies ancestry and missing discovery candidates; the private helper explains the selected-root stopping condition, with paragraph/tag separation following the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Native resolve/dirname/join and Node createRequire search paths construct OS-neutral host inputs; package-name slash splitting is package-specifier grammar, not filesystem parsing.
+ * @evidence contracts/performance.md#efficient-algorithms Config paths are natively normalized and indexed; discovery additionally walks nearest-manifest ancestors, reads/parses manifest bytes and resolves each direct dependency through Node search roots and physical candidate checks. Candidate generation/query work can repeat before Set deduplication. Final sorting costs depend on unique input count and path-text comparisons; native metadata, path/topology and manifest/name bytes remain part of the cost.
+ * @evidence contracts/performance.md#reuse-equivalent-work The operation assembles one shared universal input population for the load; identical candidate paths are retained once by the Set, while current filesystem resolution is not cached here.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The Set and returned array belong to this call, with no cross-call retention or acquired open resource.
+ */
+export function collectProjectHostInputs(
+  project: ITtscParsedProjectConfig,
+  includePluginDiscovery: boolean = true,
+  pluginConfigDir?: string,
+): string[] {
+  const inputs = new Set<string>(
+    [...project.configPaths, ...(project.configInputs ?? [])].map((file) =>
+      path.resolve(file),
+    ),
+  );
+  if (!includePluginDiscovery) return [...inputs].sort();
+  const manifestCandidates =
+    PluginPackageResolution.collectNearestPackageJsonCandidates(
+      ProjectPluginEntries.resolvePluginBaseDir(project, pluginConfigDir),
+    );
+  for (const candidate of manifestCandidates) inputs.add(candidate);
+  const manifest = manifestCandidates.find(
+    PluginPackageResolution.existingFile,
+  );
+  if (manifest !== undefined) {
+    const projectManifest =
+      PluginPackageResolution.readPackageManifest(manifest);
+    if (projectManifest !== undefined) {
+      const projectRoot = path.dirname(manifest);
+      for (const dependency of PluginPackageResolution.directDependencyNames(
+        projectManifest,
+      )) {
+        const dependencyManifest =
+          PluginPackageResolution.resolveDependencyPackageJson(
+            dependency,
+            projectRoot,
+          );
+        for (const candidate of collectDependencyManifestCandidates(
+          dependency,
+          manifest,
+          dependencyManifest,
+        )) {
+          inputs.add(candidate);
+        }
+        if (dependencyManifest !== undefined) {
+          inputs.add(path.resolve(dependencyManifest));
+        }
+      }
+    }
+  }
+  return [...inputs].sort();
+}
+
+/**
+ * Record package manifests whose later appearance can redirect discovery: the
+ * manifest of each search root's package directory, through the root that
+ * selects the manifest discovery read (`moduleResolutionBaseSelects`), or every
+ * root when none was found.
+ */
+function collectDependencyManifestCandidates(
+  packageName: string,
+  parentFile: string,
+  selectedManifest: string | undefined,
+): string[] {
+  const out: string[] = [];
+  for (const searchPath of createRequire(parentFile).resolve.paths(
+    packageName,
+  ) ?? []) {
+    const packageDirectory = path.join(searchPath, ...packageName.split("/"));
+    out.push(path.join(packageDirectory, "package.json"));
+    if (moduleResolutionBaseSelects(packageDirectory, selectedManifest, []))
+      break;
+  }
+  return out;
+}

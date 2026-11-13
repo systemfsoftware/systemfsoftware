@@ -5,40 +5,70 @@ import (
   "sync"
 )
 
-// userPatternCache memoizes RE2 compilation of option-supplied regex patterns.
-//
-// Several rules accept a custom regex option — no-fallthrough's and
-// default-case's `commentPattern`, functional's identifier patterns,
-// no-param-reassign's `ignorePropertyModificationsForRegex` — and compile it
-// inside Check. That recompiles the same immutable, config-derived automaton on
-// every invocation: once per visited node, or once per candidate name in an
-// inner loop. The pattern is invariant for a whole run, so compiling it once and
-// reusing the result collapses the per-node cost to a single compile. Distinct
-// option patterns come from configuration and are therefore few and bounded, so
-// the cache cannot grow without bound.
-//
-// The engine walks files in parallel, so access is synchronized. Both the
-// compiled regexp and a compile error are cached so every caller keeps its
-// existing success/failure handling — an invalid custom pattern still surfaces
-// its error, just without recompiling on each visit.
-var userPatternCache sync.Map // map[string]userPatternResult
-
-type userPatternResult struct {
-  re  *regexp.Regexp
-  err error
+// userPatternCache belongs to a parsed configuration, or to an engine when
+// its resolver supplies no configuration-owned cache. It retains successful
+// and failed RE2 compilations only while that owner remains reachable.
+// Separate live engines using the same parsed configuration share its cache;
+// replacing a resident configuration does not retain its historical patterns.
+type userPatternCache struct {
+  results sync.Map // map[string]*userPatternResult
 }
 
-// compileUserPattern compiles an option-supplied RE2 pattern, memoizing the
-// (regexp, error) result keyed by the pattern text. It is a drop-in replacement
-// for regexp.Compile at option-derived call sites that run during dispatch, with
-// identical return semantics.
-func compileUserPattern(pattern string) (*regexp.Regexp, error) {
-  if cached, ok := userPatternCache.Load(pattern); ok {
-    result := cached.(userPatternResult)
-    return result.re, result.err
+type userPatternResult struct {
+  once sync.Once
+  re   *regexp.Regexp
+  err  error
+}
+
+// patternCacheForResolver borrows a built-in resolver's configuration cache.
+// Other resolvers have no stable shared ownership identity, so their engine
+// receives its own cache and requires stable configuration during execution.
+func patternCacheForResolver(resolver RuleResolver) *userPatternCache {
+  if owner, ok := resolver.(interface{ userPatterns() *userPatternCache }); ok {
+    if cache := owner.userPatterns(); cache != nil {
+      return cache
+    }
   }
-  re, err := regexp.Compile(pattern)
-  actual, _ := userPatternCache.LoadOrStore(pattern, userPatternResult{re: re, err: err})
-  result := actual.(userPatternResult)
-  return result.re, result.err
+  return &userPatternCache{}
+}
+
+func (s *ConfigStore) userPatterns() *userPatternCache {
+  if s == nil {
+    return nil
+  }
+  return s.patterns
+}
+
+func (r boundProjectRuleResolver) userPatterns() *userPatternCache {
+  return r.patterns
+}
+
+func (r formatCommandResolver) userPatterns() *userPatternCache {
+  return patternCacheForResolver(r.inner)
+}
+
+// compileUserPattern preserves regexp.Compile results while sharing one
+// compilation, including a failure, per pattern and owner. Parallel file
+// workers publish the entry before compiling and synchronize through Once.
+// A directly constructed Context owns its own cache; nil contexts compile
+// without retaining a result. Contexts themselves are file-local and serial.
+func (c *Context) compileUserPattern(pattern string) (*regexp.Regexp, error) {
+  if c == nil {
+    return regexp.Compile(pattern)
+  }
+  if c.patterns == nil {
+    c.patterns = &userPatternCache{}
+  }
+  if cached, ok := c.patterns.results.Load(pattern); ok {
+    return cached.(*userPatternResult).compile(pattern)
+  }
+  actual, _ := c.patterns.results.LoadOrStore(pattern, &userPatternResult{})
+  return actual.(*userPatternResult).compile(pattern)
+}
+
+func (r *userPatternResult) compile(pattern string) (*regexp.Regexp, error) {
+  r.once.Do(func() {
+    r.re, r.err = regexp.Compile(pattern)
+  })
+  return r.re, r.err
 }

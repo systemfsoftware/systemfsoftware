@@ -45,9 +45,18 @@ class InvalidPackageTargetLoadError extends Error {}
 class InvalidPackageConfigError extends Error {}
 
 /**
- * Build a sandboxed `require` function over a runtime pack. Resolves typia /
- * `@typia/*` / randexp specifiers from the pack; throws on anything else so the
- * caller sees the unsupported dependency.
+ * Build a CommonJS resolver and evaluator over a caller-owned runtime pack.
+ * Missing modules throw; package exports use require/default conditions and
+ * legacy packages retain file-and-directory resolution.
+ *
+ * The pack must remain unchanged while this resolver is used. Evaluation uses
+ * new Function in the current realm; this is not a security isolation
+ * boundary.
+ *
+ * @evidence contracts/common.md#principled-implementation Target selection precedes loading, conditional exports preserve manifest order, validated targets stay under the package mount, and provisional module caching exposes partial exports for cycles. Evaluation assumes CommonJS source in an unchanged pack.
+ * @evidence contracts/common.md#clear-and-simple-design Manifest interpretation, specifier resolution and evaluation have local boundaries; the caller owns code isolation and transport.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Supported exports and legacy resolution decide module access uniformly; missing targets cannot trigger a second exports candidate, and failed evaluation evicts its provisional module instead of fabricating exports.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs define resolver scope, pack immutability and absent isolation; helper comments explain exports priority and cycle semantics under the documentation skill.
  */
 export function createSandboxRequire(
   pack: Record<string, string>,
@@ -55,6 +64,7 @@ export function createSandboxRequire(
 ): (specifier: string) => unknown {
   type ModuleObj = { exports: unknown };
   const cache = new Map<string, ModuleObj>();
+  const manifests = new Map<string, IPackJson>();
 
   const has = (key: string): boolean =>
     Object.prototype.hasOwnProperty.call(pack, key);
@@ -65,6 +75,7 @@ export function createSandboxRequire(
   };
 
   const readPackageJson = (mount: string): IPackJson | null => {
+    if (manifests.has(mount)) return manifests.get(mount)!;
     const key = `${mount}/package.json`;
     if (!has(key)) return null;
     try {
@@ -76,6 +87,7 @@ export function createSandboxRequire(
       ) {
         throw new Error("package.json must contain an object");
       }
+      manifests.set(mount, parsed as IPackJson);
       return parsed as IPackJson;
     } catch {
       throw new InvalidPackageConfigError(
@@ -337,18 +349,19 @@ function resolvePackageExports(
       ) {
         target = entries[request];
       } else {
-        const patterns = Object.entries(entries)
-          .map(([pattern, candidate]) => ({
-            pattern,
-            replacement: exportPatternReplacement(pattern, request),
-            target: candidate,
-          }))
-          .filter(
-            (entry): entry is typeof entry & { replacement: string } =>
-              entry.replacement !== undefined,
-          )
-          .sort((a, b) => compareExportPatternKeys(a.pattern, b.pattern));
-        const selected = patterns[0];
+        let selected:
+          | { pattern: string; replacement: string; target: unknown }
+          | undefined;
+        for (const [pattern, candidate] of Object.entries(entries)) {
+          const replacement = exportPatternReplacement(pattern, request);
+          if (replacement === undefined) continue;
+          if (
+            selected === undefined ||
+            compareExportPatternKeys(pattern, selected.pattern) < 0
+          ) {
+            selected = { pattern, replacement, target: candidate };
+          }
+        }
         if (selected === undefined) return { type: "unresolved" };
         return resolvePackageTarget(
           mount,
