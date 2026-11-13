@@ -55,7 +55,6 @@ jobs:
             access-tokens = github.com=${{ github.token }}
             extra-substituters = ${{ env.NIX_CACHE_URL }}
             extra-trusted-public-keys = ${{ env.NIX_CACHE_PUBLIC_KEY }}
-            fallback = true
 
       - name: The signing key is the cache's key
         env:

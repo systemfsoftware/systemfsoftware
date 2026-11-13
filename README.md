@@ -222,7 +222,6 @@ Add this repository as a flake input, and give your flake the registry as a subs
   nixConfig = {
     extra-substituters = "https://nix.systemfsoftware.com";
     extra-trusted-public-keys = "nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=";
-    fallback = true;
   };
 
   inputs = {

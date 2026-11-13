@@ -36,7 +36,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'static'
     - name: dprint from the flake
       if: inputs.lane == 'static'
@@ -90,7 +89,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'layers'
     - name: bun from the flake
       if: inputs.lane == 'layers'
@@ -102,7 +100,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'docs'
     - name: Commit graph for single-plan, after the depth-1 fetch (commits only, trees on demand)
       if: inputs.lane == 'docs'
@@ -113,7 +110,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'gritlint'
 
     # The sandboxed binary's store path hashes every input of its build, so a hit is exact.
@@ -235,7 +231,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'affected'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'affected'
@@ -292,7 +287,6 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
-          fallback = true
       if: inputs.lane == 'test'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'test'
