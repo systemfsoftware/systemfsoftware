@@ -10,10 +10,10 @@ queue_rules:
   - name: subtree
     merge_method: merge
     queue_conditions:
-      # Recognised from the commits themselves: both anchored git-subtree trailer
-      # lines must be present. Same checks as default.
-      - "commits[*].commit_message ~= (?m)^git-subtree-dir: \\S+$"
-      - "commits[*].commit_message ~= (?m)^git-subtree-split: [0-9a-f]{40}$"
+      # Org convention (systemfsoftware/.github README, "Subtree PRs"): one commit
+      # carries both trailers, and the PR history is not linear.
+      - 'commits[*].commit_message ~= (?ms)\A(?=.*^git-subtree-dir: \S+$)(?=.*^git-subtree-split: [0-9a-f]{40}$)'
+      - -linear-history
       - check-success = build · lint · typecheck · test / static checks (pnpm check:static)
       - check-success = not a plan-only pull request
       - or:
