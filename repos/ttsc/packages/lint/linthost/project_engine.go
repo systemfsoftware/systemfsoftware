@@ -166,6 +166,7 @@ func (e *Engine) evaluateProject(
   identity publicrule.ProjectIdentity,
   files []*shimast.SourceFile,
   checker *shimchecker.Checker,
+  readers ...publicrule.ProjectInputReader,
 ) *projectCycle {
   results := &projectCycleResults{byName: map[string]projectCycleResult{}}
   cycle := &projectCycle{results: results}
@@ -211,6 +212,13 @@ func (e *Engine) evaluateProject(
       setting.Options,
       reporter,
     )
+    if len(readers) != 0 {
+      context.Inputs = readers[0]
+      support, supported := adapter.inner.(publicrule.ProjectInputObservationRule)
+      if !supported || !support.UsesProjectInputReader() {
+        context.Inputs.Unavailable()
+      }
+    }
     runProjectRuleCheck(adapter, context, reporter)
     results.byName[name] = projectCycleResult{
       severity: setting.Severity,
@@ -231,7 +239,7 @@ func (e *Engine) projectSources(files []*shimast.SourceFile) []*shimast.SourceFi
     if file == nil {
       continue
     }
-    if e != nil && e.config != nil && e.config.ResolveRules(file.FileName()).Ignored {
+    if e != nil && e.config != nil && e.config.ResolveRules(string(file.FileName())).Ignored {
       continue
     }
     sources = append(sources, file)

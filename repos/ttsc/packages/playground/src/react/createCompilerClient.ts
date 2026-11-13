@@ -12,6 +12,11 @@ import type { ICreateCompilerClientOptions } from "../structures/ICreateCompiler
  * One connection generation owns the cached promise and connector. A reset
  * invalidates that generation before awaiting it, so a late settlement cannot
  * replace a newer connection or clear its retry state.
+ *
+ * @evidence contracts/common.md#principled-implementation Each connection record owns its promise and connector; identity-checked failure eviction and invalidation-before-await prevent old settlements from replacing a newer generation.
+ * @evidence contracts/common.md#clear-and-simple-design A factory closure exposes only connect and reset while keeping transport state private; close sharing prevents duplicate disposal.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Worker replacement uses tgrid's connector API; ordinary connection rejection remains failure rather than a synthetic driver.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs define promise ownership and stale-settlement behavior under the documentation skill; reset may wait for an underlying connection that tgrid does not expose cancellation for.
  */
 export function createCompilerClient(options: ICreateCompilerClientOptions): {
   connect(): Promise<ICompilerService>;

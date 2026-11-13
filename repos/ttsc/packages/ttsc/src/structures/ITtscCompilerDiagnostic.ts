@@ -8,6 +8,14 @@
  * terminal output.
  *
  * @author Jeongho Nam - https://github.com/samchon
+ * @evidence contracts/common.md#principled-implementation Nullable file identity distinguishes global findings from located findings; numeric or plugin string codes and optional coordinates preserve producer information without inventing locations.
+ * @evidence contracts/common.md#clear-and-simple-design A flat diagnostic record exposes severity, identity, location and text without coupling JavaScript consumers to the native compiler's internal message-chain objects.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Category names are the supported diagnostic vocabulary; plugin identifiers remain data rather than host-side special cases for known plugins.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc states null-file semantics, producer coordinate units, optional spans and flattened text; member spacing and distinct descriptive/tag paragraphs follow the documentation skill.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
+ * @evidence contracts/portability.md#os-neutral-implementation File names retain the producer's native path spelling, with null for global findings; offsets and native columns use UTF-8 bytes while rendered foreign columns retain their producer's unit, so consumers must not interpret them as UTF-16 protocol positions.
  */
 export interface ITtscCompilerDiagnostic {
   /**
@@ -38,7 +46,7 @@ export interface ITtscCompilerDiagnostic {
   /**
    * The starting position of the issue in the source file, if available.
    *
-   * TypeScript-Go reports this as a zero-based character offset. It is omitted
+   * Native TypeScript-Go reports a zero-based UTF-8 byte offset. It is omitted
    * for global diagnostics or messages that do not expose a source offset.
    */
   start?: number;
@@ -46,8 +54,9 @@ export interface ITtscCompilerDiagnostic {
   /**
    * The length of the problematic section in the source file, if available.
    *
-   * Omitted when TypeScript-Go or a native plugin reports only a point
-   * location, or when the diagnostic is not tied to a source file.
+   * Native TypeScript-Go reports a UTF-8 byte length. Omitted when it or a
+   * native plugin reports only a point location, or when the diagnostic is not
+   * tied to a source file.
    */
   length?: number;
 
@@ -60,11 +69,10 @@ export interface ITtscCompilerDiagnostic {
   line?: number;
 
   /**
-   * 1-based character (column) position where the diagnostic starts, if
-   * available.
+   * 1-based column where the diagnostic starts, if available.
    *
-   * This follows TypeScript's display convention rather than TypeScript-Go's
-   * zero-based internal column index.
+   * Native TypeScript-Go reports a UTF-8 byte column. Diagnostics parsed from
+   * another producer's rendered text retain that producer's column unit.
    */
   character?: number;
 
@@ -86,6 +94,15 @@ export namespace ITtscCompilerDiagnostic {
    * - `"error"`: issues that prevent successful compilation.
    * - `"suggestion"`: recommendations for code improvement.
    * - `"message"`: informational notes without warning or error severity.
+   *
+   * @evidence contracts/common.md#principled-implementation Four literal severities preserve the TypeScript diagnostic categories used by host decoding, with no ordinal encoding assumption.
+   * @evidence contracts/common.md#clear-and-simple-design The named union provides one shared severity vocabulary for all diagnostic consumers.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts These literals represent protocol categories and do not classify by a diagnostic's text or a fixture code.
+   * @evidence contracts/common.md#meaningful-documentation Native JSDoc explains the intended severity of each literal in separate list entries and separates the acknowledgments, following the documentation skill.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation This type declaration describes a data shape only; it opens no file, builds no path and branches on no platform.
    */
   export type Category = "warning" | "error" | "suggestion" | "message";
 }

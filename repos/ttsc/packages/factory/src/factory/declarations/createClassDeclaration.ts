@@ -19,8 +19,8 @@ import { make } from "../internal/make";
  * list.
  *
  * The `heritageClauses` supply the `extends` and `implements` clauses, printed
- * in that order on the header line. The `members` form the body, one per line
- * inside a brace block, collapsing to `{}` when empty.
+ * in supplied order on the header line. The `members` form the body, one per
+ * line inside a brace block, collapsing to `{}` when empty.
  *
  * Given an `export` modifier, the name `Circle`, an `extends Base` clause, an
  * `implements IShape` clause, and an `r: number` property, the printed
@@ -39,6 +39,20 @@ import { make } from "../internal/make";
  * @param heritageClauses The `extends` / `implements` clauses, if any.
  * @param members The members.
  * @returns The created {@link ClassDeclaration}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Undefined name preserves anonymous-class syntax; strings become Identifier.
+ *   Generic parameters, heritage and ordered class members keep distinct slots.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The class header and body share one declaration; child builders own member
+ *   syntax and the printer owns decorator placement and brace layout.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Anonymous state is retained rather than inventing a name or base class.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains anonymous/default-export use, decorators, generics and heritage
+ *   in separate paragraphs before a class example and acknowledgment tags.
  */
 export const createClassDeclaration = (
   modifiers: readonly ModifierLike[] | undefined,

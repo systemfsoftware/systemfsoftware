@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { TestMetroRuntime } from "./metro-runtime";
+import * as options from "../../../../packages/metro/src/core/options";
 
 /**
  * Run `body` with `TTSC_METRO_OPTIONS` set to `raw` (or cleared when
@@ -10,7 +10,7 @@ async function withEnv(
   raw: string | undefined,
   body: (mod: any) => Promise<void>,
 ): Promise<void> {
-  const mod = await TestMetroRuntime.loadOptions();
+  const mod = options;
   const previous = process.env[mod.ENV_KEY];
   if (raw === undefined) {
     delete process.env[mod.ENV_KEY];
@@ -30,23 +30,30 @@ async function withEnv(
 
 /**
  * Asserts every option survives the config-process → worker-process env
- * round-trip intact: the ttsc overlay (project/compilerOptions/plugins) plus
- * the Metro-specific include/exclude/upstreamTransformer.
+ * round-trip intact: the ttsc overlay
+ * (project/projectRoot/compilerOptions/plugins) plus the Metro-specific
+ * include/exclude/upstreamTransformer.
  */
 export async function assertOptionsRoundTripThroughEnv(): Promise<void> {
   const source = {
+    precompile: ["src/main.ts", "../shared/src/index.ts"],
     project: "tsconfig.json",
+    projectRoot: "../compiler-output-root",
     compilerOptions: { strict: true },
+    runExternalCode: true,
     plugins: [{ transform: "typia/lib/transform" }],
     include: ["src"],
     exclude: ["test"],
     upstreamTransformer: "custom-upstream",
   };
-  const mod = await TestMetroRuntime.loadOptions();
+  const mod = options;
   await withEnv(mod.serializeOptions(source), async (m) => {
     const resolved = m.resolveOptionsFromEnv();
+    assert.deepEqual(resolved.ttsc.precompile, source.precompile);
     assert.equal(resolved.ttsc.project, source.project);
+    assert.equal(resolved.ttsc.projectRoot, source.projectRoot);
     assert.deepEqual(resolved.ttsc.compilerOptions, source.compilerOptions);
+    assert.equal(resolved.ttsc.runExternalCode, source.runExternalCode);
     assert.deepEqual(resolved.ttsc.plugins, source.plugins);
     assert.deepEqual(resolved.include, source.include);
     assert.deepEqual(resolved.exclude, source.exclude);
@@ -63,6 +70,7 @@ export async function assertOptionsDefaultWhenEnvAbsent(): Promise<void> {
   await withEnv(undefined, async (mod) => {
     const resolved = mod.resolveOptionsFromEnv();
     assert.equal(resolved.ttsc.project, undefined);
+    assert.equal(resolved.ttsc.projectRoot, undefined);
     assert.equal(resolved.ttsc.plugins, undefined);
     assert.equal(resolved.upstreamTransformer, undefined);
     assert.deepEqual(resolved.include, []);
@@ -78,11 +86,15 @@ export async function assertOptionsDefaultWhenEnvAbsent(): Promise<void> {
  * resolver must preserve the explicit `false`.
  */
 export async function assertOptionsPreservePluginsFalse(): Promise<void> {
-  const mod = await TestMetroRuntime.loadOptions();
-  await withEnv(mod.serializeOptions({ plugins: false }), async (m) => {
-    const resolved = m.resolveOptionsFromEnv();
-    assert.equal(resolved.ttsc.plugins, false);
-  });
+  const mod = options;
+  await withEnv(
+    mod.serializeOptions({ plugins: false, runExternalCode: false }),
+    async (m) => {
+      const resolved = m.resolveOptionsFromEnv();
+      assert.equal(resolved.ttsc.plugins, false);
+      assert.equal(resolved.ttsc.runExternalCode, false);
+    },
+  );
 }
 
 /**
@@ -138,14 +150,61 @@ export async function assertEmptyStringEnvFallsBackToDefaults(): Promise<void> {
  */
 export async function assertInvalidIncludeExcludeCoerced(): Promise<void> {
   const raw = JSON.stringify({
+    precompile: ["src/a.ts", null, 7, "../shared/b.ts"],
     include: ["a", 1, "b", null],
     exclude: "everything",
     plugins: false,
   });
   await withEnv(raw, async (mod) => {
     const resolved = mod.resolveOptionsFromEnv();
+    assert.deepEqual(resolved.ttsc.precompile, ["src/a.ts", "../shared/b.ts"]);
     assert.deepEqual(resolved.include, ["a", "b"]);
     assert.deepEqual(resolved.exclude, []);
     assert.equal(resolved.ttsc.plugins, false);
   });
+  await withEnv(JSON.stringify({ precompile: "src/a.ts" }), async (mod) => {
+    assert.deepEqual(mod.resolveOptionsFromEnv().ttsc.precompile, []);
+  });
+}
+
+/**
+ * Asserts the private run identity crosses the worker env channel only as a
+ * non-empty string, that a supplied identity wins over one smuggled in through
+ * the user's options, and that serialization publishes nothing itself.
+ */
+export async function assertOptionsCarryOnlyANonEmptyPrivateRunIdentity(): Promise<void> {
+  const published = process.env[options.ENV_KEY];
+  const user = { project: "tsconfig.json" };
+  const text = options.serializeOptions(user, "run-1");
+  assert.deepEqual(JSON.parse(text), {
+    project: "tsconfig.json",
+    __snapshotRunId: "run-1",
+  });
+  assert.deepEqual(
+    user,
+    { project: "tsconfig.json" },
+    "options stay unmutated",
+  );
+  assert.equal(process.env[options.ENV_KEY], published, "nothing is published");
+  assert.deepEqual(JSON.parse(options.serializeOptions(user)), user);
+
+  await withEnv(text, async (mod) => {
+    assert.equal(mod.resolveOptionsFromEnv().snapshotRunId, "run-1");
+  });
+  await withEnv(
+    options.serializeOptions({ __snapshotRunId: "user" } as never, "private"),
+    async (mod) => {
+      assert.equal(mod.resolveOptionsFromEnv().snapshotRunId, "private");
+    },
+  );
+  for (const raw of [
+    '{"__snapshotRunId":""}',
+    '{"__snapshotRunId":7}',
+    '{"__snapshotRunId":null}',
+    "{}",
+  ]) {
+    await withEnv(raw, async (mod) => {
+      assert.equal("snapshotRunId" in mod.resolveOptionsFromEnv(), false, raw);
+    });
+  }
 }

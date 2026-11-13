@@ -42,7 +42,7 @@ func (g *Graph) markExports(checker *shimchecker.Checker, file *shimast.SourceFi
     // A re-export is an alias; unwrap it to the declaration it points at so the
     // exported flag lands on the real node, not a re-exporting index file's
     // local alias symbol (which has no node of its own).
-    if symbol.Flags&shimast.SymbolFlagsAlias != 0 {
+    if shimast.SymbolFlagsOf(symbol)&shimast.SymbolFlagsAlias != 0 {
       if aliased := shimchecker.Checker_getAliasedSymbol(checker, symbol); aliased != nil {
         symbol = aliased
       }
@@ -59,23 +59,21 @@ func (g *Graph) markExports(checker *shimchecker.Checker, file *shimast.SourceFi
 // Every source file gets one, exporting or not, because a module is also what
 // runs a file's top-level statements — and those statements are where a test
 // file keeps everything it does. `describe(() => it(() => schema.parse(x)))` is
-// a call the checker resolves and the graph used to drop on the floor: it sits
-// inside a callback, no declaration owns it, and edges are attributed to owners.
-// A whole test suite left no trace, which is why a tour that promised the tests
-// to read next could name two of zod's and none of NestJS's, and why the model
-// went off to glob for them.
+// a call the checker resolves and that no declaration owns: it sits inside a
+// callback, and edges are attributed to owners. Without a module node a whole
+// test suite would leave no trace in the graph.
 func (g *Graph) putModuleNode(file *shimast.SourceFile) *Node {
   path := file.FileName()
-  id := nodeID(path, path, NodeModule)
+  id := nodeID(string(path), string(path), NodeModule)
   if existing, ok := g.Nodes[id]; ok {
     return existing
   }
   node := &Node{
     ID:     id,
-    Name:   path,
-    Simple: path,
+    Name:   string(path),
+    Simple: string(path),
     Kind:   NodeModule,
-    File:   path,
+    File:   string(path),
     // A module that exports is by definition part of some surface; whether it is
     // the package's front door is the package.json's to say, not the graph's.
     Exported: true,
@@ -108,7 +106,7 @@ func (g *Graph) markExportedSymbol(symbol *shimast.Symbol) (string, bool) {
   if name == "" {
     return "", false
   }
-  node, ok := g.lookupNode(nodeID(file.FileName(), name, kind))
+  node, ok := g.lookupNode(nodeID(string(file.FileName()), name, kind))
   if !ok {
     return "", false
   }

@@ -4,6 +4,23 @@ import { packageNameFromSpecifier } from "./packageNameFromSpecifier";
 /**
  * Scan `source` for `import` / `require` specifiers and return the unique
  * sorted list of bare npm package names that are not in `ignoredPackages`.
+ *
+ * This is a lexical discovery pass, not name binding: a locally shadowed direct
+ * require call still looks like a dependency request. Computed strings are
+ * omitted.
+ *
+ * Static arguments are quoted strings and substitution-free, escape-free
+ * templates (`require(`x`)`, `import(`x`)`). Deliberate limits of the
+ * TypeScript-source lane: JSX is not lexed (the playground entry is a `.ts`
+ * file), so quote or `import` text in JSX children can be misread; a type
+ * argument between the callee and its parenthesis (`require<T>("x")`) is not
+ * recognized because `require` is not generic; and a source-phase import
+ * (`import source x from "y"`) collects `y`, the package it loads.
+ *
+ * @evidence contracts/common.md#principled-implementation Tokenization distinguishes executable quoted and static-template specifiers from inert comments, strings and regex bodies; package-name normalization and a Set produce unique sorted install requests. Lexical discovery does not resolve shadowed require bindings.
+ * @evidence contracts/common.md#clear-and-simple-design Lexer, module-construct recognition and package filtering are separate local responsibilities, without importing the full compiler into browser keystroke discovery.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Ignored package names are explicit caller policy; source matching does not fabricate dependency results for known examples.
+ * @evidence contracts/common.md#meaningful-documentation Native prose states discovery domain and binding limitations; helper comments explain escaped strings and lexical boundaries under the documentation skill.
  */
 export function collectExternalPackageNames(
   source: string,
@@ -33,14 +50,26 @@ export function collectExternalPackageNames(
 function collectModuleSpecifiers(source: string): string[] {
   const tokens = tokenize(source);
   const out: string[] = [];
+  // A quoted literal only; `import "x"` and `from "x"` cannot take a template.
+  const asQuoted = (token: Token | undefined): string | null =>
+    token && token.kind === "string" && !token.template ? token.value : null;
+  // A call argument may also be a static template: `require(`x`)`.
   const asString = (token: Token | undefined): string | null =>
     token && token.kind === "string" ? token.value : null;
   const isOpenParen = (token: Token | undefined): boolean =>
     token !== undefined && token.kind === "punct" && token.value === "(";
-  const isMemberAccess = (token: Token | undefined): boolean =>
-    token !== undefined &&
-    token.kind === "punct" &&
-    (token.value === "." || token.value === "?.");
+  const isPunct = (token: Token | undefined, value: string): boolean =>
+    token !== undefined && token.kind === "punct" && token.value === value;
+  // `obj.name`, `obj?.name` and `this.#name` are not the free binding. The
+  // three dots of a spread are not a member access.
+  const isMemberAccessAt = (index: number): boolean => {
+    const previous = tokens[index - 1];
+    if (isPunct(previous, "#") || isPunct(previous, "?.")) return true;
+    if (!isPunct(previous, ".")) return false;
+    return !(
+      isPunct(tokens[index - 2], ".") && isPunct(tokens[index - 3], ".")
+    );
+  };
   const isOptionalChain = (token: Token | undefined): boolean =>
     token !== undefined && token.kind === "punct" && token.value === "?.";
 
@@ -50,7 +79,7 @@ function collectModuleSpecifiers(source: string): string[] {
 
     if (token.value === "require") {
       // `obj.require(...)` is an unrelated method call, not CommonJS require.
-      if (isMemberAccess(tokens[i - 1])) continue;
+      if (isMemberAccessAt(i)) continue;
       const optional =
         isOptionalChain(tokens[i + 1]) && isOpenParen(tokens[i + 2]);
       if (isOpenParen(tokens[i + 1]) || optional) {
@@ -62,7 +91,7 @@ function collectModuleSpecifiers(source: string): string[] {
 
     if (token.value === "import" || token.value === "export") {
       // `foo.import(...)` / `import.meta` are not module-loading imports.
-      if (token.value === "import" && isMemberAccess(tokens[i - 1])) continue;
+      if (token.value === "import" && isMemberAccessAt(i)) continue;
       // Dynamic `import("x")`.
       if (token.value === "import" && isOpenParen(tokens[i + 1])) {
         const spec = asString(tokens[i + 2]);
@@ -71,7 +100,7 @@ function collectModuleSpecifiers(source: string): string[] {
       }
       // Side-effect `import "x"`.
       if (token.value === "import") {
-        const bare = asString(tokens[i + 1]);
+        const bare = asQuoted(tokens[i + 1]);
         if (bare !== null) {
           out.push(bare);
           continue;
@@ -103,7 +132,9 @@ function findFromSpecifier(tokens: Token[], start: number): string | null {
       return null;
     if (token.kind === "word" && token.value === "from") {
       const next = tokens[i + 1];
-      return next && next.kind === "string" ? next.value : null;
+      return next && next.kind === "string" && !next.template
+        ? next.value
+        : null;
     }
   }
   return null;
@@ -114,14 +145,16 @@ type Token =
   | { kind: "word"; value: string }
   // A single- or double-quoted string literal, with escapes decoded to their
   // literal characters so a specifier survives unchanged.
-  | { kind: "string"; value: string }
+  | { kind: "string"; value: string; template?: true }
   // A punctuation token; compound forms are retained where lexical state or
   // module-call recognition depends on them.
   | {
       kind: "punct";
       value: string;
+
       /** Whether a slash after this closing delimiter begins a regex literal. */
       regexAllowedAfter?: boolean;
+
       /** Whether this closes a function parameter list for an expression. */
       functionBodyIsExpression?: boolean;
     }
@@ -362,7 +395,7 @@ function tokenize(source: string): Token[] {
     // Line comment.
     if (c === "/" && source[i + 1] === "/") {
       i += 2;
-      while (i < n && source[i] !== "\n") i++;
+      while (i < n && !isLineTerminator(source[i]!)) i++;
       continue;
     }
     // Block comment.
@@ -390,9 +423,12 @@ function tokenize(source: string): Token[] {
     // JavaScript and must receive the same lexical treatment as top-level code.
     if (c === "`") {
       i++;
+      // A template with no substitution and no escape is one static string.
+      let staticValue: string | null = "";
       while (i < n) {
         const d = source[i];
         if (d === "\\") {
+          staticValue = null;
           i += 2;
           continue;
         }
@@ -403,15 +439,20 @@ function tokenize(source: string): Token[] {
         if (d === "$" && source[i + 1] === "{") {
           const start = i + 2;
           const end = findTemplateSubstitutionEnd(source, start);
+          staticValue = null;
           context.pushOther();
-          tokens.push(...tokenize(source.slice(start, end)));
+          for (const entryToAppend of tokenize(source.slice(start, end)))
+            tokens.push(entryToAppend);
           context.pushOther();
           i = end < n ? end + 1 : end;
           continue;
         }
+        if (staticValue !== null) staticValue += d;
         i++;
       }
-      context.pushOther();
+      if (staticValue !== null && source[i - 1] === "`")
+        tokens.push({ kind: "string", value: staticValue, template: true });
+      else context.pushOther();
       continue;
     }
     // Identifier / keyword.
@@ -475,7 +516,7 @@ function findTemplateSubstitutionEnd(source: string, start: number): number {
     }
     if (c === "/" && source[i + 1] === "/") {
       i += 2;
-      while (i < source.length && source[i] !== "\n") i++;
+      while (i < source.length && !isLineTerminator(source[i]!)) i++;
       continue;
     }
     if (c === "/" && source[i + 1] === "*") {

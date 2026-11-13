@@ -9,6 +9,7 @@ import (
   shimchecker "github.com/microsoft/typescript-go/shim/checker"
   shimcore "github.com/microsoft/typescript-go/shim/core"
   shimtspath "github.com/microsoft/typescript-go/shim/tspath"
+  shimvfs "github.com/microsoft/typescript-go/shim/vfs"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
 )
@@ -31,6 +32,77 @@ type plugin struct{}
 // declaration introduced (isModuleLoader). A complete declaration would have to
 // name those, and the second of them is exactly the global-scope set the
 // declaration drops, so silence keeps the sound host-owned bound (samchon/ttsc#1263).
+//
+// The rewriter uses the program's own Checker and filesystem case policy,
+// following TypeScript-Go's module-pattern precedence and emit-path model.
+// Its per-program source index and ordered patterns are reused by all file
+// walks; the AST traversal closure is allocated once per walk. Consumer names
+// do not select transforms, and native paths become slash-separated specifiers
+// only after output mapping.
+//
+// Principled implementation:
+//
+//  Program source membership and the Program's Checker determine eligible
+//  module references. Helpers commit to the compiler's best paths pattern,
+//  preserve its substitution order and map recognized source extensions to
+//  emitted extensions. Only eligible string literals change; global ambient
+//  module names and locally bound require calls retain their meaning. Failed
+//  source or output mapping leaves the specifier unchanged.
+//
+// Clear and simple design:
+//
+//  One rewriter owns the configuration snapshot and source index for this
+//  Program. Syntax eligibility, alias resolution and output mapping are
+//  separate helpers, so compiler path policy has one owner rather than a
+//  different implementation for each supported AST shape.
+//
+// Prohibited implementation shortcuts:
+//
+//  Pattern keys and substitution targets come from compiler options, and
+//  source membership comes from the Program. Extension constants represent
+//  emitted language formats; they do not identify consumers or expected
+//  outputs. Mutating owned AST string literals is the host's transform
+//  protocol, not replacement of foreign methods or runtime globals.
+//
+// Meaningful documentation:
+//
+//  Native comments explain why dependency completeness is withheld and how
+//  Checker facts delimit the rewrite. Helper documentation describes pattern
+//  precedence, source membership, root containment and extension semantics;
+//  member comments identify the stored configuration and source index. Each
+//  topic has its own paragraph, following the documentation skill.
+//
+// OS-neutral implementation:
+//
+//  Native paths use filepath operations, while normalized keys use the
+//  Program filesystem's actual case policy. Root containment compares those
+//  keys and keeps the original suffix spelling. Common-root inference uses
+//  TypeScript-Go path components and rejects disjoint volumes; only the
+//  final relative module specifier uses protocol forward slashes.
+//
+// Efficient algorithms:
+//
+//  Construction indexes S source paths and orders P patterns once. Traversal
+//  visits N AST nodes once, with one recursive closure per file. Each eligible
+//  literal scans at most P patterns, then the selected pattern's T targets;
+//  each target performs a fixed number of hash lookups for recognized source
+//  extensions and index names. Pattern precedence requires finding the best
+//  match; sorted first-match resolution avoids sorting at every literal.
+//  Source indexing avoids scanning S files for each candidate.
+//
+// Reuse equivalent work:
+//
+//  All file walks share the source index, ordered paths and Checker of the
+//  same Program. Their validity is restricted to that invocation's source
+//  membership, options and semantic snapshot. A later Program constructs a
+//  new rewriter; the plugin does not reuse results across changed snapshots.
+//
+// Bound retention and release resources:
+//
+//  This synchronous invocation owns the rewriter. It retains one source
+//  entry per Program file and copied configuration targets, plus the active
+//  traversal stack. No global cache, handle or background task survives the
+//  call; those references become reclaimable when ApplyProgram returns.
 func (plugin) ApplyProgram(prog *driver.Program, _ driver.PluginContext) error {
   rewriter := newRewriter(prog)
   for _, file := range prog.SourceFiles() {
@@ -42,20 +114,38 @@ func (plugin) ApplyProgram(prog *driver.Program, _ driver.PluginContext) error {
 // rewriter holds the resolved tsconfig paths configuration used to rewrite
 // module specifiers across an entire program.
 type rewriter struct {
-  checker           *shimchecker.Checker
-  basePath          string
+  // checker identifies module-loader bindings in the owning Program.
+  checker *shimchecker.Checker
+
+  // basePath anchors substitutions under the compiler's paths base.
+  basePath string
+
+  // canonicalFileName applies the Program filesystem's case policy.
   canonicalFileName func(string) string
-  jsxPreserve       bool
-  outDir            string
-  patterns          []pathPattern
-  rootDir           string
-  sourceFiles       map[string]string // canonical source path → original normalized path
+
+  // jsxPreserve selects .jsx output for JSX-family source files.
+  jsxPreserve bool
+
+  // outDir is the normalized destination directory; empty disables mapping.
+  outDir string
+
+  // patterns preserves substitution order within compiler-ranked patterns.
+  patterns []pathPattern
+
+  // rootDir anchors each source suffix placed beneath outDir.
+  rootDir string
+
+  // sourceFiles maps canonical source identities to original normalized names.
+  sourceFiles map[string]string
 }
 
 // pathPattern is a single tsconfig paths entry with its wildcard pattern and
 // ordered list of substitution targets.
 type pathPattern struct {
+  // pattern is an exact specifier or a pattern with at most one wildcard.
   pattern string
+
+  // targets contains substitution candidates in tsconfig declaration order.
   targets []string
 }
 
@@ -68,30 +158,28 @@ var sourceLookupExtensions = []string{
 // Patterns are sorted by decreasing specificity (longer literal prefix first)
 // so the most-specific match wins on overlapping patterns.
 func newRewriter(prog *driver.Program) *rewriter {
-  caseSensitive := useCaseSensitiveFileNames(prog)
+  caseSensitivity := fileSystemCaseSensitivity(prog)
   out := &rewriter{
-    canonicalFileName: func(name string) string {
-      return shimtspath.GetCanonicalFileName(name, caseSensitive)
-    },
-    sourceFiles: map[string]string{},
+    canonicalFileName: func(text string) string { return shimtspath.Canonicalize(caseSensitivity, text) },
+    sourceFiles:       map[string]string{},
   }
   if prog == nil || prog.ParsedConfig == nil || prog.ParsedConfig.ParsedConfig == nil || prog.ParsedConfig.ParsedConfig.CompilerOptions == nil {
     return out
   }
   out.checker = prog.Checker
   options := prog.ParsedConfig.ParsedConfig.CompilerOptions
-  cwd := prog.Host.GetCurrentDirectory()
-  out.basePath = filepath.Clean(options.GetPathsBasePath(cwd))
+  cwd := prog.TSProgram.GetCurrentDirectory()
+  out.basePath = filepath.Clean(string(options.GetPathsBasePath(cwd)))
   out.jsxPreserve = options.Jsx == shimcore.JsxEmitPreserve
-  out.outDir = optionalPath(options.OutDir, cwd)
-  out.rootDir = optionalPath(options.RootDir, cwd)
+  out.outDir = optionalPath(string(options.OutDir), string(cwd))
+  out.rootDir = optionalPath(string(options.RootDir), string(cwd))
   files := prog.SourceFiles()
   fileNames := make([]string, 0, len(files))
   for _, file := range files {
-    fileNames = append(fileNames, normalizePath(file.FileName()))
+    fileNames = append(fileNames, normalizePath(string(file.FileName())))
   }
   if out.rootDir == "" {
-    out.rootDir = inferredRootDir(options.ConfigFilePath, fileNames, cwd, useCaseSensitiveFileNames(prog))
+    out.rootDir = inferredRootDir(string(options.ConfigFilePath), fileNames, string(cwd), caseSensitivity)
   }
   for _, name := range fileNames {
     out.sourceFiles[out.sourceKey(name)] = name
@@ -108,14 +196,14 @@ func newRewriter(prog *driver.Program) *rewriter {
   return out
 }
 
-// useCaseSensitiveFileNames reports the host filesystem's case sensitivity,
+// fileSystemCaseSensitivity reports the Program filesystem's case policy,
 // defaulting to case-sensitive when the program carries no filesystem (bare
 // rewriters built by unit tests).
-func useCaseSensitiveFileNames(prog *driver.Program) bool {
+func fileSystemCaseSensitivity(prog *driver.Program) shimtspath.CaseSensitivity {
   if prog == nil || prog.FS == nil {
-    return true
+    return shimtspath.CaseSensitive
   }
-  return prog.FS.UseCaseSensitiveFileNames()
+  return shimvfs.CaseSensitivityOf(prog.FS)
 }
 
 // apply rewrites all module specifiers in file that match a tsconfig paths pattern.
@@ -128,7 +216,7 @@ func (r *rewriter) apply(file *shimast.SourceFile) {
       return
     }
     spec := lit.Text()
-    rewritten, ok := r.rewrite(file.FileName(), spec)
+    rewritten, ok := r.rewrite(string(file.FileName()), spec)
     if ok && rewritten != spec {
       lit.AsStringLiteral().Text = rewritten
       lit.Flags |= shimast.NodeFlagsSynthesized
@@ -213,9 +301,9 @@ func isModuleLoader(checker *shimchecker.Checker, expression *shimast.Node) bool
   if symbol == nil {
     return true
   }
-  return symbol.Flags&shimast.SymbolFlagsAlias == 0 &&
-    symbol.ValueDeclaration != nil &&
-    symbol.ValueDeclaration.Flags&shimast.NodeFlagsAmbient != 0
+  return shimast.SymbolFlagsOf(symbol)&shimast.SymbolFlagsAlias == 0 &&
+    shimast.SymbolValueDeclarationOf(symbol) != nil &&
+    shimast.SymbolValueDeclarationOf(symbol).Flags&shimast.NodeFlagsAmbient != 0
 }
 
 // rewrite resolves specifier from fromSource using the tsconfig paths table and
@@ -249,6 +337,9 @@ func (r *rewriter) rewrite(fromSource string, specifier string) (string, bool) {
 // order, with extension and index fallbacks. When none of them names a
 // program source the specifier stays unrewritten — falling through to a
 // weaker pattern would rewrite at a module the type checker never resolved.
+// Each target is combined with the paths base the way TypeScript-Go combines
+// it, so a rooted target, such as one a `${configDir}` template expanded to,
+// replaces the base instead of being appended to it.
 func (r *rewriter) resolveSource(specifier string) (string, bool) {
   for _, pattern := range r.patterns {
     star, ok := matchPattern(pattern.pattern, specifier)
@@ -257,7 +348,7 @@ func (r *rewriter) resolveSource(specifier string) (string, bool) {
     }
     for _, target := range pattern.targets {
       candidate := strings.Replace(target, "*", star, 1)
-      resolved := normalizePath(filepath.Join(r.basePath, candidate))
+      resolved := normalizePath(shimtspath.CombinePaths(normalizePath(r.basePath), candidate))
       if source, ok := r.lookupSource(resolved); ok {
         return source, true
       }
@@ -267,26 +358,58 @@ func (r *rewriter) resolveSource(specifier string) (string, bool) {
   return "", false
 }
 
-// lookupSource checks whether candidate (a normalized path, possibly without
-// extension) corresponds to a known source file. It tries the exact path, stem
-// with each known TypeScript/JavaScript source extension, and index files.
+// lookupSource checks whether candidate corresponds to a Program source that
+// can produce an output. Explicit module-format suffixes restrict replacement
+// to their own source family, as in TypeScript-Go's tryAddingExtensions, and an
+// unrecognized suffix such as `.service` is part of the file name, so source
+// extensions are appended to the whole candidate. The candidate itself is the
+// directory name for an index lookup; stripping its suffix there would search a
+// different directory.
 func (r *rewriter) lookupSource(candidate string) (string, bool) {
   normalized := normalizePath(candidate)
   if source, ok := r.sourceFiles[r.sourceKey(normalized)]; ok {
+    if isDeclarationSource(source) {
+      return "", false
+    }
     return source, true
   }
   stem := stripKnownSourceExtension(normalized)
-  for _, ext := range sourceLookupExtensions {
+  extensions := sourceLookupExtensions
+  switch strings.ToLower(filepath.Ext(normalized)) {
+  case ".mjs", ".mts":
+    extensions = []string{".mts", ".mjs"}
+  case ".cjs", ".cts":
+    extensions = []string{".cts", ".cjs"}
+  case ".jsx", ".tsx":
+    extensions = []string{".tsx", ".ts", ".jsx", ".js"}
+  case ".js", ".ts":
+    extensions = []string{".ts", ".tsx", ".js", ".jsx"}
+  case "":
+  default:
+    // An unrecognized suffix belongs to the file name, as in `./user.service`:
+    // tsc appends the source extensions to the whole candidate, so the stem
+    // must keep the suffix that recognized extensions lose.
+    stem = normalized
+  }
+  for _, ext := range extensions {
     if source, ok := r.sourceFiles[r.sourceKey(stem+ext)]; ok {
       return source, true
     }
   }
   for _, ext := range sourceLookupExtensions {
-    if source, ok := r.sourceFiles[r.sourceKey(filepath.Join(stem, "index"+ext))]; ok {
+    if source, ok := r.sourceFiles[r.sourceKey(filepath.Join(normalized, "index"+ext))]; ok {
       return source, true
     }
   }
   return "", false
+}
+
+// isDeclarationSource reports inputs that type-check but emit no target file.
+func isDeclarationSource(source string) bool {
+  lower := strings.ToLower(source)
+  return strings.HasSuffix(lower, ".d.ts") ||
+    strings.HasSuffix(lower, ".d.mts") ||
+    strings.HasSuffix(lower, ".d.cts")
 }
 
 // sourceKey applies the compiler host's filesystem identity rule to one path.
@@ -307,11 +430,32 @@ func (r *rewriter) outputPathForSource(source string) string {
   if r.outDir == "" || r.rootDir == "" {
     return ""
   }
-  rel, err := filepath.Rel(r.rootDir, source)
-  if err != nil || isOutsideRelativePath(rel) {
+  rel, ok := r.pathBelowRootDir(source)
+  if !ok {
     return ""
   }
   return normalizePath(filepath.Join(r.outDir, replaceSourceExtension(rel, emittedExtension(rel, r.jsxPreserve))))
+}
+
+// pathBelowRootDir returns source's path below rootDir, decided the way
+// TypeScript-Go places an output under outDir
+// (`outputpaths.GetSourceFilePathInNewDir`): rootDir contains source by the
+// compiler host's case rule, and the rest keeps the source's own spelling. A
+// Program can spell a file the way a paths target named it, such as
+// `SRC/DIRECTORY/index.ts` below `src`, so an operating system's own path
+// comparison, case-sensitive on POSIX even on a case-insensitive volume, would
+// place it outside rootDir.
+func (r *rewriter) pathBelowRootDir(source string) (string, bool) {
+  root := normalizePath(r.rootDir)
+  if !strings.HasSuffix(root, "/") {
+    root += "/"
+  }
+  file := normalizePath(source)
+  if len(file) <= len(root) || file[len(root)-1] != '/' ||
+    r.sourceKey(file[:len(root)]) != r.sourceKey(root) {
+    return "", false
+  }
+  return file[len(root):], true
 }
 
 // emittedExtension returns the output-file extension that TypeScript-Go writes
@@ -410,11 +554,16 @@ func optionalPath(value string, cwd string) string {
 // every input file. The rewriter must anchor output paths exactly where tsgo
 // anchors its own emit, or the rewritten specifiers drift from the real
 // output layout.
-func inferredRootDir(configFilePath string, fileNames []string, currentDirectory string, useCaseSensitiveFileNames bool) string {
+//
+// A tsconfig-loaded Program always carries its config path, so the shared
+// directory fallback serves only a Program built without one. That fallback
+// intersects every file name it is given, whereas TypeScript-Go excludes
+// declaration files; the caller passes the Program's full source list.
+func inferredRootDir(configFilePath string, fileNames []string, currentDirectory string, caseSensitivity shimtspath.CaseSensitivity) string {
   if configFilePath != "" {
     return normalizePath(filepath.Dir(configFilePath))
   }
-  return commonSourceDir(fileNames, currentDirectory, useCaseSensitiveFileNames)
+  return commonSourceDir(fileNames, currentDirectory, caseSensitivity)
 }
 
 // commonSourceDir mirrors TypeScript-Go's
@@ -427,7 +576,7 @@ func inferredRootDir(configFilePath string, fileNames []string, currentDirectory
 // the backslash form ("C:\") while the termination guard compared it against
 // the slash-normalized cursor ("C:/"), re-normalizing the same directory
 // forever.
-func commonSourceDir(fileNames []string, currentDirectory string, useCaseSensitiveFileNames bool) string {
+func commonSourceDir(fileNames []string, currentDirectory string, caseSensitivity shimtspath.CaseSensitivity) string {
   var common []string
   for _, fileName := range fileNames {
     components := shimtspath.GetNormalizedPathComponents(fileName, currentDirectory)
@@ -440,8 +589,8 @@ func commonSourceDir(fileNames []string, currentDirectory string, useCaseSensiti
     shared := 0
     limit := min(len(common), len(components))
     for shared < limit &&
-      shimtspath.GetCanonicalFileName(common[shared], useCaseSensitiveFileNames) ==
-        shimtspath.GetCanonicalFileName(components[shared], useCaseSensitiveFileNames) {
+      shimtspath.Canonicalize(caseSensitivity, common[shared]) ==
+        shimtspath.Canonicalize(caseSensitivity, components[shared]) {
       shared++
     }
     if shared == 0 {
@@ -480,10 +629,4 @@ func stripKnownSourceExtension(value string) string {
 // appends ext, producing the output file name.
 func replaceSourceExtension(value string, ext string) string {
   return stripKnownSourceExtension(filepath.ToSlash(value)) + ext
-}
-
-// isOutsideRelativePath reports whether a relative path escapes its base
-// directory (i.e. starts with "..").
-func isOutsideRelativePath(rel string) bool {
-  return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

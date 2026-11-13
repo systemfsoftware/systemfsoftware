@@ -23,7 +23,7 @@ async function withCleanEnv(body: () => Promise<void>): Promise<void> {
   const previous = process.env[ENV_KEY];
   delete process.env[ENV_KEY];
   try {
-    await body();
+    await TestMetroRuntime.confineSession(body);
   } finally {
     if (previous === undefined) {
       delete process.env[ENV_KEY];
@@ -60,25 +60,6 @@ function writePackage(root: string, name: string, main: string): string {
 /** The `upstreamTransformer` the last `withTtsc` call published to the worker. */
 function publishedUpstream(envKey: string): unknown {
   return JSON.parse(process.env[envKey] as string).upstreamTransformer;
-}
-
-/**
- * Asserts `withTtsc` points `transformer.babelTransformerPath` at the package's
- * built transformer module, by absolute path, and that the file exists.
- */
-export async function assertWithTtscSetsBabelTransformerPath(): Promise<void> {
-  await withCleanEnv(async () => {
-    const { withTtsc } = await TestMetroRuntime.loadIndex();
-    const config = withTtsc({
-      projectRoot: tempProjectRoot(),
-      transformer: {},
-    });
-    const target = config.transformer.babelTransformerPath;
-    assert.equal(typeof target, "string");
-    assert.equal(path.isAbsolute(target), true);
-    assert.match(target, /transformer\.js$/);
-    assert.equal(fs.existsSync(target), true);
-  });
 }
 
 /**
@@ -212,12 +193,12 @@ export async function assertWithTtscChainsAnExistingTransformer(): Promise<void>
     });
     assert.equal(
       publishedUpstream(ENV_KEY),
-      absolute,
+      fs.realpathSync(absolute),
       "the transformer the config already named must become the upstream",
     );
     assert.notEqual(
       config.transformer.babelTransformerPath,
-      absolute,
+      fs.realpathSync(absolute),
       "and this package's transformer must be the one Metro loads",
     );
 
@@ -235,7 +216,7 @@ export async function assertWithTtscChainsAnExistingTransformer(): Promise<void>
     });
     assert.equal(
       publishedUpstream(ENV_KEY),
-      relativeTarget,
+      fs.realpathSync(relativeTarget),
       "a project-relative path must be anchored to the project before it travels",
     );
 
@@ -254,7 +235,7 @@ export async function assertWithTtscChainsAnExistingTransformer(): Promise<void>
     });
     assert.equal(
       publishedUpstream(ENV_KEY),
-      bareTarget,
+      fs.realpathSync(bareTarget),
       "a bare specifier must be resolved from the project, not from this package",
     );
 
@@ -358,8 +339,70 @@ export async function assertWithTtscChainsAnExistingTransformer(): Promise<void>
     });
     assert.equal(
       publishedUpstream(ENV_KEY),
-      lookalike,
+      fs.realpathSync(lookalike),
       "a foreign module named transformer.js must still be chained",
+    );
+  });
+}
+
+/**
+ * Asserts `withTtsc` resolves the automatic upstream candidates and an explicit
+ * `upstreamTransformer` package name from the project, not from this package.
+ *
+ * The worker's own lookup is rooted in `@ttsc/metro`, which under pnpm or a
+ * linked workspace sits outside the app's `node_modules` ancestry and cannot
+ * see a transformer only the app installed. The config process knows the
+ * project, so it publishes the absolute path it resolved.
+ */
+export async function assertWithTtscResolvesUpstreamFromTheProject(): Promise<void> {
+  await withCleanEnv(async () => {
+    const { ENV_KEY } = await TestMetroRuntime.loadOptions();
+    const { withTtsc } = await TestMetroRuntime.loadIndex();
+
+    const autoRoot = tempProjectRoot();
+    const autoTarget = writePackage(
+      autoRoot,
+      "@react-native/metro-babel-transformer",
+      "index.js",
+    );
+    withTtsc({ projectRoot: autoRoot });
+    assert.equal(
+      publishedUpstream(ENV_KEY),
+      fs.realpathSync(autoTarget),
+      "an automatic candidate only the app installed must be found from the project",
+    );
+
+    const explicitRoot = tempProjectRoot();
+    const explicitTarget = writePackage(
+      explicitRoot,
+      "app-upstream",
+      "main.js",
+    );
+    withTtsc(
+      { projectRoot: explicitRoot },
+      { upstreamTransformer: "app-upstream" },
+    );
+    assert.equal(
+      publishedUpstream(ENV_KEY),
+      fs.realpathSync(explicitTarget),
+      "an explicit package name must resolve from the project",
+    );
+
+    withTtsc(
+      { projectRoot: tempProjectRoot() },
+      { upstreamTransformer: "no-such-upstream-anywhere" },
+    );
+    assert.equal(
+      publishedUpstream(ENV_KEY),
+      "no-such-upstream-anywhere",
+      "an unresolvable explicit name travels as written for the worker to name",
+    );
+
+    withTtsc({ projectRoot: tempProjectRoot() });
+    assert.equal(
+      publishedUpstream(ENV_KEY),
+      undefined,
+      "with no candidate installed the worker's own probe still reports it",
     );
   });
 }

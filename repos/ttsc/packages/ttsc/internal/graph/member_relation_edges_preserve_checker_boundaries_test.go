@@ -19,8 +19,15 @@ import (
 //  1. Build generic, overloaded, optional, merged, property/method, and
 //     accessor cases.
 //  2. Require checker diagnostics for the deliberately rejected declarations.
-//  3. Assert accepted pairs produce one member relation and rejected pairs none.
+//  3. Assert accepted pairs have their expected relation origin and rejected
+//     pairs have resident endpoint nodes but no member relation.
+//
+// @evidence contracts/testing.md#behavioral-verification Build's eleven authored accepted pairs must have their literal first-matching relation origin, while six rejected pairs must have resident endpoints and no member-relation edge. One erroneous Program also contains accepted siblings; all generic/override rules or exact edge multiplicities are not certified.
+// @evidence contracts/testing.md#independent-expectations The oracle is the TypeScript checker's accept/reject decisions encoded in the fixture: eleven accepted pairs (generic instantiation, overload set, optional-to-required, property for method, abstract accessor, split and merged declarations, protected override) must carry the literal origin implements or overrides, and six rejected pairs (wrong generic method, optional for required, method for property, property over concrete accessor, mixed-flag symbol, protected pretender) must have no member-relation edge. The only diagnostic requirement is that the program has at least one diagnostic, so the rejection of each specific pair is shown by the absent edge, not by a named diagnostic.
+// @evidence contracts/testing.md#distinguishing-cases Accepted pairs and rejected pairs sit side by side in one erroneous program, so a rejected sibling must not suppress an accepted one and an accepted one must not admit a rejected one; each pair's edge presence or absence is asserted by node id, and presence is checked by origin equality rather than by a count of exactly one.
+// @evidence contracts/testing.md#execution-ownership This Go source-unit writes a native project, constructs/closes its driver Program, requires at least one actual diagnostic and directly calls Build in-process. Actual filename/shared ID formatting select literal pairs, with first-match edgeOrigin and presence-only hasEdge helpers. A restored empty linked-plugin manifest excludes ambient hooks; no emit, installed consumer or product process runs.
 func TestMemberRelationEdgesPreserveCheckerBoundaries(t *testing.T) {
+  t.Setenv(driver.LinkedPluginsEnv, "")
   root := t.TempDir()
   writeFile(t, filepath.Join(root, "tsconfig.json"), fixtureTSConfig)
   writeFile(t, filepath.Join(root, "src", "main.ts"), `export interface Generic<T> {
@@ -142,8 +149,8 @@ export class ProtectedPretender implements ProtectedBase {
   built := Build(prog)
   path := sourceFile(t, prog, "main.ts").FileName()
   for _, id := range []string{
-    nodeID(path, "MixedFlagDerived.item", NodeMethod),
-    nodeID(path, "MixedFlagBase.item", NodeVariable),
+    nodeID(string(path), "MixedFlagDerived.item", NodeMethod),
+    nodeID(string(path), "MixedFlagBase.item", NodeVariable),
   } {
     if _, ok := built.Nodes[id]; !ok {
       t.Fatalf("mixed-symbol boundary node %s is missing; nodes: %v", id, built.Nodes)
@@ -154,17 +161,17 @@ export class ProtectedPretender implements ProtectedBase {
     to     string
     origin string
   }{
-    {nodeID(path, "StringGeneric.map", NodeMethod), nodeID(path, "Generic.map", NodeMethod), "implements"},
-    {nodeID(path, "StringGeneric.required", NodeVariable), nodeID(path, "Generic.required", NodeVariable), "implements"},
-    {nodeID(path, "WrongGeneric.required", NodeVariable), nodeID(path, "Generic.required", NodeVariable), "implements"},
-    {nodeID(path, "ParserImpl.parse", NodeMethod), nodeID(path, "Parser.parse", NodeMethod), "implements"},
-    {nodeID(path, "RequiredGood.value", NodeVariable), nodeID(path, "OptionalContract.value", NodeVariable), "implements"},
-    {nodeID(path, "PropertyDerived.run", NodeVariable), nodeID(path, "MethodBase.run", NodeMethod), "overrides"},
-    {nodeID(path, "AbstractPropertyDerived.label", NodeVariable), nodeID(path, "AbstractAccessorBase.label", NodeMethod), "overrides"},
-    {nodeID(path, "SplitDerived.alpha", NodeMethod), nodeID(path, "SplitBase.alpha", NodeMethod), "overrides"},
-    {nodeID(path, "SplitDerived.beta", NodeMethod), nodeID(path, "SplitBase.beta", NodeMethod), "overrides"},
-    {nodeID(path, "MergedDerived.augment", NodeMethod), nodeID(path, "MergedBase.augment", NodeMethod), "overrides"},
-    {nodeID(path, "ProtectedGood.token", NodeVariable), nodeID(path, "ProtectedBase.token", NodeVariable), "overrides"},
+    {nodeID(string(path), "StringGeneric.map", NodeMethod), nodeID(string(path), "Generic.map", NodeMethod), "implements"},
+    {nodeID(string(path), "StringGeneric.required", NodeVariable), nodeID(string(path), "Generic.required", NodeVariable), "implements"},
+    {nodeID(string(path), "WrongGeneric.required", NodeVariable), nodeID(string(path), "Generic.required", NodeVariable), "implements"},
+    {nodeID(string(path), "ParserImpl.parse", NodeMethod), nodeID(string(path), "Parser.parse", NodeMethod), "implements"},
+    {nodeID(string(path), "RequiredGood.value", NodeVariable), nodeID(string(path), "OptionalContract.value", NodeVariable), "implements"},
+    {nodeID(string(path), "PropertyDerived.run", NodeVariable), nodeID(string(path), "MethodBase.run", NodeMethod), "overrides"},
+    {nodeID(string(path), "AbstractPropertyDerived.label", NodeVariable), nodeID(string(path), "AbstractAccessorBase.label", NodeMethod), "overrides"},
+    {nodeID(string(path), "SplitDerived.alpha", NodeMethod), nodeID(string(path), "SplitBase.alpha", NodeMethod), "overrides"},
+    {nodeID(string(path), "SplitDerived.beta", NodeMethod), nodeID(string(path), "SplitBase.beta", NodeMethod), "overrides"},
+    {nodeID(string(path), "MergedDerived.augment", NodeMethod), nodeID(string(path), "MergedBase.augment", NodeMethod), "overrides"},
+    {nodeID(string(path), "ProtectedGood.token", NodeVariable), nodeID(string(path), "ProtectedBase.token", NodeVariable), "overrides"},
   }
   for _, pair := range expected {
     if got := edgeOrigin(built, pair.from, pair.to, EdgeMemberRelation); got != pair.origin {
@@ -176,14 +183,17 @@ export class ProtectedPretender implements ProtectedBase {
     from string
     to   string
   }{
-    {nodeID(path, "WrongGeneric.map", NodeMethod), nodeID(path, "Generic.map", NodeMethod)},
-    {nodeID(path, "OptionalWrong.value", NodeVariable), nodeID(path, "RequiredContract.value", NodeVariable)},
-    {nodeID(path, "MethodWrong.run", NodeMethod), nodeID(path, "PropertyBase.run", NodeVariable)},
-    {nodeID(path, "ConcretePropertyWrong.label", NodeVariable), nodeID(path, "ConcreteAccessorBase.label", NodeMethod)},
-    {nodeID(path, "MixedFlagDerived.item", NodeMethod), nodeID(path, "MixedFlagBase.item", NodeVariable)},
-    {nodeID(path, "ProtectedPretender.token", NodeVariable), nodeID(path, "ProtectedBase.token", NodeVariable)},
+    {nodeID(string(path), "WrongGeneric.map", NodeMethod), nodeID(string(path), "Generic.map", NodeMethod)},
+    {nodeID(string(path), "OptionalWrong.value", NodeVariable), nodeID(string(path), "RequiredContract.value", NodeVariable)},
+    {nodeID(string(path), "MethodWrong.run", NodeMethod), nodeID(string(path), "PropertyBase.run", NodeVariable)},
+    {nodeID(string(path), "ConcretePropertyWrong.label", NodeVariable), nodeID(string(path), "ConcreteAccessorBase.label", NodeMethod)},
+    {nodeID(string(path), "MixedFlagDerived.item", NodeMethod), nodeID(string(path), "MixedFlagBase.item", NodeVariable)},
+    {nodeID(string(path), "ProtectedPretender.token", NodeVariable), nodeID(string(path), "ProtectedBase.token", NodeVariable)},
   }
   for _, pair := range rejected {
+    if built.Nodes[pair.from] == nil || built.Nodes[pair.to] == nil {
+      t.Fatalf("rejected pair endpoints missing %s -> %s; nodes: %v", pair.from, pair.to, nodeIDSet(built))
+    }
     if hasEdge(built, pair.from, pair.to, EdgeMemberRelation) {
       t.Fatalf("checker-rejected boundary gained a member edge %s -> %s; edges: %v", pair.from, pair.to, built.Edges)
     }

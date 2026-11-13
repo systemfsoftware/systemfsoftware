@@ -35,6 +35,10 @@ import { make } from "../internal/make";
  *   signature.
  * @param body The block or expression body.
  * @returns The created {@link ArrowFunction}.
+ * @evidence contracts/common.md#principled-implementation Signature fields and Block-or-Expression body preserve arrow forms; the ignored compatibility token carries no semantic payload because => follows from the kind, and grammar validity remains caller-owned.
+ * @evidence contracts/common.md#clear-and-simple-design One make call records current signature constituents and the body; the printer owns arrow punctuation and concise-body grouping.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts The ignored token supports the documented legacy signature rather than a hidden transform hook or patched compiler token.
+ * @evidence contracts/common.md#meaningful-documentation JSDoc explains body alternatives, optional signature parts and the ignored parameter's reason; example, parameters and acknowledgment tags use separate blocks.
  */
 export const createArrowFunction = (
   modifiers: readonly ModifierLike[] | undefined,

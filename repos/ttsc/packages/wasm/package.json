@@ -1,6 +1,6 @@
 {
   "name": "@ttsc/wasm",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "Build in-browser ttsc playgrounds. Compose ttsc + typescript-go with your own plugins via the Go host helper.",
   "main": "lib/src/index.js",
   "types": "lib/src/index.d.ts",
@@ -31,7 +31,8 @@
     "build:wasm": "node build/build-wasm.cjs",
     "build:ts": "rimraf lib && tsc -p .",
     "prepack": "node build/pack-prepare.cjs --stash",
-    "postpack": "node build/pack-prepare.cjs --restore"
+    "postpack": "node build/pack-prepare.cjs --restore",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -44,6 +45,7 @@
   },
   "homepage": "https://ttsc.dev",
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@types/node": "catalog:utils",
     "rimraf": "catalog:utils",
     "typescript": "catalog:typescript"

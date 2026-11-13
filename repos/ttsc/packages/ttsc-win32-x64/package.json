@@ -1,11 +1,12 @@
 {
   "name": "@ttsc/win32-x64",
-  "version": "0.30.4",
-  "description": "Windows x64 native ttsc/ttscserver/ttscgraph binaries and bundled Go compiler for ttsc.",
+  "version": "0.37.0",
+  "description": "Windows x64 native ttsc/ttscserver binaries and bundled Go compiler for ttsc.",
   "os": ["win32"],
   "cpu": ["x64"],
   "scripts": {
-    "build": "node ../../scripts/build-platform-package.cjs"
+    "evidence": "evidence",
+    "build": "node ../ttsc/build/platform-package.cjs"
   },
   "repository": {
     "type": "git",
@@ -16,5 +17,8 @@
   "files": ["bin", "package.json", "README.md"],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon"
   }
 }

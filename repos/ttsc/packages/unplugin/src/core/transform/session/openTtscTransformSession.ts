@@ -1,0 +1,100 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { userStateDirectory } from "../filesystem/userStateDirectory";
+import { isZombieProcess } from "../utils/isZombieProcess";
+import { TTSC_TRANSFORM_SESSION_ENV } from "./TTSC_TRANSFORM_SESSION_ENV";
+import { readTtscTransformSession } from "./readTtscTransformSession";
+
+/**
+ * Open the shared compile store for the pooled host session this process
+ * configures, and return its path (samchon/ttsc#1390).
+ *
+ * Turbopack and Metro run transforms in a pool of worker processes, and each
+ * compiled the whole project before answering its first module. The process
+ * that configures the pool calls this before the workers exist, and puts the
+ * store's path into {@link TTSC_TRANSFORM_SESSION_ENV}, which the workers
+ * inherit. The first worker to need a generation compiles it and publishes it
+ * there, and the others prove it and adopt it.
+ *
+ * The store outlives the process (samchon/ttsc#1483). A dev server started
+ * again spawns fresh workers with no generation in memory, and Turbopack runs
+ * the loader for every module after a restart, so a store that died with its
+ * process left each restart compiling every project once. The store is one
+ * directory per user, kept across processes: a fresh worker adopts what the
+ * last process compiled after proving it against its own disk, as any adopter
+ * does, and a compile is named by what it is down to the compiler versions
+ * (`sharedCompileIdentity`). That key includes reported compiler and adapter
+ * versions; capture/adoption owners separately prove retained inputs.
+ * Publication pruning is best-effort (`claimSharedCompile`).
+ *
+ * A newly opened store lives below checked user-state storage under the system
+ * temporary directory (`userStateDirectory`). On uid-capable hosts that
+ * provider requires private user-owned directories; other hosts rely on native
+ * access policy. Its location is independent of project selection, not always
+ * outside a project placed in that root. Earlier versions kept one store per
+ * process in the same root, removed when it exited; one whose process is gone
+ * was left behind by a crash, and is removed here, as is the clock probe
+ * directory a crashed process kept there (`refreshProcessClockReference`). A
+ * process whose environment already names a live store, because a parent or an
+ * earlier call opened the session, keeps that store. The inherited reader
+ * checks an absolute current directory, not ownership or writability; the
+ * configuring host supplies that address.
+ *
+ * Sharing is an optimization, so any failure leaves the session closed and the
+ * workers compiling for themselves, never an error.
+ *
+ * @returns The store's absolute path, or `undefined` when none could be opened.
+ * @evidence contracts/common.md#principled-implementation An inherited absolute directory is preserved; otherwise checked user-state storage is declared before workers spawn. Publication keys and separate input proofs determine reuse, not store existence.
+ * @evidence contracts/common.md#clear-and-simple-design New directory ownership stays in userStateDirectory, claiming in claimSharedCompile and adoption proof in generation capture; this operation declares the address and reclaims recognized legacy children.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Optional store failure leaves real local compilation in place, rather than reusing unproven output or suppressing compiler failure.
+ * @evidence contracts/common.md#meaningful-documentation The prose explains worker inheritance, persistent versus obsolete process storage, and why sharing failures return undefined.
+ * @evidence contracts/portability.md#os-neutral-implementation Native joins and user-state capability checks provide new storage; inherited addresses receive only current directory checks. process.kill(pid, 0) treats success and EPERM as live, other failures as not live, and a success naming a Linux zombie as not live; this classification is not a general proof of death under every process-probe failure.
+ * @evidence contracts/performance.md#efficient-algorithms An inherited path performs native path/stat work and avoids the root scan. Cold opening materializes N child names, matches their text and probes recognized PIDs, with provider realpath/create/stat work and recursive deletion of selected subtrees. Cost depends on name bytes, removed descendants and native operations, not just N; persistent shared-store contents are not scanned here.
+ * @evidence contracts/performance.md#reuse-equivalent-work Parent and worker processes retain the inherited store capability, while compile identity, state proof and publication reuse remain with the claim/adoption owners.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Recognized clock and legacy children classified not live are recursively reclaimed. Inherited, live and unrecognized children bypass reclamation; a failed removal aborts opening, so no count or byte bound is enforced here. The environment retains the current address; claimSharedCompile owns best-effort publication pruning. Synchronous operations leave no open handle.
+ */
+export function openTtscTransformSession(): string | undefined {
+  const inherited = readTtscTransformSession();
+  if (inherited !== undefined) {
+    return inherited;
+  }
+  try {
+    const root = userStateDirectory();
+    if (root === undefined) return undefined;
+    for (const entry of fs.readdirSync(root)) {
+      const match = /^([1-9][0-9]*)-(?:clock|[A-Za-z0-9]{6})$/.exec(entry);
+      const owner = match === null ? undefined : Number(match[1]);
+      if (
+        owner !== undefined &&
+        Number.isSafeInteger(owner) &&
+        !processAlive(owner)
+      ) {
+        fs.rmSync(path.join(root, entry), { force: true, recursive: true });
+      }
+    }
+    const store = userStateDirectory(SHARED_STORE);
+    if (store === undefined) return undefined;
+    process.env[TTSC_TRANSFORM_SESSION_ENV] = store;
+    return store;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The store's name below the per-user root, which names no process. */
+const SHARED_STORE = "shared";
+
+/**
+ * Whether a process with this id runs, as far as this process can tell. An
+ * exited process its parent never collected does not.
+ */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return !isZombieProcess(pid);
+  } catch (error) {
+    // EPERM: it exists and belongs to another user.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}

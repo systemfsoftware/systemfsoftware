@@ -12,54 +12,27 @@ import (
   "strings"
 
   shimcompiler "github.com/microsoft/typescript-go/shim/compiler"
+  shimtspath "github.com/microsoft/typescript-go/shim/tspath"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
 )
 
-// APIResult is the stdout/stderr capture returned by InvokePlugin. The
-// js/wasm binding wraps it in the same JS result envelope that build/check/
-// transform use, adding `result` when an endpoint has a JSON payload. `code`
-// follows the native CLI exit-code contract (0 success, 2 compiler/config/
-// usage error, 3 runtime error).
-type APIResult struct {
-  Code   int    `json:"code"`
-  Stdout string `json:"stdout"`
-  Stderr string `json:"stderr"`
-}
-
-// CompileResult mirrors `ttsc api-compile`. Field names are TypeScript-style
-// so JS callers can use it directly without remapping.
-type CompileResult struct {
-  Diagnostics []CompileDiagnostic `json:"diagnostics,omitempty"`
-  // Output maps cwd-relative paths to emitted JS / d.ts text. Empty when
-  // the program produced no files (e.g. `noEmit` projects).
-  Output map[string]string `json:"output"`
-}
-
-// TransformResult is the no-emit companion. The `typescript` map keys files
-// the same way `output` does in compile mode.
-type TransformResult struct {
-  Diagnostics []CompileDiagnostic `json:"diagnostics,omitempty"`
-  TypeScript  map[string]string   `json:"typescript"`
-}
-
-// CompileDiagnostic is the public TypeScript-side diagnostic DTO. Mirrors the
-// shape `ttsc api-compile` writes so the JS host can render it without
-// remapping fields.
-type CompileDiagnostic struct {
-  File        *string `json:"file"`
-  Category    string  `json:"category"`
-  Code        int32   `json:"code"`
-  Start       *int    `json:"start,omitempty"`
-  Length      *int    `json:"length,omitempty"`
-  Line        int     `json:"line,omitempty"`
-  Character   int     `json:"character,omitempty"`
-  MessageText string  `json:"messageText"`
-}
-
 // Build runs `ttsc build`-shaped emit: load the project, emit JS, return the
 // emitted text map + diagnostics as JSON. `cwd` must be an absolute path
 // inside the host filesystem; `tsconfigPath` may be relative to cwd.
+//
+// The loaded Program is closed on every return after acquisition. Compiler
+// diagnostics still accompany emitted files; code 2 reports compiler errors,
+// while code 3 reports emit or serialization failures.
+//
+// @evidence contracts/common.md#principled-implementation LoadProgram and EmitAll own compiler behavior; encoding/json projects their results through the documented envelope.
+// @evidence contracts/common.md#clear-and-simple-design One emit pipeline owns project acquisition, supported WriteFile capture and diagnostics; shared projection helpers centralize path and diagnostic policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Emit uses supported compiler hooks, without patching foreign emitters or synthesizing expected outputs.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain paths, ownership and failure stages under the documentation skill's rationale guidance.
+// @evidence contracts/portability.md#os-neutral-implementation LoadProgram owns filesystem access through the driver's supported host. Native filepath.Rel identifies inside/outside destinations, including volume differences, and ToSlash changes JSON spelling without lowercasing identity.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Build closes its Program before returning and transfers the output to the caller, so it retains nothing.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Build delegates parsing, checking and emit to the driver and adds one pass over the diagnostics and the emitted output map.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Build loads a fresh Program per call because the virtual filesystem may have changed; sharing a loaded Program is the snapshot verbs' purpose.
 func Build(cwd, tsconfigPath string) ([]byte, int, error) {
   prog, diags, err := driver.LoadProgram(cwd, tsconfigPath, driver.LoadProgramOptions{
     ForceEmit: true,
@@ -75,8 +48,8 @@ func Build(cwd, tsconfigPath string) ([]byte, int, error) {
   if prog != nil {
     rewrites := driver.NewRewriteSet()
     writeFile := shimcompiler.WriteFile(
-      func(fileName, text string, _ *shimcompiler.WriteFileData) error {
-        output[apiOutputKey(cwd, fileName)] = text
+      func(fileName shimtspath.RootedFilePath, text string, _ *shimcompiler.WriteFileData) error {
+        output[apiOutputKey(cwd, string(fileName))] = text
         return nil
       },
     )
@@ -106,6 +79,15 @@ func Build(cwd, tsconfigPath string) ([]byte, int, error) {
 
 // Check runs the typecheck pipeline without emitting JS. The returned JSON
 // has the same shape as Build but with an empty `output` map.
+//
+// @evidence contracts/common.md#principled-implementation ForceNoEmit selects the driver's check pipeline and a deferred Close owns the loaded program.
+// @evidence contracts/common.md#clear-and-simple-design The no-emit entry keeps loading and diagnostic projection explicit while sharing DTO and path helpers with the emit entry.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No-emit is requested from the compiler rather than hiding an unnecessary emit behind an empty result.
+// @evidence contracts/common.md#meaningful-documentation Native comments explain no-emit and payload equivalence under the documentation skill's context guidance.
+// @evidence contracts/portability.md#os-neutral-implementation The driver resolves cwd/config through its filesystem host; diagnostic paths use filepath.ToSlash only for wire spelling. The adapter neither guesses case policy nor constructs a shell command.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Check closes its Program before returning and transfers the diagnostics to the caller, so it retains nothing.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Check delegates loading and checking to the driver and adds one pass over the diagnostics.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Check loads a fresh Program per call because the virtual filesystem may have changed; sharing a loaded Program is the snapshot verbs' purpose.
 func Check(cwd, tsconfigPath string) ([]byte, int, error) {
   prog, diags, err := driver.LoadProgram(cwd, tsconfigPath, driver.LoadProgramOptions{
     ForceNoEmit: true,
@@ -138,6 +120,18 @@ func Check(cwd, tsconfigPath string) ([]byte, int, error) {
 // Transform returns every source file the program saw, keyed by
 // project-relative path. The playground uses this to render the TS view
 // after source rewrites (e.g. paths rewriting) have been applied.
+//
+// Sources inside cwd use relative keys; outside sources retain absolute slash
+// paths. The invocation closes the loaded Program after copying its source text.
+//
+// @evidence contracts/common.md#principled-implementation LoadProgram supplies post-plugin SourceFiles and encoding/json preserves their source-text projection.
+// @evidence contracts/common.md#clear-and-simple-design The source projection is separate from emit, and common path/diagnostic helpers keep their shared representation policy in one place.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The program's own text is authoritative, without a secondary emitter-based reconstruction.
+// @evidence contracts/common.md#meaningful-documentation Separate paragraphs explain stage, path convention and ownership under the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Source identities come from LoadProgram, then the shared filepath relative/absolute mapping preserves native case and handles outside/other-volume paths before slash serialization.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Transform closes its Program after copying the source text, so it retains nothing.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Transform delegates loading to the driver and adds one pass over the source files and diagnostics.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Transform loads a fresh Program per call because the virtual filesystem may have changed; sharing a loaded Program is the snapshot verbs' purpose.
 func Transform(cwd, tsconfigPath string) ([]byte, int, error) {
   prog, diags, err := driver.LoadProgram(cwd, tsconfigPath, driver.LoadProgramOptions{
     ForceNoEmit: true,
@@ -149,7 +143,7 @@ func Transform(cwd, tsconfigPath string) ([]byte, int, error) {
   if prog != nil {
     defer prog.Close()
     for _, file := range prog.SourceFiles() {
-      typescript[apiOutputKey(cwd, file.FileName())] = file.Text()
+      typescript[apiOutputKey(cwd, string(file.FileName()))] = file.Text()
     }
     diags = append(diags, prog.Diagnostics()...)
   }

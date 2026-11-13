@@ -37,16 +37,14 @@ The package publishes matching ESM and CommonJS runtime and type branches. The d
 
 ## Keep the two versions together
 
-`@ttsc/unplugin` declares `ttsc` as a peer dependency pinned to the minor it was published with. Both packages are released from one repository at one version, and the adapter compiles against `ttsc`'s exported compiler surface, so a `0.x` minor is allowed to change what it imports. The pin is what turns that into an install error instead of a runtime failure in your bundler.
-
-The consequence shows up with automated updates. A bot that opens one pull request per package will raise `ttsc` alone, and the install fails:
+`@ttsc/unplugin` requires the matching `ttsc` minor version. Upgrade both together; updating only one can fail peer-dependency resolution:
 
 ```text
 npm error While resolving: @ttsc/unplugin@0.25.0
 npm error Found: ttsc@0.26.0
 ```
 
-Nothing is wrong with either package. The two updates are one update, so tell the bot that.
+Group the packages in automated dependency updates:
 
 ```yaml
 # .github/dependabot.yml
@@ -63,9 +61,9 @@ updates:
           - "@ttsc/*"
 ```
 
-That raises one pull request carrying every `ttsc` package your project installs, which is the only shape that can pass. Renovate expresses the same thing as a `packageRules` entry with `groupName` over the same patterns.
+This creates one pull request for the installed `ttsc` packages. In Renovate, use a `packageRules` entry with `groupName` over the same patterns.
 
-Pin both to the same version in `package.json` for the same reason. If you upgrade by hand, upgrade them in one commit.
+Pin both to the same version in `package.json`.
 
 ## Vite
 
@@ -79,20 +77,28 @@ export default defineConfig({
 });
 ```
 
+A query that makes the host generate a module around a source file is left to the host: `?raw`, `?url`, `?inline`, `?no-inline`, `?worker`, and `?sharedworker`, on Vite and on webpack or Rspack rules that use the same names. `import text from "./schema.ts?raw"` therefore yields the file's own text, and importing the file both ways compiles the project once. Every other query still denotes the file's program and is transformed, including cache busting such as `?t=`, the `?worker_file` entry, and route chunks such as React Router's `?route-chunk=`.
+
+ttsc compiles each file from disk. A module that reaches it with different text, because a plugin ordered before ttsc rewrote it or the file changed after the host read it, is served from the file's compile. ttsc reports that once per file and never recompiles the project for it, so a rewrite made before ttsc runs is visible rather than silently lost. Order such plugins after ttsc, which runs with `enforce: "pre"`.
+
+Vite's dependency scanner reads transformed imports, including those introduced by plugins in linked workspace sources, and resolves them from their importing file. This lets the initial scan discover dependencies that would otherwise appear when the transformed module is served and trigger another optimization. Your `optimizeDeps` entries, exclusions and optimizer plugins remain in effect; `noDiscovery: true` keeps automatic scanning disabled.
+
 ## Rollup
 
 ```ts
 // rollup.config.ts
 import ttsc from "@ttsc/unplugin/rollup";
 
+import esbuild from "rollup-plugin-esbuild";
+
 export default {
   input: "src/index.ts",
   output: { dir: "dist", format: "esm" },
-  plugins: [ttsc()],
+  plugins: [ttsc(), esbuild()],
 };
 ```
 
-One caveat worth knowing before it costs you an afternoon: the adapter emits transformed **TypeScript**, not JavaScript, and plain Rollup does not compile TypeScript itself. Add an esbuild- or swc-based plugin after `ttsc()`, or the build fails parsing type syntax. Bundlers that strip types on their own (Vite, Rolldown, esbuild, Bun) need no such step.
+The adapter emits transformed **TypeScript**, not JavaScript, and plain Rollup does not compile TypeScript itself, so an esbuild- or swc-based plugin follows `ttsc()`; without it the build fails parsing type syntax. Vite, Rolldown, esbuild, Farm, and Bun strip types themselves. webpack 5.109 or later can do so under the [conditions below](#webpack); Rspack needs a TypeScript loader.
 
 ## Rolldown
 
@@ -135,12 +141,27 @@ export default {
 };
 ```
 
+Starting with webpack 5.109, `experiments.typescript` defaults to `"auto"`: built-in TypeScript support turns on when Node supplies `module.stripTypeScriptTypes` and no rule handles `.ts`, `.mts`, or `.cts`. When built-in support is unavailable or disabled, add a TypeScript loader after the adapter, for example `module: { rules: [{ test: /\.[cm]?tsx?$/, loader: "esbuild-loader" }] }`.
+
 ## Rspack
 
 ```js
 import ttsc from "@ttsc/unplugin/rspack";
 
-export default { entry: "./src/index.ts", plugins: [ttsc()] };
+export default {
+  entry: "./src/index.ts",
+  module: {
+    rules: [
+      {
+        test: /\.[cm]?tsx?$/,
+        loader: "builtin:swc-loader",
+        options: { jsc: { parser: { syntax: "typescript" } } },
+        type: "javascript/auto",
+      },
+    ],
+  },
+  plugins: [ttsc()],
+};
 ```
 
 ## Next.js
@@ -156,7 +177,7 @@ export default withTtsc({
 
 `withTtsc` covers both of Next.js's bundlers: it injects the webpack plugin and wires the Turbopack loader rules, with the options you pass reaching both. Your own `webpack` hook and `turbopack` block are preserved, and a rule you already wired for this loader by hand is left alone rather than registered twice.
 
-That last part is decided by exact spelling. `withTtsc` declines to add its own rule when your glob is one it has measured against a real Turbopack build as naming every file with the extension: `*.ext`, `**/*.ext`, and `{**/,}*.ext` for each of `ts`, `tsx`, `mts`, and `cts`; plus the `*.{...}`, `{*.ext,...}`, `**/*.{...}`, `**/{*.ext,...}`, and `**/**/*.{...}` forms for every canonical combination of two or more extensions chosen from that same list. Any other spelling keeps your rule and gains ours beside it, so a module may be transformed twice rather than not at all. The list is exact on purpose: treating an unmeasured glob as project-wide once left every module in a project with no `ttsc` rule at all, and a build that transforms twice is recoverable in a way a build that never transforms is not.
+Duplicate detection recognizes these exact glob forms: `*.ext`, `**/*.ext`, and `{**/,}*.ext` for `ts`, `tsx`, `mts`, and `cts`, plus `*.{...}`, `{*.ext,...}`, `**/*.{...}`, `**/{*.ext,...}`, and `**/**/*.{...}` for canonical combinations of two or more of those extensions. Other spellings retain your rule and receive the wrapper's rule too, which can transform a module twice. Prefer letting `withTtsc` register the loader.
 
 ## Turbopack
 
@@ -178,6 +199,12 @@ export default {
 
 Options go through the rule's `options` object: `{ loader: "@ttsc/unplugin/turbopack", options: { project: "tsconfig.build.json" } }`. The loader applies the same filter the unplugin adapters apply, so a rule glob wider than the four above still passes declaration files, `node_modules` paths, non-TypeScript sources, and virtual ids through untouched.
 
+`withTtsc` shares project compilations across Turbopack workers, including compiler diagnostics. Workers validate project and external inputs before reusing a result. Recent compilations are stored in the user's system temporary directory and can be reused after a restart; package upgrades invalidate them. With hand-written `turbopack.rules` and no `withTtsc`, each worker compiles separately.
+
+During development, compiler failures appear as issues and remain until an input changes. Adapter failures or inputs that keep changing fail the loader request and are retried on the next request. A crashed worker does not block other workers.
+
+The loader registers one project record under Turbopack's `.ttsc` directory. The adapter updates it when compiler inputs change, including workspace packages outside Turbopack's root. You do not need to widen `turbopack.root` for these transform dependencies.
+
 ## Farm
 
 ```ts
@@ -186,6 +213,20 @@ import { defineConfig } from "@farmfe/core";
 
 export default defineConfig({ plugins: [ttsc()] });
 ```
+
+## Content mappers
+
+Content mappers require TypeScript 7.1 and an explicit permission on the adapter:
+
+```ts
+import ttsc from "@ttsc/unplugin/bun";
+
+const plugin = ttsc({ project: "tsconfig.json", runExternalCode: true });
+```
+
+Declare `contentMappers` in that project's tsconfig. The same `runExternalCode` option works with every adapter, Bun runtime `register`, Next.js's `withTtsc` second argument, Turbopack loader options and Metro. It forwards the compiler's `--runExternalCode` permission only to that invocation. An explicit `false` overrides inherited permission; omission retains inherited compiler arguments. TypeScript 7.0 rejects the flag. Without permission, TypeScript 7.1 reports `TS18068`.
+
+Mapper package manifests and dynamic configuration's `watchedFiles` invalidate cached transformations. A mapper that reads additional schema or configuration files must declare them through TypeScript's `dynamicConfig` and `watchedFiles` contract. Runtime loading of `.sql`, `.vue` or another mapped format still belongs to the bundler's loader for that format; a type-only import needs no runtime loader.
 
 ## Bun
 
@@ -220,7 +261,15 @@ Importing `@ttsc/unplugin/bun-register` registers exactly one runtime loader, sh
 
 ## Options
 
-Most projects need none: the adapter finds `tsconfig.json` on its own, and your plugins and `lint.config.ts` apply unchanged. Three options layer on top:
+Most projects need none: the adapter finds `tsconfig.json` on its own, and your plugins and `lint.config.ts` apply unchanged.
+
+The adapter starts from the nearest `tsconfig.json`. For a solution config with `"files": []` and `references`, it searches referenced projects depth-first in declaration order and uses the first that includes the file. A reference may name a config file or a directory containing `tsconfig.json`. In a Vite layout, this selects `tsconfig.app.json` for `src/App.tsx` and `tsconfig.node.json` for `vite.config.ts`.
+
+Searched configs and missing candidates remain watched. Changes to `references` or `include`, or creation of a missing config, can change project selection. A file admitted by no project passes through untransformed with a notice naming the searched projects.
+
+These options layer on top:
+
+- `projectRoot` sets a common source root when the selected config includes sibling workspace packages. Relative paths resolve from `process.cwd()`; omission uses the config directory. Config-relative compiler paths, plugin package resolution, factory contexts and plugin config discovery keep their original config directory. For example, a config under `backend` that includes `../library/src` can use `ttsc({ project: "backend/tsconfig.dev.json", projectRoot: "." })` from the workspace root.
 
 - `project` points at a non-default config file, resolved from `process.cwd()`:
 
@@ -232,6 +281,7 @@ ttsc({
 
 - `compilerOptions` overrides compiler settings for this build without another config file.
 - `plugins` replaces the project's plugin list entirely; `plugins: false` disables them.
+- `precompile` lists source entry paths whose projects should start compiling together on the first transformable load. Paths resolve from `process.cwd()` and follow the same `project`, `projectRoot`, compiler options, plugins and Vite aliases as ordinary loads. Several entries in one project share its compilation. A listed entry opts its project into compilation even if the host never imports it; omitted entries remain demand-driven. A preparation failure is reported when that module is loaded, so it does not fail an unrelated project's load.
 
 ## Path aliases
 
@@ -241,117 +291,91 @@ Not every Vite alias form can be forwarded, because a tsconfig `paths` map canno
 
 | `resolve.alias` form | Forwarded |
 | --- | --- |
-| `{ "@": "/src" }`, or the array form with a string `find` | yes |
+| a string `find` whose replacement is an absolute path | yes |
+| a replacement with a leading `/` outside the root, such as `{ "@": "/src" }` | yes, as the Vite root's `src` first and the absolute `/src` second, the order Vite tries them |
+| a relative replacement, such as `"./src"` | no: Vite resolves it against each importing module, which `paths` cannot express |
+| a bare replacement, such as `"lodash-es"` | no: Vite resolves it as a package, which `paths` cannot express |
 | array form with a `RegExp` `find`, such as `{ find: /^~/ }` | no: `paths` has no regular-expression form |
 | a string `find` containing `*` | no: a `paths` key already reads `*` as its own wildcard |
 
-In both unforwarded cases the compile resolves that specifier through the tsconfig's `paths` alone, so declare it there if `ttsc` must resolve through it. A prefix `RegExp` such as `/^~/` is written as a `"~/*"` entry. Reducing simple prefix patterns automatically is deliberately not attempted: distinguishing `/^~/` from `/^@app/`, which also matches `@apple`, needs enough of a regular-expression engine that a wrong reduction becomes likely, and a mistranslated alias resolves imports to the wrong file without saying so.
+Declare unforwarded aliases in the tsconfig's `paths`. For example, represent the prefix `/^~/` with a `"~/*"` entry. Regular expressions are not converted automatically because their matching rules can differ from `paths` wildcards.
 
-A `find` containing `*` is also reported once on stderr, naming the alias and the reason. A `RegExp` `find` is not, and the asymmetry is deliberate: Vite merges two `RegExp` aliases of its own into every resolved config, for `@vite/env` and `@vite/client`, so a report on that form would fire in every build of every project and name aliases you never wrote.
+A string `find` containing `*`, or a relative or bare replacement, produces one stderr notice naming the alias and reason. Regular-expression aliases produce no notice, since Vite adds its own for `@vite/env` and `@vite/client`.
+
+## Source maps
+
+Every transformed module comes with a source map back to the text you wrote, so stack traces, breakpoints, the error overlay, and a production build's maps point at your own lines. That holds even though the compiler reprints the file and a plugin such as `@ttsc/banner` or typia inserts code above it. Vite, Rollup, Rolldown, Farm, and Turbopack receive the map with the transformed code. webpack and Rspack receive it from a loader the adapter places right after its own, because unplugin's loader hands a transform's map on only to a module that already carried one, and so to none that ttsc transforms first. esbuild and Bun take it as an inline `sourceMappingURL` in the loaded contents. Under Metro, whose transformer returns an AST rather than a map, `@ttsc/metro` moves the upstream transformer's AST locations back to your lines, and Metro builds its map from them.
+
+A module gets a map only when the compile read exactly the text the bundler delivered. When an earlier plugin already changed that text, the module is still transformed, but without a map, because a map of the file on disk would point at the wrong lines. An executable plugin host that writes no maps keeps working the same way.
 
 ## Cache and watch invalidation
 
-The compiler replays each resident module, type-reference, and triple-slash path resolution through the pinned TypeScript-Go resolver and reports the exact filesystem inputs it consulted. `@ttsc/unplugin` registers importer-owned inputs from a transformed file's reference closure, plus universal automatic type-root discovery inputs, so changing a package manifest, failed probe, selected lexical link, unresolved search, or `@types` directory membership invalidates the transform even when neither an importer nor its tsconfig changed.
+One project compilation supplies every module's transformed output. The adapters reuse it while its inputs remain current: source files, resolved declarations, configs, resolution candidates, plugin dependencies, and plugin Go sources and build environment.
 
-Entries in `compilerOptions.types`, including package subpaths such as `tsdown/client` and relative type paths, retain the original project's resolution context when the adapter creates a temporary config. Mixed-case project paths and linked packages are supported on Windows and case-insensitive macOS filesystems. A change to an automatic type's resolution affects the whole project, so its failure can report every source file.
+`precompile` changes when known projects start, while keeping their input proofs and normal module delivery. Restarting a dev server after an edit does not prove that inputs stayed unchanged during compilation, and a source watcher cannot observe an external Go toolchain or a plugin's dependencies. Preparation therefore keeps the same post-compile proofs as demand-driven compilation and publishes host watch records only when a module is actually delivered.
 
-A dev server configured without a watcher (`server.watch: null`, which is how `vitest --run` and other one-shot consumers configure Vite) receives no watch registration at all. Nothing can deliver a change event there, while Vite's import analysis resolves every registered path like a real import of the transformed module, once per module. No private watcher or predicate poll runs in that watcherless session.
+Watching Vite servers track compiler inputs separately from Vite's runtime import graph. Type-only dependencies can trigger HMR without becoming runtime imports. Vite decides whether to preserve component state or reload the page; with `hmr: false`, the adapter requests a full reload.
 
-Under a watching Vite dev server, compiler dependencies are kept in a separate filesystem watch graph. They never enter Vite's runtime import graph: a type-only server module, declaration file, or plugin configuration asset is not a runtime import. One recursive project observer plus at most 16 external scopes serves every dependent module, including files in `node_modules`, which Vite's own watcher ignores. Compiler graph size therefore does not determine the native descriptor or timer count. File events invalidate the dependent modules in the client, SSR, and custom environment graphs and request a full reload. Missing paths and directory predicates use the recursive observer for their nearest available scope. Inputs outside the scope ceiling or behind a failed observer, hardlink alias, or linked topology share one fallback scheduler that checks at most 64 entries and 64 links per tick. A successful retransform replaces that module's subscriptions. Failed transforms retain known dependency paths so restoring a deleted input can announce recovery. Server shutdown awaits watcher cleanup. Production builds and other bundlers use their native dependency-registration contracts.
+Other bundlers watch a project record below the host root's `.ttsc/records` directory. It changes when compiler inputs change, including files created or removed while the bundler is stopped. The adapter validates these records before a persistent cache is reused. Each record also identifies the effective compiler arguments and their working directory. Changing inherited arguments or `runExternalCode` invalidates cached modules even when every project file stays unchanged. Records created by older versions require a fresh delivery.
 
-The esbuild adapter uses native file and directory subscriptions, so adding or removing an automatic type package also rebuilds its consumers. Failed loads retain recovery dependencies, including when the first build fails. Unchanged rebuilds reuse the shared compiler generation, and the final build or context disposal releases it.
+For webpack and Rspack, include the bundler configuration in cache build dependencies so changing adapter options invalidates cached modules: `cache.buildDependencies.config` for webpack and `cache.buildDependencies` for Rspack.
 
-Farm opens a delivery pass for each incremental update as well as its initial compilation. Repairing a compiler input retries a failed generation in the same update session; unchanged successful updates reuse their generation.
-
-The linked native transform host retains the loaded program's dependency graph when compilation fails. Missing external declarations remain observable even when the first build fails and its diagnostic names only the importer. Compiler errors and plugin failures return structured diagnostics and recovery inputs without publishing partially transformed source.
-
-Bundlers invalidate a module only when its registered inputs change, and they erase type-only imports from their module graphs, but a type-driven transform's output depends on the files where the consulted types are declared. `@ttsc/unplugin` closes that gap by registering, per transformed file, the compiler-reported reference closure (type-only edges included), the files contributing to the global scope, and the tsconfig `extends` chain as watch files. The JavaScript host also registers the descriptor's loaded CommonJS graph, every package manifest inspected by auto-discovery, and plugin-declared `hostInputs`; first-party plugins use that declaration for implicit config discovery and evaluated config dependencies. Arbitrary project assets do not become universal inputs. Webpack filesystem caches (what Next.js persists under `.next/cache`), watch-mode rebuilds, and Turbopack `fileDependencies` all consume that registration, so editing a type another file's generated code depends on rebuilds the consumer without deleting any cache.
-
-This works for every adapter automatically when the transform host emits the envelope's `graph` section. The built-in host and linked plugins always do; executable sidecar plugins adopt through the [driver SDK](/docs/development/reference/driver-api#reference-graph). Plugins whose output additionally depends on non-file inputs declare those files [`volatile`](/docs/development/concepts/protocol#transform), which excludes them from caching entirely.
-
-A plugin that knows exactly which declarations it consulted can go the other way and declare its reported list [complete](/docs/development/concepts/protocol#dependency-completeness) for a file. The adapter then registers only that list plus the tsconfig chain for it, so a change to a file the transform never read stops re-running the loader. Nothing is required of you: the field is per file and opt-in per plugin, and a plugin that never declares it keeps the sound default above.
-
-One whole-project compile already contains every module's output, so the adapter compiles once and serves every module from that result. What follows is how it decides that the result still describes the project on disk.
+If the adapter cannot write a project record below the host root, it uses a temporary directory where the bundler permits it. Turbopack and Farm across drives cannot use that fallback. The adapter then reports `TTSC_PROJECT_RECORD_UNWRITABLE`, disables caching where supported, and refuses watching transforms that could become stale. Make the host's `.ttsc` directory writable to restore watching.
 
 ### What the snapshot covers
 
-The transform cache snapshots every regular file reached by the non-following project walk, plus the graph-reported inputs outside that walk: `node_modules` declarations, monorepo sibling sources, files reached through symlinks or Windows junctions, and out-of-root `extends` ancestry.
+The snapshot covers selected project files and external compiler inputs, including linked workspace sources, declarations under `node_modules`, the tsconfig `extends` chain, plugin dependencies, and failed resolution candidates. Creating a previously missing input can invalidate a transform. Built-in and linked transform hosts report this graph automatically; executable sidecars use the [driver SDK](/docs/development/reference/driver-api#reference-graph).
 
-The project is snapshotted before and after compilation, and every graph member carries the compiler filesystem's content and physical-identity proof. Only a complete generation that still matches both may authorize narrow reuse. That also rejects an A to B to A change whose restored post-compile bytes would otherwise hide the transient state the compiler actually read.
+Paths are compared by filesystem identity, including symlinks, Windows junctions, and case-insensitive filesystems. The adapter checks input stability around compilation before retaining output.
 
 ### Delivery passes
 
-A host with a build boundary opens a delivery pass there and keeps the generation it already holds. A native compile opens one temporary recursive observer around the capture so a transient change cannot hide between equal before and after snapshots, then closes it before delivering any module. No build-scoped observer remains in the cache. The pass's first delivery proves the whole generation against the current filesystem once, and after that each module's first delivery in the pass is settled by the supplied source alone. An incomplete generation never takes that shortcut.
+Build hosts open a pass for each build or rebuild. The first module validates the retained project compilation; subsequent modules use that result. Metro workers, Turbopack loaders, and watching Vite servers validate each delivery. Unchanged rebuilds reuse compiled output.
 
-A pass boundary states that each module is requested at most once inside it, which is a fact about deliveries rather than about whether the compiled program is still correct. `buildStart` repeats per rebuild under webpack, Rspack, Rollup, Rolldown, esbuild and `vite build --watch`, so discarding the generation there recompiled the whole project on every edit. The boundary now opens a pass and the recorded snapshot decides whether the generation survives it.
+A Vite server with `server.watch: null` registers no watchers and uses the build-pass lifecycle. Each Bun build shares one compilation across its modules and releases it at build end; Bun runtime imports share one immutable process-scoped loading session.
 
-Long-lived hosts without a boundary (Metro workers, the Turbopack loader, and a watching Vite development server, whose initial `buildStart` spans later HMR edits) apply the file-specific validation on every generation hit. Those deliveries validate that file's reference closure, globals, configs, importer resolution inputs, universal automatic-type inputs, plugin dependencies, and exact host inputs, so sibling modules share one proof of the closure and the universal inputs rather than repeating it per module. On an unchanged proven generation, a Vite delivery reads no source bytes and performs one metadata check for its own module. Deriving a sibling's watch inputs performs no filesystem probe, regardless of graph edge count.
+Some runtimes cannot observe all plugin input reads. A coherent local result can still supply the first delivery of each recorded module in an explicitly nonwatching pass when the host supports cache withdrawal. It cannot become a persistent project record or a shared worker publication. Repeated deliveries and later passes compile again; watching or unknown lifecycles reject incomplete observation. Turbopack production loaders declare their nonwatching lifecycle and use `cacheable(false)` when that callback is available.
 
 ### Program membership
 
-Explicit `include` and `files` specifications limit root-file discovery, including inherited paths and `${configDir}` substitutions. A `files`-only project has no implicit include. The adapter skips unrelated directory trees and their rename events, so test scratch directories outside the configured search cannot invalidate a transform generation. Matching new files and directories still invalidate it, including when the project is opened through a junction or a Windows short path. Case-insensitive matching includes Unicode case variants. Imports and plugin dependencies outside that search remain tracked as external inputs; `include` is not an import restriction.
+Root-file discovery follows the effective TypeScript-Go configuration, including inherited `files`, `include`, `exclude`, `allowJs`, `resolveJsonModule`, and `${configDir}` substitutions. Imports and plugin dependencies remain tracked outside that root-file selection.
 
-Membership comes from the resolved configuration rather than from a list of directory names. `allowJs` and `resolveJsonModule` decide which extensions can enter the program, and only `.git`, `node_modules` and `.ttsc` remain excluded by name, because no tsconfig can name them. When no top-level `exclude` is declared, TypeScript uses `outDir` and `declarationDir` as implicit directory exclusions; an explicit `exclude`, including an empty array, replaces those defaults with its own entries. Adapter `compilerOptions` replace or clear inherited `outDir` and `declarationDir` values before membership is derived, and `${configDir}` paths follow TypeScript's config-relative substitution.
-
-A directory outside root-file discovery or selected by the effective exclusion rule is not walked at all. Within the configured search the digest records the entries the walk considers rather than each directory's own stamp, and a directory takes part only while its subtree can hold a program input. An output directory no effective exclusion names therefore costs nothing, however its filenames churn, as long as the project cannot admit what it holds; under `allowJs` an emitted `.js` beside the sources is a program input like any other, so such a project should name that directory in `exclude`. Emptying and recreating a directory the effective exclusions name, which `emptyOutDir` and `output.clean` do on every build, is not a change either, on a host with a build boundary or without one. A directory that takes no part is still walked and still watched, which is what makes the first source appearing in it a change the generation sees. The walk hashes only files that could enter the program, and validation compares only the generation's declared inputs, so a tree of emitted files costs no reads.
-
-Generation-scoped directory notifications detect new, removed, or renamed project inputs without repeating a directory-stat pass per module. Windows isolates those notifications so deletion of a watched temporary tree cannot crash the host. A reported membership event is evidence of a change and replaces the generation.
+An explicit `exclude`, including an empty array, replaces TypeScript's implicit output-directory exclusions. Exclude emitted JavaScript directories when `allowJs` would otherwise admit them into the project.
 
 ### Proving an input unchanged
 
-Every input a generation has already proven carries the nanosecond metadata signature captured around the read that proved it, so a later delivery that finds the signature unchanged reuses that proof instead of re-reading the bytes. Any signature change falls back to the full content comparison.
+Unchanged input metadata can avoid repeated content reads. A changed signature falls back to content comparison. Watchers detect changes to input membership, missing paths, and links; unavailable or failed watchers fall back to snapshot validation.
 
-A signature is recorded only for a read nothing raced, only for an input whose recorded state came from bytes that were read, since the metadata of a path nothing could read holds still while the bytes behind it appear, and only once the observed filesystem's own clock has provably left the tick that minted the input's modification stamp.
-
-A filesystem stamps writes once per clock tick, so a same-length rewrite landing inside the recorded stamp's tick would leave the signature unchanged. Until some stamp the same filesystem minted later separates that tick, the content comparison keeps running, and the signature is re-earned the moment it can be.
-
-The reference instant comes from the filesystem itself, never from the process clock or a timestamp merely observed on another input. The adapter retains a temporary probe outside the project and rewrites it immediately before every validation that may reuse a content signature, the way git separates racily-clean index entries with the index file's own timestamp. The old reference is discarded before the write, so a future timestamp assigned by an extraction or copy cannot forge progress and a filesystem clock rollback cannot leave historical proof behind.
-
-The probe counts only for inputs on its reporting device. Both sides of that comparison have the same granularity and clock origin, so a constant offset from the process clock changes nothing. If the probe cannot be refreshed or its volume differs from an input's volume, the adapter keeps the content comparison. It never guesses at clock offsets and never writes a probe into the user's project.
+For the implementation and platform-specific observer rules, see [Unplugin Invalidation](/docs/development/reference/unplugin-invalidation).
 
 ### Inputs that are not there
 
-An absent resolution candidate is the one input a metadata signature cannot stand for, since a path that is not there has no metadata to compare. The generation registers those names with a watcher of their own, along with the directory components of the spelling that lead to them, down to the project's own root, and a delivery reads the notification instead of re-probing each candidate.
+Missing files and resolution candidates remain tracked, so adding a declaration or package can trigger recovery without editing its importer. On filesystems that do not reliably report native notifications, enable polling through your host:
 
-That makes the notification the sole positive evidence for this one input class, which is why the registration reaches past the candidate itself: a watcher opened on a path that traverses a link follows it, so retargeting the link would otherwise move the answer without disturbing what is watched, and a package link inside `node_modules` is exactly that. It stops at the project root, and a candidate whose spelling leaves the project subtree before reaching it is not claimed at all, because above that line the components are the machine's own layout rather than the project's.
+- Vite: `server.watch.usePolling` or `CHOKIDAR_USEPOLLING`.
+- webpack and Next.js: `WATCHPACK_POLLING`.
 
-It listens for renames alone, since every event that can change a candidate's answer is one: the file appearing, a component being created, replaced or retargeted. The directories carrying them have their attributes moved by anything written below.
-
-A candidate whose watch could not be opened, whose watcher has since failed, or that belongs to a set spanning more directories than the generation will watch, is probed exactly as before. Reaching the external-scope ceiling falls back to recorded snapshots instead of opening a broad system-directory observer. A host that rejects a watcher also falls back to snapshot validation, which preserves correctness without letting descriptor count grow with the compiler graph.
-
-What none of that covers is a filesystem that accepts a watch and then reports nothing, which some network mounts do. That is the same assumption the project-membership proof beside it already rests on, though a wider one here, since the project walk skips `node_modules` and a candidate under it was never covered by that proof. A project on such a mount should be treated as one where notifications do not work rather than one where they merely have not fired.
-
-The barrier that lets a synchronous edit reach those watchers before a delivery reads their verdict is the watcher's own acknowledgement rather than a fixed wait. An in-process watcher answers on the next turn of the loop its callbacks are queued on, and the Windows broker answers by an ordered round-trip, so a delivery waits for the crossing instead of guessing at it.
+On macOS, native watching requires the optional `fsevents` dependency. Without it, `TTSC_FSEVENTS_MISSING` is reported once, cached generations use snapshot validation, and Vite compiler-input watches poll.
 
 ### Narrowing by declared completeness
 
-`dependenciesComplete` narrows file inputs by the same contract as watch registration, and a project reaches it without a type-driven plugin: ttsc's own transform lanes print syntactically, so the host declares every file complete when no plugin can contribute to it, and the first-party `@ttsc/banner` and `@ttsc/strip` declare their own contribution the same way. Such a delivery validates the universal inputs and the file itself instead of its reference closure.
+A plugin may declare its dependency list [complete](/docs/development/concepts/protocol#dependency-completeness) for a file. Vite and Metro then track that list instead of the full reference closure. The built-in syntactic transform and first-party `@ttsc/banner` and `@ttsc/strip` use this contract where applicable.
 
-A narrowed file's diagnostics narrow with it: an edit to a file the declaration dropped no longer re-runs the compile, so a type error introduced there surfaces at the next compile the build runs for another reason rather than at the edit. Run the compiler's own check beside the bundler when you want it at the edit.
-
-Envelopes without a graph, and generations whose watchers could not be opened or have since failed, retain complete-snapshot validation. Losing a notification is the absence of a membership proof rather than evidence of a change, so such a generation keeps validating against its own recorded state: the directory snapshot, the input hashes, and the universal descriptor inputs whose every rejection is evidence of a change rather than an inability to prove one.
+This also narrows when type diagnostics refresh. An error introduced outside the declared list appears at the next compilation triggered for another reason. Run `ttsc --noEmit --watch` alongside the bundler for continuous project-wide checking.
 
 ### Failures and lifecycles
 
-For a caching host, an unstable or incomplete attempt is never published: all waiters share one bounded stabilization retry inside the same generation. A stable retry alone resolves and is reused, while a second unprovable attempt rejects the shared generation with bounded path-and-proof witnesses. That terminal verdict stays cached while its project, external, and host-input fingerprints remain unchanged, so later request waves pay only the confirmation probes and the compile count is independent of module count.
+Plugins whose output depends on non-file inputs declare those files [`volatile`](/docs/development/concepts/protocol#transform) to exclude them from caching.
 
-On POSIX, adapter process launches use the direct native spawn path. If Darwin rejects that launch with `EBADF` because unrelated open descriptors pushed a capture descriptor above the platform's spawn limit, ttsc retries through a shell-free broker that inherits only standard descriptors. The retry preserves arguments, working directory, environment, timeout, exit status, signal, and complete output. The normal path pays no broker cost.
+Native compiler stages share captured source text and lookup answers for each compilation. If a source changes after the compiler reads it, a coherent local result can complete its current delivery pass. Its recorded compiler inputs still notify the host, so a watching build can request the edited generation. That result is not published to shared or persistent caches, and later passes validate or compile the new inputs.
 
-An input change or an explicit cache lifecycle reset permits a new generation. Opening a pass is not such a reset. A compile whose envelope failed outright is answered the same way: the pass retains that verdict for its remaining modules instead of repeating the identical failing compile once per module, and the next pass attempts it again. A host with no pass boundary keeps evicting a failed compile on every delivery, so a transient toolchain failure never becomes permanent for a long-lived worker. One-shot calls without a cache retain their single compile.
+A producer without captured-input authority, or one with missing, contradictory or unobserved dependencies, still uses bounded stabilization retries. Incomplete output is not retained for reuse.
 
-Closing a webpack or Rspack compiler disposes its generation at the compiler's shutdown hook. esbuild disposes after a one-shot build or after the last overlapping build context closes; an older delayed disposal cannot clear a replacement build that has already reached `onStart`. These terminal boundaries release generation-owned filesystem trackers without discarding the generation on each rebuild.
+Failed transforms retain known recovery inputs so repairing an internal or external dependency can trigger another compile, including after a failed first build. Unchanged failures are shared within a build pass. Closing the host releases its observers and sessions.
 
-A compile that succeeded but has no output for one requested file is a fact about that file rather than about the generation, so the generation is left alone and the module is returned to the host untransformed, reported once per file per pass with the file and the tsconfig it is missing from. That is one answer shared by every adapter and by `@ttsc/metro`.
+If a successful compile has no output for a requested module, the adapter passes it through and reports the file and selected tsconfig once per pass. Add the file to that project if it needs plugin transforms.
 
-A failed compile registers the project-walk inputs, retained external inputs including transformed sources, graph members, plugin dependencies, and host inputs, and files named by its structured or standard TypeScript text diagnostics, so a watching session whose first compile failed still has a channel through which an internal or external fix arrives. These failure registrations make no claim about current input state; the adapter probes or watches each path for the repair. Every message the adapter surfaces is plain text, since what it returns becomes a bundler's error in an overlay or a CI annotation rather than something a terminal renders.
-
-A generation's non-error diagnostics belong to the compile rather than to a delivery, so they are surfaced once per pass rather than once per delivered module, and a later pass over a retained generation surfaces them again.
-
-Bun runtime setup defines one process-scoped loading session. A dev server started without a watcher takes the pass lifecycle instead of persistent validation: `server.watch: null` leaves the session no channel through which a file change could ever reach it, so what per-delivery validation buys there is incoherence rather than freshness, since modules delivered before an edit and after it would come from two different compilations of one program. Each module's first delivery in such a session is therefore settled against the generation the session started from, exactly as under a build, while a module the session already delivered keeps revalidating on its next request.
-
-This section is about the **transform** cache (which files a rebuild depends on), not the **source-plugin binary** cache (the compiled Go plugin ttsc builds on first use). They are independent: persisting a bundler cache such as Next.js `.next/cache` does not carry the plugin binary across builds, and a fresh CI or container build recompiles the plugin (the `ttsc: building source plugin ...` line) even with a warm bundler cache. To keep that first-build compile from recurring on every build, persist the binary cache as described in [Build cache](/docs/ttsc/cache). In a monorepo, run `ttsc prepare` from the same project directory the bundler builds, so the warmed binary matches the cache key the bundler build looks up.
-
-Transform source outputs outside the project walk are kept in that external snapshot too. A non-declaration output is reusable only when the graph carries its compiler-time content and physical-identity proof; a post-compile disk read cannot prove which bytes produced the output. Its source hash then lets sibling module requests validate the same generation without adding arbitrary output keys to the project-file universe.
+Transform caches and source-plugin binary caches are independent. Persisting `.next/cache` does not preserve compiled Go plugins. See [Build cache](/docs/ttsc/cache), and run `ttsc prepare` from the same project directory the bundler builds.
 
 ## CLI or bundler?
 

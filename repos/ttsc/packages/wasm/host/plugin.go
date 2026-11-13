@@ -2,7 +2,6 @@ package host
 
 import (
   "bytes"
-  "context"
   "io"
   "sync"
 )
@@ -13,88 +12,54 @@ import (
 // adapters and registers them with Config. Every run receives invocation-owned
 // streams; a plugin must write only to those streams, never os.Stdout or
 // os.Stderr.
+//
+// @evidence contracts/common.md#principled-implementation A small Go interface supplies named command dispatch through invocation-owned streams.
+// @evidence contracts/common.md#clear-and-simple-design Name identifies registration and Run owns command execution; invocation context and streams are supplied through one request rather than host-owned plugin-specific APIs.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The supported plugin boundary avoids mutating process-global stdout/stderr to capture a call.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain browser linkage and stream ownership under the documentation skill.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Plugin is an interface that acquires no handle, task or retained state.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Plugin is an interface that chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Plugin is an interface that coordinates no shared or repeated computation.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Plugin declares command dispatch for in-process adapters and carries no native path, process or platform decision.
 type Plugin interface {
   // Name is the npm-style plugin id passed to api.plugin.
+  //
+  // @evidence contracts/common.md#principled-implementation Explicit registration identity decouples dispatch from the concrete plugin type.
+  // @evidence contracts/common.md#clear-and-simple-design One name query supplies the registry key without exposing command state or concrete plugin implementation.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts The implementation declares its id rather than being recognized by a consumer-specific type check.
+  // @evidence contracts/common.md#meaningful-documentation The Go member comment names the API consumer under the documentation skill's context rule.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Plugin.Name is an abstract method; the invocation and the concrete plugin own its resources.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms Plugin.Name is an abstract method; the concrete plugin chooses its algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work Plugin.Name is an abstract method; the concrete plugin owns any reuse of its work.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation Plugin.Name is an interface method with no native path, process or platform decision.
   Name() string
 
   // Run dispatches one subcommand and returns the native CLI exit code.
+  //
+  // @evidence contracts/common.md#principled-implementation A request object supplies context, arguments and owned writers through one Go extension boundary.
+  // @evidence contracts/common.md#clear-and-simple-design One invocation groups command inputs and owned effects; command-specific parsing stays with the implementation rather than the generic host.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts Commands run through the registered implementation rather than changing a foreign global launcher.
+  // @evidence contracts/common.md#meaningful-documentation The member comment states dispatch and exit-code roles under the documentation skill's clarity rule.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Plugin.Run is an abstract method; the invocation and the concrete plugin own its resources.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms Plugin.Run is an abstract method; the concrete plugin chooses its algorithm.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work Plugin.Run is an abstract method; the concrete plugin owns any reuse of its work.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation Plugin.Run is an interface method with no native path, process or platform decision.
   Run(invocation *PluginInvocation) int
-}
-
-// PluginInvocation owns all mutable state for one plugin call.
-//
-// A plugin that needs asynchronous work must register it with Go before Run
-// returns. InvokePlugin waits for every registered function. Registration
-// after Run returns is rejected, and writes made after the invocation closes
-// return io.ErrClosedPipe. This gives child goroutines an explicit ownership
-// boundary without sharing process-global output state.
-type PluginInvocation struct {
-  Context context.Context
-  Command string
-  Args    []string
-  Stdout  io.Writer
-  Stderr  io.Writer
-
-  childrenMu     sync.Mutex
-  children       sync.WaitGroup
-  acceptingChild bool
-}
-
-// Go registers and starts invocation-owned asynchronous work. It returns false
-// when Run has already returned and the ownership boundary is closed.
-func (invocation *PluginInvocation) Go(task func(context.Context)) bool {
-  if task == nil {
-    return false
-  }
-  invocation.childrenMu.Lock()
-  if !invocation.acceptingChild {
-    invocation.childrenMu.Unlock()
-    return false
-  }
-  invocation.children.Add(1)
-  invocation.childrenMu.Unlock()
-  go func() {
-    defer invocation.children.Done()
-    task(invocation.Context)
-  }()
-  return true
-}
-
-// InvokePlugin executes one plugin call and captures its request-owned output.
-// Independent invocations may run concurrently without sharing buffers.
-func InvokePlugin(ctx context.Context, plugin Plugin, command string, args []string) APIResult {
-  if ctx == nil {
-    ctx = context.Background()
-  }
-  stdout := &invocationBuffer{}
-  stderr := &invocationBuffer{}
-  invocation := &PluginInvocation{
-    Context:        ctx,
-    Command:        command,
-    Args:           append([]string(nil), args...),
-    Stdout:         stdout,
-    Stderr:         stderr,
-    acceptingChild: true,
-  }
-  code := plugin.Run(invocation)
-
-  invocation.childrenMu.Lock()
-  invocation.acceptingChild = false
-  invocation.childrenMu.Unlock()
-  invocation.children.Wait()
-
-  stdout.close()
-  stderr.close()
-  return APIResult{
-    Code:   code,
-    Stdout: stdout.String(),
-    Stderr: stderr.String(),
-  }
 }
 
 // Config carries the optional registrations the host applies before binding
 // globalThis[name]. Pass Config{} for a vanilla ttsc + tsgo wasm.
+//
+// @evidence contracts/common.md#principled-implementation An explicit slice of the small Plugin interface keeps linkage and registration with the consumer host.
+// @evidence contracts/common.md#clear-and-simple-design One registration list is sufficient for the host factory; command options and mutable invocation state remain owned by the selected plugin call.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The host receives linked registrations rather than guessing installed packages from hardcoded ids.
+// @evidence contracts/common.md#meaningful-documentation The native comment explains empty configuration and registration timing under the documentation skill's context rule.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Config is a data type and acquires no handle, task or retained state.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Config is a data type and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Config is a data type and coordinates no shared or repeated computation.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Config is a data type and performs no native filesystem, path or process operation.
 type Config struct {
+  // Plugins are registered once; empty names and nil entries are skipped.
   Plugins []Plugin
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "ttsc",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "description": "General-purpose TypeScript-Go compiler, runtime, plugin host, and LSP host.",
   "main": "lib/index.js",
   "types": "src/index.ts",
@@ -14,9 +14,21 @@
       "types": "./src/index.ts",
       "default": "./lib/index.js"
     },
+    "./binary": {
+      "types": "./src/internal/nativeBinary.ts",
+      "default": "./lib/internal/nativeBinary.js"
+    },
     "./path-identity": {
       "types": "./src/internal/projectInputPathIdentity.ts",
       "default": "./lib/internal/projectInputPathIdentity.js"
+    },
+    "./tsconfig": {
+      "types": "./src/internal/tsconfig.ts",
+      "default": "./lib/internal/tsconfig.js"
+    },
+    "./plugin-source": {
+      "types": "./src/internal/pluginSource.ts",
+      "default": "./lib/internal/pluginSource.js"
     },
     "./register": {
       "types": "./src/register.ts",
@@ -32,9 +44,21 @@
         "types": "./lib/index.d.ts",
         "default": "./lib/index.js"
       },
+      "./binary": {
+        "types": "./lib/internal/nativeBinary.d.ts",
+        "default": "./lib/internal/nativeBinary.js"
+      },
       "./path-identity": {
         "types": "./lib/internal/projectInputPathIdentity.d.ts",
         "default": "./lib/internal/projectInputPathIdentity.js"
+      },
+      "./tsconfig": {
+        "types": "./lib/internal/tsconfig.d.ts",
+        "default": "./lib/internal/tsconfig.js"
+      },
+      "./plugin-source": {
+        "types": "./lib/internal/pluginSource.d.ts",
+        "default": "./lib/internal/pluginSource.js"
       },
       "./register": {
         "types": "./lib/register.d.ts",
@@ -45,10 +69,11 @@
   },
   "scripts": {
     "build": "rimraf lib && tsc && node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\"",
-    "go:build": "node ../../scripts/go.cjs build-native",
-    "go:vet": "node ../../scripts/go.cjs vet ./...",
-    "shim:audit": "node ../../scripts/shim-audit.cjs",
-    "shim:audit:test": "node ../../scripts/shim-audit-test.cjs"
+    "go:vet": "go vet ./...",
+    "shim:audit": "node scripts/shim-audit.cjs",
+    "shim:facade": "go -C tools/gen_facade run .",
+    "shim:audit:test": "go -C tools/shim_audit test -mod=readonly -count=1 ./...",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -67,7 +92,11 @@
     "acorn": "8.16.0",
     "cjs-module-lexer": "2.2.1"
   },
+  "peerDependencies": {
+    "typescript": ">=6.0.0 || >=7.1.0-0"
+  },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@types/node": "catalog:utils",
     "rimraf": "catalog:utils",
     "typescript": "catalog:typescript"
@@ -79,7 +108,8 @@
     "@ttsc/darwin-x64": "workspace:*",
     "@ttsc/darwin-arm64": "workspace:*",
     "@ttsc/win32-x64": "workspace:*",
-    "@ttsc/win32-arm64": "workspace:*"
+    "@ttsc/win32-arm64": "workspace:*",
+    "fsevents": "^2.3.3"
   },
   "sideEffects": ["./lib/register.js", "./src/register.ts"],
   "files": [
@@ -93,6 +123,7 @@
     "lib",
     "shim",
     "src",
+    "targets",
     "tools",
     "utility"
   ],

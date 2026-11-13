@@ -1,23 +1,30 @@
 import { type SpawnSyncReturns } from "node:child_process";
-import fs from "node:fs";
 
 import { spawnSyncResilient } from "../../internal/spawnSyncResilient";
 import { captureProcessOutput } from "./captureProcessOutput";
+import { ensureExecutable } from "./ensureExecutable";
 
 /**
  * Spawn a native binary (or a Node.js script when the path has a JS/TS
- * extension) and return its result with `stdout` and `stderr` as text.
+ * extension) and return its result with decoded or raw-buffer output streams.
  *
- * The child's streams are written to files rather than piped, and the files are
- * read once it exits. `spawnSync` buffers a _piped_ stream in this process's
- * memory and refuses to hold more than `maxBuffer` bytes, so a piped capture
- * has to name a ceiling — and any ceiling is a number nobody chose for this
- * machine, deciding that a large but legitimate compile said too much. A file
- * has no such limit: the bytes never pass through this heap on their way out of
- * the child, and how many there may be is the filesystem's business.
+ * Streams go to private files and are materialized after exit, avoiding the
+ * piped maxBuffer ceiling while retaining filesystem and runtime allocation
+ * limits. Filesystem read failures propagate after capture cleanup.
  *
  * When `options.encoding` is omitted it defaults to `"utf8"`. Pass `"buffer"`
  * when the caller needs raw bytes.
+ *
+ * @evidence contracts/common.md#principled-implementation Executable plus argv are passed directly to Node spawning; script candidates instead pass their path to process.execPath, and file-backed output reconstructs the normal stdout/stderr/output result fields.
+ * @evidence contracts/common.md#clear-and-simple-design This operation owns synchronous execution and capture lifetime; permission preparation, low-descriptor recovery and byte decoding remain explicit delegated boundaries.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts No shell parses argv or foreign process API is replaced. Descriptor recovery is selected by the real resource-exhaustion contract in spawnSyncResilient rather than a fixture outcome.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain executable routing, capture limits, read errors and encoding ownership following the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Node receives native executable and argument arrays, Windows hiding is an explicit process option, and POSIX permission preparation remains in ensureExecutable rather than shell-specific commands.
+ * @evidence contracts/performance.md#efficient-algorithms Argument-reference copying costs O(A); native argv/environment launch work, permission checks, capture acquisition and any broker retry/report costs are delegated but remain part of this call. Reads/decoding allocate complete output proportional to B child bytes. Each stream is read once after synchronous completion; neither output size nor child duration is capped here.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work A child execution may have effects and depend on arbitrary filesystem state; this wrapper has no equivalence or invalidation contract permitting reuse of a previous process result.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources An acquired capture reaches finally on spawn, recovery and read failures; acquisition has its own rollback attempts. Disposal attempts closure/removal with suppressed failures, so native release is not certified. Materialized output transfers to the caller, and capture/returned bytes grow without a configured ceiling; no timeout or descendant-join policy is supplied here.
  */
 export function spawnNative(
   binary: string,
@@ -56,34 +63,4 @@ export function spawnNative(
   } finally {
     capture.dispose();
   }
-}
-
-/**
- * Ensure the binary has the executable bit set on POSIX systems. Silently skips
- * on Windows and swallows `chmod` errors to let the original spawn error
- * surface instead of masking it with a permission error.
- */
-export function ensureExecutable(binary: string): void {
-  if (process.platform === "win32") {
-    return;
-  }
-  try {
-    fs.accessSync(binary, fs.constants.X_OK);
-    return;
-  } catch {
-    try {
-      const mode = fs.statSync(binary).mode & 0o777;
-      fs.chmodSync(binary, mode | 0o755);
-    } catch {
-      /* keep the original spawn error path */
-    }
-  }
-}
-
-/** Coerce a `spawnSync` output value to a plain string, defaulting to `""`. */
-export function outputText(value: string | Buffer | null | undefined): string {
-  if (value == null) {
-    return "";
-  }
-  return typeof value === "string" ? value : value.toString("utf8");
 }

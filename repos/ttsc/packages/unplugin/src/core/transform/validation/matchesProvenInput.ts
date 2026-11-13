@@ -1,0 +1,131 @@
+import path from "node:path";
+
+import type { TtscCachedProjectTransform } from "../cache/TtscCachedProjectTransform";
+import { resultFilesystem } from "../cache/resultFilesystem";
+import type { TtscEnvelopeDerivation } from "../envelope/TtscEnvelopeDerivation";
+import { inputMetadataEvidence } from "../inputs/inputMetadataEvidence";
+import { inputMetadataSignature } from "../inputs/inputMetadataSignature";
+import { MISSING_INPUT_STATE } from "./MISSING_INPUT_STATE";
+import { inputSignatureSlot } from "./inputSignatureSlot";
+import { matchesRecordedInput } from "./matchesRecordedInput";
+import { notifiesAbsence } from "./notifiesAbsence";
+import { trackerProvesInputUnchanged } from "./trackerProvesInputUnchanged";
+
+/**
+ * Validate one derived input against the generation, skipping the content read
+ * while the recorded metadata signature still holds and its freshly minted
+ * clock reference remains safe.
+ *
+ * Sibling deliveries of one generation share most of their derived inputs, and
+ * `graph.globals` is shared by every one of them, so re-reading and re-hashing
+ * the whole derived set per delivery multiplies one generation's proven bytes
+ * by the module count. The derived set is proven the same way the universal
+ * descriptor inputs are (`matchesUniversalHostInputs`), under the same rules: a
+ * currently separable unchanged signature stands in for the content comparison,
+ * and any signature or clock-ordering change falls back to the full comparison.
+ * A signature is recorded only around a read nothing raced, only for a recorded
+ * state that came from reading the input rather than from failing to, and only
+ * while the observed filesystem's own clock has provably left the stamp's tick
+ * (`stampSeparable`), so a same-length rewrite inside that tick cannot hide
+ * behind an unchanged signature.
+ *
+ * The signature carries the physical identity of both the lexical path and its
+ * link target ({@link inputMetadataSignature}), so retargeting a symlink or
+ * junction moves it and the skipped realpath comparison cannot be evaded.
+ *
+ * @evidence contracts/common.md#principled-implementation Healthy exact watcher coverage or stable separable metadata can stand for recorded predicates/content; otherwise replay must succeed before a signature is re-earned.
+ * @evidence contracts/common.md#clear-and-simple-design One input-proof boundary chooses notification, predicate and scalar-signature authority while matchesRecordedInput owns the fallback comparison.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Missing content cannot earn a readable-content signature, and failed or unproven watcher silence supplies no proof.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain sibling reuse, same-tick rewrite prevention and physical link-target qualification before tags.
+ * @evidence contracts/portability.md#os-neutral-implementation Lexical spellings qualify metadata and watcher coverage while physical content keys come from the generation's actual filesystem identity context.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Signatures remain in the generation's recorded input population and invalid witnesses are deleted; no per-delivery history or native handle is retained.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Notification queries scan unproven scopes and recorded events with native
+ *   path/identity comparisons. Slot selection also pays path text and uncached
+ *   identity observations; metadata proof reads nonfollowing and, for links,
+ *   following stats and formats bigint fields. Failed shortcuts replay the
+ *   required codec/predicates, costing selected bytes/listings and realpath
+ *   checks, followed by metadata recapture after successful replay.
+ * @evidence contracts/performance.md#reuse-equivalent-work Successful comparison refreshes only this generation's exact spelling signature, permitting sibling consumers to reuse it while metadata and clock ordering hold.
+ */
+export function matchesProvenInput(
+  /** Generation supplying recorded predicates/content and live proof owners. */
+  cached: TtscCachedProjectTransform,
+  /** Shared immutable-envelope identity derivation for this generation. */
+  state: TtscEnvelopeDerivation,
+  /** Exact input spelling whose recorded state is being validated. */
+  input: string,
+): boolean {
+  if (
+    trackerProvesInputUnchanged(cached.projectMutationTracker, input) ||
+    trackerProvesInputUnchanged(cached.hostInputMutationTracker, input)
+  ) {
+    return true;
+  }
+  const observation = cached.externalInputObservations?.[path.resolve(input)];
+  if (observation !== undefined) {
+    if (
+      observation.fileExists === false &&
+      Object.keys(observation).length === 1 &&
+      notifiesAbsence(cached, input)
+    ) {
+      return true;
+    }
+    const filesystem = resultFilesystem(cached.result);
+    const spelling = path.resolve(input);
+    const before = inputMetadataEvidence(input, filesystem);
+    if (
+      before !== undefined &&
+      before.separable &&
+      cached.externalInputSignatures?.[spelling] === before.signature
+    ) {
+      return true;
+    }
+    if (!matchesRecordedInput(cached, input)) return false;
+    const after = inputMetadataSignature(input, filesystem);
+    const signatures = (cached.externalInputSignatures ??= {});
+    if (before?.separable === true && before.signature === after) {
+      signatures[spelling] = after;
+    } else {
+      delete signatures[spelling];
+    }
+    return true;
+  }
+  const slot = inputSignatureSlot(cached, state, input);
+  if (slot === undefined) {
+    return matchesRecordedInput(cached, input);
+  }
+  if (slot.recorded === MISSING_INPUT_STATE && notifiesAbsence(cached, input)) {
+    // The generation's watcher holds this exact name, and the caller already
+    // established that neither tracker failed and neither reported a change.
+    // Candidate selection established an unavailable-file state, not always
+    // physical absence: fileExists:false can also describe a directory. The
+    // qualified exact candidate observer preserves that recorded state.
+    return true;
+  }
+  const filesystem = resultFilesystem(cached.result);
+  const before = inputMetadataEvidence(input, filesystem);
+  if (
+    before !== undefined &&
+    before.separable &&
+    slot.signatures[slot.key] === before.signature
+  ) {
+    return true;
+  }
+  if (!matchesRecordedInput(cached, input)) {
+    return false;
+  }
+  // A recorded `missing` state can compare equal after a read fails: its
+  // metadata can hold still while the bytes behind it appear. Only content a
+  // read produced may be stood for.
+  const after =
+    slot.recorded === MISSING_INPUT_STATE
+      ? undefined
+      : inputMetadataSignature(input, filesystem);
+  if (after !== undefined && before?.signature === after && before.separable) {
+    slot.signatures[slot.key] = after;
+  } else {
+    delete slot.signatures[slot.key];
+  }
+  return true;
+}

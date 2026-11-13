@@ -52,6 +52,19 @@ func newProxyHarness(t *testing.T, source driver.PluginSource) *proxyHarness {
 
 func newProxyHarnessWithOptions(t *testing.T, source driver.PluginSource, opts driver.ProxyOptions) *proxyHarness {
   t.Helper()
+  return newProxyHarnessWithEditorOut(t, source, opts, func(w io.Writer) io.Writer { return w })
+}
+
+// newProxyHarnessWithEditorOut constructs the harness with the proxy's editor
+// output passed through wrap, so a test can stand between the proxy and the
+// editor side of the pipe, such as holding a write the proxy is making.
+func newProxyHarnessWithEditorOut(
+  t *testing.T,
+  source driver.PluginSource,
+  opts driver.ProxyOptions,
+  wrap func(io.Writer) io.Writer,
+) *proxyHarness {
+  t.Helper()
   edInR, edInW := io.Pipe()
   edOutR, edOutW := io.Pipe()
   upInR, upInW := io.Pipe()
@@ -59,7 +72,7 @@ func newProxyHarnessWithOptions(t *testing.T, source driver.PluginSource, opts d
 
   ctx, cancel := context.WithCancel(context.Background())
   opts.EditorIn = edInR
-  opts.EditorOut = edOutW
+  opts.EditorOut = wrap(edOutW)
   opts.UpstreamIn = upInW
   opts.UpstreamOut = upOutR
   opts.Source = source
@@ -244,8 +257,14 @@ func writeLSPDiskFile(t *testing.T, text string) string {
   if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
     t.Fatal(err)
   }
-  uriPath := filepath.ToSlash(file)
-  if filepath.VolumeName(file) != "" && uriPath[0] != '/' {
+  return fileURIForPath(file)
+}
+
+// fileURIForPath encodes an OS path as a file:// uri the same way editors do,
+// prefixing a leading slash for volume-qualified Windows paths.
+func fileURIForPath(path string) string {
+  uriPath := filepath.ToSlash(path)
+  if filepath.VolumeName(path) != "" && uriPath[0] != '/' {
     uriPath = "/" + uriPath
   }
   return (&url.URL{Scheme: "file", Path: uriPath}).String()

@@ -35,21 +35,6 @@ func (s *recordingResidentSource) recorded() [][]string {
   return append([][]string(nil), s.calls...)
 }
 
-// recordingSymbolProvider counts Invalidate calls; the two answer methods are
-// never reached by these notification tests. Invalidate is only ever called from
-// the notification path, which is the test's own goroutine.
-type recordingSymbolProvider struct{ invalidations int }
-
-func (p *recordingSymbolProvider) DocumentSymbols(string) ([]LSPDocumentSymbol, error) {
-  return nil, nil
-}
-
-func (p *recordingSymbolProvider) References(string, LSPPosition, bool) ([]LSPLocation, error) {
-  return nil, nil
-}
-
-func (p *recordingSymbolProvider) Invalidate() { p.invalidations++ }
-
 // testFileURI renders an absolute path as the file URI an editor would send.
 func testFileURI(path string) string {
   return "file:///" + strings.TrimPrefix(filepath.ToSlash(path), "/")
@@ -67,23 +52,25 @@ func didOpenEnvelope(uri string, text string) Envelope {
   return Envelope{JSONRPC: "2.0", Method: methodDidOpen, Params: params}
 }
 
-// TestLSPCleanDidOpenRefreshesCompilerState verifies that opening a document
-// whose buffer already matches disk refreshes both compiler-backed caches, while
-// opening a dirty buffer still refreshes neither.
+// TestLSPCleanDidOpenRefreshesCompilerState checks invalidation dispatch on
+// directly supplied clean and dirty didOpen envelopes. The resident source is a
+// recording instance, not an actual compiler-backed cache.
 //
-// The resident lint Program and the graph symbol provider stay warm for the
-// whole editor session, and before this only didSave refreshed them. A document
-// closed across a branch switch, a `git pull`, or an edit from a second editor
-// therefore came back with diagnostics computed over the pre-change AST and
-// published against the new buffer. Equality with today's disk is not evidence
-// that the warm Program was built from today's disk, so the clean branch is
-// exactly the branch that must invalidate — and the dirty branch, which reports
-// nothing at all until the buffer reaches disk, must keep not invalidating.
+// Matching disk should dispatch one resident invalidation naming the clean URI;
+// a dirty second file should not add another.
+// Returning handled=false establishes eligibility for forwarding, not an actual
+// upstream frame. Program freshness and published diagnostic content are not
+// observed, and the scheduled NullPluginSource diagnostics are not joined here.
 //
-//  1. Write a file, open it with the same text, and assert both caches were
-//     refreshed and the resident refresh named that document's URI.
+//  1. Write a file, open it with the same text, and assert the resident Program
+//     was refreshed for exactly that document's URI.
 //  2. Open a second file with text that differs from disk.
-//  3. Assert neither cache was refreshed and the notification still forwards.
+//  3. Assert the recorder gained no call and the notification is not handled.
+//
+// @evidence contracts/testing.md#behavioral-verification A clean direct didOpen produces one resident invalidation naming its URI; a dirty second open adds none. Both return handled=false. Actual compiler cache refresh, diagnostic content, upstream forwarding, and asynchronous completion are not asserted.
+// @evidence contracts/testing.md#independent-expectations The refresh count and the named URI are literal expectations for the two opened files.
+// @evidence contracts/testing.md#distinguishing-cases Two owned files have the same disk bytes, but the clean buffer matches and the dirty buffer differs. They also have different URIs and run sequentially on one proxy; this is not a one-variable-only or reversed-order experiment.
+// @evidence contracts/testing.md#execution-ownership Owns two temporary native files and a NewProxy with supported instance-owned recording PluginSource and io.Discard streams. Direct handleEditorEnvelope reads buffer/disk state and schedules NullPluginSource diagnostics on the clean branch; no join or diagnostics-result oracle is claimed. No actual compiler Program, sidecar, product CLI, installed consumer, or upstream server runs.
 func TestLSPCleanDidOpenRefreshesCompilerState(t *testing.T) {
   dir := t.TempDir()
   clean := filepath.Join(dir, "clean.ts")
@@ -93,12 +80,10 @@ func TestLSPCleanDidOpenRefreshesCompilerState(t *testing.T) {
   cleanURI := testFileURI(clean)
 
   plugins := &recordingResidentSource{}
-  symbols := &recordingSymbolProvider{}
   proxy := NewProxy(ProxyOptions{
-    EditorOut:      io.Discard,
-    UpstreamIn:     io.Discard,
-    Source:         plugins,
-    SymbolProvider: symbols,
+    EditorOut:  io.Discard,
+    UpstreamIn: io.Discard,
+    Source:     plugins,
   })
 
   handled, err := proxy.handleEditorEnvelope(
@@ -110,9 +95,6 @@ func TestLSPCleanDidOpenRefreshesCompilerState(t *testing.T) {
   }
   if handled {
     t.Fatal("clean didOpen was answered locally instead of forwarded to tsgo")
-  }
-  if symbols.invalidations != 1 {
-    t.Errorf("clean didOpen symbol invalidations = %d, want 1", symbols.invalidations)
   }
   if len(plugins.recorded()) != 1 {
     t.Fatalf("clean didOpen resident invalidations = %d, want 1", len(plugins.recorded()))
@@ -134,9 +116,6 @@ func TestLSPCleanDidOpenRefreshesCompilerState(t *testing.T) {
   }
   if handled {
     t.Fatal("dirty didOpen was answered locally instead of forwarded to tsgo")
-  }
-  if symbols.invalidations != 1 {
-    t.Errorf("dirty didOpen refreshed the symbol provider: invalidations = %d, want 1", symbols.invalidations)
   }
   if len(plugins.recorded()) != 1 {
     t.Errorf("dirty didOpen refreshed the resident daemon: calls = %v, want only the clean open's", plugins.recorded())

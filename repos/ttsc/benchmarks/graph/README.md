@@ -49,7 +49,7 @@ Each executable imports exactly one owning symbol and calls its `main()`:
 | `src/executable/generate-manifest.ts` | `manifest` | `TtscBenchmarkGraphManifest` |
 | `src/executable/reduce.ts` | `reduce` | `TtscBenchmarkGraphReduceCommand` |
 
-Validate the package with `pnpm --dir benchmarks/graph run check` for strict types, and `node --experimental-transform-types scripts/ci/benchmark-source-contract.mts` from the repository root for the source contract.
+Validate the package with `pnpm --dir benchmarks/graph run check` for strict types.
 
 ## Fixtures
 
@@ -84,7 +84,7 @@ The prompt is tool-neutral. No graph-specific guidance is appended to the user p
 
 ## Trace audit
 
-For Codex runs, `src/executable/index.ts` automatically writes `codex-trace-audit.json` beside the suite report. The audit reads every `.stream.jsonl` trace and records every exposed agent message, every shell/MCP call in timeline order, per-turn usage, and `reasoning_output_tokens`. Codex does not expose hidden reasoning text in the stream, so the audit records reasoning token counts and marks reasoning text as unavailable instead of fabricating it. It separates strict exact avoidable output such as duplicate MCP calls and legacy inline evidence text, measured graph-replaceable shell read/search output surface, candidate MCP overfetch surfaces such as broad graph traces, later-turn prompt replay exposure where the stream exposes multiple `turn.completed` events, graph-arm traces that made zero MCP calls or fell back to shell, and an input ledger comparing usage input tokens with visible trace material. The ledger's unexplained input is an accounting gap, not proof of one hidden category. By default it compares matching cells against the N=5 baseline medians in `website/public/benchmark/graph.json` and reports observed, replacement lower-bound, candidate-ceiling, and observed replay-adjusted savings; pass `--baseline=none` to disable that comparison.
+For Codex runs, `src/executable/index.ts` automatically writes `codex-trace-audit.json` beside the suite report. The audit reads every `.stream.jsonl` trace and records every exposed agent message, every shell/MCP call in timeline order, per-turn usage, and `reasoning_output_tokens`. Codex does not expose hidden reasoning text in the stream, so the audit records reasoning token counts and marks reasoning text as unavailable instead of fabricating it. It separates strict exact avoidable output such as duplicate MCP calls and legacy inline evidence text, measured graph-replaceable shell read/search output surface, candidate MCP overfetch surfaces such as broad graph traces, later-turn prompt replay exposure where the stream exposes multiple `turn.completed` events, graph-arm traces that made zero MCP calls or fell back to shell, and an input ledger comparing usage input tokens with visible trace material. The ledger's unexplained input is an accounting gap, not proof of one hidden category. By default it compares matching cells against the baseline medians in `website/public/benchmark/graph.json` and reports observed, replacement lower-bound, candidate-ceiling, and observed replay-adjusted savings; pass `--baseline=none` to disable that comparison.
 
 Use `pnpm --dir benchmarks/graph run audit -- --compare=<before>,<after>` on audit JSON files, suite reports, or suite directories while optimizing N=1 smoke runs. The comparison uses the same exposed messages, tool calls, reasoning-token ledger, and theoretical savings fields as the full audit, so optimization decisions stay tied to trace evidence rather than anecdotal output.
 
@@ -127,7 +127,7 @@ Every environment variable this package consults, `PATH` aside, is here.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `TTSC_GRAPH_BENCH_WORK` | `../graph-benchmark-work` | Fixture clone directory, checkouts only. It defaults outside the repo so a measured agent does not inherit ttsc's `CLAUDE.md` / `AGENTS.md` from a parent directory. Reports never follow it; they stay under `.work/`. |
+| `TTSC_GRAPH_BENCH_WORK` | `../graph-benchmark-work` | Fixture clone directory, checkouts only. It defaults outside the repo so a measured agent does not inherit ttsc's `AGENTS.md` from a parent directory. Reports never follow it; they stay under `.work/`. |
 | `TTSC_GRAPH_BENCH_OUT` | `.work/graph/<timestamp>` | Report directory for `src/executable/index.ts`, below `--out` and above the default. |
 | `TTSC_GRAPH_BENCH_TIMEOUT_MS` | `1800000` | Timeout on every child either runner spawns: an agent cell, a comparator index build, a fixture clone or install, the trace-audit pass, and the `ttscgraph` build. Not a per-sample budget: one agent child runs `arms × --runs` samples. |
 | `TTSC_BENCH_CONCURRENCY` | unlimited | Cap on concurrently launched agent samples. A low cap keeps the host quiet enough for per-run timings and token counts to settle. |

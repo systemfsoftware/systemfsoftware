@@ -9,6 +9,11 @@ import type { TtscLintRuleSetting } from "../TtscLintRuleSetting";
  * duplicate hook calls.
  *
  * @reference https://github.com/jest-community/eslint-plugin-jest
+ *
+ * @evidence contracts/common.md#principled-implementation Optional jest keys map to the common severity-only union, so each policy can be omitted or configured without implying an unsupported options slot.
+ * @evidence contracts/common.md#clear-and-simple-design One interface collects Jest source policies while severity spelling and tuple forms remain defined in the shared alias.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Named Jest policies use the supported setting representation and introduce no special configuration path for repository test fixtures.
+ * @evidence contracts/common.md#meaningful-documentation Family prose identifies Jest source and member comments explain assertion, lifecycle and collection concerns; separate paragraphs and members follow documentation guidance.
  */
 export interface ITtscLintJestRules {
   /**
@@ -20,7 +25,8 @@ export interface ITtscLintJestRules {
   "jest/expect-expect"?: TtscLintRuleSetting;
 
   /**
-   * Limit the number of `expect(...)` calls inside a single Jest test body.
+   * Report more than five recognized expect calls in a Jest test body using the
+   * native callback-body walker; this interface exposes no limit option.
    *
    * A test packed with assertions usually verifies several behaviors at once,
    * making failures ambiguous — splitting per scenario keeps each case
@@ -31,8 +37,9 @@ export interface ITtscLintJestRules {
   "jest/max-expects"?: TtscLintRuleSetting;
 
   /**
-   * Reject `expect(...)` calls under `if`/`try`/`catch` or other conditional
-   * branches in Jest tests.
+   * Reject recognized expect calls under if, switch, or ternary syntax in
+   * recognized Jest test callbacks. Try/catch are not native conditional
+   * kinds.
    *
    * A branch that never executes turns the assertion into a silent no-op, so
    * the test passes without verifying anything.
@@ -86,9 +93,9 @@ export interface ITtscLintJestRules {
   /**
    * Reject `export` declarations in Jest test files.
    *
-   * Tests are leaf consumers and should not expose helpers; the runner silently
-   * skips test files with any export, so a stray `export` can make a whole file
-   * disappear from the suite.
+   * Keep reusable helpers in separate modules so importing a helper does not
+   * also load the test declarations in this file. This is an organization
+   * policy, not a claim that Jest refuses modules with exports.
    *
    * @reference https://github.com/jest-community/eslint-plugin-jest/blob/main/docs/rules/no-export.md
    */
@@ -124,8 +131,9 @@ export interface ITtscLintJestRules {
   "jest/no-identical-title"?: TtscLintRuleSetting;
 
   /**
-   * Reject `expect(...)` calls outside the body of a Jest test or lifecycle
-   * hook.
+   * Report top-level expect calls and calls whose nearest function is an
+   * argument of a non-test call. Unattached helper functions are skipped;
+   * lifecycle hooks are not separately exempted by the native check.
    *
    * Top-level assertions execute at module load before any test starts, so
    * failures never attach to a named case in the runner's report.
@@ -146,11 +154,10 @@ export interface ITtscLintJestRules {
   "jest/no-test-prefixes"?: TtscLintRuleSetting;
 
   /**
-   * Reject non-Promise `return` statements from Jest test bodies.
+   * Reject explicit return statements in recognized Jest test bodies, including
+   * bare returns and returned Promises; the native check does not infer types.
    *
-   * Jest only awaits returned thenables, so a plain `return` value is dropped
-   * and following code becomes dead — usually a symptom of a missing `await` or
-   * an accidental early exit.
+   * This is a source policy rather than observation of runner completion.
    *
    * @reference https://github.com/jest-community/eslint-plugin-jest/blob/main/docs/rules/no-test-return-statement.md
    */
@@ -178,9 +185,8 @@ export interface ITtscLintJestRules {
   /**
    * Validate the shape of Jest `describe` callbacks.
    *
-   * The callback must be synchronous and take no arguments — Jest ignores
-   * returned Promises and `done`-style parameters at the describe level,
-   * silently swallowing setup errors.
+   * The native check requires a function callback without an async modifier. It
+   * does not validate parameter count or infer returned Promise types.
    *
    * @reference https://github.com/jest-community/eslint-plugin-jest/blob/main/docs/rules/valid-describe-callback.md
    */
@@ -188,7 +194,7 @@ export interface ITtscLintJestRules {
 
   /**
    * Validate `expect(...)` arity and matcher chaining: exactly one argument,
-   * terminated by a matcher call, and async matchers properly awaited.
+   * terminated by a member call. Asynchronous handling is not validated.
    *
    * Malformed expects either throw at runtime or pass without asserting
    * anything.

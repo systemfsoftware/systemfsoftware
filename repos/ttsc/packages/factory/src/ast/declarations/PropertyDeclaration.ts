@@ -10,6 +10,10 @@ import type { TypeNode } from "../types/TypeNode";
  * Built by {@link factory.createPropertyDeclaration}.
  *
  * @author Jeongho Nam - https://github.com/samchon
+ * @evidence contracts/common.md#principled-implementation Property name, optional marker/annotation/initializer and modifiers preserve class-field syntax; the broad token and name shapes do not enforce contextual validity.
+ * @evidence contracts/common.md#clear-and-simple-design A single marker field represents mutually selected ? or ! syntax, separate from annotation and initialization.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Field syntax is supplied data; this interface performs no foreign property mutation or special consumer initialization.
+ * @evidence contracts/common.md#meaningful-documentation JSDoc identifies class fields and documents optional/definite marker and absent annotation; native spacing follows the documentation skill.
  */
 export interface PropertyDeclaration {
   /** Discriminant tag; always `"PropertyDeclaration"`. */
@@ -24,7 +28,7 @@ export interface PropertyDeclaration {
   /** The optional (`?`) or definite-assignment (`!`) marker, if any. */
   questionOrExclamationToken?: Token;
 
-  /** The type. */
+  /** Field annotation, if explicitly supplied. */
   type?: TypeNode;
 
   /** The initializer, if any. */

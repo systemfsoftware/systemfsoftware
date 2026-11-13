@@ -1,22 +1,15 @@
-import { TestExecutor } from "@ttsc/testing";
+import fs from "node:fs";
 import path from "node:path";
 
-const base = path.join(process.cwd(), "src");
-const dir = process.env.TTSC_TEST_DIR;
-const dirs = process.env.TTSC_TEST_DIRS?.split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
+import { TestExecutor } from "../../utils/src/TestExecutor";
 
-TestExecutor.main({
-  // CI topology lanes pass several directories in one process so related
-  // scenarios share built packages and the content-addressed plugin cache.
-  // The singular variable remains a local/debug compatibility surface.
-  location: dirs?.length
-    ? dirs.map((value) => path.join(base, value))
-    : dir
-      ? path.join(base, dir)
-      : [path.join(base, "features"), path.join(base, "native-plugins")],
-}).catch((error) => {
+const features = path.join(process.cwd(), "src", "features");
+const locations = fs
+  .readdirSync(features, { withFileTypes: true })
+  .filter((entry) => entry.isFile() || entry.isDirectory())
+  .map((entry) => path.join(features, entry.name));
+
+TestExecutor.main({ location: locations }).catch((error: unknown) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

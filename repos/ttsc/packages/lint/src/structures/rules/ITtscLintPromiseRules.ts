@@ -10,12 +10,19 @@ import type { TtscLintRuleSetting } from "../TtscLintRuleSetting";
  * rules.
  *
  * @reference https://github.com/eslint-community/eslint-plugin-promise
+ *
+ * @evidence contracts/common.md#principled-implementation Optional promise keys express AST-based chain policies through severity-only settings, keeping their representation distinct from checker-based typescript rules.
+ * @evidence contracts/common.md#clear-and-simple-design The family groups promise-chain configuration and shares severity construction; it does not introduce asynchronous execution behavior into the type.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Explicit policy keys and a closed setting union provide the configuration boundary without monkey patching Promise or adding test-only forms.
+ * @evidence contracts/common.md#meaningful-documentation Native prose states the AST scope and the no-multiple-resolved limitation, while member comments explain failure channels; paragraph and member separation follow documentation guidance.
  */
 export interface ITtscLintPromiseRules {
   /**
-   * Require every `then()` callback to either `return` a value or `throw`.
+   * Require recognized block-bodied `then()` callbacks to satisfy the native
+   * return-or-throw statement analysis. A bare return counts; expression-bodied
+   * callbacks are skipped rather than checked for a non-undefined value.
    *
-   * A callback that does neither breaks the chain by returning `undefined`.
+   * The policy checks termination syntax, not the resolved value's type.
    *
    * @reference https://github.com/eslint-community/eslint-plugin-promise/blob/main/docs/rules/always-return.md
    */
@@ -67,8 +74,9 @@ export interface ITtscLintPromiseRules {
   "promise/no-multiple-resolved"?: TtscLintRuleSetting;
 
   /**
-   * Require every file that uses `Promise` to import or require the
-   * implementation explicitly, instead of reaching the native global.
+   * Report a `new Promise` or `Promise.*` use when no collected import or
+   * declaration is named `Promise` anywhere in the file. Native recognition is
+   * file-wide and does not resolve lexical scope or runtime implementation.
    *
    * Useful for projects that substitute Bluebird or another library and want
    * the choice grep-visible per file.
@@ -110,9 +118,9 @@ export interface ITtscLintPromiseRules {
   /**
    * Reject `return` from inside a `finally()` callback.
    *
-   * The chain's resolved value comes from the prior `then`/`catch`, so any
-   * value returned from `finally` is discarded — usually signals confusion
-   * about where the chain's value comes from.
+   * This is a source policy, not proof that evaluating the returned expression
+   * has no effect: a thrown error or returned rejection can change the
+   * outcome.
    *
    * @reference https://github.com/eslint-community/eslint-plugin-promise/blob/main/docs/rules/no-return-in-finally.md
    */
@@ -127,8 +135,8 @@ export interface ITtscLintPromiseRules {
   "promise/no-return-wrap"?: TtscLintRuleSetting;
 
   /**
-   * Enforce canonical parameter names (`resolve`, `reject`) on Promise executor
-   * functions.
+   * Enforce `resolve` / `_resolve` and `reject` / `_reject` names on the first
+   * two identifier parameters of recognized Promise executor functions.
    *
    * Consistent names make executor bodies greppable and prevent accidental
    * shadowing of the outer `resolve` symbol.
@@ -138,9 +146,9 @@ export interface ITtscLintPromiseRules {
   "promise/param-names"?: TtscLintRuleSetting;
 
   /**
-   * Flag continuation-passing callback shapes (last parameter is a function and
-   * an error-first invocation pattern is detected), suggesting an
-   * `async`/`await` rewrite.
+   * Flag callback-shaped call names, eligible last-argument functions beginning
+   * with `err`/`error`, and functions whose last parameter is named `callback`
+   * or `cb`. These are source-name heuristics, not invocation type analysis.
    *
    * Intended for codebases that have already migrated their I/O surface to
    * promises and want to keep callers consistent.
@@ -151,7 +159,8 @@ export interface ITtscLintPromiseRules {
 
   /**
    * Prefer `await` over explicit `.then()`/`.catch()`/`.finally()` chains
-   * inside `async` functions.
+   * wherever their member-call shapes occur, including outside async
+   * functions.
    *
    * Sequential awaits compose more naturally with try/catch and avoid the
    * indentation creep of deeply nested handlers.
@@ -183,7 +192,7 @@ export interface ITtscLintPromiseRules {
   "promise/spec-only"?: TtscLintRuleSetting;
 
   /**
-   * Enforce the argument counts the Promise spec defines for each method —
+   * Enforce the native argument-count policy for recognized method names:
    * `Promise.all`/`Promise.race` take exactly one argument,
    * `Promise.resolve`/`Promise.reject` take zero or one, `.then` takes one or
    * two, `.catch`/`.finally` take exactly one.

@@ -6,6 +6,10 @@ import type { Identifier } from "../names/Identifier";
  * Built by {@link factory.createJsxNamespacedName}.
  *
  * @author Jeongho Nam - https://github.com/samchon
+ * @evidence contracts/common.md#principled-implementation Two Identifier operands preserve colon-qualified JSX spelling rather than dotted property access; namespace support in a JSX consumer remains unchecked.
+ * @evidence contracts/common.md#clear-and-simple-design Namespace prefix and local name are explicit fields sharing the existing identifier shape.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Names are supplied data rather than hardcoded namespace mappings for components.
+ * @evidence contracts/common.md#meaningful-documentation JSDoc illustrates colon qualification and labels prefix/local roles; separated comments follow the documentation skill.
  */
 export interface JsxNamespacedName {
   /** Discriminant tag; always `"JsxNamespacedName"`. */
@@ -14,6 +18,6 @@ export interface JsxNamespacedName {
   /** The namespace. */
   namespace: Identifier;
 
-  /** The name. */
+  /** Local name after the colon. */
   name: Identifier;
 }

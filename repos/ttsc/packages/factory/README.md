@@ -54,6 +54,10 @@ Once a project migrates its tool-chain to the **TypeScript-Go** (tsgo, `>= 7.x`)
 
 `createXxx` methods mirror the legacy `ts.factory` names and parameter order, and return concrete, fully typed _outline_ AST nodes (each with a `kind` discriminant).
 
+`createImportTypeNode` takes `(argument, attributes, qualifier, typeArguments, isTypeOf)`. Update calls that put `isTypeOf` first; the factory now follows the TypeScript signature.
+
+Nodes must form an acyclic tree with valid token spellings and grammar combinations. Builders describe the supported outline shapes; they do not parse names or type-check generated programs. Validate generated source with the compiler when its validity matters.
+
 ```typescript
 import factory, { SyntaxKind } from "@ttsc/factory";
 
@@ -63,6 +67,8 @@ factory.createKeywordTypeNode(SyntaxKind.StringKeyword); // string
 ### `TsPrinter`
 
 A **width-aware** printer implemented directly (not a wrapper over `ts.Printer`). Like Prettier, it keeps lists on one line when they fit within `printWidth` and breaks them — with trailing commas — when they don't.
+
+Width counts JavaScript string units rather than terminal display columns. Newline and indentation are explicit source layout choices.
 
 ```typescript
 const props: TsPrinter.IProps = {
@@ -89,7 +95,11 @@ factory.createCallExpression(id("foo"), undefined, [a, b]); // foo(a, b)
 // )
 ```
 
-`printWidth` picks a layout, never a meaning. The break-time trailing comma is dropped where it would change the program (after the rest element of a destructuring assignment target, or after an argument-list hole), and it is written in both layouts where it is a value (the hole in `["a", "b", ,]`). JSX children stay on one line whenever a break would delete a whitespace-only child or trim the significant edge space off a text child, so the same tree renders the same text at every width.
+`printWidth` picks a layout, never a meaning. The break-time trailing comma is dropped where it would change the program (after the rest element of a destructuring assignment target, or after an argument-list hole), and it is written in both layouts where it preserves an authored array position (the hole in `["a", "b", ,]` or the binding `[a, ,]`). Binding holes advance the iterator even when they bind no name. JSX children stay on one line whenever a break would delete a whitespace-only child or trim the significant edge space off a text child, so the same tree renders the same text at every width.
+
+The printer does not reproduce the byte output of the legacy `ts.Printer`. Layout follows `printWidth`, a self-closing JSX tag keeps a space before `/>`, an `@overload` tag keeps its tag name, a `@param` tag with `isNameFirst` prints the name first, and a JSDoc block without a summary starts with its first tag. The grammar the output expresses is the same, and where the legacy text would parse differently the printer adds the parentheses or block that keep the tree.
+
+String literal nodes carry cooked values. In quoted JSX attributes, the printer uses entities to preserve quotes, ampersands, control characters and line endings; backslashes remain literal. A value containing an unpaired UTF-16 surrogate prints as a JSX expression with JavaScript string escapes, because native JSX entity decoding cannot preserve that code unit. Explicit JSX expressions use the same JavaScript escapes. These forms preserve the supplied value when the generated source is encoded as UTF-8.
 
 ### Comments
 

@@ -2,7 +2,9 @@
 //
 // The real compiler and runner commands live in the JavaScript launchers so
 // they can resolve the consuming project's `typescript` and
-// plugin descriptors. This binary only supplies version/platform metadata.
+// plugin descriptors. This binary supplies version/platform metadata, and the
+// hidden `__watch` command: the native Linux and Windows directory notification
+// helper the unplugin adapter runs.
 package main
 
 import (
@@ -11,6 +13,9 @@ import (
   "os"
   "runtime"
   "strings"
+
+  "github.com/samchon/ttsc/packages/ttsc/internal/sourceprocess"
+  "github.com/samchon/ttsc/packages/ttsc/internal/watchhelper"
 )
 
 var (
@@ -48,6 +53,11 @@ func run(args []string) int {
   case "-v", "--version", "version":
     printVersion(stdout)
     return 0
+  case "__watch":
+    // Hidden: it speaks a JSON protocol over stdio, not a CLI.
+    return watchhelper.Run(os.Stdin, stdout, stderr)
+  case "__source-process":
+    return sourceprocess.Run(args[1:], os.Stdin, stdout, stderr)
   case "build", "check":
     fmt.Fprintf(
       stderr,

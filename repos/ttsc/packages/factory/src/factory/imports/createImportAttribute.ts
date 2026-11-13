@@ -23,6 +23,20 @@ import { make } from "../internal/make";
  * @param name The attribute name.
  * @param value The attribute value.
  * @returns The created {@link ImportAttribute}.
+ * @evidence contracts/common.md#principled-implementation
+ *   ImportAttribute preserves its identifier/string key and expression value
+ *   as distinct fields; the caller supplies a grammar-valid attribute value.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   A single entry does not own the introducing keyword or braces, which belong
+ *   to ImportAttributes; colon formatting remains the printer's responsibility.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Resource-type values come from the caller instead of an assumed json default.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native JSDoc identifies key/value representations and common string usage,
+ *   followed by a separate colon-entry example and acknowledgment paragraphs.
  */
 export const createImportAttribute = (
   name: ImportAttributeName,

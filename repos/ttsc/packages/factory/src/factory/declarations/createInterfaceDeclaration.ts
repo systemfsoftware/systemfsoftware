@@ -35,6 +35,20 @@ import { make } from "../internal/make";
  * @param heritageClauses The `extends` / `implements` clauses, if any.
  * @param members The members.
  * @returns The created {@link InterfaceDeclaration}.
+ * @evidence contracts/common.md#principled-implementation
+ *   InterfaceDeclaration retains its normalized name, generics, heritage and
+ *   ordered TypeElement members; callers choose interface-valid heritage clauses.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Header and member grouping belong to the declaration, while individual
+ *   signatures/properties and brace formatting keep their existing owners.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Empty members stay an empty interface rather than generated compatibility fields.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains generics, extends and empty member blocks with a concrete
+ *   interface example separated from tags under documentation guidance.
  */
 export const createInterfaceDeclaration = (
   modifiers: readonly ModifierLike[] | undefined,

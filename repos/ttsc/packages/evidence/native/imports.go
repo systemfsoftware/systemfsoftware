@@ -2,7 +2,6 @@ package evidence
 
 import (
   "encoding/json"
-  "os"
   "path"
   "strings"
 
@@ -109,7 +108,8 @@ func stringLiteralText(node *shimast.Node) string {
   return node.Text()
 }
 
-// typeScriptModuleExtensions are tried in the order TypeScript itself prefers.
+// typeScriptModuleExtensions are the suffixes an extensionless specifier may
+// take, a source file before the declaration file that would describe it.
 var typeScriptModuleExtensions = []string{
   ".ts",
   ".tsx",
@@ -120,8 +120,6 @@ var typeScriptModuleExtensions = []string{
   ".d.cts",
 }
 
-// splitPackageSpecifier separates a package name from a deep-import subpath,
-// keeping the leading segment of a scoped name attached to its scope.
 // moduleCandidates lists the files a specifier may denote, most specific first.
 //
 // The `.js` rewrite is not a convenience: under `nodenext` a TypeScript source
@@ -154,6 +152,8 @@ func moduleCandidates(base string) []string {
   return candidates
 }
 
+// splitPackageSpecifier separates a package name from a deep-import subpath,
+// keeping the leading segment of a scoped name attached to its scope.
 func splitPackageSpecifier(specifier string) (string, string) {
   segments := strings.Split(specifier, "/")
   if len(segments) == 0 || segments[0] == "" {
@@ -174,8 +174,9 @@ func splitPackageSpecifier(specifier string) (string, string) {
   return name, subpath
 }
 
-func readPackageManifest(root string, relative string) map[string]json.RawMessage {
-  content, err := os.ReadFile(path.Join(strings.ReplaceAll(root, "\\", "/"), relative))
+func readPackageManifest(root string, relative string, readers ...evidenceInputReader) map[string]json.RawMessage {
+  inputs := inputReader(readers)
+  content, err := inputs.ReadFile(path.Join(strings.ReplaceAll(root, "\\", "/"), relative))
   if err != nil {
     return nil
   }

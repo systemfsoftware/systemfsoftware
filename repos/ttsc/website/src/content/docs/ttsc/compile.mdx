@@ -27,9 +27,21 @@ npx ttsc --watch
 
 Re-compiles on save. Pass `--preserveWatchOutput` to keep your scrollback.
 
-The watcher follows TypeScript-Go's resolved program inputs instead of guessing from directory names. It reconciles the set after each build and when directory topology changes, so newly included folders, `extends` configs, project references, loaded declarations, and selected Go plugin sources join the running session. A check-stage plugin may also publish exact local files and glob populations through the project-input protocol; missing exact paths and zero-match globs remain live, while unrelated workspace documents stay quiet. Executable plugin-selection dependencies additionally declare exact reload files and immediate directory topology, causing a fresh launcher evaluation when module resolution or contributor selection changes. Compiler output and cache products are not inputs, so an emit-mode build stays quiet until a real input changes.
+The watcher follows TypeScript-Go's resolved program inputs instead of guessing from directory names. It reconciles the set after each build and when directory topology changes, so newly included folders, `extends` configs, project references, loaded declarations, and selected Go plugin sources join the running session. A Go plugin is watched as its build reads it: the whole Go module its `source` belongs to, so an edit to a sibling package or to the module's `go.mod` rebuilds the session, along with every contributor's source, while a write below the module's `node_modules`, `.git`, or `.ttsc` does not. A plugin rebuilds only when what its build reads changed, so a notification that moved nothing there, such as Windows reporting a directory whose access time a build changed, rebuilds nothing; a new directory in the module is watched as soon as it is heard. A check-stage plugin may also publish exact local files and glob populations through the project-input protocol; missing exact paths and zero-match globs remain live, while unrelated workspace documents stay quiet. Executable plugin-selection dependencies additionally declare exact reload files and immediate directory topology, causing a fresh launcher evaluation when module resolution or contributor selection changes. Compiler output and cache products are not inputs, so an emit-mode build stays quiet until a real input changes.
 
-In `ttsc check --watch`, a capable check-stage sidecar and its no-emit Program stay resident across ordinary saves and declared external-data changes. Every cycle still creates fresh rule and reporting state. A config edit, root addition or deletion, selected plugin or Go contributor change, or project-input topology change starts a fresh session; an unsupported sidecar or protocol failure uses the established one-shot check path. Transform and emit builds are unchanged.
+On Windows, input matching follows each directory's observed case policy, including when a directory is named `enabled` or `disabled` and Windows uses a non-English display language. If policy cannot be established, possible case aliases remain eligible for observation without merging their identities.
+
+Input decisions run on a separate thread so compiler listings, plugin content scans and filesystem case probes do not block the launcher's process retirement. Each build, including one that reuses unchanged project declarations, waits for its plugin and project-input baselines to be published before reading those inputs.
+
+On macOS, directory watches use the optional `fsevents` binding. Its dropped-event notices make the watcher re-read the affected inputs, and moving a watch to a shared ancestor stream does not leave an unobserved interval. If the binding cannot load, `ttsc` warns once and uses `fs.watch`.
+
+Compiler response files participate in project selection and the watch session. Visible `-p`, `--project` and `--tsconfig` operands resolve against the invocation directory. Their order beside response-file project options determines the final config; that config supplies the plugin selection, compiler membership and output policy. The visible project locator establishes the original compiler argument directory before response expansion. Relative response filenames and compiler options keep that directory even when a response selects another project. Editing a response file reloads selection and output classification. A project reset (`null` or an empty value) searches from the compiler argument directory.
+
+A named change to a tracked compiler file is decided from its bytes. A late notification for bytes already admitted to the Program stays quiet, while a same-size rewrite within the filesystem's timestamp granularity still rebuilds. When a JSON file is both a compiler source and a declared project input, the project-input decision consumes the edit once even if both watchers hear it. Replacing a config file's physical owner also reloads it when its bytes are equal, because that identity can change resolution. A directory-watch gap compares the bytes of every affected tracked file; ordinary broad reconciliation checks time and size first.
+
+In `ttsc check --watch`, a capable check-stage sidecar and its no-emit Program stay resident across ordinary saves and declared external-data changes. Every cycle still creates fresh rule and reporting state. In an emitting watch with a native transform, ttsc retains the selected project and plugins across ordinary source edits but starts a fresh compiler build for each cycle. When the native plugin uses this version of ttsc's `DefaultWriteFile`, a byte-identical regular output keeps its timestamp. Plugins with custom writers follow their own write policy. A config edit, root addition or deletion, selected plugin or Go contributor change, or project-input topology change reloads selection; an unsupported check sidecar or protocol failure uses the established one-shot check path.
+
+A Node parent with an IPC channel can send `{ type: "ttsc.watch.settle", id }` with a nonempty string `id`. The watcher replies `{ type: "ttsc.watch.settled", id, builds }` after its pending input decisions, debounce and queued or running builds finish. `builds` counts all completed or failed cycles since startup. IPC and stdout arrive independently, so the parent must read that many `[ttsc] watch build complete` or `[ttsc] watch build failed` markers before mutating inputs again. The receipt describes work known to the watcher at that boundary; later filesystem events can start another cycle. A finite no-build observation still checks whether an unrelated change stays quiet during its specified window.
 
 ## Other day-to-day commands
 
@@ -58,7 +70,7 @@ npx ttsc clean                      # drop the plugin cache
 | `ttsc format` | Ask format-capable check-stage plugins to apply format-only edits. With `@ttsc/lint`, this means format-class rules only. |
 | `ttsc cache paths --json` | Print the cache root, plugin binary cache root, Go build cache root, and cacheable roots for CI. |
 | `ttsc prepare` | Pre-build every plugin binary into the cache. |
-| `ttsc clean` | Delete the plugin binary cache and ttsc-owned Go build cache. |
+| `ttsc clean` | Delete the plugin binary cache, the descriptor, capability, identity, answer, and orphan-lowering caches, the runtime directories of ttsx runs that have ended, and the ttsc-owned Go build cache. |
 | `ttsc version` | Print the CLI version. |
 | `ttsc help` | Print help. |
 
@@ -86,13 +98,27 @@ Flag names are matched the way `tsc` matches them: case-insensitively, with one 
 
 Any flag `ttsc` does not own is forwarded as-is to `tsc`, so classic `tsc` compilerOptions work on the command line too, `ttsc --strict src/main.ts`, `ttsc --target es2020`, `ttsc --listFiles`. The usual home for `target`, `module`, `strict`, `lib`, and friends is still `tsconfig.json`; the CLI form just overrides it for one run. On a project that configures a ttsc plugin, the forwarded flag still reaches the in-process compiler, though tsc's reporting flags (`--listFiles`, `--showConfig`, …) only print on a plain, plugin-free build. A plugin build receives the flags through the environment rather than its command line, so a sidecar with a strict flag parser is never handed an option it does not know; see [Plugin protocol → Environment](/docs/development/concepts/protocol#environment).
 
+## Content mappers
+
+TypeScript 7.1 content mappers turn files the compiler cannot read, such as `.sql` or `.vue`, into TypeScript while the program is built. Declare them under `contentMappers` in `tsconfig.json`, then pass `--runExternalCode`, the flag `tsc` requires before it runs a mapper's process:
+
+```bash
+npx ttsc --runExternalCode
+```
+
+On a project that configures a ttsc plugin, the mapped TypeScript joins the program the plugins see. A plugin such as typia therefore reads the types a mapped `.sql` import exports, as it reads any other source. Each mapper process lives as long as the program that started it. A resident session, such as `ttsc check --watch`, keeps its mappers across the edits it applies to that program.
+
+Without the flag, the build fails with `TS18068`, as `tsc` does. A TypeScript 7.0 project has no content mappers, so 7.0 rejects `--runExternalCode` as an unknown option (`TS5023`).
+
+Bundler adapters accept `runExternalCode: true`; see [Unplugin](/docs/setup/unplugin). Mapper package manifests and upstream-declared dynamic `watchedFiles` are project dependencies in transform metadata, so schema and mapper configuration edits invalidate cached output without pretending those declarations are compiler-read observations.
+
 ## Build information
 
 `incremental` and `composite` make `tsc` write a `.tsbuildinfo` next to the tsconfig, or wherever `tsBuildInfoFile` points. `ttsc` writes the same file, in the same format and at the same path, on both lanes: a plain build, and a build a ttsc plugin owns.
 
-What `ttsc` does not do is read one back to skip work. A plugin's output is not a function of the source text alone, and a `.tsbuildinfo` records only what `tsc` knows about: file versions, resolved options, and signatures. It has no room for the plugin binary, its config file, or its contributors, so reusing a previous run's record could serve output produced by a plugin that has since changed. Every `ttsc` build therefore emits every file, and the build information it leaves behind is a record for other consumers — a CI cache key, a later `tsc` run that should treat the outputs as current — rather than an input to the next `ttsc` run.
+`ttsc` does not use `.tsbuildinfo` to skip compilation: the file does not record plugin binaries, configuration, or contributors. Each build emits every file; other tools may consume the resulting build information.
 
-One consequence is worth knowing if you inspect the file: on a build where the plugin assembled the JavaScript itself, the record marks the JavaScript emit of each file as still pending, because `tsc`'s own emitter never ran for it. The error is one-directional — a consumer can only decide to emit again, never to skip a file the plugin actually transformed.
+When a plugin assembles JavaScript, the build information marks that emit as pending because the compiler's emitter did not run. Another consumer may emit again.
 
 ## Exit codes
 
@@ -104,13 +130,19 @@ One consequence is worth knowing if you inspect the file: on a build where the p
 
 ## Plugin cache
 
+The cache key includes the Go compiler and toolchain inputs. If they change during a successful plugin build, `ttsc` discards the result and retries, up to three attempts. A toolchain that keeps changing fails the build. Source changes, native compiler errors, and cleanup failures are returned directly.
+
 The plugin binary cache is **project-local**. By default it lives in the workspace's `node_modules/.cache/ttsc` (the `find-cache-dir` convention). In a monorepo it resolves to the workspace root's `node_modules`, so every package builds a given plugin once and shares it; `rm -rf node_modules` (or deleting the repo) reclaims everything and ttsc keeps no machine-global cache. Plugin binaries live under `<cache-dir>/plugins` and ttsc's Go object cache under `<cache-dir>/go-build`, unless `TTSC_GO_CACHE_DIR` or a user `GOCACHE` redirects it.
+
+A launch whose binary is already cached proves its unchanged inputs from metadata recorded under `<cache-dir>/identities` and `<cache-dir>/answers` instead of reading the plugin's Go source, the Go toolchain and the JavaScript runtime again and running `go list`. [Build cache](/docs/ttsc/cache#what-is-cached) describes when a recorded digest is trusted.
 
 Override the root with `--cache-dir` or `TTSC_CACHE_DIR` (relative `--cache-dir` resolves from `--cwd`, relative `TTSC_CACHE_DIR`/`TTSC_GO_CACHE_DIR` from the project root). Point these at a directory **dedicated to ttsc**, and use `ttsc` as the root's basename when `ttsc clean` should remove its nested `go-build/` as well as `plugins/`. The basename is a deletion-safety boundary, so do not set `TTSC_CACHE_DIR` to a shared cache such as `~/.cache`; use a dedicated path such as `.ttsc-cache/ttsc`. Before deleting anything, `ttsc clean` validates every resolved target, including an external `TTSC_GO_CACHE_DIR`, and refuses a filesystem root or a lexical/physical path that equals or contains the project.
 
-The cache is safe to delete at any time (`ttsc clean`); binaries rebuild on next use. The default cache prunes plugin binaries unused for 30 days and bounds its Go object cache at 8 GiB, pruning toward 6 GiB outside active builds. Explicit cache roots and a user `GOCACHE` remain caller-owned. `ttsc clean` also reclaims the machine-global cache left by pre-0.17 releases.
+Use `ttsc clean` to remove idle caches; binaries rebuild on next use. If an owned native build has not confirmed process-tree closure, clean refuses protected inputs and the diagnostic lists their retained paths. Neither an absent Node process nor elapsed time permits deleting them. Confirm closure through the original command owner, or independently confirm external closure before manual reclamation. Other plugin keys can continue sharing the Go object cache. Older ttsc versions do not honor these protections and must not share quarantined roots. The default cache prunes plugin binaries, descriptor evaluations, capability answers, recorded content identities and load answers, and lowered orphan sources unused for 30 days, and bounds its Go object cache at 8 GiB, pruning toward 6 GiB outside protected builds. Explicit cache roots and a user `GOCACHE` remain caller-owned. `ttsc clean` also reclaims the machine-global cache left by pre-0.17 releases, and the `ttsc-orphan` directory earlier releases left in the system temporary directory.
 
 Every CI job and every container build starts from a clean filesystem, so a source plugin recompiles on each one unless the cache is carried across. [Build cache](/docs/ttsc/cache) covers that: what invalidates the cache, why a CI key has to separate architectures and not only operating systems, the `npm ci` ordering trap that silently disables the cache, and worked GitHub Actions and Docker recipes.
+
+An experimental publisher package cache can provide exact Go package actions during a cold source-plugin build. It is opt-in and requires a trusted artifact manifest; [Build cache → Publisher package artifacts](/docs/ttsc/cache#publisher-package-artifacts) lists the controls, supported tuple, fallback and cleanup behavior.
 
 ## See also
 

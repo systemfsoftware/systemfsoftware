@@ -1,0 +1,78 @@
+import type { InputEntry } from "./InputEntry";
+
+/**
+ * One native recursive observer and the input entries it covers.
+ *
+ * The project root scope is pinned for the observer's lifetime. External scopes
+ * are bounded in number and close when their last entry leaves. `startedAt`
+ * records the opening boundary; readiness remains backend-owned. `lastEventAt`
+ * retains named-event uncertainty for registrations racing a compilation.
+ *
+ * @evidence contracts/common.md#principled-implementation Scope root, start sequence, capability failure, and covered entries describe the observation authority registration can actually rely on.
+ * @evidence contracts/common.md#clear-and-simple-design One scope owns its native handle while shared entries own conditions; native root identity supports topology checking for pinned and external scopes without duplicating each input's watch.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts A failed or newly opened scope cannot certify a prior compile's unchanged inputs solely because a handle exists.
+ * @evidence contracts/common.md#meaningful-documentation Member comments explain pinned ownership, directory admission, physical root identity, and the optional directory-backend track capability.
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Native root identity, failure and optional directory-backend capabilities
+ *   remain explicit; event sequence does not certify canonical native naming.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   WatchScope only declares a shape; it has no computation at runtime.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   WatchScope only declares a shape; it has no work to reuse at runtime.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   WatchScope only declares a shape; it has no handle or retained state at
+ *   runtime.
+ */
+export interface WatchScope {
+  /**
+   * Keys of the covered paths below `root` and the directories leading to them,
+   * the only ones a directory-level backend watches, each while it is a
+   * directory (samchon/ttsc#1389). Counts represent active input contributors;
+   * the last contributor removes the key and the backend can prune its watch.
+   */
+  directories: Map<string, number>;
+
+  /** Entries this observer covers; an unpinned scope closes when it empties. */
+  entries: Set<InputEntry>;
+
+  /**
+   * Whether the observer failed to open or errored, moving its entries to the
+   * poll.
+   */
+  failed: boolean;
+
+  /** Directory observed recursively. */
+  root: string;
+
+  /**
+   * The device and file id `root` resolved to when this observer opened,
+   * including the pinned project root. Absence cannot authorize coverage.
+   * Registration, native callbacks and the bounded poll verify this location: a
+   * moved watch can keep following the old directory while its spelling names a
+   * replacement. A mismatch fails the scope and hands its entries to the poll
+   * (samchon/ttsc#1384).
+   */
+  identity?: string;
+
+  /**
+   * Whether the scope lives for the observer's lifetime, as the project root
+   * does.
+   */
+  pinned: boolean;
+
+  /** Latest event sequence; a newer event requires current input validation. */
+  lastEventAt: number;
+
+  /** Sequence advanced before attempting native opening, not readiness proof. */
+  startedAt: number;
+
+  /**
+   * The native handle, absent once failed or closed. `track` exists only on a
+   * directory-level backend.
+   */
+  watcher?: {
+    close(): void;
+    track?(file: string, subtree?: boolean): void;
+    prune?(): void;
+  };
+}

@@ -2,46 +2,69 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { TtscCompiler } from "../../TtscCompiler";
+import { ResidentCheckWatchSession } from "../../compiler/internal/build/ResidentCheckWatchSession";
+import { runBuild } from "../../compiler/internal/build/runBuild";
+import { CompilerProjectSelection } from "../../compiler/internal/project/CompilerProjectSelection";
 import { readProjectConfig } from "../../compiler/internal/project/readProjectConfig";
 import { resolveProjectConfig } from "../../compiler/internal/project/resolveProjectConfig";
-import {
-  type ResidentCheckWatchChange,
-  ResidentCheckWatchSession,
-  runBuild,
-} from "../../compiler/internal/runBuild";
 import { runSingleFileEmit } from "../../compiler/internal/runSingleFileEmit";
-import {
-  getBoolean,
-  getNumber,
-  getString,
-  parseFlags,
-} from "../../flags/parser";
-import { resolveFlagSpec } from "../../flags/schema";
+import { SidecarEnvironment } from "../../compiler/internal/sharedHost/SidecarEnvironment";
+import { getBoolean } from "../../flags/getBoolean";
+import { getString } from "../../flags/getString";
+import { parseFlags } from "../../flags/parseFlags";
+import { resolveFlagSpec } from "../../flags/resolveFlagSpec";
+import { E2ETrace } from "../../internal/E2ETrace";
+import { cacheEntryExists } from "../../internal/cacheEntryExists";
+import { createFilesystemPathIdentityContext } from "../../internal/pathIdentity/createFilesystemPathIdentityContext";
+import { isFilesystemPathIdentityWithin } from "../../internal/pathIdentity/isFilesystemPathIdentityWithin";
+import { resolvePhysicalPath } from "../../internal/pathIdentity/resolvePhysicalPath";
 import { resolveSafeCacheCleanupTargets } from "../../internal/resolveSafeCacheCleanupTargets";
-import {
-  isPathWithin,
-  legacyGlobalCacheTargets,
-  resolveCleanTargets,
-  resolveSourceBuildCachePaths,
-} from "../../plugin/internal/buildSourcePlugin";
+import type { PluginContentIdentities } from "../../plugin/internal/source/PluginContentIdentities";
+import { SourceBuildCacheLayout } from "../../plugin/internal/source/SourceBuildCacheLayout";
+import { legacyGlobalCacheTargets } from "../../plugin/internal/source/legacyGlobalCacheTargets";
+import { resolveCleanTargets } from "../../plugin/internal/source/resolveCleanTargets";
+import { resolveSourceBuildCachePaths } from "../../plugin/internal/source/resolveSourceBuildCachePaths";
 import type { ITtscProjectInputSnapshot } from "../../structures/internal/ITtscProjectInputSnapshot";
-import type { TtscBuildOptions } from "../../structures/internal/TtscBuildOptions";
 import type { TtscSingleFileEmitOptions } from "../../structures/internal/TtscSingleFileEmitOptions";
-import { assertNoSolutionBuild } from "./assertNoSolutionBuild";
+import { PendingResidentCheckWatchChanges } from "./PendingResidentCheckWatchChanges";
+import type { TtscBuildMode } from "./TtscBuildMode";
 import { getCompilerVersionText } from "./getCompilerVersionText";
+import { parseTtscBuildArgs } from "./parseTtscBuildArgs";
+import { prepareTtscBuildMode } from "./prepareTtscBuildMode";
 import { resolveCacheDir } from "./resolveCacheDir";
-import { resolveSingleFileOutput } from "./singleFileOutput";
-import { type WatchInputChange, WatchTopology } from "./watchTopology";
+import { resolveSingleFileOutput } from "./resolveSingleFileOutput";
+import { resolveRuntimeCleanTargets } from "./runtime/resolveRuntimeCleanTargets";
+import { withRuntimeDirectoryLock } from "./runtime/withRuntimeDirectoryLock";
+import { AsyncWatchTopology } from "./watch/AsyncWatchTopology";
+import { type WatchInputChange } from "./watch/WatchInputChange";
+import { WatchSettlement } from "./watch/WatchSettlement";
 
 /**
- * CLI entry point for `ttsc`. Dispatches argv to the appropriate build lane
- * (build, check, fix, format, prepare, clean, or native-delegate) and returns
- * an exit code. Errors thrown by any lane are caught here and written to stderr
- * so the process can exit cleanly.
+ * CLI entry point for `ttsc`. Dispatches argv to the appropriate lane (build,
+ * check, fix, format, cache, prepare, clean, help or version) and returns an
+ * exit code. Synchronous lane errors are caught here and reported to stderr; an
+ * error thrown by reporting itself can still escape this entry.
+ *
+ * Watch setup returns before its asynchronous first build finishes. Signal
+ * shutdown and supported Node IPC stop requests await the resident close and
+ * active cycle promises before reporting the latest completed build status.
+ * Their settlement is not a descendant-process or inherited-stdio drain proof.
+ * Topology failure initiates cleanup, whose asynchronous failure is reported
+ * separately. Cache cleanup validates its full target set against the project
+ * and caller's Go cache before removal; this is not an atomic filesystem
+ * transaction against concurrent path replacement.
  *
  * @param argv - Command-line arguments (defaults to `process.argv.slice(2)`).
- * @returns The exit code: `0` on success, `1` on binary-not-found, `2` on user
- *   error or build failure.
+ * @returns The selected lane's status, or `2` for an error caught by this
+ *   entry.
+ * @evidence contracts/common.md#principled-implementation Command and schema identities select the declared build, check, edit and cache lanes; emit tri-state and ordered passthrough values preserve compiler authority. Cleanup prevalidates the complete target population and protected physical identities before removals, without atomic replacement or rollback guarantees.
+ * @evidence contracts/common.md#clear-and-simple-design One public entry owns dispatch and reporting; private argument, cleanup, single-file and watch operations isolate their distinct lifecycles while sharing the package's flag and build owners.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Command names and debounce timing are declared CLI policy, not consumer-specific answers; completed build statuses are reported while entry exceptions map to 2 and process exit normalization remains explicit. Reuse validity belongs to maintained source-build owners rather than an assumed historical binary.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs distinguish synchronous dispatch from watch lifetime and explain cleanup authority; parameter and result descriptions are separated from acknowledgments following the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Native cwd resolution and physical identities anchor reporting, cache containment and deletion; environment lookup preserves native name identity, and process/watch behavior is delegated to supported package boundaries rather than shell commands.
+ * @evidence contracts/performance.md#efficient-algorithms Dispatch copies argv tails and delegates parsing, project/plugin discovery, compiler/process work, native identity queries and cache traversal/deletion; these have input-byte/path/dependency and delegated callback costs beyond token cursors. Cleanup deduplicates accepted paths; watch adds topology discovery, fingerprinting and serialized rebuild work, not a fixed total-work bound.
+ * @evidence contracts/performance.md#reuse-equivalent-work A watch lifetime retains one resident check coordinator and forwards ordered change deltas; topology changes reset that selection, while ordinary effectful builds remain separate and source-built binaries reuse only their validated input identity.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Watch retains uncapped input/topology/pending-change state and callbacks across cycles. Close marks closed, removes owned timers/listeners, attempts topology cleanup and awaits resident/active settlements; cleanup rejection is reported, not successful backend/descendant closure certification. Returned setup status does not end this lifetime; cache target/identity/output collections are call-local and uncapped.
  */
 export function runTtsc(
   argv: readonly string[] = process.argv.slice(2),
@@ -114,57 +137,26 @@ function isBuildAlias(command: string): boolean {
   );
 }
 
-type TtscMode = "build" | "check" | "fix" | "format";
-
-function runCompatibleBuild(argv: readonly string[], mode: TtscMode): number {
+function runCompatibleBuild(
+  argv: readonly string[],
+  mode: TtscBuildMode,
+): number {
   const checkOnly = mode !== "build";
-  const options = normalizeBuildOptions(parseBuildArgs(argv));
-  if (mode === "fix") {
-    if (options.emit === true) {
-      throw new Error("ttsc: fix and --emit are mutually exclusive");
-    }
-    options.fix = true;
-    options.emit = false;
-  }
-  if (mode === "format") {
-    if (options.emit === true) {
-      throw new Error("ttsc: format and --emit are mutually exclusive");
-    }
-    options.format = true;
-    options.emit = false;
-  }
-  if (options.watch) {
-    if (mode === "fix") {
-      throw new Error(
-        "ttsc: fix does not support watch mode; use ttsc --noEmit --watch for incremental checks",
-      );
-    }
-    if (mode === "format") {
-      throw new Error(
-        "ttsc: format does not support watch mode; use ttsc --noEmit --watch for incremental checks",
-      );
-    }
-    return runWatch(options, checkOnly);
-  }
-  const buildOptions = checkOnly ? { ...options, emit: false } : options;
-  if (buildOptions.files.length !== 0) {
-    if (mode === "fix") {
-      throw new Error("ttsc: fix requires a project, not single-file mode");
-    }
-    if (mode === "format") {
-      throw new Error("ttsc: format requires a project, not single-file mode");
-    }
-    return runSingleFile(buildOptions);
-  }
-  const result = runBuild(buildOptions);
+  const options = prepareTtscBuildMode(
+    normalizeBuildOptions(parseTtscBuildArgs(argv)),
+    mode,
+  );
+  if (options.watch) return runWatch(options, checkOnly);
+  if (options.files.length !== 0) return runSingleFile(options);
+  const result = runBuild(options);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   return result.status;
 }
 
 function normalizeBuildOptions(
-  options: ReturnType<typeof parseBuildArgs>,
-): ReturnType<typeof parseBuildArgs> {
+  options: ReturnType<typeof parseTtscBuildArgs>,
+): ReturnType<typeof parseTtscBuildArgs> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   return {
     ...options,
@@ -207,6 +199,35 @@ function runClean(argv: readonly string[]): number {
   const explicitCacheDir = options.cacheDir
     ? path.resolve(cwd, options.cacheDir)
     : undefined;
+  if (explicitCacheDir !== undefined) {
+    return runCleanWithContext(cwd, projectRoot, explicitCacheDir, false);
+  }
+  const runtimeRoot = path.join(
+    resolveSourceBuildCachePaths(projectRoot).root,
+    SourceBuildCacheLayout.RUNTIME_CACHE_DIRNAME,
+  );
+  return cacheEntryExists(runtimeRoot)
+    ? withRuntimeDirectoryLock(runtimeRoot, () =>
+        runCleanWithContext(cwd, projectRoot, undefined, true),
+      )
+    : runCleanWithContext(cwd, projectRoot, undefined, false);
+}
+
+/** Resolve and remove the complete safe target set inside the runtime lock. */
+function runCleanWithContext(
+  cwd: string,
+  projectRoot: string,
+  explicitCacheDir: string | undefined,
+  includeRuntime: boolean,
+): number {
+  // The runtime directories of runs no process still owns. A run that may
+  // still be in progress keeps its own, and is reported.
+  const runtime =
+    includeRuntime && explicitCacheDir === undefined
+      ? resolveRuntimeCleanTargets(
+          resolveSourceBuildCachePaths(projectRoot).root,
+        )
+      : { kept: [], targets: [] };
   const targets = explicitCacheDir
     ? // Explicit `ttsc clean --cache-dir X`: the user names X as the cache to
       // remove for this command, so remove it wholesale plus the legacy
@@ -219,36 +240,63 @@ function runClean(argv: readonly string[]): number {
     : // Default / TTSC_CACHE_DIR: remove only ttsc-owned subdirectories (a
       // possibly-shared root is never deleted) plus the pre-0.17 machine-global
       // cache so upgraders reclaim that disk.
-      [...resolveCleanTargets(projectRoot), ...legacyGlobalCacheTargets()];
+      [
+        ...resolveCleanTargets(projectRoot),
+        ...runtime.targets,
+        ...legacyGlobalCacheTargets(),
+      ];
   // Check the complete deletion set before removing the first directory. An
   // environment-selected TTSC_GO_CACHE_DIR and a legacy-global cache can be as
   // destructive as an explicit --cache-dir when either equals or contains the
   // project through its lexical spelling or a filesystem alias.
-  const safeTargets = resolveSafeCacheCleanupTargets(projectRoot, targets);
+  const providedGoCache = SidecarEnvironment.read(
+    process.env,
+    "GOCACHE",
+  )?.trim();
+  const protectedDirectories =
+    providedGoCache === undefined ||
+    providedGoCache.length === 0 ||
+    providedGoCache === "off"
+      ? []
+      : [path.resolve(projectRoot, providedGoCache)];
+  // Every lane, including explicit and legacy/runtime candidates, preserves
+  // the caller's Go cache even when a ttsc-owned spelling overlaps it.
+  const safeTargets = resolveSafeCacheCleanupTargets(
+    projectRoot,
+    targets,
+    {},
+    protectedDirectories,
+  );
   const removed: string[] = [];
   const visited = new Set<string>();
   for (const target of safeTargets) {
     if (visited.has(target.path)) continue;
     visited.add(target.path);
-    if (!target.exists || !fs.existsSync(target.path)) continue;
+    if (!target.exists || !cacheEntryExists(target.path)) continue;
     fs.rmSync(target.path, { recursive: true, force: true });
     removed.push(target.requestedPath);
   }
-  if (removed.length === 0) {
+  if (removed.length === 0 && runtime.kept.length === 0) {
     process.stdout.write(
       `ttsc: no cache directories found under ${projectRoot}\n`,
     );
-    return 0;
   }
   for (const target of removed) {
     process.stdout.write(`ttsc: removed ${formatProjectPath(cwd, target)}\n`);
+  }
+  for (const directory of runtime.kept) {
+    process.stdout.write(
+      `ttsc: kept ${formatProjectPath(cwd, directory)}: a run that may still be in progress owns it\n`,
+    );
   }
   return 0;
 }
 
 function runCache(argv: readonly string[]): number {
   const [command, ...rest] = argv as [string | undefined, ...string[]];
-  switch (command) {
+  const leadingFlag =
+    command === undefined ? undefined : resolveFlagSpec(command)?.name;
+  switch (leadingFlag ?? command) {
     case "paths":
       return runCachePaths(rest);
     case "-h":
@@ -274,12 +322,17 @@ function runCachePaths(argv: readonly string[]): number {
   const cacheDir = resolveCacheDir(cwd, options.cacheDir);
   const projectRoot = resolveCleanProjectRoot(cwd, options.tsconfig);
   const paths = resolveSourceBuildCachePaths(projectRoot, cacheDir);
+  const identities = createFilesystemPathIdentityContext();
+  const rootIdentity = identities.resolve(paths.root);
+  const goIdentity = identities.resolve(paths.goBuildRoot);
   // Legacy combined roots retained for JSON compatibility. `requiredRoots`
   // identifies the compiled binaries that skip cold builds;
   // `acceleratorRoots` separately identifies the optional Go object cache.
   const cacheableRoots = [
     paths.root,
-    ...(isPathWithin(paths.goBuildRoot, paths.root) ? [] : [paths.goBuildRoot]),
+    ...(isFilesystemPathIdentityWithin(rootIdentity.key, goIdentity.key)
+      ? []
+      : [paths.goBuildRoot]),
   ];
   const requiredRoots = [paths.pluginRoot];
   const acceleratorRoots = [paths.goBuildRoot];
@@ -332,9 +385,22 @@ function parseCachePathsArgs(argv: readonly string[]): {
     json: boolean;
     tsconfig?: string;
   } = { json: false };
-  const rest = [...argv];
-  while (rest.length !== 0) {
-    const token = rest.shift()!;
+  let index = 0;
+  const readValue = (flag: string, inlineValue: string | undefined): string => {
+    if (inlineValue !== undefined) return inlineValue;
+    const value = argv[index++];
+    if (value === undefined) {
+      throw new Error(`ttsc: ${flag} requires a value`);
+    }
+    if (value.startsWith("-")) {
+      throw new Error(
+        `ttsc: ${flag} requires a value (next token ${JSON.stringify(value)} starts with "-")`,
+      );
+    }
+    return value;
+  };
+  while (index < argv.length) {
+    const token = argv[index++]!;
     const [rawFlag, inlineValue] = splitInlineFlag(token);
     const flag = resolveFlagSpec(rawFlag);
     if (flag?.subcommands.includes("cache") !== true) {
@@ -350,13 +416,13 @@ function parseCachePathsArgs(argv: readonly string[]): {
         out.json = true;
         break;
       case "--cache-dir":
-        out.cacheDir = readCachePathsValue(flag.name, inlineValue, rest);
+        out.cacheDir = readValue(flag.name, inlineValue);
         break;
       case "--cwd":
-        out.cwd = readCachePathsValue(flag.name, inlineValue, rest);
+        out.cwd = readValue(flag.name, inlineValue);
         break;
       case "--tsconfig":
-        out.tsconfig = readCachePathsValue(flag.name, inlineValue, rest);
+        out.tsconfig = readValue(flag.name, inlineValue);
         break;
       default:
         throw new Error(
@@ -377,27 +443,6 @@ function splitInlineFlag(token: string): [string, string | undefined] {
     : [token.slice(0, equals), token.slice(equals + 1)];
 }
 
-function readCachePathsValue(
-  flag: string,
-  inlineValue: string | undefined,
-  rest: string[],
-): string {
-  if (inlineValue !== undefined) {
-    return inlineValue;
-  }
-  const value = rest.shift();
-  if (value === undefined) {
-    throw new Error(`ttsc: ${flag} requires a value`);
-  }
-  if (value.startsWith("-")) {
-    rest.unshift(value);
-    throw new Error(
-      `ttsc: ${flag} requires a value (next token ${JSON.stringify(value)} starts with "-")`,
-    );
-  }
-  return value;
-}
-
 function resolveCleanProjectRoot(cwd: string, tsconfig?: string): string {
   try {
     return path.dirname(resolveProjectConfig({ cwd, tsconfig }));
@@ -408,11 +453,29 @@ function resolveCleanProjectRoot(cwd: string, tsconfig?: string): string {
 }
 
 function formatProjectPath(cwd: string, target: string): string {
-  const relative = path.relative(cwd, target);
-  if (!relative || isOutsideRelativePath(relative)) {
-    return target;
-  }
-  return relative;
+  const relative = relativeToCwd(cwd, target);
+  return !relative || isOutsideRelativePath(relative) ? target : relative;
+}
+
+/**
+ * `target` relative to `cwd`, both as the filesystem names them.
+ *
+ * The project, its caches, and its outputs resolve to their physical directory,
+ * while the cwd is spelled as the user reached it, possibly through a link or
+ * macOS's `/var`. Relating two spellings of one directory walks out through the
+ * link and back in, so both sides go through the one resolver that names paths
+ * physically (`resolvePhysicalPath`).
+ */
+function relativeToCwd(cwd: string, target: string): string {
+  return path.relative(resolvePhysicalPath(cwd), resolvePhysicalPath(target));
+}
+
+/**
+ * `location` as a watch message names it: relative to the cwd, `.` for the cwd
+ * itself, and through `..` when it lies outside.
+ */
+function watchMessagePath(cwd: string, location: string): string {
+  return relativeToCwd(cwd, location) || ".";
 }
 
 function isOutsideRelativePath(relative: string): boolean {
@@ -426,9 +489,8 @@ function isOutsideRelativePath(relative: string): boolean {
 function parseProjectArgs(argv: readonly string[]) {
   // `prepare` and `clean` are project-shaped commands. They share the same
   // schema as the build lane; the engine forwards unknown flags as well as
-  // build-only flags (e.g. `--strict`) to the launcher's passthrough list
-  // so the legacy "unknown option" behaviour is no longer a separate trap
-  // (RC-3 + RC-4 prevention; see issue #125 §5 in the RCA).
+  // build-only flags (e.g. `--strict`) to the launcher's passthrough list, so
+  // an unknown option is not a separate error path.
   const result = parseFlags({
     argv,
     errorPrefix: "ttsc:",
@@ -439,81 +501,6 @@ function parseProjectArgs(argv: readonly string[]) {
     cwd: getString(result, "--cwd"),
     tsconfig: getString(result, "--tsconfig"),
   };
-}
-
-function parseBuildArgs(argv: readonly string[]) {
-  const result = parseFlags({
-    argv,
-    errorPrefix: "ttsc:",
-    // A bare token is a single-file input only when it carries a TypeScript
-    // source extension; any other bare token is the space-separated value of a
-    // preceding forwarded flag (e.g. the `es2020` in `--target es2020`). The
-    // parser routes those values into `passthrough` in place, so the forwarded
-    // flag/value pairs reach tsgo in their original order.
-    isPositional: looksLikeInputFile,
-    subcommand: "build",
-  });
-  assertNoSolutionBuild(result, "ttsc:");
-  // Defaults: pinned by the previous hand-parser. `quiet` defaults true,
-  // `--verbose` flips it to false; `emit` defaults `undefined` so the resolved
-  // project controls ordinary build mode. `runCompatibleBuild` applies the
-  // check/fix/format no-emit decision before either execution lane runs.
-  const verbose = getBoolean(result, "--verbose");
-  const quietFlag = getBoolean(result, "--quiet");
-  const quiet = verbose === true ? false : (quietFlag ?? true);
-  const explicitEmit = getBoolean(result, "--emit");
-  const explicitNoEmit = getBoolean(result, "--noEmit");
-  const emit = resolveExplicitEmit(explicitEmit, explicitNoEmit);
-
-  // `isPositional: looksLikeInputFile` guarantees every `result.positional`
-  // token is a TypeScript input file; forwarded flag values already live in
-  // `result.passthrough` in their original order, so no reconstruction is
-  // needed here (the previous `[...passthrough, ...trailingValues]` concat
-  // reordered every flag ahead of every value).
-  const files = [...result.positional];
-  const passthrough = [...result.passthrough];
-
-  return {
-    binary: getString(result, "--binary"),
-    cacheDir: getString(result, "--cache-dir"),
-    checkers: getNumber(result, "--checkers"),
-    cwd: getString(result, "--cwd"),
-    emit,
-    files,
-    fix: false,
-    format: false,
-    outDir: getString(result, "--outDir"),
-    passthrough,
-    preserveWatchOutput: getBoolean(result, "--preserveWatchOutput") === true,
-    quiet,
-    singleThreaded: getBoolean(result, "--singleThreaded") === true,
-    tsconfig: getString(result, "--tsconfig"),
-    watch: getBoolean(result, "--watch") === true,
-  };
-}
-
-/**
- * Collapse the two launcher-owned emit switches into the tri-state consumed by
- * `runBuild` and the single-file lane. A specified boolean is significant even
- * when it is `false`: `--emit=false` is analysis-only and `--noEmit=false`
- * explicitly overrides a project's `noEmit`. `--emit` retains precedence when
- * callers supply both switches, matching the legacy true-only resolution.
- */
-function resolveExplicitEmit(
-  explicitEmit: boolean | undefined,
-  explicitNoEmit: boolean | undefined,
-): boolean | undefined {
-  if (explicitEmit !== undefined) return explicitEmit;
-  return explicitNoEmit === undefined ? undefined : !explicitNoEmit;
-}
-
-/**
- * Report whether a bare CLI token is a TypeScript source file ttsc should
- * compile in single-file mode. Anything without a TypeScript source extension
- * is treated as a forwarded flag value rather than an input file.
- */
-function looksLikeInputFile(token: string): boolean {
-  return [".ts", ".tsx", ".mts", ".cts"].some((ext) => token.endsWith(ext));
 }
 
 function printHelp(): void {
@@ -590,10 +577,32 @@ function printCacheHelp(): void {
   process.stdout.write("\n");
 }
 
+/**
+ * Adapt one normalized CLI request to its selected private producer and public
+ * copy. The existing selection owns config and original argument anchoring; the
+ * full request retains cache, reporting and watch callbacks. Only the private
+ * helper writes the selected public file. Success presentation follows that
+ * completed copy and describes public emission, without private products or a
+ * fabricated transform-site count. Watch supplies quiet true itself. The async
+ * watch executor awaits input publication before building; ordinary CLI calls
+ * keep their synchronous return contract and share output planning.
+ */
 function runSingleFile(
-  options: ReturnType<typeof parseBuildArgs> &
+  options: ReturnType<typeof parseTtscBuildArgs> &
     Pick<TtscSingleFileEmitOptions, "onProjectInputs" | "onWatchInputs">,
-): number {
+): number;
+function runSingleFile(
+  options: ReturnType<typeof parseTtscBuildArgs> &
+    Pick<TtscSingleFileEmitOptions, "onProjectInputs" | "onWatchInputs">,
+  execute: typeof runSingleFileEmit.async,
+): Promise<number>;
+function runSingleFile(
+  options: ReturnType<typeof parseTtscBuildArgs> &
+    Pick<TtscSingleFileEmitOptions, "onProjectInputs" | "onWatchInputs">,
+  execute:
+    | typeof runSingleFileEmit
+    | typeof runSingleFileEmit.async = runSingleFileEmit,
+): number | Promise<number> {
   if (options.files.length !== 1) {
     throw new Error(
       "ttsc: single-file mode currently accepts exactly one input file",
@@ -601,95 +610,86 @@ function runSingleFile(
   }
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const file = path.resolve(cwd, options.files[0]!);
-  const emit = singleFileShouldEmit(options, cwd, file);
+  const selection = CompilerProjectSelection.read({ ...options, cwd, file });
+  const project = selection.project;
+  const emit = options.emit ?? project.compilerOptions.noEmit !== true;
   const out = emit
-    ? resolveSingleFileOutput({
-        cliOutDir: options.outDir,
-        cwd,
-        file,
-        passthrough: options.passthrough,
-        tsconfig: options.tsconfig,
-      })
+    ? resolveSingleFileOutput(
+        {
+          cliOutDir: options.outDir,
+          cwd,
+          file,
+          passthrough: options.passthrough,
+          tsconfig: options.tsconfig,
+        },
+        project,
+      )
     : undefined;
-  const text = runSingleFileEmit({
-    binary: options.binary,
-    checkers: options.checkers,
-    cwd,
-    file,
-    onProjectInputs: options.onProjectInputs,
-    onWatchInputs: options.onWatchInputs,
-    out,
-    passthrough: options.passthrough,
-    singleThreaded: options.singleThreaded,
-    tsconfig: options.tsconfig,
-  });
-  if (out !== undefined && !fs.existsSync(out)) {
-    fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, text, "utf8");
-  }
-  if (out !== undefined) {
-    process.stdout.write(`${path.relative(cwd, out) || path.basename(out)}\n`);
-  }
-  return 0;
-}
-
-/**
- * Resolve the same effective emit decision used by the project lane before
- * entering the single-file compatibility path. The compatibility path still
- * emits into a private temporary directory to obtain transformed text and
- * diagnostics, but only this boundary is allowed to write into the user's
- * tree.
- */
-function singleFileShouldEmit(
-  options: ReturnType<typeof parseBuildArgs>,
-  cwd: string,
-  file: string,
-): boolean {
-  if (options.emit !== undefined) return options.emit;
-  const project = readProjectConfig({
-    cwd,
-    file,
-    tsconfig: options.tsconfig,
-  });
-  return project.compilerOptions.noEmit !== true;
+  const result = execute({ ...options, cwd, file, out }, selection);
+  const report = (): number => {
+    if (options.quiet === false) {
+      process.stdout.write(
+        `// ttsc: tsconfig=${project.path} cwd=${cwd} emit=${emit}\n`,
+      );
+      if (out !== undefined) {
+        process.stdout.write(`// ttsc: emitted=1 files\n`);
+        process.stdout.write(`  + ${relativeToCwd(cwd, out) || out}\n`);
+      }
+    }
+    if (out !== undefined) {
+      process.stdout.write(
+        `${relativeToCwd(cwd, out) || path.basename(out)}\n`,
+      );
+    }
+    return 0;
+  };
+  return typeof result === "string" ? report() : result.then(report);
 }
 
 function runWatch(
-  options: ReturnType<typeof parseBuildArgs>,
+  options: ReturnType<typeof parseTtscBuildArgs>,
   checkOnly: boolean,
 ): number {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  let topology: WatchTopology | undefined;
+  let topology: AsyncWatchTopology | undefined;
   const invocation = {
     ...(checkOnly ? { ...options, emit: false } : options),
     cwd,
-    onWatchInputs: (inputs: readonly string[]) => {
-      topology?.setExtraInputs(inputs);
+    onWatchInputs: (
+      inputs: readonly string[],
+      identities?: PluginContentIdentities.Store,
+    ) => {
+      return topology?.setExtraInputs(inputs, identities);
     },
     onProjectInputs: (inputs: ITtscProjectInputSnapshot) => {
-      topology?.setProjectInputs(inputs);
+      return topology?.setProjectInputs(inputs);
     },
     quiet: true,
   };
-  const root = path.dirname(
-    resolveProjectConfig({
-      cwd,
-      tsconfig: options.tsconfig,
-    }),
-  );
+  const root = CompilerProjectSelection.read(invocation).project.root;
   let running = false;
+  let closed = false;
+  let active: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
   let rerun = false;
   let timer: NodeJS.Timeout | null = null;
+  const settlement = new WatchSettlement();
+  let completedBuilds = 0;
   const resident =
     invocation.files.length === 0 ? new ResidentCheckWatchSession() : undefined;
   const pendingChanges = new PendingResidentCheckWatchChanges();
   // Tracks the most recent build's exit code so the watch session can exit
   // non-zero when its latest rebuild failed, instead of always reporting 0.
   let lastStatus = 0;
+  let completedBuild = false;
 
   const runOnce = async () => {
+    if (closed) return;
     running = true;
+    settlement.changed();
     const change = pendingChanges.take();
+    if (process.env.TTSC_WATCH_DEBUG_INPUTS)
+      debugWatchInputs(`cycle ${JSON.stringify(change)}`);
     let completed = false;
     try {
       if (!options.preserveWatchOutput) {
@@ -705,14 +705,14 @@ function runWatch(
       // rebuild reports a clear failure and the watcher keeps running instead
       // of crashing the process with an uncaught exception.
       const status = await (invocation.files.length !== 0
-        ? Promise.resolve(runSingleFile(invocation))
+        ? runSingleFile(invocation, runSingleFileEmit.async)
         : (async () => {
             const buildOptions = checkOnly
               ? { ...invocation, emit: false }
               : invocation;
             const result =
               resident === undefined
-                ? runBuild(buildOptions)
+                ? await runBuild.async(buildOptions)
                 : await resident.run(buildOptions, change);
             // Watch output is one ordered stream. The diagnostics a build
             // produced and the "[ttsc] watch build …" marker that concludes
@@ -726,59 +726,263 @@ function runWatch(
             if (result.stderr) process.stdout.write(result.stderr);
             return result.status;
           })());
+      if (closed) return;
       lastStatus = status;
+      completedBuild = true;
       completed = true;
       process.stdout.write(
         `[ttsc] ${status === 0 ? "watch build complete" : "watch build failed"}\n`,
       );
+      ++completedBuilds;
     } catch (error) {
+      if (closed) return;
       // Same ordered-stream rule as the build path: the failure text goes on
       // the stream the marker below uses, so a merged reader sees them in order
       // rather than racing two pipes.
       process.stdout.write(`${formatError(error)}\n`);
       lastStatus = lastStatus === 0 ? 2 : lastStatus;
+      completedBuild = true;
       process.stdout.write(`[ttsc] watch build failed\n`);
+      ++completedBuilds;
     } finally {
-      running = false;
-      if (completed) {
+      if (completed && !closed) {
         try {
           // A filesystem event can arrive after the build reports completion
-          // but before this synchronous cleanup reaches its re-resolution.
+          // but before post-build reconciliation reaches its re-resolution.
           // Notify for a membership change here as well, otherwise that new
           // input is silently absorbed into the watch set without a rebuild.
-          topology?.refresh(true);
+          await topology?.refresh(true);
         } catch (error) {
           process.stderr.write(
-            `[ttsc] watch error on ${path.relative(cwd, root) || "."}: ${formatError(error)}\n`,
+            `[ttsc] watch error on ${watchMessagePath(cwd, root)}: ${formatError(error)}\n`,
           );
         }
       }
+      running = false;
     }
     if (rerun) {
       rerun = false;
       trigger();
     }
+    settlement.changed();
   };
   const trigger = (change?: WatchInputChange, reload = false) => {
+    if (closed) return;
     pendingChanges.push(change, reload);
+    settlement.changed();
     if (running) {
       rerun = true;
       return;
     }
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void runOnce(), 60);
+    timer = setTimeout(startRun, 60);
   };
 
-  topology = new WatchTopology(invocation, {
+  const close = (): Promise<void> => {
+    if (closing !== undefined) return closing;
+    E2ETrace.watchShutdown("close-start", {
+      residentSelected: resident !== undefined,
+      activeSelected: active !== undefined,
+    });
+    closed = true;
+    settlement.changed();
+    if (timer) clearTimeout(timer);
+    timer = null;
+    process.off("SIGINT", onInterrupt);
+    process.off("SIGTERM", onTerminate);
+    process.off("message", onMessage);
+    process.off("disconnect", onDisconnect);
+    const topologyClosing = topology?.close() ?? Promise.resolve();
+    const residentClosing = resident?.close() ?? Promise.resolve();
+    const activeClosing = active ?? Promise.resolve();
+    closing = Promise.allSettled([
+      topologyClosing,
+      residentClosing,
+      activeClosing,
+    ]).then((results) => {
+      const errors = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (errors.length !== 0)
+        throw new AggregateError(
+          errors,
+          `ttsc: watch shutdown failed: ${errors.map(formatError).join("; ")}`,
+        );
+    });
+    if (process.env.TTSC_E2E_TRACE) {
+      // Observe the original promises without substituting their settlements.
+      void residentClosing.then(
+        () =>
+          E2ETrace.watchShutdown("resident-settled", { outcome: "fulfilled" }),
+        () =>
+          E2ETrace.watchShutdown("resident-settled", { outcome: "rejected" }),
+      );
+      void activeClosing.then(
+        () =>
+          E2ETrace.watchShutdown("active-settled", { outcome: "fulfilled" }),
+        () => E2ETrace.watchShutdown("active-settled", { outcome: "rejected" }),
+      );
+      void closing.then(
+        () =>
+          E2ETrace.watchShutdown("close-promise-settled", {
+            outcome: "fulfilled",
+          }),
+        () =>
+          E2ETrace.watchShutdown("close-promise-settled", {
+            outcome: "rejected",
+          }),
+      );
+    }
+    void closing.catch(() => {});
+    return closing;
+  };
+  const finish = async (id?: string): Promise<void> => {
+    E2ETrace.watchShutdown("finish-start", { stopId: id });
+    try {
+      await close();
+      E2ETrace.watchShutdown("close-settled", {
+        stopId: id,
+        outcome: "fulfilled",
+      });
+      process.exitCode = toExitCode(lastStatus);
+      if (id !== undefined && process.connected && process.send !== undefined) {
+        E2ETrace.watchShutdown("ack-send", { stopId: id });
+        await new Promise<void>((resolve, reject) => {
+          process.send!(
+            {
+              type: "ttsc.watch.stopped",
+              id,
+              status: completedBuild ? lastStatus : null,
+            },
+            (error: Error | null) => {
+              E2ETrace.watchShutdown("ack-callback", {
+                stopId: id,
+                outcome: error === null ? "fulfilled" : "rejected",
+              });
+              error === null ? resolve() : reject(error);
+            },
+          );
+        });
+      }
+    } catch (error) {
+      E2ETrace.watchShutdown("finish-rejected", { stopId: id });
+      process.stderr.write(`${formatError(error)}\n`);
+      process.exitCode = toExitCode(lastStatus === 0 ? 2 : lastStatus);
+    } finally {
+      if (process.connected) {
+        E2ETrace.watchShutdown("disconnect-start", {
+          stopId: id,
+          selected: process.disconnect !== undefined,
+        });
+        try {
+          process.disconnect?.();
+          E2ETrace.watchShutdown("disconnect-return", {
+            stopId: id,
+            outcome: "fulfilled",
+          });
+        } catch (error) {
+          E2ETrace.watchShutdown("disconnect-return", {
+            stopId: id,
+            outcome: "rejected",
+          });
+          process.stderr.write(`${formatError(error)}\n`);
+          process.exitCode = toExitCode(lastStatus === 0 ? 2 : lastStatus);
+        }
+      }
+      E2ETrace.watchShutdown("finish-end", {
+        stopId: id,
+        exitCode: process.exitCode,
+      });
+    }
+  };
+  const onInterrupt = () => {
+    void finish();
+  };
+  const onTerminate = () => {
+    void finish();
+  };
+  const onDisconnect = () => {
+    void finish();
+  };
+  const onMessage = (message: unknown) => {
+    if (
+      typeof message === "object" &&
+      message !== null &&
+      "type" in message &&
+      message.type === "ttsc.watch.stop" &&
+      "id" in message &&
+      typeof message.id === "string" &&
+      message.id.length !== 0
+    ) {
+      const id = message.id;
+      E2ETrace.watchShutdown("ipc-stop-received", { stopId: id });
+      void finish(id);
+    } else if (
+      typeof message === "object" &&
+      message !== null &&
+      "type" in message &&
+      message.type === "ttsc.watch.settle" &&
+      "id" in message &&
+      typeof message.id === "string" &&
+      message.id.length !== 0
+    ) {
+      const id = message.id;
+      // Build markers retain their exact text and one marker per cycle. IPC
+      // travels on another pipe, so its receipt carries the completed count:
+      // a caller must drain those stdout markers before using the boundary.
+      void settlement
+        .wait(
+          async () => {
+            await topology?.whenIdle();
+            if (closed) throw new Error("ttsc: watch closed before settling");
+            return !running && !rerun && timer === null;
+          },
+          async () => {
+            if (process.connected && process.send !== undefined)
+              await new Promise<void>((resolve, reject) => {
+                process.send!(
+                  { type: "ttsc.watch.settled", id, builds: completedBuilds },
+                  (error: Error | null) =>
+                    error === null ? resolve() : reject(error),
+                );
+              });
+          },
+        )
+        .catch((error: unknown) => {
+          if (!closed) {
+            process.stderr.write(`${formatError(error)}\n`);
+            lastStatus = lastStatus === 0 ? 2 : lastStatus;
+            void finish();
+          }
+        });
+    }
+  };
+  const startRun = () => {
+    timer = null;
+    active = runOnce();
+    void active.catch((error: unknown) => {
+      process.stderr.write(`${formatError(error)}\n`);
+      lastStatus = lastStatus === 0 ? 2 : lastStatus;
+      void finish();
+    });
+  };
+
+  topology = new AsyncWatchTopology(invocation, {
+    onFailure: (error) => {
+      if (closed) return;
+      lastStatus = lastStatus === 0 ? 2 : lastStatus;
+      process.stderr.write(`${formatError(error)}\n`);
+      void finish();
+    },
     onError: (location, error) => {
       process.stderr.write(
-        `[ttsc] watch error on ${path.relative(cwd, location) || "."}: ${formatError(error)}\n`,
+        `[ttsc] watch error on ${watchMessagePath(cwd, location)}: ${formatError(error)}\n`,
       );
     },
     onProjectInputWatchUnavailable: (roots) => {
       for (const root of roots) {
         process.stderr.write(
-          `[ttsc] project-input watch unavailable on ${path.relative(cwd, root) || "."}; changes under this root are not being observed\n`,
+          `[ttsc] project-input watch unavailable on ${watchMessagePath(cwd, root)}; changes under this root are not being observed\n`,
         );
       }
     },
@@ -787,100 +991,46 @@ function runWatch(
         `change ${change.kind}${change.invalidate === true ? " invalidate" : ""} ${
           change.path === undefined
             ? "(unnamed)"
-            : path.relative(cwd, change.path)
+            : watchMessagePath(cwd, change.path)
         }`,
       );
       trigger(change);
     },
     onProjectInputWatchRoots: (roots) => {
       debugWatchInputs(
-        `roots ${JSON.stringify(roots.map((root) => path.relative(cwd, root) || "."))}`,
+        `roots ${JSON.stringify(roots.map((root) => watchMessagePath(cwd, root)))}`,
       );
     },
     onTopologyChange: () => trigger(undefined, true),
   });
-  topology.refresh(false);
-
-  const close = () => {
-    if (timer) clearTimeout(timer);
-    topology?.close();
-    resident?.dispose();
+  const start = async (): Promise<void> => {
+    await topology!.refresh(false);
+    if (closed) return;
+    process.stdout.write(`[ttsc] watching ${watchMessagePath(cwd, root)}\n`);
+    startRun();
   };
-  process.on("SIGINT", () => {
-    close();
-    process.exit(toExitCode(lastStatus));
-  });
-  process.on("SIGTERM", () => {
-    close();
-    process.exit(toExitCode(lastStatus));
-  });
-
-  process.stdout.write(`[ttsc] watching ${path.relative(cwd, root) || "."}\n`);
   try {
-    void runOnce();
+    process.on("SIGINT", onInterrupt);
+    process.on("SIGTERM", onTerminate);
+    if (process.connected) {
+      process.on("message", onMessage);
+      process.on("disconnect", onDisconnect);
+    }
+    void start().catch((error: unknown) => {
+      if (closed) return;
+      lastStatus = lastStatus === 0 ? 2 : lastStatus;
+      process.stderr.write(`${formatError(error)}\n`);
+      void finish();
+    });
   } catch (error) {
-    // runOnce already swallows build throws, but guard against any unforeseen
-    // throw escaping the first pass: tear down the persistent watchers so the
-    // event loop drains and the process exits cleanly with a non-zero code
-    // instead of hanging on live fs.watch handles.
-    close();
+    // Refresh may fail after acquiring only part of the watch set. Release that
+    // partial ownership as well as setup's signal listeners before returning.
+    lastStatus = lastStatus === 0 ? 2 : lastStatus;
     process.stderr.write(`${formatError(error)}\n`);
-    return toExitCode(lastStatus === 0 ? 2 : lastStatus);
+    void finish();
+    return toExitCode(lastStatus);
   }
   return toExitCode(lastStatus);
-}
-
-/**
- * Coalesces filesystem events until the next resident check-watch cycle.
- *
- * A full reload dominates every narrower signal. Program invalidation remains
- * distinct so a project-input module creation/deletion can cold-load the
- * Program without discarding the selected execution or restarting the sidecar.
- */
-export class PendingResidentCheckWatchChanges {
-  private readonly changed = new Set<string>();
-  private readonly external = new Set<string>();
-  private invalidate = false;
-  private reload = false;
-
-  public push(change?: WatchInputChange, reload = false): void {
-    if (reload || change?.kind === "config" || change?.kind === "plugin") {
-      this.reload = true;
-      this.invalidate = false;
-      this.changed.clear();
-      this.external.clear();
-      return;
-    }
-    if (this.reload) return;
-    if (change?.invalidate === true) this.invalidate = true;
-    if (change?.path === undefined) {
-      if (change?.kind === "compiler") {
-        this.reload = true;
-        this.invalidate = false;
-        this.changed.clear();
-        this.external.clear();
-      }
-      return;
-    }
-    this.changed.add(change.path);
-    if (change.kind === "project") this.external.add(change.path);
-  }
-
-  public take(): ResidentCheckWatchChange {
-    const change: ResidentCheckWatchChange = {
-      ...(this.reload ? { reload: true } : {}),
-      ...(this.invalidate ? { invalidate: true } : {}),
-      ...(this.changed.size === 0 ? {} : { changed: [...this.changed].sort() }),
-      ...(this.external.size === 0
-        ? {}
-        : { external: [...this.external].sort() }),
-    };
-    this.reload = false;
-    this.invalidate = false;
-    this.changed.clear();
-    this.external.clear();
-    return change;
-  }
 }
 
 // Coerces a build status into a valid process exit code: 0 stays 0, any

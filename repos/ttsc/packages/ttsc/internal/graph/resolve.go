@@ -1,8 +1,7 @@
 // Package graph builds a checker-resolved code reference graph over a tsgo
-// Program: symbols as nodes, type-resolved relationships as edges. Because the
-// graph rides ttsc's in-process Checker, every edge is resolved by the real
-// type checker rather than a syntactic heuristic, so an edge can be tagged
-// "checker-resolved" instead of "guessed".
+// Program: modeled symbols and checker-derived relationships. Separate artifact
+// links can also be added; not every edge is a compiler binding or a runtime-use
+// observation.
 //
 // resolve.go holds the load-bearing primitive the rest of the graph depends on:
 // following a reference to the true declaration the checker binds it to. The
@@ -22,9 +21,20 @@ import (
   shimchecker "github.com/microsoft/typescript-go/shim/checker"
 )
 
-// Target is the resolved endpoint of a reference: the declaration symbol the
-// checker binds it to, the source file that declares it, and whether that file
-// sits outside the workspace (a node_modules or `.d.ts` boundary leaf).
+// Target is the contextual endpoint reported by Resolve: a checker symbol,
+// representative source declaration when available, and lexical external
+// classification (a node_modules or `.d.ts` boundary leaf).
+// A bound symbol without a representative source declaration retains empty File
+// and zero location/default External; those defaults do not prove workspace ownership.
+//
+// @evidence contracts/common.md#principled-implementation A bound symbol and its representative declaration location distinguish authored endpoints from external boundary leaves.
+// @evidence contracts/common.md#clear-and-simple-design One resolution record passes checker identity and byte span to edge creation without reparsing the reference.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts External classification follows declaration ownership, not a consumer-name heuristic.
+// @evidence contracts/common.md#meaningful-documentation Native prose identifies symbol binding and the node_modules/declaration-file boundary; tags remain separated under the documentation skill.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The record chooses no resolution strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Build's resolver memo owns reuse, not this value container.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The record borrows a compiler symbol without independently acquiring a generation lease. Caller-held targets can keep symbol/declaration references reachable after build scratch is dropped.
+// @evidence contracts/portability.md#os-neutral-implementation File is compiler-reported spelling and External is declaration-file/node_modules lexical classification; neither certifies physical realpath or ownership under aliases.
 type Target struct {
   Symbol   *shimast.Symbol
   File     string
@@ -57,17 +67,66 @@ func (g *Graph) resolve(checker *shimchecker.Checker, ref *shimast.Node) *Target
   return target
 }
 
-// Resolve follows ref to the real declaration the checker binds it to. It
-// unwraps import/export alias chains so a reference through a barrel re-export
-// lands on the sibling source that declares the symbol, not the re-exporting
-// index file. It returns nil when the checker cannot bind ref to a symbol (a
-// numeric literal, a punctuation token, an unresolved name).
+// Resolve uses the checker's external symbol APIs, including source-value lookup
+// for shorthand properties and contextual property lookup for destructuring and
+// JSX attributes, then unwraps aliases. These APIs return a contextual
+// symbol, not a universal type-checking binding guarantee. A valid checker and
+// parented source-tree ref are required. Nil means no reported symbol; a symbol
+// without a source declaration can instead return a target with empty File.
+//
+// @evidence contracts/common.md#principled-implementation Supported upstream symbol, shorthand-value and contextual-type/property queries supply endpoints for their respective syntax. Alias unwrapping and representative declaration selection prefer workspace bodies without certifying physical ownership or every expression's type-checking binding.
+// @evidence contracts/common.md#clear-and-simple-design Syntax-specific supported checker queries feed shared alias unwrapping and declaration classification in one endpoint adapter.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Barrel resolution uses the supported checker API rather than guessing export files or rewriting foreign state.
+// @evidence contracts/common.md#meaningful-documentation Native prose states alias behavior, unresolved outcomes and source ownership, with documentation-skill tag spacing.
+// @evidence contracts/performance.md#efficient-algorithms Delegated contextual lookup/alias resolution can perform lazy semantic work beyond the returned symbol. Up to three declaration passes, source ancestry and filename classification add declaration-count/depth/string costs; this adapter itself performs no repository scan.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Direct Resolve owns no repeated-request cache; Graph.resolve supplies build-local AST-keyed reuse for graph passes.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The new endpoint and borrowed symbol transfer to the caller and can retain declarations/AST state. The compiler owner must keep that generation stable; this adapter owns no historical cache, generation lease or native handle release.
+// @evidence contracts/portability.md#os-neutral-implementation Returned filename spelling and declaration-file/node_modules classification come from the supplied compiler tree. Lexical classification does not resolve native aliases or establish physical workspace ownership.
 func Resolve(checker *shimchecker.Checker, ref *shimast.Node) *Target {
-  symbol := checker.GetSymbolAtLocation(ref)
+  // The external checker API resolves a literal index at its argument node,
+  // not at the enclosing element-access expression. A dynamic index is not a
+  // named property and must not be mistaken for the index variable's symbol.
+  if ref.Kind == shimast.KindElementAccessExpression {
+    argument := ref.AsElementAccessExpression().ArgumentExpression
+    if argument == nil {
+      return nil
+    }
+    switch argument.Kind {
+    case shimast.KindStringLiteral, shimast.KindNoSubstitutionTemplateLiteral, shimast.KindNumericLiteral:
+      ref = argument
+    default:
+      return nil
+    }
+  }
+  var symbol *shimast.Symbol
+  switch ref.Kind {
+  case shimast.KindShorthandPropertyAssignment:
+    symbol = checker.GetShorthandAssignmentValueSymbol(ref)
+  case shimast.KindBindingElement:
+    binding := ref.AsBindingElement()
+    if ref.Parent != nil && ref.Parent.Kind == shimast.KindObjectBindingPattern && binding.DotDotDotToken == nil {
+      name := binding.PropertyName
+      if name == nil {
+        name = binding.Name()
+      }
+      if property, ok := staticObjectMemberName(name); ok {
+        symbol = checker.GetPropertyOfType(checker.GetTypeAtLocation(ref.Parent), property)
+      }
+    }
+  case shimast.KindJsxAttribute:
+    if property, ok := staticObjectMemberName(ref.Name()); ok && ref.Parent != nil {
+      // Zero requests the upstream API's ordinary contextual type, with no flags.
+      if contextual := checker.GetContextualType(ref.Parent, 0); contextual != nil {
+        symbol = checker.GetPropertyOfType(contextual, property)
+      }
+    }
+  default:
+    symbol = checker.GetSymbolAtLocation(ref)
+  }
   if symbol == nil {
     return nil
   }
-  if symbol.Flags&shimast.SymbolFlagsAlias != 0 {
+  if shimast.SymbolFlagsOf(symbol)&shimast.SymbolFlagsAlias != 0 {
     if aliased := shimchecker.Checker_getAliasedSymbol(checker, symbol); aliased != nil {
       symbol = aliased
     }
@@ -77,7 +136,7 @@ func Resolve(checker *shimchecker.Checker, ref *shimast.Node) *Target {
     target.Pos = declaration.Pos()
     target.End = declaration.End()
     if file := shimast.GetSourceFileOfNode(declaration); file != nil {
-      target.File = file.FileName()
+      target.File = string(file.FileName())
       target.External = !IsWorkspaceSourceFile(file)
     }
   }
@@ -97,27 +156,27 @@ func declarationFile(symbol *shimast.Symbol) *shimast.SourceFile {
 }
 
 func declarationNode(symbol *shimast.Symbol) *shimast.Node {
-  if len(symbol.Declarations) == 0 {
+  if len(shimast.SymbolDeclarationsOf(symbol)) == 0 {
     return nil
   }
   // Prefer a non-declaration-file declaration. A declaration-merged symbol (a
   // class paired with an interface, or a function with a namespace) can list a
   // `.d.ts` declaration first; classifying by it would mark a real workspace
   // symbol external and sever it from the graph.
-  for _, declaration := range symbol.Declarations {
+  for _, declaration := range shimast.SymbolDeclarationsOf(symbol) {
     if file := shimast.GetSourceFileOfNode(declaration); file != nil && !file.IsDeclarationFile && declaration.Body() != nil {
       return declaration
     }
   }
-  for _, declaration := range symbol.Declarations {
+  for _, declaration := range shimast.SymbolDeclarationsOf(symbol) {
     if file := shimast.GetSourceFileOfNode(declaration); file != nil && !file.IsDeclarationFile {
       return declaration
     }
   }
-  for _, declaration := range symbol.Declarations {
+  for _, declaration := range shimast.SymbolDeclarationsOf(symbol) {
     if declaration.Body() != nil {
       return declaration
     }
   }
-  return symbol.Declarations[0]
+  return shimast.SymbolDeclarationsOf(symbol)[0]
 }

@@ -17,6 +17,10 @@ import { createBinaryExpression } from "./createBinaryExpression";
  * @param left The left-hand operand.
  * @param right The right-hand operand.
  * @returns The created {@link BinaryExpression}.
+ * @evidence contracts/common.md#principled-implementation ExclamationEqualsEqualsToken records strict inequality without coercing operands or computing a boolean during construction.
+ * @evidence contracts/common.md#clear-and-simple-design Operator selection delegates to the shared binary builder rather than wrapping equality in another expression.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Strict inequality is retained as supplied syntax instead of an expected-result branch for known operands.
+ * @evidence contracts/common.md#meaningful-documentation JSDoc identifies strict inequality, the shared builder and operand roles with a separate example and acknowledgment block.
  */
 export const createStrictInequality = (
   left: Expression,

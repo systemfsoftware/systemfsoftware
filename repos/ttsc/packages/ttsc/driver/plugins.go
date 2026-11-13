@@ -5,6 +5,7 @@ import (
   "fmt"
   "os"
   "path/filepath"
+  "runtime"
   "sort"
   "strings"
   "sync"
@@ -36,25 +37,41 @@ const PluginConfigDirEnv = "TTSC_PLUGIN_CONFIG_DIR"
 // means nothing was forwarded.
 //
 // It rides the environment for the same reason PluginConfigDirEnv does, only
-// with sharper consequences. The payload used to travel as a `--tsgo-args`
-// flag, which #113 appended to a plugin protocol third-party hosts had already
-// frozen. A Go `flag.FlagSet` created with `flag.ContinueOnError` treats an
-// undeclared flag as fatal, so every sidecar built before #113 answered
-// `flag provided but not defined: -tsgo-args` and exited 2 — including on
-// `ttsc <file.ts>`, where the launcher forwards its own output-containment
-// flags and the user passed nothing at all (issue #1188). An unknown
+// with sharper consequences. A flag would have to be appended to the plugin
+// protocol third-party hosts have already frozen, and a Go `flag.FlagSet`
+// created with `flag.ContinueOnError` treats an undeclared flag as fatal: the
+// sidecar would answer `flag provided but not defined: -tsgo-args` and exit 2,
+// even on `ttsc <file.ts>`, where the launcher forwards its own
+// output-containment flags and the user passed nothing at all. An unknown
 // environment variable is inert to every host; an unknown flag is fatal to all
 // of them. ttsc's own hosts still accept `--tsgo-args` so an older launcher
 // paired with a newer host keeps working.
 const TsgoArgsEnv = "TTSC_TSGO_ARGS"
 
+// TsgoArgsCwdEnv carries the argument base paired with TsgoArgsEnv. It changes
+// upstream response/CLI option parsing, not the Program or plugin root. Hosts
+// declare compilerArgsCwd support before the launcher sends a distinct base.
+const TsgoArgsCwdEnv = "TTSC_TSGO_ARGS_CWD"
+
 // TsgoArgsFromEnv decodes the forwarded tsgo argv the launcher published in
 // TsgoArgsEnv. An absent or whitespace-only value yields a nil slice and no
 // error, so a host can call this unconditionally.
+// Decoding follows Go JSON []string semantics: JSON null yields nil and null
+// elements keep their zero-value empty string. This does not independently
+// validate token meaning or authenticate the environment's producer.
 //
 // Hosts that also declare a `--tsgo-args` flag should prefer the explicit flag
 // value and fall back to this; LoadProgram already does that for every
 // driver-based host.
+//
+// @evidence contracts/common.md#principled-implementation JSON argv decoding implements the declared environment protocol; LoadProgram owns explicit-flag precedence.
+// @evidence contracts/common.md#clear-and-simple-design Empty input and JSON decoding preserve a named malformed-channel error.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The declared environment channel avoids adding unsupported flags to third-party hosts.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains empty input and explicit precedence following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation os.Getenv and JSON argv do not depend on shell quoting or native separators.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The parsed slice is returned to the caller and nothing is retained.
+// @evidence contracts/performance.md#efficient-algorithms Environment trimming, byte conversion and JSON decoding process payload bytes, with returned slice/string allocation driven by token count and decoded text. One decode preserves native JSON errors without an intermediate shell-tokenization pass.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The function coordinates no equivalent or in-flight requests and owns no parsed-argv cache; each call observes its current environment value.
 func TsgoArgsFromEnv() ([]string, error) {
   raw := strings.TrimSpace(os.Getenv(TsgoArgsEnv))
   if raw == "" {
@@ -71,6 +88,17 @@ func TsgoArgsFromEnv() ([]string, error) {
 // config-file discovery walk and resolves relative "configFile" paths.
 // The explicit PluginConfigDirEnv channel wins when set; otherwise the
 // tsconfig's directory is used, falling back to cwd when no tsconfig is set.
+// Selection is lexical: it does not stat, resolve symlinks or enforce an
+// absolute result. Callers supply the intended cwd/environment anchor.
+//
+// @evidence contracts/common.md#principled-implementation The project anchor keeps generated wrappers from moving discovery into the temporary-directory tree.
+// @evidence contracts/common.md#clear-and-simple-design Environment, config-directory, and cwd branches state precedence directly.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Declared anchors replace guessed layouts or platform-specific temporary paths.
+// @evidence contracts/common.md#meaningful-documentation Native prose specifies precedence and relative resolution following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Native filepath operations handle absolute, relative, and volume syntax without separator literals.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Returned path strings are caller-owned; this selector keeps no historical cache or native handle and controls no later discovery lifetime.
+// @evidence contracts/performance.md#efficient-algorithms Environment trimming and native IsAbs/Join/Clean/Dir processing depend on selected environment/cwd/config path bytes. One precedence branch is selected without filesystem traversal or existence queries; string processing is not a universal fixed-cost operation.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This selector coordinates no shared computation or cached anchor validation; each call uses its supplied cwd/config and current environment channel.
 func PluginConfigBaseDir(cwd, tsconfigPath string) string {
   if dir := strings.TrimSpace(os.Getenv(PluginConfigDirEnv)); dir != "" {
     if !filepath.IsAbs(dir) && cwd != "" {
@@ -89,16 +117,47 @@ func PluginConfigBaseDir(cwd, tsconfigPath string) string {
 }
 
 // PluginEntry is the manifest shape ttsc passes to driver-level plugins.
+// The linked-host loader decodes JSON into this shape; Config is the decoded
+// object (or nil for JSON null), not the original JavaScript object's identity
+// or arbitrary non-JSON values. Standard Go JSON number decoding applies.
+//
+// @evidence contracts/common.md#principled-implementation Manifest labels/stage and decoded object configuration remain separate; registration pairing uses order rather than treating Name as executable or filesystem identity. The loader's JSON projection/decoding is distinct from preserving an original JavaScript object or its non-JSON values.
+// @evidence contracts/common.md#clear-and-simple-design One serialized registration excludes runtime hook state.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The schema has no fixture or plugin-package specialization.
+// @evidence contracts/common.md#meaningful-documentation Native field comments and JSON tags explain the boundary following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Name/Stage labels and opaque decoded JSON configuration define no native executable, argument quoting or filesystem-identity policy. Hooks own any path interpretation of their configuration; this schema does not choose platform behavior.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+// @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
 type PluginEntry struct {
+  // Config is the JSON-decoded configuration object, or nil for JSON null.
   Config map[string]any `json:"config"`
-  Name   string         `json:"name"`
-  Stage  string         `json:"stage"`
+
+  // Name identifies the configured plugin entry; registration pairing uses order.
+  Name string `json:"name"`
+
+  // Stage carries the manifest's requested plugin execution stage.
+  Stage string `json:"stage"`
 }
 
 // PluginContext is the per-entry context passed to registered linked plugins.
+//
+// @evidence contracts/common.md#principled-implementation Per-hook observations and per-plugin completeness have separate callback owners; one hook cannot prove another's inputs.
+// @evidence contracts/common.md#clear-and-simple-design Public project context is separate from private report callbacks.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Explicit reports avoid foreign globals or intercepted arbitrary filesystem calls.
+// @evidence contracts/common.md#meaningful-documentation Field prose and reporting-method contracts explain context and proof following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Cwd/Tsconfig retain the host-supplied native anchors; context construction does not physically canonicalize them or establish case policy. Reporting methods resolve relative inputs with native filepath operations and serialize dependency coordinates through TransformOutputKey, while physical observations remain separately reported. No shell string or OS-name guess supplies identity proof.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+// @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
 type PluginContext struct {
-  Cwd      string
-  Entry    PluginEntry
+  // Cwd anchors relative paths reported by this plugin.
+  Cwd string
+
+  // Entry is this registration's JSON-decoded manifest value.
+  Entry PluginEntry
+
+  // Tsconfig names the compiler configuration selected for this project.
   Tsconfig string
 
   reportHostInput                func(string)
@@ -106,10 +165,72 @@ type PluginContext struct {
   reportHostInputHashUnknown     func(string)
   reportHostInputRealpath        func(string, *string)
   reportHostInputRealpathUnknown func(string)
+  reportObservationIncomplete    func()
   reportFileDependency           func(string, string)
   reportFileDependencyRejected   func(string)
   reportFileComplete             func(string)
   reportEveryFileComplete        func()
+  readEnvironment                func(string) (string, bool)
+}
+
+// ReportObservationIncomplete declares that this hook's input population could
+// not be observed through its supported public observation API. The declaration
+// is sticky for this hook and compiler generation. Fresh output may still be
+// usable, but callers must decline reuse based on this incomplete population.
+//
+// Report actual input mutation and inconsistent hash or physical-path observations
+// through their existing input callbacks. This declaration neither clears those
+// failures nor authorizes their admission. A context without a driver callback
+// ignores the report; its absence is not proof of complete observations.
+//
+// @evidence contracts/common.md#principled-implementation A declared unavailable observation boundary becomes a sticky per-hook state while existing individual input conflict evidence remains untouched.
+// @evidence contracts/common.md#clear-and-simple-design One callback transfers the hook's known observation limitation to its owning generation without pretending to enumerate missing inputs.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Public API unavailability is distinguished from observed mutation; no blanket hash omission or fabricated input filename bypasses a real conflict.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs define hook scope, sticky lifetime, fresh output versus reuse and the prohibition on masking actual mutation following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation This callback reports an observation limitation and performs no native filesystem operation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The callback marks an existing caller-owned hook scope sticky; this notifier neither acquires that scope nor controls its lifetime, and allocates no independent handle, buffer or historical cache. The marked state persists after return under its ledger owner.
+// @evidenceExclude contracts/performance.md#efficient-algorithms This notifier selects no collection or input-processing strategy; it forwards a signal to the owning scope's mutex-protected boolean update, without enumerating missing inputs or constructing a proof population.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Declaring a known observation limitation is an effectful signal, not coordination of completed/in-flight computation or authority to reuse an artifact. Reuse admission belongs to consumers of the scope state.
+func (ctx PluginContext) ReportObservationIncomplete() {
+  if ctx.reportObservationIncomplete != nil {
+    ctx.reportObservationIncomplete()
+  }
+}
+
+// Env returns the value of the environment variable name, like os.LookupEnv,
+// and records the read as an input of this compiler generation. A plugin whose
+// output depends on a variable reads it here instead of calling os.Getenv, so
+// the envelope's environmentInputs names it and persistent hosts withdraw
+// output compiled under another value. The first read of a name fixes its
+// value for the whole generation: a later read returns the recorded value even
+// if the process environment changed in between, so the output never depends
+// on a value the record does not carry. ok is false for an unset variable, and
+// that absence is recorded too.
+//
+// A name that cannot name a variable (empty, or containing '=' or NUL) reads
+// as unset and is not recorded. A context without a driver callback reads the
+// process environment without recording it.
+//
+// The precedents are Rust's proc_macro::tracked_env::var, Cargo's
+// rerun-if-env-changed, and Racket's register-external-file: the read site
+// itself declares the dependency, so no tool keeps a list of variables.
+//
+// @evidence contracts/common.md#principled-implementation The read site records the exact name and value or absence it returned, and the generation ledger returns the first recorded value for every later read, so output and record cannot disagree.
+// @evidence contracts/common.md#clear-and-simple-design One callback delegates to the generation ledger; name validation precedes it and the uncallbacked context falls back to os.LookupEnv.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No static variable list, prefix rule or intercepted os.Getenv replaces the explicit read; values are not hashed or redacted, so equality checks compare what the plugin saw.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs state the lookup semantics, first-read fixing, absence recording, invalid names and the precedents following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation os.LookupEnv supplies native lookup; the ledger shares Windows case aliases while retaining the first spelling and keeps POSIX names distinct.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The ledger retains one name and value copy per distinct name read for the generation's lifetime; repeated reads add nothing. No handle is acquired and no cap is imposed.
+// @evidence contracts/performance.md#efficient-algorithms Name validation scans the name once; the ledger takes one lock, scans recorded names for Windows aliases, and performs one map lookup, plus one os.LookupEnv on a first read. Windows lookup work scales with recorded name bytes.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Recording an input coordinates no completed or in-flight computation; consumers decide reuse from the record.
+func (ctx PluginContext) Env(name string) (string, bool) {
+  if name == "" || strings.ContainsAny(name, "=\x00") {
+    return "", false
+  }
+  if ctx.readEnvironment == nil {
+    return os.LookupEnv(name)
+  }
+  return ctx.readEnvironment(name)
 }
 
 // ReportHostInputHash declares the exact file state consumed by a native
@@ -117,6 +238,17 @@ type PluginContext struct {
 // a missing candidate. Conflicting observations are retained as host inputs
 // but omitted from PluginHostInputHashes, forcing persistent adapters to
 // decline narrow reuse without failing the transform.
+// This reporter validates digest syntax and forwards the supplied observation;
+// it does not read the file or independently authenticate consumption-time data.
+//
+// @evidence contracts/common.md#principled-implementation Invalid digest reports retain the input but withdraw proof instead of authorizing reuse.
+// @evidence contracts/common.md#clear-and-simple-design Path normalization and digest validation precede one valid or unknown observation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No later reread or invented digest replaces evaluation-time evidence.
+// @evidence contracts/common.md#meaningful-documentation Native prose defines digests, absence, and conflict consequences following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Relative paths use native Join and Clean against cwd without shell interpretation.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Normalized file text and the supplied hash value transfer to the caller-owned hook ledger; its callback copies the pointer value and retains per-path known/unknown state. Repeated paths fold into that scope, while distinct paths grow retained keys and metadata without a cap supplied here. No native handle is acquired, and this reporter controls neither scope lifetime nor disposal.
+// @evidence contracts/performance.md#efficient-algorithms Blank/path guards and native Join/Clean process file/cwd text. Digest validation rejects non-64-byte strings by length and scans at most 64 bytes for lowercase hex; the callback adds map key hashing/comparison, locking and value copying. No file content read or hashing is performed by this syntax-validation reporter.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Publishing a supplied input observation is not coordination of a completed/in-flight artifact computation. The ledger merges evidence and consumers separately decide continued artifact validity; this reporter owns no cached computation or reuse permission.
 func (ctx PluginContext) ReportHostInputHash(file string, hash *string) {
   if ctx.reportHostInputHash == nil || strings.TrimSpace(file) == "" {
     return
@@ -141,6 +273,17 @@ func (ctx PluginContext) ReportHostInputHash(file string, hash *string) {
 // a missing candidate. Conflicting observations remain host inputs but are
 // omitted from PluginHostInputRealpaths so adapters cannot attach an earlier
 // result to a retargeted symlink or junction.
+// This method validates supplied path syntax; it does not call Realpath or
+// independently verify physical resolution, absence or alias equivalence.
+//
+// @evidence contracts/common.md#principled-implementation Consumption-time identity becomes unknown when invalid rather than defaulting to lexical identity.
+// @evidence contracts/common.md#clear-and-simple-design Normalize and validate before delivering one ledger observation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Neither a later realpath read nor the lexical filename substitutes for missing proof.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains absolute identity and retarget safety following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation File spellings resolve against Cwd with native Join/Clean; supplied nonnil identity must have native absolute-path syntax and is cleaned without resolving links or guessing case policy. Nil is the caller's absence report, not a new stat result, and accepted absolute spelling alone does not authenticate physical identity.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Normalized file/identity strings transfer to the caller-owned hook ledger, whose callback copies pointer values and folds repeated-path conflicts into unknown state. Distinct paths retain keys and identity metadata without a cap imposed here. No native handle is acquired; scope lifetime and any separately retained context callbacks remain outside this reporter's disposal control.
+// @evidence contracts/performance.md#efficient-algorithms Trimming, native absolute/path checks and Join/Clean process file/cwd/identity text; ledger delivery adds locking, key hashing and string comparison/value copying. There is no filesystem traversal or native identity query, but path-length work is not a fixed number of byte operations.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Reporting supplied identity metadata is not sharing an artifact computation; the ledger merges evidence and reuse consumers own validation/admission. This reporter caches no native query or output from a previous filesystem generation.
 func (ctx PluginContext) ReportHostInputRealpath(file string, realpath *string) {
   if ctx.reportHostInputRealpath == nil || strings.TrimSpace(file) == "" {
     return
@@ -177,9 +320,18 @@ func isLowerSHA256(value string) bool {
 }
 
 // ReportHostInput declares an absolute file whose content or presence was
-// consumed while the native plugin evaluated configuration. Native transform
+// consumed by the native plugin hook. Native transform
 // envelopes expose the generation-wide union so persistent hosts can invalidate
 // without re-evaluating plugin config on the JavaScript side.
+//
+// @evidence contracts/common.md#principled-implementation Input declarations persist for the generation even without content proof.
+// @evidence contracts/common.md#clear-and-simple-design Guarded native-path normalization delegates to one observation owner.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Actual consumption reports replace guessed config names and fabricated hashes.
+// @evidence contracts/common.md#meaningful-documentation Native prose separates input declaration from reevaluation following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Native Join and Clean resolve against cwd without separator literals.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The cleaned path transfers into an existing caller-owned hook scope; distinct paths grow its retained declaration set, while repeated equal paths deduplicate there. This reporter opens no handle and supplies no path-count/byte cap or scope disposal policy; separately retained callbacks can preserve that state.
+// @evidence contracts/performance.md#efficient-algorithms Trimming and native absolute/Join/Clean operations process file/cwd text, followed by the scope callback's lock and string-key insertion. No file is read or traversed, but path normalization and map hashing are not constant byte work.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This effectful declaration adds an input candidate without proving content or coordinating a completed/in-flight artifact computation. The scope retains reports and artifact consumers separately establish reuse eligibility.
 func (ctx PluginContext) ReportHostInput(file string) {
   if ctx.reportHostInput == nil || strings.TrimSpace(file) == "" {
     return
@@ -197,13 +349,24 @@ func (ctx PluginContext) ReportHostInput(file string) {
 // by key.
 //
 // Reporting alone only widens what a consumer invalidates on; it is
-// ReportFileDependenciesComplete that turns the reported set into the file's
-// whole input set.
+// ReportFileDependenciesComplete that declares this plugin's per-file set
+// complete. The host still combines applicable contributors and independent
+// compiler, resolver, host-input and plugin-source inputs; reporting does not
+// authenticate arbitrary reads by a plugin.
 //
 // A dependency this cannot resolve to a key is not silently forgotten: it
 // withdraws this plugin's completeness claim for that file, because a complete
 // list missing a member is exactly what serves stale output. The plugin's other
 // files keep theirs.
+//
+// @evidence contracts/common.md#principled-implementation Unrepresentable dependencies revoke file completeness rather than silently dropping an input.
+// @evidence contracts/common.md#clear-and-simple-design One key helper normalizes both paths before recording an edge or rejection.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A partial set never implicitly becomes complete.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains widening, completeness, and failure following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Shared native cwd resolution and slash conversion preserve filename case.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Accepted file/dependency keys or rejection keys transfer to the caller-owned plugin declaration ledger; distinct files and edges grow retained text and maps without a cap here, for that ledger's lifetime.
+// @evidence contracts/performance.md#efficient-algorithms Two native key conversions scan and allocate path text, followed by mutex-protected map insertion or rejection; the reporter does not enumerate the filesystem or traverse the dependency graph.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This effectful edge or rejection report does not coordinate artifact computation or grant reuse permission; the declaration owner deduplicates recorded membership.
 func (ctx PluginContext) ReportFileDependency(file string, dependency string) {
   if ctx.reportFileDependency == nil {
     return
@@ -229,8 +392,18 @@ func (ctx PluginContext) ReportFileDependency(file string, dependency string) {
 //
 // The declaration is per (plugin, file), the way the protocol's completeness
 // contract defines it: the host lists a file in dependenciesComplete only when
-// every plugin that can contribute to it declared it, because a consumer cannot
-// attribute one plugin's entries back to it.
+// every entry classified as a source-preamble or program contributor declared
+// it. This is a reported claim, not proof of arbitrary plugin reads; independent
+// resolver, host-input and plugin-source lanes remain part of invalidation.
+//
+// @evidence contracts/common.md#principled-implementation Completeness belongs to each plugin and file, never one contributor on another's behalf.
+// @evidence contracts/common.md#clear-and-simple-design One normalized target receives one explicit completeness declaration.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Empty lists or successful transforms do not imply completeness.
+// @evidence contracts/common.md#meaningful-documentation Native prose defines complete inputs and all contributors following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Shared native-path conversion replaces platform-specific prefix slicing.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Each accepted target transfers to the caller-owned plugin declaration set, whose distinct-file text and membership have no cap here and remain for that ledger's lifetime.
+// @evidence contracts/performance.md#efficient-algorithms Native target conversion scans and allocates path text before a mutex-protected map insertion; this report does not enumerate program files or contributors.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This explicit declaration does not coordinate artifact computation or validate equivalent requests; consumer aggregation owns reuse admission.
 func (ctx PluginContext) ReportFileDependenciesComplete(file string) {
   if ctx.reportFileComplete == nil {
     return
@@ -247,10 +420,19 @@ func (ctx PluginContext) ReportFileDependenciesComplete(file string) {
 // function of that file's own text, whatever it reported for that file, its
 // reported host inputs, and the compiler options.
 //
-// That is the honest claim of a syntactic transform — one that decides from the
-// file in front of it and its own configuration rather than from the type
-// system — and it is the only form available to a hook that never sees the
-// program, such as SourcePreamble.
+// A syntactic transform may make this claim when those inputs cover its work.
+// The host records it without authenticating the plugin's reads. Preamble hooks
+// can also use it without enumerating program files; it does not remove their
+// ability to report individual files or the host's independent input lanes.
+//
+// @evidence contracts/common.md#principled-implementation Universal completeness includes host inputs and compiler options alongside file text and dependencies.
+// @evidence contracts/common.md#clear-and-simple-design One callback records the plugin-wide declaration without boundary enumeration.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Contributor declarations replace completeness inferred from syntax or test success.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains the declaration and preamble-hook applicability following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Reporting this boolean policy performs no native operation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The callback marks a sticky boolean in an existing caller-owned plugin declaration ledger; this notifier does not acquire or release that ledger or own its lifecycle.
+// @evidenceExclude contracts/performance.md#efficient-algorithms The notifier chooses no collection or traversal strategy: its callback sets an existing flag under the declaration owner's mutex, while aggregation enumerates files and contributors separately.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This explicit policy report does not coordinate artifact computation or authenticate equivalent requests; consumer aggregation owns reuse admission.
 func (ctx PluginContext) ReportDependenciesComplete() {
   if ctx.reportEveryFileComplete == nil {
     return
@@ -281,12 +463,50 @@ func (ctx PluginContext) transformKey(file string) (string, bool) {
 // SourcePreamblePlugin can inject source text before TypeScript-Go parses the
 // project. This is intentionally generic: the driver knows only the registered
 // plugin name and the project plugin manifest.
+//
+// @evidence contracts/common.md#principled-implementation Source production precedes parsing rather than mutating a bound program.
+// @evidence contracts/common.md#clear-and-simple-design One context-to-text capability excludes unrelated lifecycle methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Explicit interfaces replace package-name dispatch or parser monkeypatching.
+// @evidence contracts/common.md#meaningful-documentation Native prose identifies the parse boundary following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Concrete implementations own native configuration access; the interface only defines source production.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+// @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
 type SourcePreamblePlugin interface {
+  // SourcePreamble produces source text for this plugin's preparse contribution.
+  //
+  // @evidence contracts/common.md#principled-implementation A context-owned source contribution enters before the compiler parses and binds the project.
+  // @evidence contracts/common.md#clear-and-simple-design One text/error result expresses preparse production without a bound-program mutation.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts The supported hook avoids parser monkeypatches and package-name special cases.
+  // @evidence contracts/common.md#meaningful-documentation Native prose identifies plugin-owned preparse text following the documentation skill.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation The capability declaration owns no native operation; concrete configuration readers own their platform boundary.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources SourcePreamble declares a signature only; the implementation owns acquisition and release of resources.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms SourcePreamble declares a signature only; the implementation owns the processing strategy.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work SourcePreamble declares a signature only; the implementation owns any shared work.
   SourcePreamble(PluginContext) (string, error)
 }
 
 // ProgramPlugin can mutate a loaded Program before source output or emit.
+//
+// @evidence contracts/common.md#principled-implementation Declared AST mutation lets the host distinguish it from reusable incremental checking.
+// @evidence contracts/common.md#clear-and-simple-design One operation separates loaded-program mutation from preparse and emit phases.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The supported hook replaces globally altered compiler packages.
+// @evidence contracts/common.md#meaningful-documentation Native prose identifies the mutation boundary following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation The capability declaration performs no native operation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+// @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
 type ProgramPlugin interface {
+  // ApplyProgram mutates this generation before source output or native emit.
+  //
+  // @evidence contracts/common.md#principled-implementation Explicit generation mutation lets the host distinguish fresh transform work from reusable clean checking.
+  // @evidence contracts/common.md#clear-and-simple-design One program/context operation represents this phase separately from preambles and emit transforms.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts Mutation uses the declared plugin seam rather than global compiler package replacement.
+  // @evidence contracts/common.md#meaningful-documentation Native prose specifies generation and phase following the documentation skill.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation This method declaration owns no native filesystem or process operation.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources ApplyProgram declares a signature only; the implementation owns acquisition and release of resources.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms ApplyProgram declares a signature only; the implementation owns the processing strategy.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work ApplyProgram declares a signature only; the implementation owns any shared work.
   ApplyProgram(*Program, PluginContext) error
 }
 
@@ -301,7 +521,26 @@ type ProgramPlugin interface {
 // This is the AST-integration replacement for the ProgramPlugin + RewriteSet
 // text-splice model. A plugin whose returned transform is nil contributes
 // nothing.
+//
+// @evidence contracts/common.md#principled-implementation EmitContext owns binding identity and builtin integration rather than a second textual module-resolution model.
+// @evidence contracts/common.md#clear-and-simple-design One optional transformer leaves scheduling and printing with the host.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Supported factory names and original links replace hardcoded temporary identifiers.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains factory identity, nil behavior, and binding reuse following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation This AST capability owns no native process or path operation.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources A type declaration acquires and holds no runtime resource.
+// @evidenceExclude contracts/performance.md#efficient-algorithms A type declaration chooses no processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work A type declaration computes nothing, so there is no work to share.
 type EmitTransformPlugin interface {
+  // EmitTransform produces an optional callback for the native per-file emit chain.
+  //
+  // @evidence contracts/common.md#principled-implementation The returned callback shares EmitContext identity with builtin transformations.
+  // @evidence contracts/common.md#clear-and-simple-design Callback production is separate from per-source execution and printing.
+  // @evidence contracts/common.md#prohibited-implementation-shortcuts The interface returns supported AST transformations instead of guessed downlevel import text.
+  // @evidence contracts/common.md#meaningful-documentation Native prose identifies optional callback production following the documentation skill.
+  // @evidenceExclude contracts/portability.md#os-neutral-implementation The callback declaration defines AST work without a native path or process operation.
+  // @evidenceExclude contracts/performance.md#bound-retention-and-release-resources EmitTransform declares a signature only; the implementation owns acquisition and release of resources.
+  // @evidenceExclude contracts/performance.md#efficient-algorithms EmitTransform declares a signature only; the implementation owns the processing strategy.
+  // @evidenceExclude contracts/performance.md#reuse-equivalent-work EmitTransform declares a signature only; the implementation owns any shared work.
   EmitTransform(PluginContext) (PluginTransform, error)
 }
 
@@ -317,16 +556,92 @@ type linkedPluginState struct {
 // one hook cannot prove another hook's same-file dependency when that hook only
 // reported the path, while ReportHostInput followed by ReportHostInputHash in
 // one hook remains one complete observation.
+//
+// Environment reads are kept once per generation instead: a value is a
+// complete observation by itself, and every hook must see the value the
+// generation records, so the first read of a name fixes it for all of them.
 type pluginHostInputScopes struct {
-  mu     sync.Mutex
-  scopes []*pluginHostInputs
+  mu          sync.Mutex
+  scopes      []*pluginHostInputs
+  environment map[string]*string
+}
+
+// readEnvironment returns the generation's recorded value of name, reading and
+// recording the process environment on the first read. A nil ledger records
+// nothing.
+func (inputs *pluginHostInputScopes) readEnvironment(name string) (string, bool) {
+  if inputs == nil {
+    return os.LookupEnv(name)
+  }
+  inputs.mu.Lock()
+  defer inputs.mu.Unlock()
+  if runtime.GOOS == "windows" {
+    identity := strings.ToUpper(name)
+    for recordedName := range inputs.environment {
+      if strings.ToUpper(recordedName) == identity {
+        name = recordedName
+        break
+      }
+    }
+  }
+  recorded, exists := inputs.environment[name]
+  if !exists {
+    if value, ok := os.LookupEnv(name); ok {
+      recorded = &value
+    }
+    if inputs.environment == nil {
+      inputs.environment = map[string]*string{}
+    }
+    inputs.environment[name] = recorded
+  }
+  if recorded == nil {
+    return "", false
+  }
+  return *recorded, true
+}
+
+// environmentList copies the recorded environment reads, or returns nil when
+// no hook read one.
+func (inputs *pluginHostInputScopes) environmentList() map[string]*string {
+  if inputs == nil {
+    return nil
+  }
+  inputs.mu.Lock()
+  defer inputs.mu.Unlock()
+  if len(inputs.environment) == 0 {
+    return nil
+  }
+  environment := make(map[string]*string, len(inputs.environment))
+  for name, value := range inputs.environment {
+    environment[name] = cloneStringPointer(value)
+  }
+  return environment
 }
 
 type pluginHostInputs struct {
-  files     map[string]struct{}
-  hashes    map[string]pluginHostInputHash
-  realpaths map[string]pluginHostInputHash
-  mu        sync.Mutex
+  files                 map[string]struct{}
+  hashes                map[string]pluginHostInputHash
+  realpaths             map[string]pluginHostInputHash
+  observationIncomplete bool
+  mu                    sync.Mutex
+}
+
+func (inputs *pluginHostInputs) markObservationIncomplete() {
+  inputs.mu.Lock()
+  inputs.observationIncomplete = true
+  inputs.mu.Unlock()
+}
+
+func (inputs *pluginHostInputScopes) hasIncompleteObservations() bool {
+  for _, scope := range inputs.snapshot() {
+    scope.mu.Lock()
+    incomplete := scope.observationIncomplete
+    scope.mu.Unlock()
+    if incomplete {
+      return true
+    }
+  }
+  return false
 }
 
 type pluginHostInputHash struct {
@@ -552,6 +867,17 @@ var pluginRegistry []any
 // RegisterPlugin registers a driver-level plugin implementation. Linked Go
 // packages call this from init(); ttsc pairs registrations with linked manifest
 // entries by build order, not by package name.
+// The guard rejects a nil interface, not every typed-nil implementation.
+// Registry mutation has no concurrent-call synchronization or reset/cap policy.
+//
+// @evidence contracts/common.md#principled-implementation Init registration preserves ordered manifest pairing and rejects a nil interface. A nonnil interface wrapping a typed-nil implementation is not structurally validated by this append boundary.
+// @evidence contracts/common.md#clear-and-simple-design One guarded append owns registration; dispatch owns capability classification.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Registry entries come from linked init calls rather than guessed names or test fixtures.
+// @evidence contracts/common.md#meaningful-documentation Native prose states init use and order-based pairing following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation In-process insertion performs no native path or process operation.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The process-global registry retains every appended interface and reachable implementation state for the process lifetime. Linked init calls normally determine the population, but this exported function enforces no registration-count/transitive-byte cap, deduplication or reset/release operation.
+// @evidence contracts/performance.md#efficient-algorithms The nil-interface check precedes one ordered append. Appending is amortized constant entry work; capacity growth can allocate/copy the existing registration references, without cloning implementation payloads or scanning them for duplicate identity.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Registration performs no per-call computation that a later call could reuse.
 func RegisterPlugin(plugin any) {
   if plugin == nil {
     panic("driver: RegisterPlugin called with nil plugin")
@@ -682,7 +1008,8 @@ func registeredPlugin(index int) (any, bool) {
 // declarations are scoped per plugin instead: completeness is a claim about
 // everything one plugin contributes to a file, so the claims of its preamble
 // and program hooks are the same plugin's claim and must not be attributed
-// separately.
+// separately. Environment reads go to the generation ledger, which fixes one
+// value per name for every hook.
 func (state linkedPluginState) contextAt(index int, entry PluginEntry) PluginContext {
   inputs := state.inputs.newScope()
   declaration := state.declarations.forPlugin(index)
@@ -695,10 +1022,12 @@ func (state linkedPluginState) contextAt(index int, entry PluginEntry) PluginCon
     reportHostInputHashUnknown:     inputs.invalidateHash,
     reportHostInputRealpath:        inputs.addRealpath,
     reportHostInputRealpathUnknown: inputs.invalidateRealpath,
+    reportObservationIncomplete:    inputs.markObservationIncomplete,
     reportFileDependency:           declaration.addDependency,
     reportFileDependencyRejected:   declaration.rejectDependency,
     reportFileComplete:             declaration.addComplete,
     reportEveryFileComplete:        declaration.completeEveryFile,
+    readEnvironment:                state.inputs.readEnvironment,
   }
 }
 
@@ -714,4 +1043,8 @@ func (state linkedPluginState) hostInputHashes() map[string]*string {
 
 func (state linkedPluginState) hostInputRealpaths() map[string]*string {
   return state.inputs.realpathList()
+}
+
+func (state linkedPluginState) environmentInputs() map[string]*string {
+  return state.inputs.environmentList()
 }

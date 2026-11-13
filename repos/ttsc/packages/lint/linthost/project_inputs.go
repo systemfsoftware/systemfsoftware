@@ -10,21 +10,51 @@ import (
   "sort"
   "strings"
 
+  "github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
+  "github.com/microsoft/typescript-go/shim/vfs/osvfs"
+
   publicrule "github.com/samchon/ttsc/packages/lint/rule"
 )
 
 // ProjectInputSnapshot is the normalized filesystem dependency publication
 // shared by the CLI launcher and ttscserver.
+//
+// @evidence contracts/common.md#principled-implementation Root, exact files, glob populations and reload topology preserve separate dependency and execution-selection channels even when inputs are missing.
+// @evidence contracts/common.md#clear-and-simple-design One snapshot groups normalized dependency declarations without including a TypeScript Program or watcher implementation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The snapshot describes configured topology rather than inferring dependencies only from successful reads.
+// @evidence contracts/common.md#meaningful-documentation Native members identify physical-root spelling, exact and glob dependencies and reload effects; member gaps and tags follow documentation guidance.
+// @evidence contracts/portability.md#os-neutral-implementation Root and dependency patterns carry native filesystem identity with forward-slash protocol spelling, not remote URLs or a universal case-folded identity. Producers normalize exact paths and nonwildcard glob prefixes through physical-path helpers while preserving missing suffixes and case-distinct spellings; each consumer resolves actual aliases/case policy and owns watching/reload behavior. The DTO introduces no process executable or argument representation.
+// @evidenceExclude contracts/performance.md#efficient-algorithms ProjectInputSnapshot is a declaration of data shape and chooses no algorithm or processing strategy.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work ProjectInputSnapshot is a declaration of data shape and coordinates no computation that could be shared.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources ProjectInputSnapshot is a declaration of data shape; the code that holds its values owns their lifetime.
 type ProjectInputSnapshot struct {
-  Root              string   `json:"root"`
-  Files             []string `json:"files"`
-  Globs             []string `json:"globs"`
-  ReloadFiles       []string `json:"reloadFiles,omitempty"`
+  // Root is the normalized physical dependency root with forward-slash spelling.
+  Root string `json:"root"`
+
+  // Files contains exact dependencies, including missing paths and argument-directory identity.
+  Files []string `json:"files"`
+
+  // Globs contains changing dependency populations, including empty matches.
+  Globs []string `json:"globs"`
+
+  // ReloadFiles also trigger reconsideration of execution selection.
+  ReloadFiles []string `json:"reloadFiles,omitempty"`
+
+  // ReloadDirectories observe changes that can introduce a nearer config.
   ReloadDirectories []string `json:"reloadDirectories,omitempty"`
 }
 
 // RunProjectInputs prints the enabled ProjectRule dependency snapshot without
 // loading a TypeScript Program.
+//
+// @evidence contracts/common.md#principled-implementation Resolved rule settings and physical identity determine normalized exact-file and glob declarations before Program loading; publisher and normalization failures are aggregated rather than reporting partial topology as complete.
+// @evidence contracts/common.md#clear-and-simple-design CLI parsing and JSON output reuse one dependency collector, with per-input normalization and duplicate sorting owned by helpers.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Dependencies survive missing files and empty populations instead of being restricted to successful Check reads; unsupported remote URLs produce explicit errors.
+// @evidence contracts/common.md#meaningful-documentation Native prose states pre-Program publication and snapshot members explain reload topology; paragraphs, member gaps and tags follow documentation guidance.
+// @evidence contracts/portability.md#os-neutral-implementation RunProjectInputs obtains native project/config identity through shared parsing/acquisition. Rule dependencies and nonwildcard glob prefixes resolve physical ancestors while missing suffixes remain declared; compiler argument paths retain their consumed locators so link retargets remain observable. HTTP(S) URLs are rejected. Published strings use forward slashes and preserve case-distinct spellings instead of inferring directory case policy from OS names. Watchers and matching consumers own actual capability/alias decisions.
+// @evidence contracts/performance.md#efficient-algorithms The command parses options and loads config without building a Program, then scans configured project publishers and collects their input records under protected calls. Per-input native normalization/physical resolution and option/record copies add byte/filesystem work; four dependency populations are deduplicated and sorted, costing name hashing/comparison bytes as well as record visits. Provider work and JSON payload size remain additional dimensions. Globs are declared patterns, not expanded match populations here; no fixed complete-command bound is claimed.
+// @evidence contracts/performance.md#reuse-equivalent-work acquireRules shares a dependency-validated resolver memo when installed by the resident host and delegates executable evaluation cache premises otherwise. Project-input providers receive current resolved policy each query; this entry adds no independent topology-response cache or Program cache. Equivalent caller reuse must include rule/config/declared-input validity, not only matching project-root spelling.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Input contexts/options, copied declaration records, deduplication maps, normalized arrays and JSON buffers are temporary for the query; the published snapshot transfers plain path/pattern data rather than a Program/watcher lease. Provider-owned data and config/resident memo state have separate lifetimes. The operation creates no watcher or child task directly, but delegated evaluation owns its resources; no dependency/byte cap, cache eviction or caller deadline is introduced.
 func RunProjectInputs(args []string) int {
   opts, ok := parseLSPCommandOptions("project-inputs", args)
   if !ok {
@@ -56,6 +86,22 @@ func computeProjectInputs(opts *lspCommandOptions) (ProjectInputSnapshot, int) {
     fmt.Fprintln(os.Stderr, err)
     return ProjectInputSnapshot{}, 2
   }
+  arguments, err := prepareCompilerArguments(opts.cwd, cachedvfs.From(osvfs.FS()), nil, "")
+  if err != nil {
+    fmt.Fprintln(os.Stderr, err)
+    return ProjectInputSnapshot{}, 2
+  }
+  // Argument observations precede graph-nodes. Even a currently missing or
+  // malformed response file remains a reload input so repair can republish.
+  for _, input := range arguments.inputs {
+    // The consumed locator can retarget independently of its current physical
+    // target. Retain that edge while Root remains the physical project owner.
+    normalized := filepath.ToSlash(filepath.Clean(input))
+    snapshot.Files = append(snapshot.Files, normalized)
+    snapshot.ReloadFiles = append(snapshot.ReloadFiles, normalized)
+  }
+  snapshot.Files = uniqueProjectInputPatterns(snapshot.Files)
+  snapshot.ReloadFiles = uniqueProjectInputPatterns(snapshot.ReloadFiles)
   return snapshot, 0
 }
 

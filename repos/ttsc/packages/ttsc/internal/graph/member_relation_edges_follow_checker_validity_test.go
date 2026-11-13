@@ -19,9 +19,15 @@ import (
 //  1. Compile a class implementing an interface through ordinary methods plus
 //     the two valid cross-kind shapes, and a class overriding an abstract base.
 //  2. Build the native graph.
-//  3. Assert every directly declared checker-valid pair has the correct member
-//     relation while constructors never become override edges.
+//  3. Assert the five selected member pairs have the correct relation, while
+//     the two resident constructor nodes have no tested override edge.
+//
+// @evidence contracts/testing.md#behavioral-verification The fixture must have zero actual Program diagnostics, and Build must report five literal implements/overrides pairs, including two cross-kind implementations. Both constructor nodes must exist without a member-relation edge between them. Other valid shapes, exact relation counts and spans are not asserted.
+// @evidence contracts/testing.md#independent-expectations The oracle is the TypeScript checker: the fixture is first required to have no diagnostics, then the literal pairs Implementation.run/name/callback to Contract.run/name/callback must carry origin implements (including the getter-for-readonly-property and method-for-function-property shapes) and Derived.act/property to Base.act/property must carry origin overrides, while Derived's constructor must have no member-relation edge to Base's.
+// @evidence contracts/testing.md#distinguishing-cases Ordinary methods and property overrides contrast the selected getter-for-property and method-for-function-property accepted shapes. Resident constructor nodes supply a bounded negative relation counterpart; invalid pairs are not exercised by this valid fixture.
+// @evidence contracts/testing.md#execution-ownership This Go source-unit writes a native project, constructs/closes its driver Program, queries actual diagnostics and directly calls Build in-process. Actual filename/shared ID formatting select literal pairs; edgeOrigin reads a first matching edge rather than proving uniqueness. A restored empty linked-plugin manifest excludes ambient hooks; no emit, installed consumer or product process runs.
 func TestMemberRelationEdgesFollowCheckerValidity(t *testing.T) {
+  t.Setenv(driver.LinkedPluginsEnv, "")
   root := t.TempDir()
   writeFile(t, filepath.Join(root, "tsconfig.json"), fixtureTSConfig)
   writeFile(t, filepath.Join(root, "src", "main.ts"), `export interface Contract {
@@ -65,11 +71,11 @@ export class Derived extends Base {
     to     string
     origin string
   }{
-    {nodeID(path, "Implementation.run", NodeMethod), nodeID(path, "Contract.run", NodeMethod), "implements"},
-    {nodeID(path, "Implementation.name", NodeMethod), nodeID(path, "Contract.name", NodeVariable), "implements"},
-    {nodeID(path, "Implementation.callback", NodeMethod), nodeID(path, "Contract.callback", NodeVariable), "implements"},
-    {nodeID(path, "Derived.act", NodeMethod), nodeID(path, "Base.act", NodeMethod), "overrides"},
-    {nodeID(path, "Derived.property", NodeVariable), nodeID(path, "Base.property", NodeVariable), "overrides"},
+    {nodeID(string(path), "Implementation.run", NodeMethod), nodeID(string(path), "Contract.run", NodeMethod), "implements"},
+    {nodeID(string(path), "Implementation.name", NodeMethod), nodeID(string(path), "Contract.name", NodeVariable), "implements"},
+    {nodeID(string(path), "Implementation.callback", NodeMethod), nodeID(string(path), "Contract.callback", NodeVariable), "implements"},
+    {nodeID(string(path), "Derived.act", NodeMethod), nodeID(string(path), "Base.act", NodeMethod), "overrides"},
+    {nodeID(string(path), "Derived.property", NodeVariable), nodeID(string(path), "Base.property", NodeVariable), "overrides"},
   }
   for _, assertion := range assertions {
     if got := edgeOrigin(built, assertion.from, assertion.to, EdgeMemberRelation); got != assertion.origin {
@@ -77,8 +83,11 @@ export class Derived extends Base {
     }
   }
 
-  derivedConstructor := nodeID(path, "Derived.__constructor", NodeMethod)
-  baseConstructor := nodeID(path, "Base.__constructor", NodeMethod)
+  derivedConstructor := nodeID(string(path), "Derived.__constructor", NodeMethod)
+  baseConstructor := nodeID(string(path), "Base.__constructor", NodeMethod)
+  if built.Nodes[derivedConstructor] == nil || built.Nodes[baseConstructor] == nil {
+    t.Fatalf("missing fixture constructor nodes; nodes: %v", nodeIDSet(built))
+  }
   if hasEdge(built, derivedConstructor, baseConstructor, EdgeMemberRelation) {
     t.Fatalf("constructors are not member overrides; edges: %v", built.Edges)
   }

@@ -1,20 +1,101 @@
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 
 import type { ITtscProjectPluginConfig } from "../../../structures/ITtscProjectPluginConfig";
 import type { ITtscParsedProjectConfig } from "../../../structures/internal/ITtscParsedProjectConfig";
 import type { ITtscProjectLocatorOptions } from "../../../structures/internal/ITtscProjectLocatorOptions";
-import { readJsonFile, readJsoncFile } from "./readConfigJson";
-import { resolveProjectIdentity } from "./resolveProjectConfig";
+import { readJsoncFile } from "./readJsoncFile";
+import { resolveProjectIdentity } from "./resolveProjectIdentity";
+import { resolveTsconfigExtends } from "./resolveTsconfigExtends";
+import { tsconfigExtendsFileCandidates } from "./tsconfigExtendsFileCandidates";
+
+/**
+ * Read and resolve the project config subset used by ttsc.
+ *
+ * Follows `extends` chains (including arrays) and merges compiler options with
+ * later configs taking precedence. Path-typed options (`baseUrl`,
+ * `declarationDir`, `outFile`, `rootDir`, `tsBuildInfoFile`) are resolved
+ * relative to the config that declares them. `${configDir}` paths are resolved
+ * against the final consuming config after the extends chain is merged. The
+ * `outDir` is resolved to an absolute path when it is a string; a null reset
+ * becomes undefined in the returned shape. A declared plugins array replaces
+ * inheritance, including an empty array. Array presets merge left to right,
+ * with the last branch carrying a declaration supplying plugin entries and
+ * their declaring directories. Non-object plugin entries are filtered here;
+ * descriptor validation remains with the plugin loader.
+ *
+ * Config observations include selected lexical paths and missing candidates
+ * that could change selection. Package/import-map `extends` uses Node's
+ * resolver, whose complete search authority is not exposed here; such a chain
+ * marks `configInputsComplete` false and cannot authorize persistent reuse.
+ * Completed ancestors are shared only within this read. Each incoming extends
+ * edge still selects and observes its lexical candidates before reuse; config
+ * bytes, canonical declaring directories and the final configDir are shared
+ * within the invocation. Another read performs fresh discovery and evaluation.
+ *
+ * @param opts Config selection, invocation directory and optional project root.
+ * @returns Resolved options, plugin origins, selected identity and config
+ *   inputs.
+ * @throws When selection, parsing or inheritance fails, including circular
+ *   extends chains. Native read failures propagate from the shared reader.
+ * @evidence contracts/common.md#principled-implementation Recursive left-to-right option merging retains each declaring directory and final configDir substitution; selected and missing config candidates are recorded, while module inheritance explicitly lacks complete freshness proof.
+ * @evidence contracts/common.md#clear-and-simple-design Identity selection, extends resolution and JSONC parsing stay with their shared owners; one recursive merge returns options, plugin origins and config observations together. Separate active and completed collections distinguish circular dependencies from reusable ancestors.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Missing candidates are real selection premises, and incomplete Node module topology is marked unproved instead of imitated by a guessed package resolver or cache bypass.
+ * @evidence contracts/common.md#meaningful-documentation Native JSDoc separates option inheritance, path anchors and observation limitations; native member comments and separated tags follow the documentation skill.
+ * @evidence contracts/portability.md#os-neutral-implementation Native resolution and realpath preserve distinct lexical and physical config identities; option separators and configDir substitution use the shared host-neutral config rule rather than POSIX concatenation.
+ * @evidence contracts/performance.md#efficient-algorithms Each distinct canonical config is read, parsed and merged once; each outgoing extends edge of those configs performs native selection and realpath before completed lookup, so shared diamonds no longer expand by inheritance-path count. Record merging and ordered configPaths copies still scale with accumulated option/path volume and can be quadratic along long chains or wide arrays. Candidate observations use a Set and one final sort; native resolution and path-text processing retain their delegated costs.
+ * @evidence contracts/performance.md#reuse-equivalent-work One invocation-owned Map shares completed canonical results after incoming lexical selection observations and active-stack cycle checks. Outgoing resolution always uses the canonical declaring file and all entries share the invocation's final configDir, so aliases do not change the merge context. Observed outgoing premises and incomplete module authority are retained with the shared result. No entry survives the read, and independent loader stability reads remain fresh; this synchronous operation does not claim an atomic filesystem snapshot.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources The active Set and completed Map belong to one read and retain at most its distinct reachable configs, with merged records/path lists proportional to each reachable subtree. They become reclaimable on return or failure; finally removes active membership, and no historical cache or live handle survives the invocation.
+ */
+export function readProjectConfig(
+  opts: ITtscProjectLocatorOptions = {},
+): ITtscParsedProjectConfig {
+  const configInputs = new Set<string>();
+  const onInput = (file: string): void => {
+    configInputs.add(path.resolve(file));
+  };
+  const identity = resolveProjectIdentity(opts, onInput);
+  const tsconfig = identity.physicalConfigPath;
+  const root = identity.physicalProjectRoot;
+  const compilerOptions = readResolvedCompilerOptions(
+    tsconfig,
+    new Set(),
+    new Map(),
+    path.dirname(tsconfig),
+    onInput,
+  );
+  return {
+    configInputs: [...configInputs].sort(),
+    configInputsComplete: compilerOptions.configInputsComplete,
+    configPaths: compilerOptions.configPaths,
+    compilerOptions: {
+      ...compilerOptions.options,
+      // A null reset merges as `null`, exactly as the compiler reads it; the
+      // parsed shape states an unset output directory as `undefined`.
+      outDir:
+        typeof compilerOptions.options.outDir === "string"
+          ? compilerOptions.options.outDir
+          : undefined,
+      plugins: compilerOptions.plugins,
+    },
+    identity,
+    path: tsconfig,
+    pluginBaseDirs: compilerOptions.pluginBaseDirs,
+    root,
+  };
+}
 
 /**
  * Compiler option keys whose values are file-system paths that must be resolved
  * relative to the tsconfig that declares them, not the project root.
+ *
+ * `outDir` merges here like every other path option, so a child's `outDir:
+ * null` resets an inherited one the way the compiler resets it.
  */
 const PATH_OPTIONS = new Set([
   "baseUrl",
   "declarationDir",
+  "outDir",
   "outFile",
   "rootDir",
   "tsBuildInfoFile",
@@ -26,53 +107,20 @@ const CONFIG_DIR_TEMPLATE = "${configDir}";
  * projected into `ITtscParsedProjectConfig`.
  */
 type ResolvedCompilerOptions = {
+  /** Whether every supported config-resolution authority was observed. */
+  configInputsComplete: boolean;
+
   configPaths: string[];
   options: Record<string, unknown>;
+
   /** Directory of the tsconfig that last declared each option key. */
   optionBaseDirs: Record<string, string>;
-  outDir?: string;
   pluginBaseDirs: string[];
+
   /** True when any tsconfig in the chain explicitly declared `plugins`. */
   pluginsDeclared: boolean;
   plugins: ITtscProjectPluginConfig[];
 };
-
-/**
- * Read and resolve the project config subset used by ttsc.
- *
- * Follows `extends` chains (including arrays) and merges compiler options with
- * later configs taking precedence. Path-typed options (`baseUrl`,
- * `declarationDir`, `outFile`, `rootDir`, `tsBuildInfoFile`) are resolved
- * relative to the config that declares them. `${configDir}` paths are resolved
- * against the final consuming config after the extends chain is merged. The
- * `outDir` is resolved to an absolute path. Plugins are inherited from the
- * nearest ancestor that declares them.
- */
-export function readProjectConfig(
-  opts: ITtscProjectLocatorOptions = {},
-): ITtscParsedProjectConfig {
-  const identity = resolveProjectIdentity(opts);
-  const tsconfig = identity.physicalConfigPath;
-  const root = identity.physicalProjectRoot;
-  const compilerOptions = readResolvedCompilerOptions(
-    tsconfig,
-    new Set(),
-    path.dirname(tsconfig),
-  );
-  return {
-    configPaths: compilerOptions.configPaths,
-    compilerOptions: {
-      ...compilerOptions.options,
-      outDir: compilerOptions.outDir,
-      plugins: compilerOptions.plugins,
-    },
-    identity,
-    path: tsconfig,
-    pluginBaseDirs: compilerOptions.pluginBaseDirs,
-    root,
-  };
-}
-
 /**
  * Type guard: accept any non-null object as a plugin config entry. This is
  * intentionally loose because the shape is validated later by plugin loaders.
@@ -95,33 +143,47 @@ function resolveRealPath(location: string): string {
   }
 }
 
-/** Resolve `target` against `cwd` when it is not already absolute. */
+/**
+ * Resolve `target` against `cwd`, normalized to native separators.
+ *
+ * An absolute `target` is normalized too, not returned as given. Every path
+ * option is resolved once in the config that declares it and again in each
+ * config that inherits it, after its separators were folded to `/` for the
+ * `${configDir}` check, so returning an absolute value verbatim would hand an
+ * inherited `rootDir` back as `C:/…/src` on Windows while a declared one comes
+ * back as `C:\…\src`.
+ */
 function resolveAbsolutePath(cwd: string, target: string): string {
-  return path.isAbsolute(target) ? target : path.resolve(cwd, target);
+  return path.resolve(cwd, target);
 }
 
 /**
  * Recursively read and merge `compilerOptions` from `tsconfig` and all configs
- * in its `extends` chain. `seen` tracks canonical paths to detect circular
- * `extends` references; the current config is removed from `seen` in the
- * `finally` block so sibling-referenced configs can be visited again via a
- * different parent.
+ * in its `extends` chain. Active canonical paths reject circular references
+ * before completed results are considered. Incoming selection observations
+ * happen before this call; each completed canonical file has already observed
+ * its outgoing edges under the same canonical anchor and final configDir.
+ * Parent merges copy records and never mutate the shared completed result.
  */
 function readResolvedCompilerOptions(
   tsconfig: string,
-  seen: Set<string> = new Set(),
-  configDir = path.dirname(tsconfig),
+  seen: Set<string>,
+  completed: Map<string, ResolvedCompilerOptions>,
+  configDir: string,
+  onInput?: (file: string) => void,
 ): ResolvedCompilerOptions {
+  onInput?.(tsconfig);
   const canonical = resolveRealPath(tsconfig);
   if (seen.has(canonical)) {
     throw new Error(`ttsc: circular tsconfig extends detected: ${canonical}`);
   }
+  const cached = completed.get(canonical);
+  if (cached !== undefined) return cached;
   seen.add(canonical);
   try {
     const parsed = readJsoncFile(canonical) as {
       extends?: unknown;
       compilerOptions?: Record<string, unknown> & {
-        outDir?: unknown;
         plugins?: unknown;
       };
     };
@@ -130,7 +192,9 @@ function readResolvedCompilerOptions(
       canonical,
       parsed.extends,
       seen,
+      completed,
       configDir,
+      onInput,
     );
     const ownBaseDir = path.dirname(canonical);
     const ownOptionBaseDirs =
@@ -156,20 +220,19 @@ function readResolvedCompilerOptions(
     const plugins = pluginsDeclared
       ? ownPlugins.filter(isProjectPluginConfig)
       : base.plugins;
-    return {
+    const resolved: ResolvedCompilerOptions = {
+      configInputsComplete: base.configInputsComplete,
       configPaths: uniquePaths([...base.configPaths, canonical]),
       optionBaseDirs,
       options,
-      outDir:
-        typeof own?.outDir === "string"
-          ? resolveCompilerOptionPath(ownBaseDir, configDir, own.outDir)
-          : base.outDir,
       pluginBaseDirs: pluginsDeclared
         ? plugins.map(() => ownBaseDir)
         : base.pluginBaseDirs,
       pluginsDeclared: pluginsDeclared || base.pluginsDeclared,
       plugins,
     };
+    completed.set(canonical, resolved);
+    return resolved;
   } finally {
     seen.delete(canonical);
   }
@@ -182,24 +245,36 @@ function readResolvedCompilerOptions(
  * - Array: multiple base configs merged left-to-right (later entries win).
  * - Absent / non-string non-array: returns empty options.
  *
- * Plugin inheritance: when the current config in an array chain explicitly
- * declares `plugins`, subsequent configs in the array do not override them.
+ * Plugin inheritance follows the last array entry that explicitly declares
+ * `plugins`; a later entry that merely inherits no declaration does not erase
+ * an earlier declaration.
  */
 function resolveBaseCompilerOptions(
   tsconfig: string,
   extended: unknown,
   seen: Set<string>,
+  completed: Map<string, ResolvedCompilerOptions>,
   configDir: string,
+  onInput?: (file: string) => void,
 ): ResolvedCompilerOptions {
   if (typeof extended === "string") {
-    return readResolvedCompilerOptions(
-      resolveExtendsConfig(tsconfig, extended),
+    const inherited = readResolvedCompilerOptions(
+      resolveTsconfigExtends(tsconfig, extended, onInput),
       seen,
+      completed,
       configDir,
+      onInput,
     );
+    return {
+      ...inherited,
+      configInputsComplete:
+        inherited.configInputsComplete &&
+        tsconfigExtendsFileCandidates(tsconfig, extended) !== undefined,
+    };
   }
   if (!Array.isArray(extended)) {
     return {
+      configInputsComplete: true,
       configPaths: [],
       optionBaseDirs: {},
       options: {},
@@ -209,6 +284,7 @@ function resolveBaseCompilerOptions(
     };
   }
   let merged: ResolvedCompilerOptions = {
+    configInputsComplete: true,
     configPaths: [],
     optionBaseDirs: {},
     options: {},
@@ -221,11 +297,17 @@ function resolveBaseCompilerOptions(
       continue;
     }
     const current = readResolvedCompilerOptions(
-      resolveExtendsConfig(tsconfig, specifier),
+      resolveTsconfigExtends(tsconfig, specifier, onInput),
       seen,
+      completed,
       configDir,
+      onInput,
     );
     merged = {
+      configInputsComplete:
+        merged.configInputsComplete &&
+        current.configInputsComplete &&
+        tsconfigExtendsFileCandidates(tsconfig, specifier) !== undefined,
       configPaths: uniquePaths([...merged.configPaths, ...current.configPaths]),
       optionBaseDirs: {
         ...merged.optionBaseDirs,
@@ -235,7 +317,6 @@ function resolveBaseCompilerOptions(
         ...merged.options,
         ...current.options,
       },
-      outDir: current.outDir ?? merged.outDir,
       pluginBaseDirs: current.pluginsDeclared
         ? current.pluginBaseDirs
         : merged.pluginBaseDirs,
@@ -299,148 +380,4 @@ function resolveCompilerOptionPath(
     ? `./${normalized.slice(CONFIG_DIR_TEMPLATE.length)}`
     : normalized;
   return resolveAbsolutePath(configDir, substituted);
-}
-
-/**
- * Resolve an `extends` specifier to an absolute path using the same rules as
- * TypeScript's config resolution:
- *
- * - Absolute path: used directly.
- * - Relative specifier (`./`, `../`, `.`, `..`): resolved against the declaring
- *   tsconfig's directory with fallback extension candidates.
- * - Bare package specifier: resolved through Node's module resolver (the resolver
- *   also tries appending `.json` when the first attempt fails).
- */
-function resolveExtendsConfig(tsconfig: string, specifier: string): string {
-  specifier = specifier.replaceAll("\\", "/");
-  const baseDir = path.dirname(tsconfig);
-  if (path.isAbsolute(specifier)) {
-    return resolveExistingExtendsPath(specifier);
-  }
-  if (isRelativeSpecifier(specifier)) {
-    return resolveExistingExtendsPath(path.resolve(baseDir, specifier));
-  }
-  const resolver = createRequire(tsconfig);
-  // A bare package root selects its preset through `package.json#tsconfig`,
-  // matching TypeScript's config resolution. Presets shipped this way often
-  // have no JavaScript/JSON entrypoint at all, so Node's entrypoint resolver
-  // and the `<specifier>.json` fallback below both miss them.
-  const viaManifest = resolvePackageManifestTsconfig(resolver, specifier);
-  if (viaManifest !== undefined) {
-    return resolveExistingExtendsPath(viaManifest);
-  }
-  try {
-    return resolveRealPath(resolver.resolve(specifier));
-  } catch {
-    return resolveRealPath(resolver.resolve(`${specifier}.json`));
-  }
-}
-
-/**
- * When `specifier` names a bare package root, resolve the config file its
- * `package.json#tsconfig` field selects (anchored at the package directory).
- * Returns `undefined` when the specifier is a subpath, the manifest cannot be
- * resolved at all, or it declares no `tsconfig` field, so the caller falls back
- * to Node entrypoint resolution. A manifest that resolves but does not parse
- * throws, naming the file.
- */
-function resolvePackageManifestTsconfig(
-  resolver: NodeRequire,
-  specifier: string,
-): string | undefined {
-  if (!isBarePackageRoot(specifier)) {
-    return undefined;
-  }
-  let manifestPath: string;
-  try {
-    manifestPath = resolver.resolve(`${specifier}/package.json`);
-  } catch (error) {
-    // Node parses a package's manifest while resolving into it, so a malformed
-    // preset manifest fails here rather than at the read below. Swallowing it
-    // is what turned a broken manifest into the confusing downstream
-    // "Cannot find module 'example-preset.json'" from the `extends` fallback,
-    // which names a file that was never the problem. Node's own message names
-    // the real one, so report it in ttsc's voice instead of continuing.
-    if (
-      (error as NodeJS.ErrnoException | undefined)?.code ===
-      "ERR_INVALID_PACKAGE_CONFIG"
-    ) {
-      throw new Error(
-        `ttsc: failed to parse the package manifest of ${JSON.stringify(specifier)}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    return undefined;
-  }
-  // A manifest that exists but does not parse is a real configuration error,
-  // and it used to be swallowed here: the read returned `undefined`, the caller
-  // fell back to Node entrypoint resolution, and the user learned nothing about
-  // the file that actually broke. Report it instead.
-  //
-  // A manifest that parses to something other than an object carries no
-  // `tsconfig` field to read, so it falls back rather than throwing on a
-  // property access.
-  const manifest = readJsonFile(manifestPath);
-  const field =
-    typeof manifest === "object" && manifest !== null
-      ? (manifest as { tsconfig?: unknown }).tsconfig
-      : undefined;
-  if (typeof field !== "string" || field.length === 0) {
-    return undefined;
-  }
-  return path.resolve(path.dirname(manifestPath), field.replaceAll("\\", "/"));
-}
-
-/**
- * Return true when `specifier` is a bare package root (no subpath): a plain
- * package name (`preset`) or a scoped name (`@scope/preset`). Subpaths such as
- * `@scope/preset/base.json` resolve directly and keep their current meaning.
- */
-function isBarePackageRoot(specifier: string): boolean {
-  if (specifier.startsWith("@")) {
-    return specifier.split("/").length === 2;
-  }
-  return !specifier.includes("/");
-}
-
-/**
- * Given an on-disk location, try the path as-is and, unless it already ends in
- * `.json`, with that extension appended. Only regular files are valid `extends`
- * targets; TypeScript neither expands a directory into `tsconfig.json` nor
- * probes a double `.json` suffix.
- */
-function resolveExistingExtendsPath(location: string): string {
-  const candidates = location.endsWith(".json")
-    ? [location]
-    : [location, `${location}.json`];
-  for (const candidate of candidates) {
-    if (isFile(candidate)) {
-      return resolveRealPath(candidate);
-    }
-  }
-  throw new Error(`ttsc: extended tsconfig not found: ${location}`);
-}
-
-function isFile(location: string): boolean {
-  try {
-    return fs.statSync(location).isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Return true when `specifier` is a relative path reference: `.`, `..`, or a
- * string starting with `./`, `../`, `.\\`, or `..\\`.
- */
-function isRelativeSpecifier(specifier: string): boolean {
-  return (
-    specifier === "." ||
-    specifier === ".." ||
-    specifier.startsWith("./") ||
-    specifier.startsWith("../") ||
-    specifier.startsWith(".\\") ||
-    specifier.startsWith("..\\")
-  );
 }

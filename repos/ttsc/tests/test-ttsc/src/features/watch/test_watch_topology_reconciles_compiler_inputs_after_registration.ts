@@ -1,61 +1,89 @@
-import { TestProject } from "@ttsc/testing";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
+import { type WatchInputChange } from "../../../../../packages/ttsc/src/launcher/internal/watch/WatchInputChange";
+import { WatchTopology } from "../../../../../packages/ttsc/src/launcher/internal/watch/WatchTopology";
+import { watchDirectoryThroughFsWatch } from "../../../../../packages/ttsc/src/launcher/internal/watch/watchDirectoryThroughFsWatch";
 import {
-  type WatchInputChange,
-  WatchTopology,
-} from "../../../../../packages/ttsc/lib/launcher/internal/watchTopology.js";
+  deliverWatchEvent,
+  recordWatchers,
+  settleWatchEvents,
+} from "../../../../utils/src/RecordedWatchers";
+import { TestProject } from "../../../../utils/src/TestProject";
 
 /**
- * Verifies compiler watchers close their snapshot-to-registration handoff.
+ * Verifies source topology decisions with authored compiler membership.
  *
- * A backend can return a file or directory watcher before its first event is
- * deliverable. The bounded reconciliation must recover tracked-file and
- * Program-membership changes, rebind replaced POSIX files, and stay silent
- * after close.
+ * Supplied subscriptions retain the original ordered notifications and handle
+ * lifetimes. Literal absolute membership is supplied separately from actual
+ * config parsing, path ownership and source fingerprint decisions.
  *
- * 1. Swallow every startup event and report one config change plus parse error.
- * 2. Swallow a new included source event and refresh compiler membership once.
- * 3. Let a real source event win the race without producing a duplicate.
- * 4. Hand pure and mixed Windows memberships across project/compiler watchers.
- * 5. Contain and recover a transient reload-directory fingerprint race.
- * 6. Rebind a same-stamp POSIX replacement without reporting identical bytes.
- * 7. Keep a source rearm from repeating a failed config membership refresh.
- * 8. Observe the rebound POSIX file's next in-place edit.
- * 9. Close before reconciliation and drain every fake watcher exactly once.
+ * 1. Author the nine config, membership, lane, fingerprint and owner-handoff
+ *    scenarios.
+ * 2. Drive swallowed and event-first transitions through native directory owners
+ *    on Windows and per-file owners on POSIX. The recursive Windows
+ *    mixed-membership scenario remains specific to that backend.
+ * 3. Collect every scenario result and require exact reports, errors and handle
+ *    retirements.
+ *
+ * @evidence contracts/testing.md#behavioral-verification Preserves all nine handoff scenarios: swallowed config and membership events, event-first deduplication, deleted JSON handoff, Windows mixed membership, transient directory failure, POSIX owner rebind, failed refresh containment and close cancellation.
+ * @evidence contracts/testing.md#independent-expectations Authored config/source/JSON changes, literal error and notification counts, distinct inode assertions and exact close counts define independent handoff outcomes.
+ * @evidence contracts/testing.md#distinguishing-cases Contrasts: a swallowed config deletion reports one config change and one error while a swallowed new compiler member reports one topology refresh and no input change; a backend event that wins reconciliation reports exactly one compiler change; a consumed warm creation is not repeated by delayed project and compiler deliveries, a mixed source-plus-JSON membership keeps its broader topology reload, and reload-file and reload-directory deltas are consumed once; a first directory read that fails with ENOENT yields one config change and no error; an identical physical replacement invents no change but a later edit does, and a rearm after a failed refresh neither repeats the config notice nor the error; after close nothing is reported. POSIX asserts per-file rebind and retirement; Windows asserts no per-file registration and retention of its directory owner. The recursive Windows mixed-membership scenario is logged as unexecuted on other platforms, not counted as coverage there.
+ * @evidence contracts/testing.md#execution-ownership Actual source WatchTopology and directory adapters consume recorded notifications and explicitly supplied absolute compiler membership. This unit starts no compiler process or native watcher; retained native E2E cases own compiler population and physical delivery. Every original semantic assertion remains in this unit.
  */
-export const test_watch_topology_reconciles_compiler_inputs_after_registration =
-  async (): Promise<void> => {
-    await verifySwallowedConfigDeletion();
-    await verifySwallowedCompilerMembership();
-    await verifyBackendEventWinsReconciliation();
-    await verifyWindowsProjectCompilerMembershipHandoff();
-    await verifyTransientReloadDirectoryFingerprintRace();
-    await verifyAtomicReplacementRebindsPosixFileWatcher();
-    await verifyFileRearmDoesNotRepeatCompilerRefresh();
-    await verifyCloseCancelsReconciliation();
-  };
+export async function test_watch_topology_reconciles_compiler_inputs_after_registration() {
+  const failures: Error[] = [];
+  for (const [run, platform] of [
+    [verifySwallowedConfigDeletion, "any"],
+    [verifySwallowedCompilerMembership, "any"],
+    [verifyBackendEventWinsReconciliation, "any"],
+    [verifyDeletedProjectMemberReconcilesBeforeFileNotification, "any"],
+    [verifyWindowsProjectCompilerMembershipHandoff, "win32"],
+    [verifyTransientReloadDirectoryFingerprintRace, "any"],
+    [verifyAtomicReplacementRebindsPosixFileWatcher, "any"],
+    [verifyFileRearmDoesNotRepeatCompilerRefresh, "any"],
+    [verifyCloseCancelsReconciliation, "any"],
+  ] as const) {
+    // A scenario owned by another platform is reported rather than passed
+    // silently, so the run never claims coverage it did not execute.
+    if (platform === "win32" && process.platform !== "win32") {
+      console.log(
+        `  - ${run.name}: SKIPPED on ${process.platform} (${platform}-only scenario; no coverage claimed)`,
+      );
+      continue;
+    }
+    try {
+      await run();
+    } catch (error) {
+      failures.push(new Error(run.name, { cause: error }));
+    }
+  }
+  if (failures.length !== 0)
+    throw new AggregateError(failures, "watch registration handoffs failed");
+}
+
+const compilerMembership = new Map<string, string[]>();
 
 async function verifySwallowedConfigDeletion(): Promise<void> {
   const fixture = createFixture("ttsc-watch-compiler-registration-");
   const changes: WatchInputChange[] = [];
   const errors: unknown[] = [];
   const watchers: FakeWatcher[] = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: (() => {
-      const watcher = new FakeWatcher();
-      watchers.push(watcher);
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = (() => {
+    const watcher = new FakeWatcher();
+    watchers.push(watcher);
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+  );
   try {
     topology.refresh(false);
     fs.rmSync(fixture.config);
@@ -67,11 +95,6 @@ async function verifySwallowedConfigDeletion(): Promise<void> {
     assert.equal(errors.length, 1, "the failed refresh was not reported");
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(watchers.length > 0, "the regression registered no watchers");
   assert.ok(
@@ -89,24 +112,24 @@ async function verifySwallowedCompilerMembership(): Promise<void> {
   const errors: unknown[] = [];
   const topologyChanges: number[] = [];
   const watchers: FakeWatcher[] = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: (() => {
-      const watcher = new FakeWatcher();
-      watchers.push(watcher);
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = (() => {
+    const watcher = new FakeWatcher();
+    watchers.push(watcher);
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors, () =>
-    topologyChanges.push(topologyChanges.length + 1),
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    () => topologyChanges.push(topologyChanges.length + 1),
+    openFileWatch,
   );
   try {
     topology.refresh(false);
     fs.writeFileSync(added, "export const added = true;\n", "utf8");
+    compilerMembership.set(fixture.root, [fixture.reportedSource, added]);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -119,11 +142,6 @@ async function verifySwallowedCompilerMembership(): Promise<void> {
     );
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(watchers.length > 0, "the membership case registered no watchers");
   assert.ok(
@@ -141,27 +159,28 @@ async function verifyBackendEventWinsReconciliation(): Promise<void> {
     location: string;
     watcher: FakeWatcher;
   }> = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: ((
-      location: fs.PathLike,
-      _options: fs.WatchOptions,
-      listener: fs.WatchListener<string>,
-    ) => {
-      const watcher = new FakeWatcher();
-      registrations.push({
-        listener,
-        location: fs.realpathSync.native(location),
-        watcher,
-      });
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = ((
+    location: fs.PathLike,
+    _options: fs.WatchOptions,
+    listener: fs.WatchListener<string>,
+  ) => {
+    const watcher = new FakeWatcher();
+    registrations.push({
+      listener,
+      location: fs.realpathSync.native(location),
+      watcher,
+    });
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+  );
   try {
     topology.refresh(false);
     const registration = registrations
@@ -174,7 +193,7 @@ async function verifyBackendEventWinsReconciliation(): Promise<void> {
       "change",
       path.relative(registration.location, fixture.physicalSource),
     );
-    await Promise.resolve();
+    await settleWatchEvents();
 
     assert.deepEqual(changes, [
       { kind: "compiler", path: fixture.reportedSource },
@@ -182,11 +201,6 @@ async function verifyBackendEventWinsReconciliation(): Promise<void> {
     assert.deepEqual(errors, []);
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(
     registrations.every(({ watcher }) => watcher.closeCount === 1),
@@ -194,9 +208,103 @@ async function verifyBackendEventWinsReconciliation(): Promise<void> {
   );
 }
 
-async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
-  if (process.platform !== "win32") return;
+async function verifyDeletedProjectMemberReconcilesBeforeFileNotification(): Promise<void> {
+  const root = TestProject.tmpdir("ttsc-watch-project-delete-handoff-");
+  const source = path.join(root, "src", "main.ts");
+  const json = path.join(root, "api", "openapi.json");
+  fs.mkdirSync(path.dirname(source), { recursive: true });
+  fs.mkdirSync(path.dirname(json), { recursive: true });
+  fs.writeFileSync(
+    source,
+    'import contract from "../api/openapi.json";\nexport const name = contract.name;\n',
+  );
+  fs.writeFileSync(json, '{"name":"before"}\n');
+  fs.writeFileSync(
+    path.join(root, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        esModuleInterop: true,
+        noEmit: true,
+        resolveJsonModule: true,
+      },
+      include: ["src"],
+    }),
+  );
 
+  const changes: WatchInputChange[] = [];
+  const errors: unknown[] = [];
+  const recorded = recordWatchers(watchDirectoryThroughFsWatch);
+  compilerMembership.set(root, [
+    fs.realpathSync.native(source),
+    fs.realpathSync.native(json),
+  ]);
+  const topology = createTopology(
+    root,
+    changes,
+    errors,
+    undefined,
+    recorded.openFileWatch,
+  );
+  try {
+    topology.refresh(false);
+    const compilerDirectoryWatcher = recorded.watchers.find(
+      (watcher) =>
+        watcher.active &&
+        watcher.recursive &&
+        isPathWithin(watcher.location, fs.realpathSync.native(json)),
+    );
+    topology.setProjectInputs({
+      files: [],
+      globs: [path.join(root, "api", "**", "*.json")],
+      root,
+    });
+    await settleWatchEvents();
+
+    const physicalJson = fs.realpathSync.native(json);
+    const fileWatcher = recorded.watchers.find(
+      (watcher) => watcher.active && watcher.location === physicalJson,
+    );
+    if (process.platform === "win32") {
+      assert.equal(
+        fileWatcher,
+        undefined,
+        "Windows must not acquire a per-file JSON owner",
+      );
+      assert.ok(
+        compilerDirectoryWatcher,
+        "Windows has no recursive compiler owner for the JSON member",
+      );
+    } else assert.ok(fileWatcher, "the compiler did not watch its JSON member");
+    fs.rmSync(json);
+    compilerMembership.set(root, [fs.realpathSync.native(source)]);
+    if (process.platform === "win32") {
+      assert.ok(compilerDirectoryWatcher);
+      compilerDirectoryWatcher.listener(
+        "rename",
+        path.relative(compilerDirectoryWatcher.location, physicalJson),
+      );
+    } else {
+      assert.ok(fileWatcher);
+      fileWatcher.listener("rename", path.basename(json));
+    }
+    deliverWatchEvent(
+      recorded.watchers.filter((watcher) => watcher.recursive),
+      physicalJson,
+      "rename",
+    );
+    await settleWatchEvents();
+
+    assert.deepEqual(changes, [
+      { invalidate: true, kind: "project", path: physicalJson },
+    ]);
+    assert.deepEqual(errors, []);
+  } finally {
+    topology.close();
+  }
+  assert.ok(recorded.watchers.every((watcher) => watcher.active === false));
+}
+
+async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
   const fixture = createFixture("ttsc-watch-membership-handoff-", {
     compilerOptions: {
       esModuleInterop: true,
@@ -238,30 +346,26 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     location: string;
     watcher: FakeWatcher;
   }> = [];
-  const originalWatch = fs.watch;
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: ((
-      location: fs.PathLike,
-      _options: fs.WatchOptions,
-      listener: fs.WatchListener<string>,
-    ) => {
-      const watcher = new FakeWatcher();
-      registrations.push({
-        listener,
-        location: path.resolve(location.toString()),
-        watcher,
-      });
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = ((
+    location: fs.PathLike,
+    _options: fs.WatchOptions,
+    listener: fs.WatchListener<string>,
+  ) => {
+    const watcher = new FakeWatcher();
+    registrations.push({
+      listener,
+      location: path.resolve(location.toString()),
+      watcher,
+    });
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
   const topology = createTopology(
     fixture.root,
     changes,
     errors,
     () => (topologyChanges += 1),
+    openFileWatch,
   );
   try {
     topology.refresh(false);
@@ -287,6 +391,12 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     fs.writeFileSync(first, '{"name":"created"}\n', "utf8");
     fs.writeFileSync(firstPeer, '{"name":"created"}\n', "utf8");
     fs.writeFileSync(other, '{"name":"created"}\n', "utf8");
+    compilerMembership.set(fixture.root, [
+      fixture.reportedSource,
+      first,
+      firstPeer,
+      other,
+    ]);
     topology.refresh(true);
     assert.deepEqual(changes, [
       { invalidate: true, kind: "project", path: undefined },
@@ -303,7 +413,7 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     compiler.listener("change", path.relative(compiler.location, first));
     compiler.listener("change", path.relative(compiler.location, firstPeer));
     compiler.listener("change", path.relative(compiler.location, other));
-    await Promise.resolve();
+    await settleWatchEvents();
     assert.equal(
       changes.length,
       1,
@@ -323,6 +433,14 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     });
     fs.writeFileSync(mixed, '{"name":"created"}\n', "utf8");
     fs.writeFileSync(mixedSource, "export const added = true;\n", "utf8");
+    compilerMembership.set(fixture.root, [
+      fixture.reportedSource,
+      first,
+      firstPeer,
+      other,
+      mixed,
+      mixedSource,
+    ]);
     topology.refresh(true);
     assert.equal(
       topologyChanges,
@@ -339,7 +457,7 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
       path.relative(project.location, path.dirname(mixed)),
     );
     compiler.listener("change", path.relative(compiler.location, mixed));
-    await Promise.resolve();
+    await settleWatchEvents();
     assert.equal(
       topologyChanges,
       1,
@@ -352,6 +470,15 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     );
 
     fs.writeFileSync(second, '{"name":"created"}\n', "utf8");
+    compilerMembership.set(fixture.root, [
+      fixture.reportedSource,
+      first,
+      firstPeer,
+      other,
+      mixed,
+      mixedSource,
+      second,
+    ]);
     topology.refresh(true);
     assert.deepEqual(changes.at(-1), {
       kind: "config",
@@ -362,7 +489,7 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
       path.relative(project.location, path.dirname(second)),
     );
     compiler.listener("change", path.relative(compiler.location, second));
-    await Promise.resolve();
+    await settleWatchEvents();
     assert.equal(
       changes.length,
       2,
@@ -377,13 +504,31 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
       "the strong-fingerprint case changed file size",
     );
     compiler.listener("change", path.relative(compiler.location, second));
-    await Promise.resolve();
+    await settleWatchEvents();
     assert.deepEqual(changes.at(-1), {
-      kind: "compiler",
+      kind: "config",
       path: second,
     });
+    const afterReloadEdit = changes.length;
+    project.listener("change", path.relative(project.location, second));
+    await settleWatchEvents();
+    assert.equal(
+      changes.length,
+      afterReloadEdit,
+      "the project watcher repeated a reload edit the compiler watcher consumed",
+    );
 
     fs.writeFileSync(third, '{"name":"created"}\n', "utf8");
+    compilerMembership.set(fixture.root, [
+      fixture.reportedSource,
+      first,
+      firstPeer,
+      other,
+      mixed,
+      mixedSource,
+      second,
+      third,
+    ]);
     fs.writeFileSync(
       path.join(reloadDirectory, "selection.cjs"),
       "module.exports = 1;\n",
@@ -399,7 +544,7 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
       path.relative(project.location, path.dirname(third)),
     );
     compiler.listener("change", path.relative(compiler.location, third));
-    await Promise.resolve();
+    await settleWatchEvents();
     assert.equal(
       changes.length,
       4,
@@ -408,11 +553,6 @@ async function verifyWindowsProjectCompilerMembershipHandoff(): Promise<void> {
     assert.deepEqual(errors, []);
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(
     registrations.every(({ watcher }) => watcher.closeCount === 1),
@@ -434,38 +574,36 @@ async function verifyTransientReloadDirectoryFingerprintRace(): Promise<void> {
   const changes: WatchInputChange[] = [];
   const errors: unknown[] = [];
   const watchers: FakeWatcher[] = [];
-  const originalWatch = fs.watch;
   const originalReaddirSync = fs.readdirSync;
   let injected = false;
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: (() => {
-      const watcher = new FakeWatcher();
-      watchers.push(watcher);
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
-  Object.defineProperty(fs, "readdirSync", {
-    configurable: true,
-    value: ((location: fs.PathLike, options?: unknown) => {
-      if (
-        !injected &&
-        fs.realpathSync.native(location) === reloadDirectoryIdentity
-      ) {
-        injected = true;
-        const error = new Error(
-          "simulated transient directory race",
-        ) as NodeJS.ErrnoException;
-        error.code = "ENOENT";
-        throw error;
-      }
-      return Reflect.apply(originalReaddirSync, fs, [location, options]);
-    }) as typeof fs.readdirSync,
-    writable: true,
-  });
+  const openFileWatch = (() => {
+    const watcher = new FakeWatcher();
+    watchers.push(watcher);
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
+  const readDirectory = ((location: fs.PathLike, options?: unknown) => {
+    if (
+      !injected &&
+      fs.realpathSync.native(location) === reloadDirectoryIdentity
+    ) {
+      injected = true;
+      const error = new Error(
+        "simulated transient directory race",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    }
+    return Reflect.apply(originalReaddirSync, fs, [location, options]);
+  }) as typeof fs.readdirSync;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+    readDirectory,
+  );
   try {
     topology.setProjectInputs({
       files: [],
@@ -475,11 +613,7 @@ async function verifyTransientReloadDirectoryFingerprintRace(): Promise<void> {
       root: fixture.root,
     });
     assert.equal(injected, true, "the transient fingerprint race was not run");
-    Object.defineProperty(fs, "readdirSync", {
-      configurable: true,
-      value: originalReaddirSync,
-      writable: true,
-    });
+
     await Promise.resolve();
 
     assert.deepEqual(changes, [
@@ -491,16 +625,6 @@ async function verifyTransientReloadDirectoryFingerprintRace(): Promise<void> {
     assert.deepEqual(errors, []);
   } finally {
     topology.close();
-    Object.defineProperty(fs, "readdirSync", {
-      configurable: true,
-      value: originalReaddirSync,
-      writable: true,
-    });
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(
     watchers.every((watcher) => watcher.closeCount === 1),
@@ -509,8 +633,6 @@ async function verifyTransientReloadDirectoryFingerprintRace(): Promise<void> {
 }
 
 async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
-  if (process.platform === "win32") return;
-
   const fixture = createFixture("ttsc-watch-compiler-registration-replace-");
   const changes: WatchInputChange[] = [];
   const errors: unknown[] = [];
@@ -519,31 +641,40 @@ async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
     location: string;
     watcher: FakeWatcher;
   }> = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: ((
-      location: fs.PathLike,
-      _options: fs.WatchOptions,
-      listener: fs.WatchListener<string>,
-    ) => {
-      const watcher = new FakeWatcher();
-      registrations.push({
-        listener,
-        location: fs.realpathSync.native(location),
-        watcher,
-      });
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = ((
+    location: fs.PathLike,
+    _options: fs.WatchOptions,
+    listener: fs.WatchListener<string>,
+  ) => {
+    const watcher = new FakeWatcher();
+    registrations.push({
+      listener,
+      location: fs.realpathSync.native(location),
+      watcher,
+    });
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+  );
   try {
     const sharedTime = new Date("2020-01-02T03:04:05.000Z");
     fs.utimesSync(fixture.source, sharedTime, sharedTime);
     topology.refresh(false);
+    const directoryOwner = registrations.find(
+      ({ location }) =>
+        fs.statSync(location).isDirectory() &&
+        isPathWithin(location, fixture.physicalSource),
+    );
+    const originalDirectoryOwners = registrations.filter(({ location }) =>
+      fs.statSync(location).isDirectory(),
+    );
     const replacement = path.join(fixture.root, "src", "main.next.ts");
     fs.copyFileSync(fixture.source, replacement);
     fs.utimesSync(replacement, sharedTime, sharedTime);
@@ -558,12 +689,32 @@ async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
     const sourceRegistrations = registrations.filter(
       ({ location }) => location === fixture.physicalSource,
     );
-    assert.equal(
-      sourceRegistrations.length,
-      2,
-      "the atomic replacement retained its old per-file watcher",
-    );
-    assert.equal(sourceRegistrations[0]?.watcher.closeCount, 1);
+    if (process.platform === "win32") {
+      assert.equal(
+        sourceRegistrations.length,
+        0,
+        "Windows acquired a per-file owner during replacement",
+      );
+      assert.ok(
+        directoryOwner,
+        "Windows has no directory owner for the source",
+      );
+      assert.deepEqual(
+        registrations.filter(({ location }) =>
+          fs.statSync(location).isDirectory(),
+        ),
+        originalDirectoryOwners,
+        "an ordinary source replacement re-created its directory owners",
+      );
+      assert.equal(directoryOwner.watcher.closeCount, 0);
+    } else {
+      assert.equal(
+        sourceRegistrations.length,
+        2,
+        "the atomic replacement retained its old per-file watcher",
+      );
+      assert.equal(sourceRegistrations[0]?.watcher.closeCount, 1);
+    }
     assert.deepEqual(
       changes,
       [],
@@ -571,8 +722,15 @@ async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
     );
 
     fs.writeFileSync(fixture.source, "export const value = 3000;\n", "utf8");
-    sourceRegistrations[1]?.listener("change", path.basename(fixture.source));
-    await Promise.resolve();
+    if (process.platform === "win32") {
+      assert.ok(directoryOwner);
+      directoryOwner.listener(
+        "change",
+        path.relative(directoryOwner.location, fixture.physicalSource),
+      );
+    } else
+      sourceRegistrations[1]?.listener("change", path.basename(fixture.source));
+    await settleWatchEvents();
 
     assert.deepEqual(changes, [
       { kind: "compiler", path: fixture.reportedSource },
@@ -580,11 +738,6 @@ async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
     assert.deepEqual(errors, []);
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(
     registrations.every(({ watcher }) => watcher.closeCount === 1),
@@ -593,8 +746,6 @@ async function verifyAtomicReplacementRebindsPosixFileWatcher(): Promise<void> {
 }
 
 async function verifyFileRearmDoesNotRepeatCompilerRefresh(): Promise<void> {
-  if (process.platform === "win32") return;
-
   const fixture = createFixture("ttsc-watch-compiler-registration-error-");
   const changes: WatchInputChange[] = [];
   const errors: unknown[] = [];
@@ -602,22 +753,23 @@ async function verifyFileRearmDoesNotRepeatCompilerRefresh(): Promise<void> {
     location: string;
     watcher: FakeWatcher;
   }> = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: ((location: fs.PathLike) => {
-      const watcher = new FakeWatcher();
-      registrations.push({
-        location: fs.realpathSync.native(location),
-        watcher,
-      });
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = ((location: fs.PathLike) => {
+    const watcher = new FakeWatcher();
+    registrations.push({
+      location: fs.realpathSync.native(location),
+      watcher,
+    });
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+  );
   try {
     topology.refresh(false);
     const replacement = path.join(fixture.root, "src", "main.next.ts");
@@ -646,16 +798,11 @@ async function verifyFileRearmDoesNotRepeatCompilerRefresh(): Promise<void> {
       registrations.filter(
         ({ location }) => location === fixture.physicalSource,
       ).length,
-      2,
-      "the replaced source did not receive exactly one new physical owner",
+      process.platform === "win32" ? 0 : 2,
+      "the replacement did not preserve its native directory/per-file ownership",
     );
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(
     registrations.every(({ watcher }) => watcher.closeCount === 1),
@@ -668,19 +815,20 @@ async function verifyCloseCancelsReconciliation(): Promise<void> {
   const changes: WatchInputChange[] = [];
   const errors: unknown[] = [];
   const watchers: FakeWatcher[] = [];
-  const originalWatch = fs.watch;
 
-  Object.defineProperty(fs, "watch", {
-    configurable: true,
-    value: (() => {
-      const watcher = new FakeWatcher();
-      watchers.push(watcher);
-      return watcher as unknown as fs.FSWatcher;
-    }) as typeof fs.watch,
-    writable: true,
-  });
+  const openFileWatch = (() => {
+    const watcher = new FakeWatcher();
+    watchers.push(watcher);
+    return watcher as unknown as fs.FSWatcher;
+  }) as typeof fs.watch;
 
-  const topology = createTopology(fixture.root, changes, errors);
+  const topology = createTopology(
+    fixture.root,
+    changes,
+    errors,
+    undefined,
+    openFileWatch,
+  );
   try {
     topology.refresh(false);
     topology.close();
@@ -691,11 +839,6 @@ async function verifyCloseCancelsReconciliation(): Promise<void> {
     assert.deepEqual(errors, []);
   } finally {
     topology.close();
-    Object.defineProperty(fs, "watch", {
-      configurable: true,
-      value: originalWatch,
-      writable: true,
-    });
   }
   assert.ok(watchers.length > 0, "the close case registered no watchers");
   assert.ok(
@@ -721,10 +864,13 @@ function createFixture(
   fs.mkdirSync(path.dirname(source), { recursive: true });
   fs.writeFileSync(source, "export const value = 1;\n", "utf8");
   fs.writeFileSync(config, JSON.stringify(configJson), "utf8");
-  // tsgo canonicalizes POSIX aliases such as `/var` to `/private/var`, while
+  // Author the same declared/physical spelling as the native boundary:
   // Windows retains the declared 8.3 spelling returned by the temp-directory
   // API. Registration is physical on every platform; notification follows the
   // compiler topology's spelling.
+  compilerMembership.set(root, [
+    process.platform === "win32" ? source : fs.realpathSync.native(source),
+  ]);
   return {
     config,
     physicalSource: fs.realpathSync.native(source),
@@ -752,6 +898,8 @@ function createTopology(
   changes: WatchInputChange[],
   errors: unknown[],
   onTopologyChange: () => void = () => undefined,
+  openFileWatch: typeof fs.watch = fs.watch,
+  readDirectory: typeof fs.readdirSync = fs.readdirSync,
 ): WatchTopology {
   return new WatchTopology(
     {
@@ -764,6 +912,21 @@ function createTopology(
       onError: (_location, error) => errors.push(error),
       onInputChange: (change) => changes.push(change),
       onTopologyChange,
+    },
+    // Every directory watch goes through the explicitly supplied subscription operation.
+    (location, recursive, listener) =>
+      watchDirectoryThroughFsWatch(
+        location,
+        recursive,
+        listener,
+        openFileWatch,
+      ),
+    openFileWatch,
+    readDirectory,
+    () => {
+      const inputs = compilerMembership.get(root);
+      assert.ok(inputs, "the case did not author compiler membership");
+      return inputs;
     },
   );
 }

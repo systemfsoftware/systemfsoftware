@@ -31,6 +31,28 @@ const packCache = new Map<string, RuntimePackEntry>();
  * attempt; rejection removes it from the cache so the next call retries from
  * scratch. Successful packs remain cached. Nothing else ends the load: how long
  * a fetch takes belongs to the network, not to a number chosen here.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Fetch, AbortController and Promise sharing implement the site-selected
+ *   runtime-pack transport. The loader returns source records for the existing
+ *   resolver rather than evaluating packages or introducing another module
+ *   protocol.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The URL map owns shared attempt identity; cancellation helpers isolate
+ *   event cleanup from transport decoding and the resolver owns evaluation.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The URL comes from the caller, and load failures remain failures. Shared
+ *   cancellation is an explicit public policy rather than a fixture-specific
+ *   timeout or a replacement of fetch internals; rejection removes the owned
+ *   entry instead of returning a fabricated empty pack.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native JSDoc separates the per-URL purpose from shared cancellation,
+ *   rejection eviction and network waiting policy. Those reasons follow the
+ *   documentation skill, and ILoadTypiaRuntimePackOptions documents the
+ *   cancellation scope.
  */
 export function loadTypiaRuntimePack(
   url: string,
@@ -62,12 +84,23 @@ export function loadTypiaRuntimePack(
       );
 
     phase = `reading JSON from ${url}`;
-    return (await raceRuntimePackCancellation(
+    const pack: unknown = await raceRuntimePackCancellation(
       response.json(),
       cancellation.promise,
       controller.signal,
       () => phase,
-    )) as Record<string, string>;
+    );
+    if (
+      !pack ||
+      typeof pack !== "object" ||
+      Array.isArray(pack) ||
+      !Object.values(pack).every((value) => typeof value === "string")
+    ) {
+      throw new Error(
+        "loadTypiaRuntimePack: expected a source-text record map.",
+      );
+    }
+    return pack as Record<string, string>;
   })()
     .catch((error) => {
       if (packCache.get(url) === entry) packCache.delete(url);

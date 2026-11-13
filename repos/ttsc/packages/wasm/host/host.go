@@ -3,8 +3,9 @@
 // JS-side bindings for the host package.
 //
 // `Expose` installs `globalThis[apiName]` with the base ttsc endpoints
-// (version, build, check, transform) plus `plugin({ name, command, ...opts })`,
-// routing into the consumer's registered plugins. Every async endpoint returns
+// (version, build, check, transform), the retained-program verbs of
+// fountain.go, and `plugin({ name, command, ...opts })`, routing into the
+// consumer's registered plugins. Every async endpoint returns
 // the JS result envelope so callers can build a single boot helper that works
 // against any host-built binary.
 package host
@@ -14,6 +15,7 @@ import (
   "fmt"
   "os"
   "runtime"
+  "strconv"
   "sync/atomic"
   "syscall/js"
   "time"
@@ -27,31 +29,12 @@ var (
   date    = "unknown"
 )
 
-// exposed gates Expose so a duplicate call panics instead of leaking the
+// exposed gates Expose so a duplicate call reports failure instead of leaking the
 // previous batch of js.Funcs + spawning a second keepalive goroutine.
 var exposed atomic.Bool
 
-// API stability: experimental until v1.0; signatures may change between
-// minor releases. Pin exact versions in production playgrounds.
-//
-// Expose installs `globalThis[apiName]` with the base API endpoints and the
-// plugin dispatcher, then keeps the Go runtime alive forever.
-//
-// The contract:
-//
-//   - globalThis[apiName].version()                        → version banner
-//   - globalThis[apiName].build({ cwd, tsconfig })         → Promise<ITtscResult>
-//   - globalThis[apiName].check({ cwd, tsconfig })         → Promise<ITtscResult>
-//   - globalThis[apiName].transform({ cwd, tsconfig })     → Promise<ITtscResult>
-//   - globalThis[apiName].plugin({ name, command, ...opts}) → Promise<ITtscResult>
-//   - globalThis[apiName].plugins()                        → string[] of registered names
-//
-// build/check/transform encode their structured payloads as JSON in
-// ITtscResult.result. Plugin stdout/stderr are captured in the envelope streams.
-//
-// A matching readiness resolver is invoked: `globalThis[`${apiName}Ready`]`.
-// JS callers register this BEFORE go.run begins so they can await wasm boot.
-func Expose(apiName string, cfg Config) {
+// expose is the js/wasm implementation behind Expose.
+func expose(apiName string, cfg Config) {
   // Refuse double-Expose: the second call would leak every js.FuncOf from
   // the first batch (Go pins js.Funcs and they're not GC'd), spin a second
   // keepalive goroutine forever, and overwrite the ready resolver so JS
@@ -258,7 +241,9 @@ func buildPluginArgv(opts js.Value) []string {
         out = append(out, "--"+key)
       }
     case js.TypeNumber:
-      out = append(out, fmt.Sprintf("--%s=%v", key, value.Float()))
+      // 'f' with the shortest precision that round-trips keeps an integer such
+      // as 1234567 as "1234567"; `%v` would spell it "1.234567e+06".
+      out = append(out, "--"+key+"="+strconv.FormatFloat(value.Float(), 'f', -1, 64))
     }
   }
   return out

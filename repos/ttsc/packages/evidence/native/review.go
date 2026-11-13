@@ -18,7 +18,8 @@ import (
 // second one is never put.
 //
 // The rule puts it. Every `@evidence` and `@evidenceExclude` on a public
-// identity must be answered by an `@evidenceReview` naming the same target, so a
+// identity must be answered by `@evidenceReview` or `@evidenceExcludeReview`,
+// respectively, naming the same target, so a
 // citation cannot be produced without a separately addressed statement written
 // as its own act.
 //
@@ -145,12 +146,6 @@ func judgeReviewedHost(ctx *rule.Context, host documentedHost) {
   }
 }
 
-// acknowledgementQuestion is what a review of this tag has to answer.
-//
-// The two are not the same question and the diagnostic says which one is open. A
-// citation is verified by checking that this declaration does what the cited unit
-// describes. An exclusion is verified by checking that the unit genuinely does not
-// apply here, which no reading of this declaration can establish on its own.
 // reviewExample shows the shape of a check that answers this tag's question.
 //
 // The two examples differ because the two checks do. A citation is answered by
@@ -164,6 +159,12 @@ func reviewExample(tag tagKind) string {
   return "A review of a citation names what you read or ran, as in 'read the section's three rules and ran the checkout test'."
 }
 
+// acknowledgementQuestion is what a review of this tag has to answer.
+//
+// The two are not the same question and the diagnostic says which one is open. A
+// citation is verified by checking that this declaration does what the cited unit
+// describes. An exclusion is verified by checking that the unit genuinely does not
+// apply here, which no reading of this declaration can establish on its own.
 func acknowledgementQuestion(tag tagKind) string {
   if tag == tagExclude {
     return "The exclusion states that this claim does not cover that target."

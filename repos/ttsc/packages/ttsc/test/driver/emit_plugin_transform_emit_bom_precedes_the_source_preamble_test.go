@@ -10,6 +10,7 @@ import (
   shimast "github.com/microsoft/typescript-go/shim/ast"
   shimcompiler "github.com/microsoft/typescript-go/shim/compiler"
   shimprinter "github.com/microsoft/typescript-go/shim/printer"
+  shimtspath "github.com/microsoft/typescript-go/shim/tspath"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
 )
@@ -33,8 +34,8 @@ const preambleHashbangLine = "#!/usr/bin/env node"
 // correction rewrote the text, could easily leave it second. The three
 // producers of leading bytes are independent here (the byte order mark from the
 // compiler option, the shebang from the printer, the preamble comment from a
-// linked SourcePreamblePlugin), and only their order proves the mark was
-// applied last and to the whole text.
+// linked SourcePreamblePlugin). Their observed order checks the finished output;
+// it does not independently prove the internal order of assembly operations.
 //
 //  1. Register a SourcePreamblePlugin and compile a hashbang fixture through
 //     EmitWithPluginTransformer with an identity transform, once with `emitBOM`
@@ -45,6 +46,11 @@ const preambleHashbangLine = "#!/usr/bin/env node"
 //     mark anywhere (the negative twin).
 //  4. Repeat the positive case with `inlineSourceMap`, where the preamble-shift
 //     correction rewrites the emitted text after the mark was applied.
+//
+// @evidence contracts/testing.md#behavioral-verification Runs actual linked-preamble and identity-transform emission for three option rows, requiring BOM/hashbang ordering or BOM absence, retained preamble, and valid inline base64/JSON map.
+// @evidence contracts/testing.md#independent-expectations Literal UTF8 BOM, hashbang leader and preamble marker independently define byte positions; standard decoders independently inspect inline map encoding.
+// @evidence contracts/testing.md#distinguishing-cases BOM enabled/disabled and inline-map correction distinguish ordering and trailer-splice interactions with the real injected preamble.
+// @evidence contracts/testing.md#execution-ownership Named owning Go driver unit rows call actual registered-plugin/compiler operations, each with private Program cleanup and captured writes; no script execution or compiled host.
 func TestEmitPluginTransformEmitBOMPrecedesTheSourcePreamble(t *testing.T) {
   t.Run("emit_bom_marks_the_file_ahead_of_the_shebang", func(t *testing.T) {
     js := emitHashbangWithPreamble(t, `"emitBOM": true`)
@@ -163,8 +169,8 @@ func emitHashbangWithPreamble(t *testing.T, options string) string {
     return sf
   }
   emitted := map[string]string{}
-  if _, err := prog.EmitWithPluginTransformer(identity, func(fileName, text string, _ *shimcompiler.WriteFileData) error {
-    emitted[filepath.Base(fileName)] = text
+  if _, err := prog.EmitWithPluginTransformer(identity, func(fileName shimtspath.RootedFilePath, text string, _ *shimcompiler.WriteFileData) error {
+    emitted[filepath.Base(string(fileName))] = text
     return nil
   }); err != nil {
     t.Fatal(err)

@@ -5,14 +5,20 @@ import (
   "context"
   "crypto/sha256"
   "encoding/json"
+  "errors"
   "fmt"
   "os"
   "os/exec"
   "path/filepath"
   "runtime"
+  "strconv"
   "strings"
+  "syscall"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
+  "github.com/samchon/ttsc/packages/ttsc/driver/compileraliases"
+  "github.com/samchon/ttsc/packages/ttsc/driver/configloaderscratch"
+  "github.com/samchon/ttsc/packages/ttsc/driver/resolutioninputs"
   "github.com/samchon/ttsc/packages/ttsc/driver/windowsjunction"
 )
 
@@ -38,18 +44,17 @@ var allowedTsconfigKeys = map[string]struct{}{
   "transform":  {},
 }
 
-// loadStripConfigMap validates the tsconfig plugin entry and loads the strip
-// configuration from either an explicit configFile or an auto-discovered
-// strip.config.* file. Returns the raw config map ready for parseStrip.
-func loadStripConfigMap(pluginConfig map[string]any, cwd, tsconfigPath string) (map[string]any, error) {
-  return loadStripConfigMapWithReporter(pluginConfig, cwd, tsconfigPath, nil)
-}
-
-func loadStripConfigMapWithReporter(pluginConfig map[string]any, cwd, tsconfigPath string, reporter func(string)) (map[string]any, error) {
-  return loadStripConfigMapWithReporters(pluginConfig, cwd, tsconfigPath, reporter, nil, nil)
-}
-
-func loadStripConfigMapWithReporters(pluginConfig map[string]any, cwd, tsconfigPath string, reporter func(string), hashReporter, realpathReporter func(string, *string)) (map[string]any, error) {
+// loadStripConfigMapWithReporters validates the tsconfig plugin entry and loads
+// the strip configuration from either an explicit configFile or an
+// auto-discovered strip.config.* file. It returns the raw config map ready for
+// parseStrip, which applies the built-in defaults to an empty one.
+//
+// The reporters declare the exact known configuration inputs: the evaluated
+// config and everything its evaluation read, and the discovery candidates that
+// were rejected on the way. Optional incomplete reporters disclose unavailable
+// public resolution observation separately from a moved input's missing proof;
+// the evaluated value remains usable.
+func loadStripConfigMapWithReporters(pluginConfig map[string]any, cwd, tsconfigPath string, reporter func(string), hashReporter, realpathReporter func(string, *string), incompleteReporters ...func()) (map[string]any, error) {
   // Reject any key that @ttsc/strip does not recognise. This surfaces
   // stale inline keys (calls, statements) with a clear error so users
   // migrate to a config file instead of silently using defaults.
@@ -100,6 +105,13 @@ func loadStripConfigMapWithReporters(pluginConfig map[string]any, cwd, tsconfigP
     return nil, err
   }
   reportStripConfigInputs(loaded.inputs, loaded.hashes, loaded.realpaths, reporter, hashReporter, realpathReporter)
+  if !loaded.complete {
+    for _, report := range incompleteReporters {
+      if report != nil {
+        report()
+      }
+    }
+  }
   cfg, ok := loaded.value.(map[string]any)
   if !ok {
     return nil, fmt.Errorf("@ttsc/strip: config file %s must export an object", configFilePath)
@@ -151,7 +163,8 @@ func stripDiscoveryBaseDir(cwd, tsconfigPath string) string {
 
 // resolveStripConfigFilePath resolves a user-supplied config path to an
 // absolute path. Absolute paths are returned unchanged; relative paths are
-// joined to the tsconfig directory (or cwd when no tsconfig is set).
+// joined to the explicit host discovery anchor, otherwise the tsconfig
+// directory (or cwd when no tsconfig is set).
 func resolveStripConfigFilePath(configPath, cwd, tsconfigPath string) string {
   if filepath.IsAbs(configPath) {
     return configPath
@@ -159,26 +172,27 @@ func resolveStripConfigFilePath(configPath, cwd, tsconfigPath string) string {
   return filepath.Join(stripDiscoveryBaseDir(cwd, tsconfigPath), configPath)
 }
 
-// loadStripConfigFile loads and deserializes a strip config file at location.
-// The format is determined by extension: .json is parsed natively; .js/.cjs/.mjs
-// run through a Node subprocess; .ts/.cts/.mts run through ttsx.
-//
-// resolutionRoot is the project directory the TypeScript branch anchors its
-// toolchain resolution on when the config file's own ancestry answers nothing;
-// see stripConfigToolAnchors. The JSON and JS branches spawn no ttsx and
-// ignore it.
-func loadStripConfigFile(location, resolutionRoot string) (any, error) {
-  loaded, err := loadStripConfigFileWithInputs(location, resolutionRoot)
-  return loaded.value, err
-}
-
+// stripLoadedConfig is an evaluated config value with the inputs its
+// evaluation read.
 type stripLoadedConfig struct {
+  // complete concerns resolution capability, independently of per-input stability.
+  complete bool
+
   hashes    map[string]*string
   inputs    []string
   realpaths map[string]*string
   value     any
 }
 
+// loadStripConfigFileWithInputs loads and deserializes a strip config file at
+// location together with the inputs its evaluation read. The format is
+// determined by extension: .json is parsed natively; .js/.cjs/.mjs run through
+// a Node subprocess; .ts/.cts/.mts run through ttsx.
+//
+// resolutionRoot is the project directory the TypeScript branch anchors its
+// toolchain resolution on when the config file's own ancestry answers nothing;
+// see stripConfigToolAnchors. The JSON and JS branches spawn no ttsx and
+// ignore it.
 func loadStripConfigFileWithInputs(location, resolutionRoot string) (stripLoadedConfig, error) {
   ext := strings.ToLower(filepath.Ext(location))
   switch ext {
@@ -189,7 +203,7 @@ func loadStripConfigFileWithInputs(location, resolutionRoot string) (stripLoaded
     }
     value, err := parseStripJSONConfigFile(location, body)
     digest := fmt.Sprintf("%x", sha256.Sum256(body))
-    return stripLoadedConfig{hashes: map[string]*string{location: &digest}, inputs: []string{location}, realpaths: map[string]*string{location: stripPhysicalHostInput(location)}, value: value}, err
+    return stripLoadedConfig{complete: true, hashes: map[string]*string{location: &digest}, inputs: []string{location}, realpaths: map[string]*string{location: stripPhysicalHostInput(location)}, value: value}, err
   case ".js", ".cjs", ".mjs":
     return loadStripScriptConfigFileWithInputs(location)
   case ".ts", ".cts", ".mts":
@@ -282,17 +296,6 @@ func stripResolveHostInputLinkAncestor(location string) (string, bool) {
   }
 }
 
-// loadStripJSONConfigFile reads and JSON-parses a strip config file. A leading
-// UTF-8 BOM is stripped before parsing so files saved by Windows editors are
-// accepted.
-func loadStripJSONConfigFile(location string) (any, error) {
-  body, err := os.ReadFile(location)
-  if err != nil {
-    return nil, fmt.Errorf("@ttsc/strip: read config file %s: %w", location, err)
-  }
-  return parseStripJSONConfigFile(location, body)
-}
-
 func parseStripJSONConfigFile(location string, body []byte) (any, error) {
   body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
   var out any
@@ -303,232 +306,20 @@ func parseStripJSONConfigFile(location string, body []byte) (any, error) {
 }
 
 // stripScriptLoaderSource is the inline Node.js script used by
-// loadStripScriptConfigFile to evaluate a .js/.cjs/.mjs strip config and
+// loadStripScriptConfigFileWithInputs to evaluate a .js/.cjs/.mjs strip config and
 // serialize the result to stdout as JSON.
 const stripScriptLoaderSource = `
-const nodeModule = require("node:module");
-const { createRequire, isBuiltin, registerHooks } = nodeModule;
-const crypto = require("node:crypto");
-const fs = require("node:fs");
-const path = require("node:path");
-const { fileURLToPath, pathToFileURL } = require("node:url");
-const inputs = new Set();
-const hashes = new Map();
-const realpaths = new Map();
-const signatures = new Map();
-const unstableHashes = new Set();
+const { pathToFileURL } = require("node:url");
+// Which inputs a resolution read is the one rule ttsc owns
+// (resolutioninputs.Recorder), evaluated before any hook is installed.
+const { createResolutionInputRecorder, observeResolutions } = RESOLUTION_INPUT_RECORDER;
+const recorder = createResolutionInputRecorder({ extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".json", ".node"] });
 
-function existingFile(file) {
-  try { return fs.statSync(file).isFile(); }
-  catch { return false; }
-}
-
-function missingPathError(error) {
-  return error && (error.code === "ENOENT" || error.code === "ENOTDIR");
-}
-
-function inputMetadataSignature(file) {
-  const requested = path.resolve(file);
-  let current = requested;
-  for (;;) {
-    try {
-      const link = fs.lstatSync(current, { bigint: true });
-      let target = link;
-      if (link.isSymbolicLink()) {
-        try { target = fs.statSync(current, { bigint: true }); }
-        catch { return undefined; }
-      }
-      return [path.relative(current, requested), link.dev, link.ino, link.mode, link.size, link.mtimeNs, link.ctimeNs, target.dev, target.ino, target.mode, target.size, target.mtimeNs, target.ctimeNs].join(":");
-    } catch (error) {
-      if (!missingPathError(error)) return undefined;
-      const parent = path.dirname(current);
-      if (parent === current) return undefined;
-      current = parent;
-    }
-  }
-}
-
-function recordInput(file) {
-  file = path.resolve(file);
-  inputs.add(file);
-  if (unstableHashes.has(file)) return;
-  const beforeSignature = inputMetadataSignature(file);
-  let observed;
-  let observedRealpath;
-  try { observed = fs.statSync(file).isDirectory() ? crypto.createHash("sha256").update("ttsc:host-input:directory\0").digest("hex") : crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
-  catch { observed = null; }
-  try { observedRealpath = fs.realpathSync.native(file); }
-  catch { observedRealpath = null; }
-  const afterSignature = inputMetadataSignature(file);
-  if (beforeSignature === undefined || afterSignature === undefined || beforeSignature !== afterSignature || (signatures.has(file) && signatures.get(file) !== afterSignature) || (hashes.has(file) && hashes.get(file) !== observed) || (realpaths.has(file) && realpaths.get(file) !== observedRealpath)) {
-    hashes.delete(file);
-    realpaths.delete(file);
-    signatures.delete(file);
-    unstableHashes.add(file);
-    return;
-  }
-  signatures.set(file, afterSignature);
-  hashes.set(file, observed);
-  realpaths.set(file, observedRealpath);
-}
-
-function recordFile(file) {
-  const resolvedFile = path.resolve(file);
-  recordInput(resolvedFile);
-  for (let directory = path.dirname(resolvedFile);;) {
-    const manifest = path.join(directory, "package.json");
-    recordInput(manifest);
-    if (existingFile(manifest)) {
-      break;
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) {
-      break;
-    }
-    directory = parent;
-  }
-}
-
-function recordPackageManifests(file) {
-  for (let directory = path.dirname(path.resolve(file));;) {
-    const manifest = path.join(directory, "package.json");
-    recordInput(manifest);
-    if (existingFile(manifest)) return;
-    const parent = path.dirname(directory);
-    if (parent === directory) return;
-    directory = parent;
-  }
-}
-
-const moduleProbeExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".json", ".node"];
-function moduleCandidates(base) {
-  return [
-    base,
-    ...moduleProbeExtensions.map((extension) => base + extension),
-    path.join(base, "package.json"),
-    ...moduleProbeExtensions.map((extension) => path.join(base, "index" + extension)),
-  ];
-}
-const recordedModuleBases = new Set();
-function recordManifestTargets(value, directory, allowBare = false) {
-  if (typeof value === "string") {
-    if (value !== "" && (allowBare || value.startsWith("./") || value.startsWith("../"))) recordModuleCandidates(path.resolve(directory, value));
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) recordManifestTargets(item, directory, allowBare);
-    return;
-  }
-  if (value && typeof value === "object") {
-    for (const item of Object.values(value)) recordManifestTargets(item, directory, allowBare);
-  }
-}
-function recordModuleCandidates(base) {
-  const resolvedBase = path.resolve(base);
-  if (recordedModuleBases.has(resolvedBase)) return;
-  recordedModuleBases.add(resolvedBase);
-  for (const candidate of moduleCandidates(resolvedBase)) recordInput(candidate);
-  try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(resolvedBase, "package.json"), "utf8").replace(/^\uFEFF/, ""));
-    recordManifestTargets(manifest.exports, resolvedBase);
-    recordManifestTargets(manifest.module, resolvedBase, true);
-    recordManifestTargets(manifest.main, resolvedBase, true);
-  } catch {}
-}
-function candidateSelected(base, resolvedFile) {
-  for (const candidate of moduleCandidates(base)) {
-    try {
-      const canonical = fs.realpathSync.native(candidate);
-      const relative = path.relative(canonical, resolvedFile);
-      if (relative === "" || (fs.statSync(canonical).isDirectory() && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative))) return true;
-    } catch {}
-  }
-  return false;
-}
-function localBases(specifier, parentDirectory) {
-  if (specifier.startsWith("file:")) return [fileURLToPath(specifier)];
-  const raw = path.resolve(parentDirectory, specifier);
-  const suffixStart = specifier.search(/[?#]/);
-  if (suffixStart === -1) return [raw];
-  const pathname = specifier.slice(0, suffixStart);
-  return pathname === "" ? [raw] : [...new Set([raw, path.resolve(parentDirectory, pathname)])];
-}
-function recordResolutionCandidates(specifier, parentURL, resolvedURL) {
-  if (typeof parentURL !== "string" || !parentURL.startsWith("file:")) return;
-  const parentDirectory = path.dirname(fileURLToPath(parentURL));
-  let resolvedFile;
-  try {
-    resolvedFile = typeof resolvedURL === "string" && resolvedURL.startsWith("file:")
-      ? fs.realpathSync.native(fileURLToPath(resolvedURL))
-      : undefined;
-  } catch {}
-  if (specifier.startsWith(".") || path.isAbsolute(specifier) || specifier.startsWith("file:")) {
-    try {
-      for (const base of localBases(specifier, parentDirectory)) {
-        recordPackageManifests(base);
-        let exact = false;
-        try { exact = resolvedFile === undefined ? fs.statSync(base).isFile() : fs.realpathSync.native(base) === resolvedFile; } catch {}
-        if (exact) recordInput(base);
-        else recordModuleCandidates(base);
-      }
-    } catch {}
-    return;
-  }
-  if (isBuiltin(specifier) || specifier.startsWith("#")) return;
-  const parts = specifier.split("/");
-  const packageParts = parts[0].startsWith("@") ? parts.slice(0, 2) : parts.slice(0, 1);
-  if (packageParts.some((part) => part === undefined || part === "")) return;
-  const packageName = packageParts.join("/");
-  const subpath = parts.slice(packageParts.length);
-  const searchPaths = createRequire(parentURL).resolve.paths(specifier) ?? [];
-  for (const searchPath of searchPaths) {
-    const packageDirectory = path.join(searchPath, packageName);
-    recordModuleCandidates(packageDirectory);
-    if (subpath.length !== 0) recordModuleCandidates(path.join(packageDirectory, ...subpath));
-    if (resolvedFile !== undefined && candidateSelected(packageDirectory, resolvedFile)) break;
-  }
-}
-
-recordFile(process.argv[1]);
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    recordResolutionCandidates(specifier, context.parentURL, undefined);
-    const resolved = nextResolve(specifier, context);
-    const url = typeof resolved === "string" ? resolved : resolved && resolved.url;
-    recordResolutionCandidates(specifier, context.parentURL, url);
-    if (typeof url === "string" && url.startsWith("file:")) {
-      recordFile(fileURLToPath(url));
-    }
-    return resolved;
-  },
-});
-
-// The hook above never sees a require() made from inside a CommonJS module the
-// ESM loader evaluated, which on Node 22 is every require the config makes:
-// module.registerHooks observes the import() of that module and nothing within
-// it. A config's own dependencies would then be reported without the candidates
-// that decide them, so a spelling appearing later could change what the config
-// resolves to with nothing in the envelope to notice it (samchon/ttsc#1280).
-// Wrapping the CommonJS resolver records the same two observations the hook
-// does, on the graph the hook cannot reach.
-const nextResolveFilename = nodeModule._resolveFilename;
-nodeModule._resolveFilename = function resolveFilename(request, parent, isMain, options) {
-  // _resolveFilename is an internal entry point anything may call, so a
-  // non-string request arrives here as readily as a specifier does. Reading it
-  // would replace Node's own argument error with a TypeError from this loader.
-  if (typeof request !== "string") {
-    return nextResolveFilename.call(this, request, parent, isMain, options);
-  }
-  const parentFile = parent && typeof parent.filename === "string" ? parent.filename : undefined;
-  const parentURL = parentFile === undefined ? undefined : pathToFileURL(parentFile).href;
-  recordResolutionCandidates(request, parentURL, undefined);
-  const resolved = nextResolveFilename.call(this, request, parent, isMain, options);
-  if (path.isAbsolute(resolved)) {
-    recordResolutionCandidates(request, parentURL, pathToFileURL(resolved).href);
-    recordFile(resolved);
-  }
-  return resolved;
-};
+recorder.recordFile(process.argv[1]);
+// Every resolution the config makes is recorded: through a resolve hook, and
+// on a runtime whose require.resolve bypasses the hooks, through the one
+// entry point it reaches (resolutioninputs.Recorder, samchon/ttsc#1523).
+observeResolutions(recorder);
 
 (async () => {
   const mod = await import(pathToFileURL(process.argv[1]).href);
@@ -545,8 +336,8 @@ nodeModule._resolveFilename = function resolveFilename(request, parent, isMain, 
     throw new Error("strip config file must export an object");
   }
   const serializedValue = JSON.stringify(value);
-  for (const input of [...inputs]) recordInput(input);
-  process.stdout.write(JSON.stringify({ value: JSON.parse(serializedValue), hashes: Object.fromEntries(hashes), inputs: [...inputs].sort(), realpaths: Object.fromEntries(realpaths) }));
+  const recorded = recorder.finish();
+  process.stdout.write(JSON.stringify({ value: JSON.parse(serializedValue), complete: recorded.complete, hashes: recorded.hashes, inputs: recorded.inputs, realpaths: recorded.realpaths }));
 })().catch((error) => {
   process.stderr.write(error && error.stack ? error.stack : String(error));
   process.exitCode = 1;
@@ -554,14 +345,9 @@ nodeModule._resolveFilename = function resolveFilename(request, parent, isMain, 
 });
 `
 
-// loadStripScriptConfigFile evaluates a .js/.cjs/.mjs config file by running a
-// Node subprocess that dynamic-imports the file, resolves the default export,
-// and serializes the result as JSON to stdout.
-func loadStripScriptConfigFile(location string) (any, error) {
-  loaded, err := loadStripScriptConfigFileWithInputs(location)
-  return loaded.value, err
-}
-
+// loadStripScriptConfigFileWithInputs evaluates a .js/.cjs/.mjs config file by
+// running a Node subprocess that dynamic-imports the file, resolves the default
+// export, and serializes the result and the inputs it read as JSON to stdout.
 func loadStripScriptConfigFileWithInputs(location string) (stripLoadedConfig, error) {
   node := os.Getenv("TTSC_NODE_BINARY")
   if node == "" {
@@ -576,7 +362,8 @@ func loadStripScriptConfigFileWithInputs(location string) (stripLoadedConfig, er
   // both the loader and the imported user config without using string eval.
   cmd := exec.CommandContext(ctx, node, "--input-type=commonjs", "-", location)
   cmd.Stdin = strings.NewReader(
-    "process.argv.splice(1, 1);\n" + stripScriptLoaderSource,
+    "process.argv.splice(1, 1);\nconst RESOLUTION_INPUT_RECORDER = " +
+      resolutioninputs.CommonJSExpression() + ";\n" + stripScriptLoaderSource,
   )
   cmd.Env = stripNodeConfigLoaderEnv(location)
   // The child's stderr is human output and goes straight to this process's
@@ -601,8 +388,14 @@ func loadStripScriptConfigFileWithInputs(location string) (stripLoadedConfig, er
   return loaded, nil
 }
 
+// decodeStripConfigLoaderOutput requires the value and recorder snapshot from
+// the executed loader. Accepting a bare value would report complete dependency
+// observations even though no observations were returned. Missing probe values
+// remain legitimate nullable entries inside the snapshot maps.
 func decodeStripConfigLoaderOutput(output []byte) (stripLoadedConfig, error) {
   var envelope struct {
+    Complete *bool `json:"complete"`
+
     Error     string             `json:"__ttscLoaderError"`
     Hashes    map[string]*string `json:"hashes"`
     Inputs    []string           `json:"inputs"`
@@ -615,282 +408,35 @@ func decodeStripConfigLoaderOutput(output []byte) (stripLoadedConfig, error) {
   if envelope.Error != "" {
     return stripLoadedConfig{}, fmt.Errorf("%s", envelope.Error)
   }
-  if len(envelope.Value) == 0 {
-    // Test/fallback launchers written against the historical payload return
-    // the config value directly. Preserve that accepted contract while real
-    // loaders use the envelope to carry runtime inputs.
-    var value any
-    if err := json.Unmarshal(output, &value); err != nil {
-      return stripLoadedConfig{}, err
-    }
-    return stripLoadedConfig{value: value}, nil
+  if len(envelope.Value) == 0 || envelope.Complete == nil || envelope.Inputs == nil || envelope.Hashes == nil || envelope.Realpaths == nil {
+    return stripLoadedConfig{}, fmt.Errorf("config loader must return a value with dependency observations")
   }
   var value any
   if err := json.Unmarshal(envelope.Value, &value); err != nil {
     return stripLoadedConfig{}, err
   }
-  return stripLoadedConfig{hashes: envelope.Hashes, inputs: envelope.Inputs, realpaths: envelope.Realpaths, value: value}, nil
+  return stripLoadedConfig{complete: *envelope.Complete, hashes: envelope.Hashes, inputs: envelope.Inputs, realpaths: envelope.Realpaths, value: value}, nil
 }
 
 // stripTypeScriptLoaderSource returns the TypeScript source of the ephemeral
 // loader script that ttsx executes to evaluate a TypeScript strip config file.
 // importLiteral must be a JSON-encoded relative import path (e.g.
 // `"./strip.config.ts"`) produced by json.Marshal.
-func stripTypeScriptLoaderSource(importLiteral string) string {
+func stripTypeScriptLoaderSource(importLiteral, recorderLiteral string) string {
   return fmt.Sprintf(`// @ts-nocheck
-import Module, { createRequire, isBuiltin, registerHooks } from "node:module";
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 
-const inputs = new Set<string>();
-const hashes = new Map<string, string | null>();
-const realpaths = new Map<string, string | null>();
-const signatures = new Map<string, string>();
-const unstableHashes = new Set<string>();
+// Which inputs a resolution read is the one rule ttsc owns
+// (resolutioninputs.Recorder), written beside this loader and required before
+// any hook is installed, so the recorder itself is no input.
+const recorderFile: string = %[2]s;
+const { createResolutionInputRecorder, observeResolutions } = createRequire(recorderFile)(recorderFile);
+const recorder = createResolutionInputRecorder({ extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".json", ".node"] });
 
-function existingFile(file: string): boolean {
-  try { return fs.statSync(file).isFile(); }
-  catch { return false; }
-}
-
-function missingPathError(error: unknown): boolean {
-  const code = (error as { code?: unknown } | undefined)?.code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-function inputMetadataSignature(file: string): string | undefined {
-  const requested = path.resolve(file);
-  let current = requested;
-  for (;;) {
-    try {
-      const link = fs.lstatSync(current, { bigint: true });
-      let target = link;
-      if (link.isSymbolicLink()) {
-        try { target = fs.statSync(current, { bigint: true }); }
-        catch { return undefined; }
-      }
-      return [path.relative(current, requested), link.dev, link.ino, link.mode, link.size, link.mtimeNs, link.ctimeNs, target.dev, target.ino, target.mode, target.size, target.mtimeNs, target.ctimeNs].join(":");
-    } catch (error) {
-      if (!missingPathError(error)) return undefined;
-      const parent = path.dirname(current);
-      if (parent === current) return undefined;
-      current = parent;
-    }
-  }
-}
-
-function recordInput(file: string): void {
-  file = path.resolve(file);
-  inputs.add(file);
-  if (unstableHashes.has(file)) return;
-  const beforeSignature = inputMetadataSignature(file);
-  let observed: string | null;
-  let observedRealpath: string | null;
-  try { observed = fs.statSync(file).isDirectory() ? crypto.createHash("sha256").update("ttsc:host-input:directory\0").digest("hex") : crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
-  catch { observed = null; }
-  try { observedRealpath = fs.realpathSync.native(file); }
-  catch { observedRealpath = null; }
-  const afterSignature = inputMetadataSignature(file);
-  if (beforeSignature === undefined || afterSignature === undefined || beforeSignature !== afterSignature || (signatures.has(file) && signatures.get(file) !== afterSignature) || (hashes.has(file) && hashes.get(file) !== observed) || (realpaths.has(file) && realpaths.get(file) !== observedRealpath)) {
-    hashes.delete(file);
-    realpaths.delete(file);
-    signatures.delete(file);
-    unstableHashes.add(file);
-    return;
-  }
-  signatures.set(file, afterSignature);
-  hashes.set(file, observed);
-  realpaths.set(file, observedRealpath);
-}
-
-function recordFile(file: string): void {
-  const resolvedFile = path.resolve(file);
-  recordInput(resolvedFile);
-  for (let directory = path.dirname(resolvedFile);;) {
-    const manifest = path.join(directory, "package.json");
-    recordInput(manifest);
-    if (existingFile(manifest)) {
-      break;
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) {
-      break;
-    }
-    directory = parent;
-  }
-}
-
-function recordPackageManifests(file: string): void {
-  for (let directory = path.dirname(path.resolve(file));;) {
-    const manifest = path.join(directory, "package.json");
-    recordInput(manifest);
-    if (existingFile(manifest)) return;
-    const parent = path.dirname(directory);
-    if (parent === directory) return;
-    directory = parent;
-  }
-}
-
-const moduleProbeExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".json", ".node"] as const;
-const jsToTsProbeExtensions = new Map<string, readonly string[]>([
-  [".js", [".ts", ".tsx"]],
-  [".jsx", [".tsx"]],
-  [".mjs", [".mts"]],
-  [".cjs", [".cts"]],
-]);
-function sourceSubstitutionCandidates(base: string): string[] {
-  const extension = path.extname(base).toLowerCase();
-  const substitutions = jsToTsProbeExtensions.get(extension);
-  if (substitutions === undefined) return [];
-  const stem = base.slice(0, base.length - extension.length);
-  return substitutions.map((candidate) => stem + candidate);
-}
-function moduleCandidates(base: string): string[] {
-  return [
-    base,
-    ...sourceSubstitutionCandidates(base),
-    ...moduleProbeExtensions.map((extension) => base + extension),
-    path.join(base, "package.json"),
-    ...moduleProbeExtensions.map((extension) => path.join(base, "index" + extension)),
-  ];
-}
-const recordedModuleBases = new Set<string>();
-function recordManifestTargets(value: unknown, directory: string, allowBare: boolean = false): void {
-  if (typeof value === "string") {
-    if (value !== "" && (allowBare || value.startsWith("./") || value.startsWith("../"))) recordModuleCandidates(path.resolve(directory, value));
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) recordManifestTargets(item, directory, allowBare);
-    return;
-  }
-  if (value !== null && typeof value === "object") {
-    for (const item of Object.values(value)) recordManifestTargets(item, directory, allowBare);
-  }
-}
-function recordModuleCandidates(base: string): void {
-  const resolvedBase = path.resolve(base);
-  if (recordedModuleBases.has(resolvedBase)) return;
-  recordedModuleBases.add(resolvedBase);
-  for (const candidate of moduleCandidates(resolvedBase)) recordInput(candidate);
-  try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(resolvedBase, "package.json"), "utf8").replace(/^\uFEFF/, ""));
-    recordManifestTargets(manifest.exports, resolvedBase);
-    recordManifestTargets(manifest.module, resolvedBase, true);
-    recordManifestTargets(manifest.main, resolvedBase, true);
-  } catch {}
-}
-function candidateSelected(base: string, resolvedFile: string): boolean {
-  for (const candidate of moduleCandidates(base)) {
-    try {
-      const canonical = fs.realpathSync.native(candidate);
-      const relative = path.relative(canonical, resolvedFile);
-      if (relative === "" || (fs.statSync(canonical).isDirectory() && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative))) return true;
-    } catch {}
-  }
-  return false;
-}
-function localBases(specifier: string, parentDirectory: string): string[] {
-  if (specifier.startsWith("file:")) return [fileURLToPath(specifier)];
-  const raw = path.resolve(parentDirectory, specifier);
-  const suffixStart = specifier.search(/[?#]/);
-  if (suffixStart === -1) return [raw];
-  const pathname = specifier.slice(0, suffixStart);
-  return pathname === "" ? [raw] : [...new Set([raw, path.resolve(parentDirectory, pathname)])];
-}
-function recordResolutionCandidates(specifier: string, parentURL: string | undefined, resolvedURL: string | undefined): void {
-  if (typeof parentURL !== "string" || !parentURL.startsWith("file:")) return;
-  const parentDirectory = path.dirname(fileURLToPath(parentURL));
-  let resolvedFile: string | undefined;
-  try {
-    resolvedFile = typeof resolvedURL === "string" && resolvedURL.startsWith("file:")
-      ? fs.realpathSync.native(fileURLToPath(resolvedURL))
-      : undefined;
-  } catch {}
-  if (specifier.startsWith(".") || path.isAbsolute(specifier) || specifier.startsWith("file:")) {
-    try {
-      for (const base of localBases(specifier, parentDirectory)) {
-        recordPackageManifests(base);
-        let exact = false;
-        try { exact = resolvedFile === undefined ? fs.statSync(base).isFile() : fs.realpathSync.native(base) === resolvedFile; } catch {}
-        if (exact) recordInput(base);
-        else recordModuleCandidates(base);
-      }
-    } catch {}
-    return;
-  }
-  if (isBuiltin(specifier) || specifier.startsWith("#")) return;
-  const parts = specifier.split("/");
-  const packageParts = parts[0]!.startsWith("@") ? parts.slice(0, 2) : parts.slice(0, 1);
-  if (packageParts.some((part) => part === undefined || part === "")) return;
-  const packageName = packageParts.join("/");
-  const subpath = parts.slice(packageParts.length);
-  const searchPaths = createRequire(parentURL).resolve.paths(specifier) ?? [];
-  for (const searchPath of searchPaths) {
-    const packageDirectory = path.join(searchPath, packageName);
-    recordModuleCandidates(packageDirectory);
-    if (subpath.length !== 0) recordModuleCandidates(path.join(packageDirectory, ...subpath));
-    if (resolvedFile !== undefined && candidateSelected(packageDirectory, resolvedFile)) break;
-  }
-}
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    recordResolutionCandidates(specifier, context.parentURL, undefined);
-    const resolved = nextResolve(specifier, context);
-    const url = typeof resolved === "string" ? resolved : resolved?.url;
-    recordResolutionCandidates(specifier, context.parentURL, url);
-    if (typeof url === "string" && url.startsWith("file:")) {
-      recordFile(fileURLToPath(url));
-    }
-    return resolved;
-  },
-});
-
-// The hook above never sees a require() made from inside a CommonJS module the
-// ESM loader evaluated, which on Node 22 is every require the config makes:
-// module.registerHooks observes the import() of that module and nothing within
-// it. A config's own dependencies would then be reported without the candidates
-// that decide them, so a spelling appearing later could change what the config
-// resolves to with nothing in the envelope to notice it (samchon/ttsc#1280).
-// Wrapping the CommonJS resolver records the same two observations the hook
-// does, on the graph the hook cannot reach.
-const moduleInternals = Module as unknown as {
-  _resolveFilename(
-    request: string,
-    parent: { filename?: string | null } | null | undefined,
-    isMain: boolean,
-    options?: unknown,
-  ): string;
-};
-const nextResolveFilename = moduleInternals._resolveFilename;
-moduleInternals._resolveFilename = function resolveFilename(
-  this: unknown,
-  request: string,
-  parent: { filename?: string | null } | null | undefined,
-  isMain: boolean,
-  options?: unknown,
-): string {
-  // _resolveFilename is an internal entry point anything may call, so a
-  // non-string request arrives here as readily as a specifier does. Reading it
-  // would replace Node's own argument error with a TypeError from this loader.
-  if (typeof request !== "string") {
-    return nextResolveFilename.call(this, request, parent, isMain, options);
-  }
-  const parentURL =
-    typeof parent?.filename === "string"
-      ? pathToFileURL(parent.filename).href
-      : undefined;
-  recordResolutionCandidates(request, parentURL, undefined);
-  const resolved = nextResolveFilename.call(this, request, parent, isMain, options);
-  if (path.isAbsolute(resolved)) {
-    recordResolutionCandidates(request, parentURL, pathToFileURL(resolved).href);
-    recordFile(resolved);
-  }
-  return resolved;
-};
+// Every resolution the config makes is recorded: through a resolve hook, and
+// on a runtime whose require.resolve bypasses the hooks, through the one
+// entry point it reaches (resolutioninputs.Recorder, samchon/ttsc#1523).
+observeResolutions(recorder);
 
 declare const process: {
   exitCode?: number;
@@ -906,7 +452,7 @@ declare const process: {
 // left for a trailing handler to settle.
 (async () => {
   try {
-    const importedConfig = await import(%s);
+    const importedConfig = await import(%[1]s);
     let current: unknown = importedConfig;
     for (let i = 0; i < 8; i++) {
       if (current !== null && typeof current === "object" && Object.prototype.hasOwnProperty.call(current as Record<string, unknown>, "default")) {
@@ -922,8 +468,8 @@ declare const process: {
       throw new Error("strip config file must export an object");
     }
     const serializedValue = JSON.stringify(current);
-    for (const input of [...inputs]) recordInput(input);
-    process.stdout.write(JSON.stringify({ value: JSON.parse(serializedValue), hashes: Object.fromEntries(hashes), inputs: [...inputs].sort(), realpaths: Object.fromEntries(realpaths) }));
+    const recorded = recorder.finish();
+    process.stdout.write(JSON.stringify({ value: JSON.parse(serializedValue), complete: recorded.complete, hashes: recorded.hashes, inputs: recorded.inputs, realpaths: recorded.realpaths }));
   } catch (error) {
     process.stderr.write(error instanceof Error && error.stack ? error.stack : String(error));
     // The stack above is for the reader. This is for the caller: the parent
@@ -939,10 +485,10 @@ declare const process: {
     );
   }
 })();
-`, importLiteral)
+`, importLiteral, recorderLiteral)
 }
 
-// loadStripTypeScriptConfigFile evaluates a .ts/.cts/.mts config file by writing
+// loadStripTypeScriptConfigFileWithInputs evaluates a .ts/.cts/.mts config file by writing
 // an ephemeral loader script and tsconfig into a temp directory, symlinking the
 // nearest node_modules, then running ttsx.
 //
@@ -953,14 +499,10 @@ declare const process: {
 //
 // Both tools this spawns — the launcher and the compiler handed to it — are
 // resolved from the project rather than from the process environment alone;
-// see stripConfigToolAnchors.
-func loadStripTypeScriptConfigFile(location, resolutionRoot string) (any, error) {
-  loaded, err := loadStripTypeScriptConfigFileWithInputs(location, resolutionRoot)
-  return loaded.value, err
-}
-
+// see stripConfigToolAnchors. An already-open identity store can hold the
+// loader on a cross-volume TEMP setup without moving the config directory.
 func loadStripTypeScriptConfigFileWithInputs(location, resolutionRoot string) (stripLoadedConfig, error) {
-  tempDir, err := os.MkdirTemp(stripLoaderTempBase(location, os.TempDir()), "ttsc-strip-config-")
+  tempDir, err := createStripConfigLoaderTempDir(location, os.TempDir(), os.Getenv("TTSC_NATIVE_PLUGIN_RECORD_ROOT"))
   if err != nil {
     return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: create config loader tempdir: %w", err)
   }
@@ -980,7 +522,15 @@ func loadStripTypeScriptConfigFileWithInputs(location, resolutionRoot string) (s
   if err != nil {
     return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: encode config import %s: %w", location, err)
   }
-  if err := os.WriteFile(loader, []byte(stripTypeScriptLoaderSource(string(importLiteral))), 0o644); err != nil {
+  recorder := filepath.Join(tempDir, "ttsc-resolution-inputs.cjs")
+  if err := os.WriteFile(recorder, []byte(resolutioninputs.Recorder), 0o644); err != nil {
+    return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: write config loader: %w", err)
+  }
+  recorderLiteral, err := json.Marshal(recorder)
+  if err != nil {
+    return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: encode config loader recorder %s: %w", recorder, err)
+  }
+  if err := os.WriteFile(loader, []byte(stripTypeScriptLoaderSource(string(importLiteral), string(recorderLiteral))), 0o644); err != nil {
     return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: write config loader: %w", err)
   }
   if err := os.WriteFile(tsconfig, []byte(stripTypeScriptLoaderTsconfig(loader, location, tempDir)), 0o644); err != nil {
@@ -1023,6 +573,25 @@ func loadStripTypeScriptConfigFileWithInputs(location, resolutionRoot string) (s
     return stripLoadedConfig{}, fmt.Errorf("@ttsc/strip: parse TypeScript config file %s output: %w", location, err)
   }
   return loaded, nil
+}
+
+// createStripConfigLoaderTempDir uses this invocation's existing identity
+// directory when it is safe for the config; otherwise it preserves the
+// historical loader base. Expected filesystem refusal of the preferred base
+// also falls back, while unexpected errors remain visible to the caller.
+func createStripConfigLoaderTempDir(location, systemTemp, recordRoot string) (string, error) {
+  preferred := configloaderscratch.IdentityTempBase(location, systemTemp, recordRoot)
+  var tempDir string
+  var err error
+  if preferred != "" {
+    tempDir, err = os.MkdirTemp(preferred, "ttsc-strip-config-")
+  }
+  if preferred == "" || (err != nil &&
+    (os.IsPermission(err) || os.IsNotExist(err) ||
+      errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EROFS))) {
+    tempDir, err = os.MkdirTemp(stripLoaderTempBase(location, systemTemp), "ttsc-strip-config-")
+  }
+  return tempDir, err
 }
 
 // stripTypeScriptLoaderTsconfig generates the JSON content of the ephemeral
@@ -1075,11 +644,8 @@ func stripTypeScriptLoaderTsconfig(loader, location, outDir string) string {
 // packages/banner/driver/banner.go and packages/strip/driver/config.go. #1169
 // decided against extracting it — the only home the three modules could share
 // is the public `packages/ttsc/driver` seam, and packages/lint's go.mod
-// deliberately requires no in-tree ttsc module — and replaced the checklist
-// with a gate: `scripts/ci/config-loader-copies.cjs` compares every function
-// between these markers across all three copies on every pull request, so
-// editing one and not the others fails by name. That file's header carries the
-// full decision and the rules for changing this block.
+// deliberately requires no in-tree ttsc module — so a change to one copy must
+// be made to all three.
 //
 // The code between the markers must stay identical. Comments may differ, the
 // `@ttsc/<pkg>:` error prefix may differ, and @ttsc/strip spells each name with
@@ -1223,11 +789,11 @@ func stripRealpathIfPossible(location string) string {
 // the project being compiled, with an explicit environment variable winning
 // and a last resort that invents no path.
 //
-// The three Go copies are held identical by the gate named at the top of this
-// block. The JS original — `resolveConfigTsgo` / `resolveTtsxLauncher` in
-// packages/lint/src/index.ts — is a fourth copy in another language that no Go
-// gate can reach; what it owes is that both policies stay describable in one
-// sentence.
+// No automated check holds the three Go copies identical: a change lands in
+// all three by hand, and each package's own config-loader tests exercise it.
+// The JS original — `resolveConfigTsgo` / `resolveTtsxLauncher` in
+// packages/lint/src/index.ts — is a fourth copy in another language; what it
+// owes is that both policies stay describable in one sentence.
 //
 // The environment alone is the wrong place to ask. `ttsx` exports
 // TTSC_TSGO_BINARY and TTSC_TTSX_BINARY to its own descendants, so a host
@@ -1286,7 +852,7 @@ func stripResolveConfigTsgo(anchors []string) string {
 // the package nor its platform dependency.
 //
 // Mirrors resolveTsgo.ts so the Go plugin and the JS launcher name one file:
-// the `typescript` manifest, then `@typescript/typescript-<platform>-<arch>`
+// declared npm aliases before `typescript`, then the native platform package
 // resolved from that manifest, then `lib/tsc` inside it.
 //
 // The install is chased to its real directory before the second hop, because
@@ -1297,7 +863,39 @@ func stripResolveConfigTsgo(anchors []string) string {
 // package. NTFS junctions defeat filepath.EvalSymlinks, so the link component
 // is chased by hand first, the same order stripLoaderTempBase uses.
 func stripTsgoBinaryFrom(anchor string) string {
-  manifest := stripNodePackageManifestFrom(anchor, "typescript")
+  names, err := compileraliases.Names(anchor)
+  if err != nil {
+    return ""
+  }
+  manifest := ""
+  for _, name := range names {
+    if name == "typescript" && manifest != "" {
+      break
+    }
+    candidate := stripNodePackageManifestFrom(anchor, name)
+    if candidate == "" {
+      continue
+    }
+    body, err := os.ReadFile(candidate)
+    var metadata struct {
+      Name    string `json:"name"`
+      Version string `json:"version"`
+    }
+    if err != nil || json.Unmarshal(body, &metadata) != nil {
+      return ""
+    }
+    major, err := strconv.Atoi(strings.SplitN(metadata.Version, ".", 2)[0])
+    if err == nil && major < 7 {
+      continue
+    }
+    if name != "typescript" && (metadata.Name != "typescript" || err != nil) {
+      continue
+    }
+    if manifest != "" && stripRealpathIfPossible(stripResolveDirLink(filepath.Dir(manifest))) != stripRealpathIfPossible(stripResolveDirLink(filepath.Dir(candidate))) {
+      return ""
+    }
+    manifest = candidate
+  }
   if manifest == "" {
     return ""
   }
@@ -1549,8 +1147,8 @@ func stripSetEnv(env []string, key, value string) []string {
 // payload channel when it stops on an error it can name.
 //
 // The loader's stack goes to this process's stderr as it runs, which is where a
-// reader wants it. But the *reason* — "config file must export an object with a
-// non-empty text string" — is a fact about the user's config, and a caller
+// reader wants it. But the reason, such as a non-object config export, is a
+// fact about the user's config, and a caller
 // deserves it in the error rather than having to go find it in the log. So it
 // travels as data through the same stdout the payload uses, and only a
 // well-formed envelope is honoured: anything else leaves the process status to

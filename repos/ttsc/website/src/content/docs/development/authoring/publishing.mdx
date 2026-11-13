@@ -25,7 +25,7 @@ A lint contributor adds `ttsc-lint-plugin` and `lint` to that list.
 
 The `@ttsc/*` scope is reserved for packages this project owns and maintains. Publish community packages unscoped or under your own scope; do not use `@ttsc/*` to signal compatibility.
 
-Existing and branded names stay valid and need no rename — `typia` and `nestia` are plugins under their own names. Keywords, peer dependencies, and the [ecosystem page](/docs/plugins) are how those stay discoverable.
+Branded packages such as `typia` and `nestia` keep their names. Use the recommended keywords and peer dependencies for discovery through the [ecosystem page](/docs/plugins).
 
 ## `package.json`
 
@@ -85,6 +85,8 @@ npm pack --dry-run
 ```
 
 The tarball contains Go source, not a prebuilt plugin binary. `ttsc` builds that source on the consumer machine: executable `package main` sources become sidecars, while linked non-`main` transform packages are compiled into the selected native host.
+
+The optional [publisher package cache](/docs/ttsc/cache#publisher-package-artifacts) does not change your tarball or plugin API. Go reuses a published package body only when its full build action matches the consumer's selected source, module role, dependencies, flags and toolchain. An edited or unpublished helper compiles locally, and the final native executable still links on the consumer machine.
 
 ## Dependencies
 
