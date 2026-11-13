@@ -1,6 +1,6 @@
 # Mergify: the policy lives in systemfsoftware/.github (.mergify.yml). This file only names this repo's CI checks.
 #
-# Layering (SYS-1369): a PR queues on the cheap checks only. The queue draft (`mergify/merge-queue/*`) runs the
+# Layering: a PR queues on the cheap checks only. The queue draft (`mergify/merge-queue/*`) runs the
 # per-change suite and the Nix compare, and merges only when they pass; main runs the same suite again after the merge.
 # `queue_conditions` and `merge_conditions` must stay different, or Mergify tests in place and skips the draft.
 extends: .github
@@ -11,7 +11,7 @@ queue_rules:
     merge_method: merge
     queue_conditions:
       # Recognised from the commits themselves: both anchored git-subtree trailer
-      # lines must be present (ruling 9, SYS-1246). Same checks as default.
+      # lines must be present. Same checks as default.
       - "commits[*].commit_message ~= (?m)^git-subtree-dir: \\S+$"
       - "commits[*].commit_message ~= (?m)^git-subtree-split: [0-9a-f]{40}$"
       - check-success = build · lint · typecheck · test / static checks (pnpm check:static)
@@ -31,7 +31,7 @@ queue_rules:
   - name: default
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
-      # Ruling 9 (SYS-1246): subtree PRs merge via the subtree queue above; a subtree
+      # Subtree PRs merge via the subtree queue above; a subtree
       # claim without trailers matches no queue and cannot merge at all.
       - "-commits[*].commit_message ~= (?m)^git-subtree-dir: \\S+$"
       - "-title ~= (?i)\\b(add|pull|update|sync|vendor|refresh|import)\\b[^.]*\\bsubtrees?\\b|\\bsubtrees?\\b[^.]*(\\badd\\b|\\bpull\\b|\\bupdate\\b|\\bsync\\b|\\bvendor\\b|\\brefresh\\b|\\bimport\\b)"
