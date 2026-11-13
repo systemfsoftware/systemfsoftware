@@ -1,76 +1,71 @@
+# The org's one Dependabot configuration (public-repo standard, item 5). Only the ecosystems and the extra
+# major-version ignores differ by repository. The 3-day cooldown matches pnpm's minimumReleaseAge; vendored
+# subtrees under repos/ are never updated in place; @systemfsoftware/* moves with the flake input.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    labels:
-      - "automerge"
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    labels:
+      - "automerge"
     groups:
       github-actions-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  # Every catalog range in pnpm-workspace.yaml names a full version (^5.0.1, never ^5), or this job ends in
-  # NoChangeError; catalogs.peers, `latest` and `workspace:^` are the exceptions.
-  # See docs/solutions/integration-issues/dependabot-npm-fails-on-jsr-catalog-entries.md.
-  - package-ecosystem: npm
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: weekly
       day: monday
-    versioning-strategy: increase
-    open-pull-requests-limit: 20
+    cooldown:
+      default-days: 3
     exclude-paths:
       - "repos/**"
+    versioning-strategy: "increase"
+    open-pull-requests-limit: 20
     ignore:
+      - dependency-name: "@systemfsoftware/*"
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "vite"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "fast-check"
-        update-types: ["version-update:semver-major"]
-
     groups:
       oxlint-minor-patch:
         patterns:
           - "oxlint"
           - "@oxlint/*"
         update-types: ["minor", "patch"]
-
       oxlint-major:
         patterns:
           - "oxlint"
           - "@oxlint/*"
         update-types: ["major"]
-
       effect-minor-patch:
         patterns:
           - "@effect/*"
           - "effect"
         update-types: ["minor", "patch"]
-
       effect-major:
         patterns:
           - "@effect/*"
           - "effect"
         update-types: ["major"]
-
       turborepo-minor-patch:
         patterns:
           - "turbo"
         update-types: ["minor", "patch"]
-
       testing-minor-patch:
         patterns:
           - "vitest"
           - "@vitest/*"
         update-types: ["minor", "patch"]
-
       testing-major:
         patterns:
           - "vitest"
@@ -80,35 +75,29 @@ updates:
         patterns:
           - "@commitlint/*"
         update-types: ["minor", "patch"]
-
       typescript-minor-patch:
         patterns:
           - "typescript"
         update-types: ["minor", "patch"]
-
       types-node-minor-patch:
         patterns:
           - "@types/node"
         update-types: ["minor", "patch"]
-
-      types-node-major:
-        patterns:
-          - "@types/node"
-        update-types: ["major"]
-
       other-minor-patch:
-        patterns: ["*"]
+        patterns:
+          - "*"
         exclude-patterns:
           - "oxlint"
           - "@oxlint/*"
           - "@effect/*"
+          - "effect"
           - "@commitlint/*"
           - "typescript"
           - "@types/node"
         update-types: ["minor", "patch"]
-
       major-updates:
-        patterns: ["*"]
+        patterns:
+          - "*"
         exclude-patterns:
           - "oxlint"
           - "@oxlint/*"
@@ -117,15 +106,16 @@ updates:
           - "@types/node"
         update-types: ["major"]
 
-  - package-ecosystem: nix
+  - package-ecosystem: "nix"
     directory: "/"
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
     groups:
       minor-and-patch:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
