@@ -26,7 +26,7 @@ on:
         required: true
         type: boolean
       changeset:
-        description: Require a change intent for every publishable-package change; the dev shell must provide `changeset-management`
+        description: Require a change intent for every publishable-package change, checked with a pinned release of the change-intent tool
         required: true
         type: boolean
       shell:
@@ -107,13 +107,14 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
+          # The change-intent tool is one pinned release for every repository, not whatever each dev shell carries.
+          if [ "$CHECK_INTENT" = true ]; then
+            nix run "github:systemfsoftware/pnpm-release-management/ae663466c157a8e5b612c78091e17ddd32a030e0#changeset-management" -- check "$BASE"
+          fi
           nix develop "$SHELL_REF" --command bash -euo pipefail -c '
             eval "$INSTALL"
             if [ "$LINT_COMMITS" = true ]; then
               pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
-            fi
-            if [ "$CHECK_INTENT" = true ]; then
-              changeset-management check "$BASE"
             fi
             eval "$COMMAND"
           '
