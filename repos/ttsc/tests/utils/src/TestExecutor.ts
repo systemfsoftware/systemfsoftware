@@ -1,119 +1,326 @@
-import { DynamicExecutor } from "@nestia/e2e";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { E2eProcessTrace } from "./E2eProcessTrace";
+
+const trace = createRequire(import.meta.url)(E2eProcessTrace.runtimePath) as {
+  begin(): string | undefined;
+  record(
+    event: string,
+    invocation: string | undefined,
+    fields: Record<string, unknown>,
+  ): void;
+};
 
 /**
- * Shared feature-test runner used by the package-shaped test projects.
+ * Runs package-shaped suites and collects their ordered named operations.
  *
- * Test packages expose each scenario as a `test_*` function; this wrapper keeps
- * discovery, include/exclude filtering, and console reporting identical across
- * compiler, runner, lint, and plugin suites.
+ * @evidence contracts/common.md#principled-implementation The namespace exposes the existing runner and its location contract as one package entry.
+ * @evidence contracts/common.md#clear-and-simple-design Main owns suite discovery/invocation, while collectPhases owns callback settlement without discovering or retrying tests.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Named exports execute normally; tracing observes actual invocation without substituting results.
+ * @evidence contracts/common.md#meaningful-documentation The headline identifies the suite runner and main documents failure isolation and unfinished-run detection.
+ * @evidence contracts/portability.md#os-neutral-implementation Native directory paths and module URLs are separated by main through Node path and URL APIs.
+ * @evidence contracts/performance.md#efficient-algorithms Main visits each directory entry once per supplied location, then imports each selected module and invokes its test exports sequentially.
+ * @evidence contracts/performance.md#reuse-equivalent-work Node module identity shares helpers; test outcomes are always recomputed and overlapping supplied locations are not deduplicated.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Run-local paths and failures are released after settlement; the exit guard is removed on completion. Actual test resources remain with case owners.
  */
 export namespace TestExecutor {
   /**
-   * One or more feature-module trees for DynamicExecutor to scan. A test
-   * package that splits its go-binary scenarios onto their own CI lanes passes
-   * an array (e.g. `["src/features", "src/native"]`) so a plain local run still
-   * exercises every tree while CI can point a lane at a single subtree.
+   * One ordered operation and the unmet prerequisites that forbid its entry.
+   *
+   * @evidence contracts/common.md#principled-implementation Owners supply concrete callbacks and explicit unmet prerequisites, rather than treating an unrelated error as a dependency.
+   * @evidence contracts/common.md#clear-and-simple-design The name, entry restrictions and operation describe one phase without a scheduler or dependency graph.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts A callback must perform its actual work; this shape does not certify readiness or resource closure.
+   * @evidence contracts/common.md#meaningful-documentation Member comments distinguish diagnostic identity, unmet authority and actual execution.
+   * @evidence contracts/portability.md#os-neutral-implementation The contract contains no platform-specific paths or readiness assumptions.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms This interface defines data and a callback, not an algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work This interface defines no result cache.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Actual resources remain owned by the callback.
+   */
+  export interface IPhase {
+    /** Identity retained in the result and the owner's failure report. */
+    name: string;
+
+    /** Concrete unmet prerequisites; a nonempty list forbids callback entry. */
+    blockedBy?: readonly string[];
+
+    /**
+     * Actual operation, including any owner-specific concurrent cleanup.
+     *
+     * Settle only after the operation's required work has finished. A thrown
+     * value is retained unchanged; the owner must separately establish any
+     * resource closure or readiness needed by later operations.
+     *
+     * @evidence contracts/common.md#principled-implementation The callback signature accepts synchronous completion or an awaited Promise and preserves arbitrary rejection values through collectPhases.
+     * @evidence contracts/common.md#clear-and-simple-design One parameterless callback owns the named operation; concrete inputs and concurrent cleanup remain in its closure.
+     * @evidence contracts/common.md#prohibited-implementation-shortcuts The signature supplies actual work rather than an expected outcome, and does not certify readiness or resource closure.
+     * @evidence contracts/common.md#meaningful-documentation Native prose identifies settlement, unchanged failure identity and the owner's separate lifetime obligations.
+     * @evidence contracts/portability.md#os-neutral-implementation Completion and rejection use JavaScript callback and Promise semantics without platform-specific assumptions.
+     * @evidenceExclude contracts/performance.md#efficient-algorithms This callable signature chooses no algorithm; the callback implementation owns its work.
+     * @evidenceExclude contracts/performance.md#reuse-equivalent-work The signature establishes no result reuse; collectPhases invokes each eligible callback once per collection.
+     * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources This signature acquires no resource; the implementing operation owns acquisition, concurrent cleanup and actual closure.
+     */
+    run: () => unknown | Promise<unknown>;
+  }
+
+  /**
+   * Actual settlement or explicit non-entry of one named operation.
+   *
+   * @evidence contracts/common.md#principled-implementation Returned, failed and blocked outcomes distinguish completed work, original failure and unavailable work.
+   * @evidence contracts/common.md#clear-and-simple-design A discriminated union retains only the payload meaningful for each outcome.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts A blocked operation is never reported as returned, and failed errors retain their original identity.
+   * @evidence contracts/common.md#meaningful-documentation The headline identifies the three actual outcomes; fields preserve their operation identity and failure or prerequisite payload.
+   * @evidence contracts/portability.md#os-neutral-implementation Results describe execution independently of an operating system.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms This union represents results without computation.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work This union defines no result reuse policy.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Callback-owned resources are not represented as closed by a result.
+   */
+  export type PhaseResult =
+    | { name: string; status: "returned" }
+    | { name: string; status: "failed"; error: unknown }
+    | { name: string; status: "blocked"; blockedBy: readonly string[] };
+
+  /**
+   * Settle every eligible operation in order, retaining failures and non-entry.
+   *
+   * Independent operations still run after a rejection. Owners must supply
+   * their real readiness restrictions and retain resource-lifetime authority;
+   * returning from a callback is not a certificate of descendant closure.
+   *
+   * @evidence contracts/common.md#principled-implementation Each eligible callback is awaited once; explicit unmet prerequisites prevent entry without replacing earlier failures.
+   * @evidence contracts/common.md#clear-and-simple-design One ordered loop collects settlements, with no retries, graph traversal or implicit readiness inference.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Original thrown values survive unchanged and blocked callbacks are not executed or labeled successful.
+   * @evidence contracts/common.md#meaningful-documentation Native prose states continuation, prerequisite and lifetime responsibilities.
+   * @evidence contracts/portability.md#os-neutral-implementation Promise settlement and explicit owner-supplied prerequisites require no OS-specific branch.
+   * @evidence contracts/performance.md#efficient-algorithms Each of P phases is visited once, with O(P + B) result storage including copied blocked-reason entries B; callback costs remain with their owners.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work Every eligible callback executes anew; outcomes are not cached or reused.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Results last with their caller and no timer, handle or background operation is created. Concurrent close attempts belong inside the owning callback and must actually settle before it returns.
+   */
+  export const collectPhases = async (
+    phases: readonly IPhase[],
+  ): Promise<PhaseResult[]> => {
+    const results: PhaseResult[] = [];
+    for (const phase of phases) {
+      if (phase.blockedBy?.length) {
+        results.push({
+          name: phase.name,
+          status: "blocked",
+          blockedBy: [...phase.blockedBy],
+        });
+        continue;
+      }
+      try {
+        await phase.run();
+        results.push({ name: phase.name, status: "returned" });
+      } catch (error) {
+        results.push({ name: phase.name, status: "failed", error });
+      }
+    }
+    return results;
+  };
+
+  /**
+   * Feature-module trees selected by the owning test package.
+   *
+   * @evidence contracts/common.md#principled-implementation A single location or list represents the runner's supported discovery roots without confusing a string with iterable path characters.
+   * @evidence contracts/common.md#clear-and-simple-design One field leaves discovery and execution policy in main.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Locations select actual modules, not expected outcomes or fabricated executions.
+   * @evidence contracts/common.md#meaningful-documentation The interface identifies package-selected feature roots; location accepts one root or several.
+   * @evidence contracts/portability.md#os-neutral-implementation Location strings retain native filesystem spelling for the runner; conversion to module URLs belongs to main.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms TestExecutor.IProps defines a representation; it chooses no processing algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work TestExecutor.IProps defines no computation-sharing or invalidation policy.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources TestExecutor.IProps carries data or signatures; acquisition and release remain with the implementing operation.
    */
   export interface IProps {
+    /**
+     * Native feature file or directory roots; every supplied location is
+     * visited.
+     */
     location: string | string[];
   }
 
   /**
-   * Execute every discovered `test_*` export under the requested location(s).
+   * Execute every selected test export, retaining each failure's identity.
    *
-   * Command-line filters intentionally match by substring so a failing scenario
-   * can be rerun from any package with `--include=<case-name>` without adding
-   * package-specific runner switches.
+   * Files are selected before import. An import failure blocks only that file;
+   * remaining files and locations still execute. Nested causes are printed as
+   * each result arrives, so later discovery failures cannot hide them. Existing
+   * opt-in tracing records real import start/return/throw separately from the
+   * subsequent test invocation, so an unfinished module evaluation is not
+   * mislabeled as an already entered test body.
+   *
+   * @evidence contracts/common.md#principled-implementation A single walk selects the TypeScript file prefix and substring filters before the exported-function loop. Native ESM imports retain real file URL and module identity. Import and invocation failures remain errors while independent entries continue.
+   * @evidence contracts/common.md#clear-and-simple-design One walk and two loops own discovery and execution without another runner or per-file directory rescans; existing package entries still provide locations and named exports.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts No failure is retried or replaced. Returned false is reported as skipped without coverage; an empty selection or unfinished process is an error. Opt-in actual file/export invocation and outcome markers do not certify assertions or count native children.
+   * @evidence contracts/common.md#meaningful-documentation Documents selection before import, the file-level failure boundary and immediate nested error output; callers supply feature locations.
+   * @evidence contracts/portability.md#os-neutral-implementation Native paths address directories and pathToFileURL supplies the module URL on Windows and POSIX. Directory links are not traversed, matching the former lstat-based discovery.
+   * @evidence contracts/performance.md#efficient-algorithms One traversal visits each directory entry and each selected file is imported once. Executions run sequentially; retained paths grow with selected files and errors with failed entries. Enabled observation adds two events proportional to actual file/name text; disabled tracing performs no sink IO.
+   * @evidence contracts/performance.md#reuse-equivalent-work Node module caching shares imported helpers across cases and discovery runs once per location; test results are never reused.
+   * @evidence contracts/performance.md#bound-retention-and-release-resources Synchronous directory reads leave no handle open; enabled marker files append/close through the bounded private runtime. Test children belong to their case owners. Paths and errors last through this run and the exit guard is removed on normal completion; nested error output is not separately capped and markers do not prove descendant closure.
    */
   export const main = async (props: IProps): Promise<void> => {
     const include = getArguments("include");
     const exclude = getArguments("exclude");
     const locations =
       typeof props.location === "string" ? [props.location] : props.location;
-    const filter = (name: string) =>
-      (include.length ? include.some((str) => name.includes(str)) : true) &&
-      (exclude.length ? exclude.every((str) => !name.includes(str)) : true);
+    const selected = (name: string): boolean =>
+      name.startsWith("test_") &&
+      name.endsWith(".ts") &&
+      (!include.length || include.some((value) => name.includes(value))) &&
+      exclude.every((value) => !name.includes(value));
     const started = Date.now();
-    // A suite that stops early must not read as a passing one. Nothing here
-    // holds the event loop open by itself: a scenario awaiting a reply that
-    // never comes, over a channel nothing else references, lets the process
-    // exit with a success code and most of the suite unrun, which is exactly
-    // as green as a real pass in CI.
     let finished = false;
-    process.on("exit", (code) => {
+    const guard = (code: number): void => {
       if (!finished && code === 0) {
-        // Written synchronously: the process is already exiting, and an async
-        // write to a pipe (which is how CI captures this) can be dropped before
-        // it flushes, leaving a failed run with no reason attached.
         fs.writeSync(
           2,
-          "The runner exited before finishing. Every case after the last one printed above was never run.\n",
+          "The runner exited before finishing. Cases after the last printed result were not run.\n",
         );
         process.exitCode = 1;
       }
-    });
-
-    const executions: DynamicExecutor.IReport["executions"] = [];
+    };
+    process.on("exit", guard);
+    const failures: Error[] = [];
+    let executed = 0;
+    let skipped = 0;
+    const fail = (name: string, cause: unknown): void => {
+      const error = new Error(name, { cause });
+      failures.push(error);
+      console.dir(error, { depth: null });
+    };
     for (const location of locations) {
-      const report: DynamicExecutor.IReport = await DynamicExecutor.validate({
-        prefix: "test_",
-        location,
-        extension: "ts",
-        parameters: () => [],
-        onComplete: (exec) => {
-          if (exec.value === false)
-            console.log(`  - \x1b[32m${exec.name}\x1b[0m: Pass`);
-          else if (exec.error === null) {
-            const elapsed = Math.max(
-              0,
-              new Date(exec.completed_at).getTime() -
-                new Date(exec.started_at).getTime(),
-            );
-            console.log(
-              `  - \x1b[32m${exec.name}\x1b[0m: \x1b[33m${elapsed.toLocaleString()} ms\x1b[0m`,
-            );
-          } else
-            console.log(
-              `  - \x1b[32m${exec.name}\x1b[0m: \x1b[31m${exec.error.name}\x1b[0m`,
-            );
-        },
-        filter,
-      });
-      executions.push(...report.executions);
+      const files: string[] = [];
+      const visit = (directory: string): void => {
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(directory, { withFileTypes: true });
+        } catch (error) {
+          fail(`Test discovery failed under ${directory}`, error);
+          return;
+        }
+        for (const entry of entries) {
+          const file = path.join(directory, entry.name);
+          if (entry.isDirectory()) visit(file);
+          else if (entry.isFile() && selected(entry.name)) files.push(file);
+        }
+      };
+      try {
+        if (fs.statSync(location).isFile()) {
+          if (selected(path.basename(location))) files.push(location);
+        } else visit(location);
+      } catch (error) {
+        fail(`Test discovery failed under ${location}`, error);
+      }
+      for (const file of files) {
+        let exports: Record<string, unknown>;
+        const moduleUrl = pathToFileURL(file).href;
+        const importInvocation = trace.begin();
+        trace.record("test-import", importInvocation, {
+          pid: process.pid,
+          data: {
+            writerRuntime: process.version,
+            file,
+            moduleUrl,
+            phase: "started",
+          },
+        });
+        try {
+          exports = await import(moduleUrl);
+          trace.record("test-import", importInvocation, {
+            pid: process.pid,
+            data: {
+              writerRuntime: process.version,
+              file,
+              moduleUrl,
+              phase: "returned",
+            },
+          });
+        } catch (error) {
+          trace.record("test-import", importInvocation, {
+            pid: process.pid,
+            data: {
+              writerRuntime: process.version,
+              file,
+              moduleUrl,
+              phase: "threw",
+              error: String(error),
+            },
+          });
+          fail(`Test import failed: ${file}`, error);
+          continue;
+        }
+        for (const [name, run] of Object.entries(exports)) {
+          if (!name.startsWith("test_") || typeof run !== "function") continue;
+          const before = Date.now();
+          executed++;
+          const invocation = trace.begin();
+          trace.record("test-invocation", invocation, {
+            pid: process.pid,
+            data: { writerRuntime: process.version, file, name },
+          });
+          try {
+            const value = await run();
+            trace.record("test-result", invocation, {
+              pid: process.pid,
+              data: {
+                writerRuntime: process.version,
+                file,
+                name,
+                outcome: value === false ? "skipped" : "returned",
+                assertionCoverageCertified: false,
+              },
+            });
+            if (value === false) {
+              skipped++;
+              console.log(
+                `  - ${name}: SKIPPED (returned false; no coverage claimed)`,
+              );
+            } else
+              console.log(
+                `  - \x1b[32m${name}\x1b[0m: \x1b[33m${(Date.now() - before).toLocaleString()} ms\x1b[0m`,
+              );
+          } catch (error) {
+            trace.record("test-result", invocation, {
+              pid: process.pid,
+              data: {
+                writerRuntime: process.version,
+                file,
+                name,
+                outcome: "threw",
+                assertionCoverageCertified: false,
+              },
+            });
+            fail(`Test failed: ${name} (${file})`, error);
+          }
+        }
+      }
     }
-
-    if (executions.length === 0) {
-      console.error(
+    if (executed === 0)
+      fail(
         include.length
           ? `No tests matched --include=${include.join(",")}`
           : `No tests were discovered under ${locations.join(", ")}`,
+        undefined,
       );
-      process.exit(1);
-    }
-
-    const exceptions: Error[] = executions
-      .filter((exec) => exec.error !== null)
-      .map((exec) => exec.error!);
-    for (const error of exceptions) console.error(error);
-    console.log(exceptions.length ? "Failed" : "Success");
-    console.log(
-      "Elapsed time",
-      Math.max(0, Date.now() - started).toLocaleString(),
-      "ms",
-    );
+    console.log(failures.length ? "Failed" : "Success");
+    if (skipped)
+      console.log(`${skipped} case(s) skipped; no coverage claimed.`);
+    console.log("Elapsed time", (Date.now() - started).toLocaleString(), "ms");
     finished = true;
-    if (exceptions.length) process.exit(1);
+    process.removeListener("exit", guard);
+    if (failures.length) process.exitCode = 1;
   };
 
-  /** Read comma-separated repeatable CLI filters such as `--include=a,b`. */
+  /** Read repeatable comma-separated filters from the current invocation. */
   function getArguments(key: string): string[] {
     const prefix = `--${key}=`;
     return process.argv
       .slice(2)
-      .filter((arg) => arg.startsWith(prefix))
-      .flatMap((arg) => arg.slice(prefix.length).split(","))
-      .map((arg) => arg.trim())
+      .filter((value) => value.startsWith(prefix))
+      .flatMap((value) => value.slice(prefix.length).split(","))
+      .map((value) => value.trim())
       .filter(Boolean);
   }
 }

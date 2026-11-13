@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Namespace from "alchemy/Namespace";
 import type * as ByteSize from "effect/ByteSize";
 import * as Config from "effect/Config";
@@ -39,6 +39,13 @@ export interface RegistryOptions {
     readonly repos: ReadonlyArray<string>;
     /** @default Duration.weeks(1) */
     readonly ttl?: Duration.Duration;
+    /**
+     * Branches whose latest push publication never expires, such as
+     * `["main"]`. A newer push from the branch hands the previous
+     * publication back to the TTL, counted from that newer push.
+     * @default []
+     */
+    readonly keepLatest?: ReadonlyArray<string>;
     /** Upper bound on a single tarball. Absent means unlimited. */
     readonly maxPackageSize?: ByteSize.ByteSize;
   };
@@ -127,7 +134,7 @@ export default RegistryLive.pipe(Layer.provide(RegistryConfigFromEnv));
  * // stacks/pkg.ts
  * import { PkgRegistry } from "@alchemy.run/pkg/Registry";
  * import * as Alchemy from "alchemy";
- * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as ByteSize from "effect/ByteSize";
  * import * as Config from "effect/Config";
  * import * as Duration from "effect/Duration";
@@ -168,6 +175,9 @@ export const PkgRegistry = <const Id extends string>(id: Id, options: RegistryOp
             policy: {
               repos: options.policy.repos,
               ttl: options.policy.ttl ?? DEFAULT_TTL,
+              ...(options.policy.keepLatest !== undefined
+                ? { keepLatest: options.policy.keepLatest }
+                : {}),
               ...(options.policy.maxPackageSize !== undefined
                 ? { maxPackageSize: options.policy.maxPackageSize }
                 : {}),

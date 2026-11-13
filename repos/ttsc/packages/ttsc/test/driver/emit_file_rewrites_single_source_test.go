@@ -6,6 +6,7 @@ import (
   "testing"
 
   shimcompiler "github.com/microsoft/typescript-go/shim/compiler"
+  shimtspath "github.com/microsoft/typescript-go/shim/tspath"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
 )
@@ -19,6 +20,10 @@ import (
 // 1. Load a project with two source files.
 // 2. Register a rewrite for the selected source only.
 // 3. Emit that source through EmitFile and assert the patched output.
+// @evidence contracts/testing.md#behavioral-verification Calls EmitFile with a selected actual SourceFile and rewrite; the selected JavaScript must contain its sentinel and authored replacement while other.js must be absent.
+// @evidence contracts/testing.md#independent-expectations Literal single replacement and independent other.ts fixture distinguish selected output from unrelated output; no expected body is produced by another emitter.
+// @evidence contracts/testing.md#distinguishing-cases Two-source input and one selected rewrite contrast selected emission with accidental whole-program output.
+// @evidence contracts/testing.md#execution-ownership The owning driver unit loads/closes an in-process Program and captures write callbacks into a private map; no native compiler process runs.
 func TestDriverEmitFileRewritesSingleSource(t *testing.T) {
   root := t.TempDir()
 
@@ -66,8 +71,8 @@ export const value = plugin.make();
   // Emit assertion: the callback observes only outputs produced for the
   // selected source file, and that output must carry the rewrite sentinel.
   emitted := map[string]string{}
-  _, emitDiags, err := prog.EmitFile(rewrites, target, func(fileName, text string, _ *shimcompiler.WriteFileData) error {
-    emitted[filepath.Base(fileName)] = text
+  _, emitDiags, err := prog.EmitFile(rewrites, target, func(fileName shimtspath.RootedFilePath, text string, _ *shimcompiler.WriteFileData) error {
+    emitted[filepath.Base(string(fileName))] = text
     return nil
   })
   if err != nil {

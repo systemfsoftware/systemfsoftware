@@ -1,56 +1,33 @@
 ---
 name: documentation
-description: Defines README, website-guide, and agent-instruction structure, concise prose, and voice for ttsc. Use before writing, modifying, renaming, or moving repository documentation.
+description: Owns ttsc's writing rules and writes its READMEs, website guides, and doc comments. Use before writing or changing a README, anything under website/src/content, or a doc comment.
 ---
 
 # Documentation
 
-## READMEs
+Good writing is the same for every reader: deliver the core point concisely and clearly. Only the reader, and so what the reader needs, differs by document.
 
-README files are for the final reader of that package or directory. Start with what it is, when to use it, installation, the smallest working setup, and the common path.
+## Writing
 
-Keep README language direct and practical. Avoid compiler theory, protocol details, internal architecture, and edge cases unless the reader must know them to use the package. Move deep explanations into the website guides and link them only as the next step.
+- Write only what the reader needs and would not otherwise know. Cut padding, repetition, preamble, filler, and closing summaries; completeness means covering what the reader needs, never longer phrasing.
+- One point, one sentence, one place. Give the reason when it is not obvious.
+- Say what to do rather than what to avoid; when a prohibition is needed, name the concrete pattern.
+- Plain English with one term per concept, and no emphasis capitals, em-dashes, emoji in prose, promotional adjectives, stock AI phrasing, or hedging.
 
-## Guide Documents
+## Paragraphs And Lists
 
-Guide documents live under `website/src/content/docs/` as MDX, served by Nextra at https://ttsc.dev. They are the detailed layer. Each guide must name its reader: consumer, package user, bundler user, runtime user, plugin author, or maintainer.
+A paragraph is one topic. Start a new one when the topic changes and keep sentences on the same topic together; merging topics to save paragraphs and splitting every sentence are both failures. Write each paragraph on one source line.
 
-Organize the tree by audience:
+Use a list for parallel items, for steps whose order changes the result, and for their sub-steps, marking a sublist differently from its parent, such as `-` items under a numbered list. Write an argument whose conditions, reasons, and exceptions depend on each other as prose. Use a table for repeated mappings and a code block for exact commands.
 
-- top-level pages (`index.mdx`, `setup.mdx`, `faq.mdx`, `benchmark/`) for cross-cutting tasks;
-- per-package folders (`ttsc/`, `lint/`, `plugins/`, `wasm/`) for package users; and
-- `development/` for plugin authors and maintainers.
+## READMEs And Guides
 
-Package guides may cover full options, recipes, troubleshooting, compatibility, and migration. Plugin-author guides may cover protocols, Go APIs, testing, publishing, and internals.
+These are read by a person using or extending ttsc.
 
-Keep one audience and task per page. Update the matching `_meta.ts` whenever a guide is added, renamed, or moved.
+- A README is for the package's user: what it is, when to use it, installation, the smallest working setup, and a link to its guide. Leave internals, protocols, and edge cases to the guide.
+- A guide under `website/src/content/docs/` serves one reader (consumer, package user, bundler user, runtime user, plugin author, or maintainer) and one task, with the options, examples, and troubleshooting that task needs. Package folders hold package use, `development/` holds plugin authoring, and top-level pages hold cross-cutting tasks. Update the folder's `_meta.ts` when adding, renaming, or moving a guide.
+- Take every code example from code that runs.
 
-## Agent Instructions
+## Doc Comments
 
-`AGENTS.md` and `SKILL.md` files are operational documents for humans and agents. Keep only the product-wide contract in `AGENTS.md`, the always-applicable procedure in `SKILL.md`, and conditional detail in a linked sibling document.
-
-Concise and clear means:
-
-- Include the context needed to act correctly. Do not make the reader infer prerequisites, exceptions, reasons, or stop conditions merely to shorten the document.
-- State each rule at its owning document and link to it elsewhere. Remove repeated wording, not necessary substance.
-- Give each paragraph one job. Separate purpose, rule, rationale, procedure, and consequence when combining them obscures the action.
-- Use structure to compress meaning: ordered lists for procedures, bullets for choices and checks, tables for repeated mappings, and code blocks for exact commands.
-- State the rule before its reason. Use a negative rule only when it prevents a named failure the affirmative rule does not already exclude.
-- Link to website guides, READMEs, or source comments instead of paraphrasing them.
-
-## Prose line breaks
-
-Write each Markdown or MDX paragraph on one source line. Never hard-wrap a single paragraph at a fixed column: Markdown already soft-wraps it, while manual wrapping makes small edits reflow unrelated lines.
-
-One source line does not mean one long paragraph. Insert a blank line whenever the idea changes. Keep structural line breaks for paragraphs, list items, headings, tables, and fenced code.
-
-The repository enforces `prettier --prose-wrap never` across `*.md` and `*.mdx`. `embeddedLanguageFormatting: off` keeps fenced code byte-identical. Run the repository format script instead of wrapping prose by hand.
-
-## Voice
-
-Write in the plain, direct voice of the human-authored docs in this repo. Do not write like an AI assistant.
-
-- No em-dashes. Use a period, comma, colon, or parentheses.
-- No emoji.
-- No AI-cliche phrasing: "not only X but also Y", "whether you're X or Y", "it's worth noting", "let's dive in", filler adjectives like "seamless", "powerful", "robust", "effortless", and reflexive hedging.
-- No wrap-up sentence that just restates the paragraph. State the fact and stop.
+JSDoc and Go doc comments follow the Writing and Paragraphs And Lists rules above. What a public declaration's comment must say is the contracts [Meaningful documentation](../contracts/common.md#meaningful-documentation) chapter.

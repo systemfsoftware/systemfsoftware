@@ -31,10 +31,13 @@ func run(args []string) int {
   flags := flag.NewFlagSet("transform", flag.ContinueOnError)
   cwd := flags.String("cwd", "", "")
   _ = flags.String("tsconfig", "", "")
-  _ = flags.String("plugins-json", "", "")
+  pluginsJSON := flags.String("plugins-json", "", "")
   if err := flags.Parse(args[1:]); err != nil {
     return 2
   }
+  // A `fixed` value in this plugin's tsconfig entry replaces every consumer's
+  // value, so an edit to the tsconfig itself has an observable effect.
+  fixed := fixedValue(*pluginsJSON)
   root := *cwd
   if root == "" {
     root, _ = os.Getwd()
@@ -75,16 +78,15 @@ func run(args []string) int {
     }
     key := filepath.ToSlash(relative)
     if strings.Contains(code, "watchValue()") {
-      input, err := os.ReadFile(dependency)
+      value, dependencies, err := contractValue(root, dependency)
       if err != nil {
         return err
       }
-      match := typeValue.FindStringSubmatch(string(input))
-      if len(match) != 2 {
-        return fmt.Errorf("invalid contract type in %s", dependency)
+      if fixed != "" {
+        value = fixed
       }
-      code = strings.ReplaceAll(code, "watchValue()", fmt.Sprintf("%q", match[1]))
-      output.Dependencies[key] = []string{dependency}
+      code = strings.ReplaceAll(code, "watchValue()", fmt.Sprintf("%q", value))
+      output.Dependencies[key] = dependencies
       counted = true
     }
     output.TypeScript[key] = code
@@ -117,4 +119,67 @@ func run(args []string) int {
   }
   fmt.Fprintln(os.Stdout, string(data))
   return 0
+}
+
+// contractValue reads the value the contract input names, and the files it read
+// for it.
+//
+// Values drive the race scenarios (samchon/ttsc#1423). `FROM_<NAME>` takes the
+// value from `src/<name>-input.server.ts`, a file the module depends on for the
+// first time. A value prefixed `RACE_` is rewritten without the prefix in the
+// file that held it, right after this compile read it: an edit landing between
+// the compile's read and the host taking the module's dependencies.
+func contractValue(root string, dependency string) (string, []string, error) {
+  files := []string{dependency}
+  value, err := readContractValue(dependency)
+  if err != nil {
+    return "", nil, err
+  }
+  source := dependency
+  if name, found := strings.CutPrefix(value, "FROM_"); found {
+    source = filepath.Join(root, "src", strings.ToLower(name)+"-input.server.ts")
+    files = append(files, source)
+    if value, err = readContractValue(source); err != nil {
+      return "", nil, err
+    }
+  }
+  if strings.HasPrefix(value, "RACE_") {
+    edited := fmt.Sprintf("export type ContractInput = %q;\n", strings.TrimPrefix(value, "RACE_"))
+    if err := os.WriteFile(source, []byte(edited), 0o644); err != nil {
+      return "", nil, err
+    }
+  }
+  return value, files, nil
+}
+
+func readContractValue(file string) (string, error) {
+  input, err := os.ReadFile(file)
+  if err != nil {
+    return "", err
+  }
+  match := typeValue.FindStringSubmatch(string(input))
+  if len(match) != 2 {
+    return "", fmt.Errorf("invalid contract type in %s", file)
+  }
+  return match[1], nil
+}
+
+// fixedValue reads the `fixed` entry of this plugin's config from the plugin
+// list ttsc hands the transform, or "" when none is set.
+func fixedValue(pluginsJSON string) string {
+  if pluginsJSON == "" {
+    return ""
+  }
+  var plugins []struct {
+    Config map[string]any `json:"config"`
+  }
+  if err := json.Unmarshal([]byte(pluginsJSON), &plugins); err != nil {
+    return ""
+  }
+  for _, plugin := range plugins {
+    if fixed, ok := plugin.Config["fixed"].(string); ok && fixed != "" {
+      return fixed
+    }
+  }
+  return ""
 }

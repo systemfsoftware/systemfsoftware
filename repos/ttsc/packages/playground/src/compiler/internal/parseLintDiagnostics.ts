@@ -15,6 +15,11 @@ const ANSI_REGEXP = /\x1b\[[0-9;]*m/g;
 /**
  * Parse the lint plugin's stderr (tsgo-style pretty diagnostics) into the
  * playground's normalized diagnostic shape.
+ *
+ * @evidence contracts/common.md#principled-implementation The parser recognizes the supported pretty-diagnostic grammar after removing actual ANSI SGR escapes and carries its one-based line and column unchanged into UI records.
+ * @evidence contracts/common.md#clear-and-simple-design Matching and record construction stay in one pass; token-span inference remains a local helper rather than a second diagnostic protocol.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Unknown lines are omitted as non-diagnostics; the owning pipeline separately reports plugin failure instead of treating every empty parse as success.
+ * @evidence contracts/common.md#meaningful-documentation Native prose identifies producer format and normalization responsibility; nearby comments explain ANSI matching reasons under the documentation skill.
  */
 export function parseLintDiagnostics(
   stderr: string,
@@ -22,6 +27,7 @@ export function parseLintDiagnostics(
 ): ICompilerService.IDiagnostic[] {
   const stripped = stderr.replace(ANSI_REGEXP, "");
   const lines = stripped.split(/\r?\n/);
+  const sourceLines = source.split(/\r?\n/);
   const out: ICompilerService.IDiagnostic[] = [];
   for (const line of lines) {
     const m = line.match(LINT_LINE_REGEXP);
@@ -33,7 +39,7 @@ export function parseLintDiagnostics(
     out.push({
       line: lineNum,
       column: colNum,
-      length: lengthOfTokenAt(source, lineNum, colNum) ?? 1,
+      length: lengthOfTokenAt(sourceLines, lineNum, colNum) ?? 1,
       severity: sev === "warning" ? "warning" : "error",
       message: rule ? `[${rule}] ${message ?? ""}` : (message ?? ""),
       code: `TS${codeStr ?? ""}`,
@@ -47,11 +53,10 @@ export function parseLintDiagnostics(
  * `column`) in `source`. Falls back to 1 when no token is found.
  */
 function lengthOfTokenAt(
-  source: string,
+  lines: readonly string[],
   line: number,
   column: number,
 ): number | null {
-  const lines = source.split(/\r?\n/);
   if (line < 1 || line > lines.length) return null;
   const text = lines[line - 1] ?? "";
   const start = Math.max(0, column - 1);

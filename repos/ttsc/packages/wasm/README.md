@@ -118,7 +118,7 @@ There is no boot deadline. How long a fetch and instantiation take belongs to th
 
 Once `go.run` starts, JavaScript cannot terminate the Go wasm runtime. A boot failure from that point throws `BootTtscWorkerTerminationError` with code `TTSC_WASM_WORKER_TERMINATION_REQUIRED`, and later boots for the same `apiName` reject without installing another readiness bridge. Terminate and replace that Worker before retrying.
 
-Booting two wasms with the same `apiName` overwrites the previous global binding; pick a unique `apiName` per binary. `bootTtsc` also installs shared `fs` and `process` globals in its Worker, so use separate Workers when binaries need independent filesystems.
+Use one Go runtime per Worker. A different API name does not isolate the shared `Go`, `fs` and `process` globals, so another binary needs another Worker. Calls joining the same API/binary boot reuse its actual filesystem; a different explicit host or `wasmExecUrl` is rejected rather than silently ignored. The default runtime-script URL is the binary's sibling `wasm_exec.js`, without its query or fragment.
 
 ## Fountain API (snapshot, AST, type checker)
 
@@ -171,7 +171,7 @@ Verbs and payload types:
 
 `getNodeAtPosition` returns the syntax token touching `position`, including punctuation. `getTypeAtPosition` resolves that token to its enclosing semantic AST node, while `getSymbolAtPosition` queries the token directly. Both return `null` when there is no semantic answer. Whitespace and comments return `null` for all three verbs.
 
-`position` is a **byte offset** into the source text and must satisfy `0 <= position < UTF-8 byte length of sourceText`. The same coordinate TypeScript-Go uses internally. JS callers that have a UTF-16 `(line, character)` pair (e.g. From Monaco) must convert it before calling.
+`position` is a finite integer **byte offset** into the source text and must satisfy `0 <= position < UTF-8 byte length of sourceText`. This is the coordinate TypeScript-Go uses internally. Fractional and non-finite values are rejected before integer conversion. JS callers that have a UTF-16 `(line, character)` pair (e.g. From Monaco) must convert it before calling.
 
 **Lifecycle:** JS owns the handle. The wasm keeps the program (parsed AST, checker pool lease, every source file) alive until you call `releaseSnapshot`. Leaking handles leaks memory in the wasm linear heap.
 
@@ -195,7 +195,7 @@ Use `invocation.Go` for asynchronous work that belongs to the result. Register i
 The published `@ttsc/wasm` tarball ships:
 
 - A rewritten root `go.mod` whose `replace` directives point at `./shim-vendor/shim/*` (vendored at pack time from `packages/ttsc/shim/`).
-- The full `host/`, `cmd/`, `build/` Go source so consumers can `go build -tags '...'` their own wasm against your host helper.
+- The full `host/` and `cmd/` Go source and the `build/` scripts so consumers can `go build -tags '...'` their own wasm against your host helper.
 - `dist/ttsc.wasm` + `dist/wasm_exec.js`: the no-plugin sanity binary and the Go runtime loader.
 
 The tarball intentionally drops the `replace github.com/samchon/ttsc/packages/ttsc => ../ttsc` directive that the in-repo `go.mod` carries: consumers of the published module who want to rebuild the wasm must supply their own `replace` (or vendor `packages/ttsc` themselves). The published `dist/ttsc.wasm` is plug-and-play for runtime use; the Go module is for **plugin authors extending the host**, not for vanilla consumers.

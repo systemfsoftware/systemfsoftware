@@ -10,12 +10,24 @@ interface OptionsPanelProps {
   options: ITransformOptions;
   onChange: (next: ITransformOptions) => void;
   onClose: () => void;
+
   /** Defaults to the typia + lint pair from `DEFAULT_OPTION_TOGGLES`. */
   toggles?: readonly IOptionToggle[];
+
   /** Dialog heading. Defaults to "Transform Options". */
   title?: string;
 }
 
+/**
+ * Render site-defined boolean toggles in a dialog, merging a changed flag into
+ * the controlled option record. Focus moves to the first control once when the
+ * dialog opens, Escape closes and Tab wraps within the dialog.
+ *
+ * @evidence contracts/common.md#principled-implementation Computed-key copying preserves unrelated options; focus traversal and Escape use DOM events with cleanup on callback replacement or unmount.
+ * @evidence contracts/common.md#clear-and-simple-design Parent callbacks own values and visibility while this component owns dialog focus behavior and toggle presentation.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Metadata keys drive all toggles through the same supported callback rather than plugin-specific mutation paths.
+ * @evidence contracts/common.md#meaningful-documentation Native prose states merge and keyboard behavior; prop comments state UI defaults with documentation-skill tag and member separation.
+ */
 export function OptionsPanel({
   options,
   onChange,
@@ -28,7 +40,9 @@ export function OptionsPanel({
   const toggle = (key: string) =>
     onChange({ ...options, [key]: !options[key] });
 
-  // Escape closes. Focus traps inside the dialog.
+  // Escape closes. Focus traps inside the dialog. The listener re-registers
+  // whenever the parent supplies a new `onClose`, which an inline callback does
+  // on every render, so it must not move focus.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -52,13 +66,17 @@ export function OptionsPanel({
       }
     };
     window.addEventListener("keydown", onKey);
-    // Auto-focus the first focusable on mount.
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Auto-focus the first focusable once, when the dialog opens. Toggling an
+  // option re-renders the parent, and focus must stay on the toggled control.
+  useEffect(() => {
     const focusable = dialogRef.current?.querySelector<HTMLElement>(
       'button, input, [tabindex]:not([tabindex="-1"])',
     );
     focusable?.focus();
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   return (
     <div

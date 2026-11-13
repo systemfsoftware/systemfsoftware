@@ -14,6 +14,14 @@ type jsonValidateStringifyProgrammerNamespace struct{}
 
 var JsonValidateStringifyProgrammer = jsonValidateStringifyProgrammerNamespace{}
 
+// JsonValidateStringifyProgrammer_DecomposeProps is the argument record of
+// JsonValidateStringifyProgrammer.Decompose, which builds the
+// `json.validateStringify` function.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonValidateStringifyProgrammer.Decompose, which builds the `json.validateStringify` function; its 5 fields (Context, Modulo, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type JsonValidateStringifyProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
@@ -21,8 +29,6 @@ type JsonValidateStringifyProgrammer_DecomposeProps struct {
   Type    *shimchecker.Type
   Name    *string
 }
-
-var jsonValidateStringifyProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (jsonValidateStringifyProgrammerNamespace) Decompose(props JsonValidateStringifyProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   validateContext := props.Context
@@ -45,7 +51,7 @@ func (jsonValidateStringifyProgrammerNamespace) Decompose(props JsonValidateStri
     Name:      props.Name,
     Validated: true,
   })
-  f := nativecontext.EmitFactoryOf(jsonValidateStringifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   statements := append([]*shimast.Node{}, validate.Statements...)
   statements = append(statements, stringify.Statements...)
   statements = append(statements,
@@ -118,7 +124,7 @@ func (jsonValidateStringifyProgrammerNamespace) Write(props nativecontext.IProgr
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

@@ -16,17 +16,18 @@ import (
 const bundledScheme = "bundled:///"
 
 // TransformGraph is the host-owned reference-graph section of a transform
-// envelope (`graph` in the stdout JSON). It carries the language-semantic
-// input set of a transform under `tsc --incremental` semantics, so cache
-// layers (bundler filesystem caches, watch graphs) can register every file
-// whose content can influence a transformed module's output:
+// envelope (`graph` in the stdout JSON). It reports the loaded compiler
+// program's references, global contributors, configuration ancestry and
+// resolver observations. Consumers choose graph inputs alongside independent
+// plugin and host inputs; this graph alone does not certify every dependency
+// of an arbitrary plugin's transformed output or continued filesystem freshness:
 //
 //   - Edges maps each file to its direct resolved references — imports,
 //     re-exports, `/// <reference>` targets, type reference directives, and
 //     ambient-module declaration files, type-only edges included. A leaf file
 //     has an empty list so the node and its compiler-time input proof remain
-//     explicit. Direct edges are the minimal sufficient statistic; consumers
-//     that need a flat per-file list compute the reachability closure themselves.
+//     explicit. Consumers that need a flat per-file graph list compute the
+//     reachability closure themselves.
 //   - Globals lists the files that contribute to the global scope (ambient
 //     declaration files, script files, global augmentations, `typeRoots`
 //     entries). A change to any of them can affect every file.
@@ -36,27 +37,57 @@ const bundledScheme = "bundled:///"
 //     results. They are a separate class from resolved edges: a predicate or
 //     package manifest changing can change an unchanged reference's meaning.
 //   - ResolutionInputs lists automatic type discovery and resolution inputs
-//     whose state can affect every source file, including type-root directory
+//     whose state can affect every source file, including compiler response files and type-root directory
 //     membership.
 //   - InputObservations preserves the independent filesystem predicates the
 //     compiler actually asked. InputHashes and InputRealpaths retain the legacy
 //     collapsed content/identity projection for older consumers.
 //   - InputProofFailures gives a stable reason when a realized member lacks
 //     proof or a replayed resolver predicate changed.
+//   - UseCaseSensitiveFileNames is the case policy the compiler matched the
+//     project's root specs and compared paths with, so a host deciding the
+//     same membership uses the compiler's policy rather than a guess from the
+//     platform.
+//   - ContentMapperInputs lists mapper manifests and upstream-declared dynamic
+//     dependencies for every output. They are declarations, not observed reads,
+//     and require independent before/after dependency witnesses.
+//
+// A failed-load recovery graph contains only the CLI/config predicates observed
+// before Program construction failed. Empty source/config lists and absent
+// membership settings supply no completed Program authority. Failure status and
+// explicit observation limitations remain in the containing response.
 //
 // Keys and values use the same convention as the envelope's `typescript`
 // map: project-relative slash paths, falling back to slash-normalized
 // absolute paths outside the project root (see TransformOutputKey).
+//
+// @evidence contracts/common.md#principled-implementation Resolved references, globals, resolver predicates, and proof failures retain distinct meanings in the envelope.
+// @evidence contracts/common.md#clear-and-simple-design Each field carries one input class or observation projection under the shared key convention.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Compiler observations and explicit failures replace guessed dependencies or assumed validity.
+// @evidence contracts/common.md#meaningful-documentation Native prose defines the input classes, leaf semantics, case policy, and key convention following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation The reported compiler case policy is distinct from slash-normalized protocol keys and reported native realpaths carried by observations/InputRealpaths. Native VFS realpath errors can retain lexical spelling, so presence alone does not certify physical alias resolution. TransformOutputKey preserves cwd-relative or outside-root/cross-volume absolute coordinates; neither protocol spelling nor absent proof establishes capabilities from an OS name.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Graph construction owns traversal; this type describes the result.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This schema carries proof without coordinating artifact reuse.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The caller-owned value owns no resident cache or resource.
 type TransformGraph struct {
-  Edges              map[string][]string                  `json:"edges"`
-  Globals            []string                             `json:"globals"`
-  Configs            []string                             `json:"configs"`
-  Candidates         map[string][]string                  `json:"candidates,omitempty"`
-  ResolutionInputs   []string                             `json:"resolutionInputs,omitempty"`
-  InputObservations  map[string]TransformInputObservation `json:"inputObservations,omitempty"`
-  InputHashes        map[string]*string                   `json:"inputHashes,omitempty"`
-  InputRealpaths     map[string]*string                   `json:"inputRealpaths,omitempty"`
-  InputProofFailures map[string]string                    `json:"inputProofFailures,omitempty"`
+  // CompilationSnapshot identifies the shared read-once view of every native stage.
+  // It authorizes fresh delivery, not reuse after the disk changes.
+  CompilationSnapshot string `json:"compilationSnapshot,omitempty"`
+  // Membership is the effective native root-admission and output-exclusion policy.
+  Membership *TransformMembership `json:"membership,omitempty"`
+  // ContentMapperInputs are declared project dependencies, not observed reads.
+  // Consumers witness them before compilation independently of graph proof.
+  ContentMapperInputs       []string                             `json:"contentMapperInputs,omitempty"`
+  Edges                     map[string][]string                  `json:"edges"`
+  Globals                   []string                             `json:"globals"`
+  Configs                   []string                             `json:"configs"`
+  Candidates                map[string][]string                  `json:"candidates,omitempty"`
+  ResolutionInputs          []string                             `json:"resolutionInputs,omitempty"`
+  InputObservations         map[string]TransformInputObservation `json:"inputObservations,omitempty"`
+  InputHashes               map[string]*string                   `json:"inputHashes,omitempty"`
+  InputRealpaths            map[string]*string                   `json:"inputRealpaths,omitempty"`
+  InputProofFailures        map[string]string                    `json:"inputProofFailures,omitempty"`
+  UseCaseSensitiveFileNames bool                                 `json:"useCaseSensitiveFileNames"`
 }
 
 // NewTransformGraph computes the reference graph of a loaded program, keyed
@@ -64,24 +95,51 @@ type TransformGraph struct {
 // Hosts stamp the result into their stdout envelope's `graph` field;
 // `cmd/ttsc api-transform` and the linked-plugin utility host both do.
 // Returns nil only for a nil or unloaded program.
+//
+// @evidence contracts/common.md#principled-implementation Compiler references, global scope, config ancestry and replayed predicates form one generation's dependency proof; a shared snapshot identity is attached only after its captured answers are published.
+// @evidence contracts/common.md#clear-and-simple-design Reference collection, resolution replay, and proof attachment share one output-key owner.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Unobserved or contradictory inputs remain failures rather than later filesystem snapshots substituted for compiler reads.
+// @evidence contracts/common.md#meaningful-documentation Native prose specifies envelope integration and unloaded-program behavior following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Keys use native filepath conversion and compiler case policy; identity metadata comes from reported adapter realpaths, whose native VFS error fallback can retain lexical spelling rather than certifying physical resolution.
+// @evidence contracts/performance.md#efficient-algorithms Direct adjacency avoids computing every transitive closure. Construction scans resident sources/references, converts path text and sorts per-source targets, globals and resolver inputs; a distinct-input set selects proof attachment, whose rich and legacy projections can perform two observer lookups. Resolver task sorting, native replay reads/metadata/enumeration and observation merging remain part of this call's delegated cost; dirty snapshot publication additionally encodes and writes the complete captured text, paths and predicate population. No work or byte ceiling is imposed here.
+// @evidence contracts/performance.md#reuse-equivalent-work Final proof projection reuses the current Program observer, including its exact physical-target read for a lexical alias; it does not replace missing compiler evidence with a new read. Resolver replay separately performs native queries and merges contradictions into that generation. No prior graph or later filesystem generation is reused by this constructor.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Temporary adjacency/input/proof maps grow with resident references, distinct paths and reported predicate bytes. Graph arrays/maps transfer to the caller, while replay observations merge into the caller-owned current Program observer. Snapshot encoding adds a temporary complete document buffer, and a failed rename can leave invocation-owned staging for coordinator cleanup. This call owns no resident historical graph cache or persistent native handle, and supplies no population/byte ceiling or caller-lifetime disposal policy.
 func NewTransformGraph(prog *Program, cwd string) *TransformGraph {
   if prog == nil || prog.TSProgram == nil {
     return nil
   }
   resolution := ObserveProgramResolutions(prog, cwd)
   graph := &TransformGraph{
-    Edges:            map[string][]string{},
-    Globals:          []string{},
-    Configs:          []string{},
-    Candidates:       resolution.Candidates,
-    ResolutionInputs: resolution.Universal,
+    Membership:                programRootMembership(prog),
+    Edges:                     map[string][]string{},
+    Globals:                   []string{},
+    Configs:                   []string{},
+    Candidates:                resolution.Candidates,
+    ResolutionInputs:          resolution.Universal,
+    UseCaseSensitiveFileNames: prog.TSProgram.UseCaseSensitiveFileNames(),
   }
+  for _, input := range prog.mapperDependencies {
+    graph.ContentMapperInputs = append(graph.ContentMapperInputs, TransformOutputKey(cwd, input))
+  }
+  sort.Strings(graph.ContentMapperInputs)
+  argumentInputs := map[string]struct{}{}
+  for _, input := range graph.ResolutionInputs {
+    argumentInputs[input] = struct{}{}
+  }
+  for _, input := range prog.compilerArgumentInputs {
+    key := TransformOutputKey(cwd, input)
+    if _, found := argumentInputs[key]; !found {
+      graph.ResolutionInputs = append(graph.ResolutionInputs, key)
+      argumentInputs[key] = struct{}{}
+    }
+  }
+  sort.Strings(graph.ResolutionInputs)
   for _, file := range prog.TSProgram.SourceFiles() {
     fileName := file.FileName()
-    if strings.HasPrefix(fileName, bundledScheme) {
+    if strings.HasPrefix(string(fileName), bundledScheme) {
       continue
     }
-    key := TransformOutputKey(cwd, fileName)
+    key := TransformOutputKey(cwd, string(fileName))
     if shimcompiler.FileAffectsGlobalScope(file) {
       graph.Globals = append(graph.Globals, key)
     }
@@ -99,6 +157,9 @@ func NewTransformGraph(prog *Program, cwd string) *TransformGraph {
     graph.InputProofFailures = resolution.Failures
   }
   graph.attachInputProof(prog, cwd)
+  if snapshot := prog.compilationSnapshot; snapshot != nil && snapshot.save() == nil {
+    graph.CompilationSnapshot = snapshot.data.ID
+  }
   return graph
 }
 
@@ -110,6 +171,13 @@ func (graph *TransformGraph) attachInputProof(prog *Program, cwd string) {
   if prog == nil || prog.inputObserver == nil {
     return
   }
+  graph.attachObservedInputProof(prog.inputObserver, cwd)
+}
+
+// attachObservedInputProof projects only this observer's existing predicates.
+// Failed CLI/config loads use it without constructing a compiler Program;
+// successful graph construction retains the same realized-source requirements.
+func (graph *TransformGraph) attachObservedInputProof(observer *inputObservationFS, cwd string) {
   inputs := map[string]struct{}{}
   realized := map[string]struct{}{}
   addRealized := func(input string) {
@@ -149,14 +217,14 @@ func (graph *TransformGraph) attachInputProof(prog *Program, cwd string) {
     if !filepath.IsAbs(file) {
       file = filepath.Join(cwd, file)
     }
-    observation, predicateFailure := prog.inputObserver.predicateProof(file)
+    observation, predicateFailure := observer.predicateProof(file)
     if predicateFailure == "" {
       observations[input] = observation
     }
     var hash, realpath *string
     legacyFailure := predicateFailure
     if predicateFailure == "" {
-      hash, realpath, legacyFailure = prog.inputObserver.proof(file)
+      hash, realpath, legacyFailure = observer.proof(file)
     }
     if legacyFailure != "" {
       // A resolver input can have a complete predicate proof that the legacy
@@ -191,17 +259,17 @@ func referenceTargets(prog *Program, cwd string, file *ast.SourceFile) []string 
   paths := shimcompiler.GetReferencedFilePaths(prog.TSProgram, file)
   targets := make([]string, 0, len(paths))
   for _, referencedPath := range paths {
-    // Referenced paths are case-canonicalized tspath.Path values; recover the
+    // Referenced paths are case-canonicalized tspath.PathKey values; recover the
     // resident source and its real spelling from the Program. The incremental
     // helper can retain a raw extensionless project-reference directive even
     // when no corresponding source became resident. That spelling is a
     // resolver candidate, not a realized graph edge, and has no compiler-time
     // content proof.
-    resolved := prog.TSProgram.GetSourceFileByPath(shimtspath.Path(referencedPath))
-    if resolved == nil || resolved == file || strings.HasPrefix(resolved.FileName(), bundledScheme) {
+    resolved := prog.TSProgram.GetSourceFileByPath(shimtspath.PathKey(referencedPath))
+    if resolved == nil || resolved == file || strings.HasPrefix(string(resolved.FileName()), bundledScheme) {
       continue
     }
-    targets = append(targets, TransformOutputKey(cwd, resolved.FileName()))
+    targets = append(targets, TransformOutputKey(cwd, string(resolved.FileName())))
   }
   sort.Strings(targets)
   return targets
@@ -216,10 +284,10 @@ func configChain(prog *Program, cwd string) []string {
     return configs
   }
   if source := parsed.ConfigFile.SourceFile; source != nil {
-    configs = append(configs, TransformOutputKey(cwd, source.FileName()))
+    configs = append(configs, TransformOutputKey(cwd, string(source.FileName())))
   }
   for _, extended := range parsed.ExtendedSourceFiles() {
-    configs = append(configs, TransformOutputKey(cwd, extended))
+    configs = append(configs, TransformOutputKey(cwd, string(extended)))
   }
   return configs
 }
@@ -230,6 +298,15 @@ func configChain(prog *Program, cwd string) []string {
 // outside the project root. Every envelope section (`typescript`, `graph`,
 // `dependencies` producers) must share this one implementation so a consumer
 // can join sections by key.
+//
+// @evidence contracts/common.md#principled-implementation One key convention keeps source, dependency, and graph sections joinable across project boundaries.
+// @evidence contracts/common.md#clear-and-simple-design Native relative-path calculation and one escape predicate choose serialization.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Structural traversal and cross-volume checks replace guessed string-prefix roots.
+// @evidence contracts/common.md#meaningful-documentation Native prose states absolute input and outside-root behavior following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation filepath.Rel handles volumes and separators; ToSlash supplies envelope spelling.
+// @evidence contracts/performance.md#efficient-algorithms Native filepath.Rel normalization, volume/segment comparisons, escape-prefix checks and ToSlash output copying scale with cwd/fileName/relative path text. Delegation does not make this conversion constant work; the relative result is preferred when structurally within cwd, with no filesystem traversal or repeated collection scan.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This conversion owns no repeated-work coordinator.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Only the caller-owned result is retained.
 func TransformOutputKey(cwd, fileName string) string {
   rel, err := filepath.Rel(cwd, fileName)
   if err != nil || isOutsideRelativePath(rel) {

@@ -1,6 +1,6 @@
 {
   "name": "typia",
-  "version": "15.0.1",
+  "version": "15.4.0",
   "description": "Superfast runtime validators with only one line",
   "main": "src/index.ts",
   "exports": {
@@ -16,8 +16,9 @@
     }
   },
   "scripts": {
-    "build": "rimraf lib && ttsc && rolldown -c && cp ../../README.md README.md",
-    "dev": "ttsc --watch"
+    "build": "rimraf lib && ttsc && rolldown -c && node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\"",
+    "dev": "ttsc --watch",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -35,7 +36,7 @@
     "randexp": "^0.5.3"
   },
   "peerDependencies": {
-    "ttsc": ">=0.19.2"
+    "ttsc": ">=0.37.0"
   },
   "peerDependenciesMeta": {
     "ttsc": {
@@ -46,7 +47,7 @@
     "@types/node": "catalog:utils",
     "rimraf": "catalog:utils",
     "rolldown": "catalog:rolldown",
-    "ttsc": "catalog:typescript",
+    "ttsc": "catalog:samchon",
     "typescript": "catalog:typescript"
   },
   "sideEffects": false,

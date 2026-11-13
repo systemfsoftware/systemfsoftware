@@ -35,6 +35,12 @@ const post = (
 ) => handler(new Request("http://localhost/upload", { method: "POST", body, headers, duplex: "half" } as RequestInit))
 
 describe("request body", () => {
+  it.effect("fromWeb stream is empty when the request has no body", () =>
+    Effect.gen(function*() {
+      const web = new Request("http://localhost/upload", { method: "PUT", headers: { "content-length": "0" } })
+      assert.deepStrictEqual(yield* Stream.runCollect(HttpServerRequest.fromWeb(web).stream), [])
+    }))
+
   it.effect("fromWebHandler can inspect headers without reading the body", () =>
     Effect.gen(function*() {
       const request = fromClient()
@@ -44,6 +50,16 @@ describe("request body", () => {
       }).pipe(Effect.provideService(HttpServerRequest.HttpServerRequest, request))
       assert.strictEqual(response.status, 204)
       assert.strictEqual(yield* request.text, payload)
+    }))
+
+  it.effect("fromClientRequest fails buffered reads over MaxBodySize", () =>
+    Effect.gen(function*() {
+      const error = yield* fromClient().text.pipe(
+        Effect.flip,
+        Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.bytes(4))
+      )
+      assert(error.reason._tag === "RequestParseError")
+      assert.strictEqual(error.reason.reason, "BodyTooLarge")
     }))
 
   for (const accessor of ["arrayBuffer", "text"] as const) {

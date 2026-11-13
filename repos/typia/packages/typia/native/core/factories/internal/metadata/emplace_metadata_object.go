@@ -8,6 +8,17 @@ import (
   schemametadata "github.com/samchon/typia/packages/typia/native/core/schemas/metadata"
 )
 
+// Emplace_metadata_object returns the collection's entry for the object type,
+// building its properties the first time it is seen.
+//
+// It records documentation, the declaring file and class facts, skips members
+// that have no JSON form, analyzes every property and index signature and
+// delegates to the intersection merge when the type is an intersection.
+//
+// @evidence contracts/common.md#principled-implementation The collection registers an object before exploring its members, preserving recursive identity. First sight fills type documentation and available source/class facts. The modifier/symbol/member-kind filter depends on Functional, Methods and StrictObjectMembers: methods can be retained explicitly and strict mode diagnoses unsupported members. Visible properties and supported index domains become key/value schemas, while eligible disjoint plain-object intersections share parent objects and copy property roots. Heritage dependency reporting includes otherwise empty bases.
+// @evidence contracts/common.md#clear-and-simple-design One long function that holds the member filter as a closure and delegates heritage touching, privacy detection, symbol-name tests and property creation to private helpers; the length reflects the many member kinds a TypeScript object can have.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The member filter is by symbol and modifier kinds, with the symbol rule referencing the cited issue, and no property name is special-cased.
+// @evidence contracts/common.md#meaningful-documentation Long comments explain each rule at its place; the exported function has its own doc.
 func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.MetadataObjectType {
   obj, newbie := props.Components.Emplace(props.Checker, props.Type)
   metadata_array_util_add_bool(&obj.Nullables, props.Metadata.Nullable)
@@ -30,11 +41,11 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
     obj.Description = metadata_node_type_description(symbol)
     obj.JsDocTags = metadata_node_type_js_doc_tags(symbol)
 
-    // Capture the declaring source file (named declarations only) so
+    // Capture the first symbol declaration's source file when locatable so
     // plain.classify can value-import a cross-module class it reconstructs.
     // Additive: other features ignore obj.Source.
-    if sym := props.Type.Symbol(); sym != nil && len(sym.Declarations) != 0 {
-      decl := sym.Declarations[0]
+    if sym := props.Type.Symbol(); sym != nil && len(nativeast.SymbolDeclarationsOf(sym)) != 0 {
+      decl := nativeast.SymbolDeclarationsOf(sym)[0]
       // A `class` (declaration or expression — including a generic instantiation,
       // whose symbol still resolves to the class declaration) has a runtime value
       // binding; an interface / type alias / anonymous object literal does not, so
@@ -42,7 +53,7 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
       // name. classRefOf gates on this.
       obj.IsClass = decl.Kind == nativeast.KindClassDeclaration || decl.Kind == nativeast.KindClassExpression
       if src := nativeast.GetSourceFileOfNode(decl); src != nil {
-        file := src.FileName()
+        file := string(src.FileName())
         obj.Source = &file
         // The Default modifier covers `export default class C {}`; a SEPARATE
         // `class C {}; export default C;` puts no modifier on the class, so also
@@ -115,7 +126,7 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
   pred := func(symbol *nativeast.Symbol, node *nativeast.Node) bool {
     name := "<anonymous>"
     if symbol != nil {
-      name = symbol.Name
+      name = nativeast.SymbolNameOf(symbol)
     }
     // Diagnose ES #private before the symbol-key filter so JEV reports the
     // nominal member rather than its compiler-generated mangled name.
@@ -135,7 +146,7 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
     // would declare an uninhabitable required property (#2226). Checked on the
     // SYMBOL rather than a declaration node so a late-bound member with no
     // reachable declaration is excluded too.
-    if symbol != nil && iterate_metadata_intersection_is_symbol_name(symbol.Name) {
+    if symbol != nil && iterate_metadata_intersection_is_symbol_name(nativeast.SymbolNameOf(symbol)) {
       rejectMember(name, "LLM evaluation does not support symbol-keyed properties.")
       return false
     }
@@ -169,24 +180,24 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
       continue
     }
     var node *nativeast.Node
-    if len(symbol.Declarations) != 0 {
-      node = symbol.Declarations[0]
+    if len(nativeast.SymbolDeclarationsOf(symbol)) != 0 {
+      node = nativeast.SymbolDeclarationsOf(symbol)[0]
     }
     var typ *nativechecker.Type
     if node != nil {
       typ = props.Checker.GetTypeOfSymbolAtLocation(symbol, node)
     } else {
-      typ = nativechecker.Checker_getTypeOfPropertyOfType(props.Checker, props.Type, symbol.Name)
+      typ = nativechecker.Checker_getTypeOfPropertyOfType(props.Checker, props.Type, nativeast.SymbolNameOf(symbol))
     }
     if pred(symbol, node) == false || typ == nil {
       continue
     }
 
-    key := MetadataHelper.Literal_to_metadata(symbol.Name)
+    key := MetadataHelper.Literal_to_metadata(nativeast.SymbolNameOf(symbol))
     explore := MetadataFactory_IExplore{
       Top:       false,
       Object:    obj,
-      Property:  symbol.Name,
+      Property:  nativeast.SymbolNameOf(symbol),
       Parameter: nil,
       Nested:    nil,
       Aliased:   false,
@@ -202,7 +213,7 @@ func Emplace_metadata_object(props IMetadataIteratorProps) *schemametadata.Metad
       Explore:     explore,
       Intersected: false,
     })
-    value.Optional = symbol.Flags&nativeast.SymbolFlagsOptional != 0
+    value.Optional = nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsOptional != 0
     insert(emplace_metadata_object_insert{
       Key:    key,
       Value:  value,
@@ -288,7 +299,7 @@ func emplace_metadata_object_touch_heritage(
     return
   }
   visited[symbol] = true
-  for _, decl := range symbol.Declarations {
+  for _, decl := range nativeast.SymbolDeclarationsOf(symbol) {
     if decl == nil {
       continue
     }
@@ -325,15 +336,24 @@ func emplace_metadata_object_touch_heritage(
         // The node walk reports the heritage expression's symbol and every
         // reference written in its type arguments (e.g. `extends Base<Id>`).
         schemametadata.MetadataDependency_touchTypeNode(checker, element)
-        expr := element.AsExpressionWithTypeArguments()
-        if expr == nil || expr.Expression == nil {
+        // Type heritage (interface extends and class implements) is a type
+        // reference on 7.1; class extends remains an expression. Older targets
+        // represent both forms as expressions with type arguments.
+        var name *nativeast.Node
+        switch element.Kind {
+        case nativeast.KindTypeReference:
+          name = element.AsTypeReferenceNode().TypeName
+        case nativeast.KindExpressionWithTypeArguments:
+          name = element.AsExpressionWithTypeArguments().Expression
+        }
+        if name == nil {
           continue
         }
-        target := checker.GetSymbolAtLocation(expr.Expression)
+        target := checker.GetSymbolAtLocation(name)
         if target == nil {
           continue
         }
-        if target.Flags&nativeast.SymbolFlagsAlias != 0 {
+        if nativeast.SymbolFlagsOf(target)&nativeast.SymbolFlagsAlias != 0 {
           if resolved := nativechecker.Checker_getAliasedSymbol(checker, target); resolved != nil {
             target = resolved
           }
@@ -355,10 +375,10 @@ func emplace_metadata_object_private_fields(checker *nativechecker.Checker, typ 
   }
   visited[typ] = true
   sym := typ.Symbol()
-  if sym == nil || len(sym.Declarations) == 0 {
+  if sym == nil || len(nativeast.SymbolDeclarationsOf(sym)) == 0 {
     return false
   }
-  decl := sym.Declarations[0]
+  decl := nativeast.SymbolDeclarationsOf(sym)[0]
   var members []*nativeast.Node
   if decl.Kind == nativeast.KindClassDeclaration {
     if cd := decl.AsClassDeclaration(); cd != nil && cd.Members != nil {
@@ -430,7 +450,7 @@ func emplace_metadata_object_is_default_export(
     if target == nil {
       continue
     }
-    if target == sym || (len(target.Declarations) != 0 && target.Declarations[0] == decl) {
+    if target == sym || (len(nativeast.SymbolDeclarationsOf(target)) != 0 && nativeast.SymbolDeclarationsOf(target)[0] == decl) {
       return true
     }
   }
@@ -581,21 +601,21 @@ func emplace_metadata_object_intersection_append(
       continue
     }
     var node *nativeast.Node
-    if len(symbol.Declarations) != 0 {
-      node = symbol.Declarations[0]
+    if len(nativeast.SymbolDeclarationsOf(symbol)) != 0 {
+      node = nativeast.SymbolDeclarationsOf(symbol)[0]
     }
     var typ *nativechecker.Type
     if node != nil {
       typ = props.Checker.GetTypeOfSymbolAtLocation(symbol, node)
     } else {
-      typ = nativechecker.Checker_getTypeOfPropertyOfType(props.Checker, child, symbol.Name)
+      typ = nativechecker.Checker_getTypeOfPropertyOfType(props.Checker, child, nativeast.SymbolNameOf(symbol))
     }
     if pred(symbol, node) == false || typ == nil {
       continue
     }
 
     explore := props.Explore
-    explore.Property = symbol.Name
+    explore.Property = nativeast.SymbolNameOf(symbol)
     explore.Parameter = nil
     explore.Nested = nil
     explore.Aliased = false
@@ -611,9 +631,9 @@ func emplace_metadata_object_intersection_append(
       Intersected: false,
       Prunable:    props.Prunable,
     })
-    value.Optional = symbol.Flags&nativeast.SymbolFlagsOptional != 0
+    value.Optional = nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsOptional != 0
     insert(emplace_metadata_object_insert{
-      Key:    MetadataHelper.Literal_to_metadata(symbol.Name),
+      Key:    MetadataHelper.Literal_to_metadata(nativeast.SymbolNameOf(symbol)),
       Value:  value,
       Symbol: symbol,
       Node:   node,
@@ -651,10 +671,10 @@ func emplace_metadata_object_intersection_has_duplicate_key(
       return true
     }
     for _, symbol := range collection.ApparentProperties(checker, child) {
-      if keys[symbol.Name] {
+      if keys[nativeast.SymbolNameOf(symbol)] {
         return true
       }
-      keys[symbol.Name] = true
+      keys[nativeast.SymbolNameOf(symbol)] = true
     }
   }
   return false

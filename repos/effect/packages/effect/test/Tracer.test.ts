@@ -5,6 +5,7 @@ import { HttpBody, HttpClient, HttpClientResponse } from "effect/http"
 import { OtlpSerialization, OtlpTracer } from "effect/observability"
 import { TestClock } from "effect/testing"
 import type { Span } from "effect/Tracer"
+import { collectGarbage } from "./utils/gc.ts"
 
 const getParent = (span: Tracer.Span): Tracer.AnySpan => {
   if (span.parent._tag === "None") {
@@ -245,6 +246,25 @@ describe("Tracer", () => {
         strictEqual(span.attributes.has("late"), false)
         deepStrictEqual(span.events, [])
       }))
+
+    it.effect.skipIf(process.versions.bun !== undefined || process.versions.deno !== undefined)(
+      "are not retained by finished fibers",
+      () =>
+        Effect.gen(function*() {
+          let fiber: Fiber.Fiber<void> | undefined
+          let reference: WeakRef<object> | undefined
+          yield* Effect.gen(function*() {
+            const value = {}
+            reference = new WeakRef(value)
+            fiber = yield* Effect.forkChild(Effect.void.pipe(Effect.withSpan("child")))
+            yield* Fiber.join(fiber)
+            return value
+          }).pipe(Effect.withSpan("parent"), Effect.asVoid)
+          yield* collectGarbage
+          assert.isDefined(fiber)
+          assert.isUndefined(reference!.deref())
+        })
+    )
   })
 
   describe("Effect.annotateSpans", () => {
@@ -383,10 +403,10 @@ describe("Tracer", () => {
       )
     }
 
-    it.effect("marks an empty cause Ok without a description", () =>
+    it.effect("leaves an empty cause Unset without a description", () =>
       Effect.gen(function*() {
         const span = yield* exportSpan(Exit.failCause(Cause.empty))
-        deepStrictEqual(span.status, { code: 1 })
+        deepStrictEqual(span.status, { code: 0 })
         deepStrictEqual(span.events, [])
         deepStrictEqual(span.attributes, [])
       }))
@@ -402,7 +422,7 @@ describe("Tracer", () => {
     it.effect("exports a span once when end is called again", () =>
       Effect.gen(function*() {
         const span = yield* exportSpan(Exit.void, (span) => span.end(span.status.startTime + 2n, Exit.fail("late")))
-        deepStrictEqual(span.status, { code: 1 })
+        deepStrictEqual(span.status, { code: 0 })
       }))
   })
 

@@ -18,6 +18,7 @@ import (
 
   shimtsoptions "github.com/microsoft/typescript-go/shim/tsoptions"
   shimtspath "github.com/microsoft/typescript-go/shim/tspath"
+  shimvfs "github.com/microsoft/typescript-go/shim/vfs"
 
   "github.com/samchon/ttsc/packages/ttsc/driver"
   "github.com/samchon/ttsc/packages/ttsc/internal/graph"
@@ -35,7 +36,7 @@ import (
 // self-describing even when read from a log.
 const serveProtocolVersion = 1
 
-// serveModes are the computation modes Snapshot can report, plus the error mode
+// The serveMode* constants are the computation modes Snapshot can report, plus the error mode
 // the transport adds. A consumer branches on these to report honestly what the
 // producer did rather than inferring it from a generation counter.
 const (
@@ -91,8 +92,6 @@ func (s *graphSession) capabilities() []string {
   )
 }
 
-// artifactProducer names the second producer behind this session's artifact
-// nodes, and is nil when it has none.
 // provenance is this session's published origin for one generation.
 func (s *graphSession) provenance(texts map[string]string) graph.Provenance {
   built := graph.NewProvenance(
@@ -107,6 +106,8 @@ func (s *graphSession) provenance(texts map[string]string) graph.Provenance {
   return built
 }
 
+// artifactProducer names the second producer behind this session's artifact
+// nodes, and is nil when it has none.
 func (s *graphSession) artifactProducer() *graph.Producer {
   if len(s.artifacts) == 0 {
     return nil
@@ -116,9 +117,11 @@ func (s *graphSession) artifactProducer() *graph.Producer {
 
 type serveRequest struct {
   ID int `json:"id"`
+
   // GraphSnapshotVersion opts into the incremental shard protocol. Omitted
   // requests retain the full-dump response for existing @ttsc/graph clients.
   GraphSnapshotVersion int `json:"graphSnapshotVersion,omitempty"`
+
   // Artifacts is the path to the set a plugin published for this request, which
   // the client re-derives when the documents or lint configuration behind it
   // moved. It rides every request rather than only the changed ones: the client
@@ -137,21 +140,32 @@ type serveRequest struct {
 }
 
 type serveResponse struct {
-  Dump     *graph.Dump         `json:"dump,omitempty"`
+  // Dump carries a changed full projection for the legacy request protocol.
+  Dump *graph.Dump `json:"dump,omitempty"`
+
+  // Snapshot carries a changed shard transaction for the opted-in protocol.
   Snapshot *serveGraphSnapshot `json:"snapshot,omitempty"`
+
   // Error is set when the request produced no snapshot; Mode is then
   // serveModeError.
   Error string `json:"error,omitempty"`
-  ID    int    `json:"id"`
+
+  // ID addresses the response to the matching outstanding client request.
+  ID int `json:"id"`
+
   // ProtocolVersion is serveProtocolVersion on every response, including error
   // responses: a client that cannot parse the rest still learns why.
   ProtocolVersion int `json:"protocolVersion"`
-  // Mode is always present. It was omitempty, which meant the one field that
-  // distinguishes a reuse from a full rebuild silently vanished exactly when a
-  // consumer most wanted to report what happened.
-  Mode         string   `json:"mode"`
+
+  // Mode is always present: it is the one field that distinguishes a reuse
+  // from a full rebuild, so it must not vanish on any path.
+  Mode string `json:"mode"`
+
+  // Capabilities describe this session even when no changed dump is attached.
   Capabilities []string `json:"capabilities"`
-  Changed      bool     `json:"changed"`
+
+  // Changed is false for reuse and failure; neither publishes a new graph.
+  Changed bool `json:"changed"`
 }
 
 const graphPhaseTraceEnvironment = "SAMCHON_GRAPH_TTSC_PHASE_TRACE"
@@ -177,47 +191,45 @@ func errorResponse(id int, message string) serveResponse {
 type graphSession struct {
   cwd      string
   tsconfig string
+
   // artifacts is the set a plugin published: a second producer's facts about
   // documents this Program never read. Refreshing it is therefore not a refresh
   // of the graph — editing a Markdown heading moves the artifact and not one
   // compiler fact — so the two invalidations stay separate questions, and this
   // one is answered by adoptArtifacts rather than by the build universe.
   artifacts []graph.Artifact
+
   // artifactsDigest is the content of the set currently applied. Content, and
   // not the path or its modification time: the client overwrites one file per
   // process and project, so the path never moves for a given session, and a
   // republish triggered by a document whose headings did not actually change
-  // writes the same bytes and must therefore cost nothing.
+  // writes the same bytes and must therefore avoid decoding and projection.
   artifactsDigest [sha256.Size]byte
-  // artifactsFile and artifactsStat are what the digest was taken from, kept so
-  // an unchanged file need not be read at all. The set is one entry per
-  // document section, model field, and operation, so it is bounded by the
-  // project's documentation rather than by anything small — and this comparison
-  // runs before every graph request, where reading and hashing that whole file
-  // to learn it did not move is the kind of cost a resident session pays
-  // forever.
-  artifactsFile string
-  artifactsStat artifactsFileState
 
   compiler     *driver.Session
+  loadOptions  driver.LoadProgramOptions
   configHashes map[string][sha256.Size]byte
   auxStates    map[string]diskState
   sourceHashes map[string][sha256.Size]byte
   rootFiles    []string
+
   // diskDigests is the published disk evidence for the current generation, kept
   // beside sourceHashes because the two answer different questions: one decides
   // whether to invalidate, the other is what the snapshot tells a consumer.
   diskDigests map[string]string
+
   // configDigests and roots are the build-universe fingerprint for the current
   // generation, captured from the same parse that produced configHashes and
   // rootFiles so the published evidence and the invalidation state can never
   // describe different loads.
-  configDigests           []graph.FileDigest
+  configDigests []graph.FileDigest
+
   roots                   []graph.RootFile
   initialized             bool
   graphStore              *serveGraphStore
   requestProtocol         int
   requestProtocolSelected bool
+
   // pending remembers work the next request owes regardless of what the build
   // universe says: a generation whose state was captured but whose selected
   // projection failed, or an artifact set adopted after the graph carrying the
@@ -228,19 +240,18 @@ type graphSession struct {
 }
 
 func newGraphSession(cwd, tsconfig string) (*graphSession, error) {
-  return newGraphSessionWithArtifacts(cwd, tsconfig, nil)
+  return newGraphSessionWithArtifacts(cwd, tsconfig, nil, driver.LoadProgramOptions{})
 }
 
-// newGraphSessionWithArtifacts is the constructor the serve command uses, and
-// the plain one above is it with nothing published. The artifacts are read once
-// and held for the session: they are a second producer's facts about documents
-// this Program never read, so refreshing them is a different question from
-// refreshing the graph, and only the first answer is wired today.
+// newGraphSessionWithArtifacts loads one compiler session with the initial
+// artifact overlay. Requests can replace that overlay without reloading the
+// compiler because documents are not compiler inputs.
 func newGraphSessionWithArtifacts(
   cwd, tsconfig string,
   artifacts []graph.Artifact,
+  options driver.LoadProgramOptions,
 ) (*graphSession, error) {
-  session := &graphSession{cwd: cwd, tsconfig: tsconfig, artifacts: artifacts}
+  session := &graphSession{cwd: cwd, tsconfig: tsconfig, artifacts: artifacts, loadOptions: options}
   if err := session.reload(); err != nil {
     return nil, err
   }
@@ -267,14 +278,6 @@ func (s *graphSession) adoptArtifacts(named *string) (bool, error) {
   if path == "" {
     return s.applyArtifacts(nil, withdrawnArtifactsDigest), nil
   }
-  stat, err := os.Stat(path)
-  if err != nil {
-    return false, err
-  }
-  state := artifactsFileState{size: stat.Size(), modTime: stat.ModTime().UnixNano()}
-  if path == s.artifactsFile && state == s.artifactsStat {
-    return false, nil
-  }
   // One read, hashed and decoded from the same bytes. Reading twice would let
   // an overwrite land between them and leave this session recording an identity
   // for a set it is not holding — after which a later request naming the file
@@ -283,27 +286,18 @@ func (s *graphSession) adoptArtifacts(named *string) (bool, error) {
   if err != nil {
     return false, err
   }
+  digest := sha256.Sum256(contents)
+  // Metadata alone cannot prove unchanged content. Comparing the applied
+  // digest also permits restoring the same file after an explicit withdrawal.
+  // Equivalent bytes reuse both decoding and graph projection.
+  if digest == s.artifactsDigest {
+    return false, nil
+  }
   next, err := graph.ParseArtifacts(contents)
   if err != nil {
     return false, err
   }
-  s.artifactsFile = path
-  s.artifactsStat = state
-  return s.applyArtifacts(next, sha256.Sum256(contents)), nil
-}
-
-// artifactsFileState is what an unchanged published file looks like from the
-// outside: size and modification time, never contents. It exists only to decide
-// whether the file is worth reading, and the digest taken from those contents is
-// still what decides whether the set is worth applying.
-type artifactsFileState struct {
-  size int64
-  // modTime is nanoseconds since the epoch rather than a time.Time, so the
-  // struct compares with == and means it. A time.Time carries a location
-  // pointer and an optional monotonic reading, and comparing two of those with
-  // == is a well-known way to get a false inequality that reads as a changed
-  // file forever.
-  modTime int64
+  return s.applyArtifacts(next, digest), nil
 }
 
 // applyArtifacts installs a set and reports whether it differs from the applied
@@ -354,6 +348,20 @@ func (s *graphSession) Close() error {
 }
 
 func (s *graphSession) Snapshot() (*graph.Dump, string, bool, error) {
+  prepared, mode, changed, err := s.prepareDumpSnapshot()
+  if err != nil || prepared == nil {
+    return nil, mode, changed, err
+  }
+  dump, err := prepared.publish(graph.GitIgnoredFiles(s.cwd, prepared.built))
+  if err != nil {
+    return nil, "", false, err
+  }
+  return dump, mode, true, nil
+}
+
+// prepareDumpSnapshot advances actual resident state and prepares its dump.
+// Completing it consumes evaluated membership and owns pending retry state.
+func (s *graphSession) prepareDumpSnapshot() (*preparedDumpProjection, string, bool, error) {
   change, err := s.nextChange(false)
   if err != nil {
     return nil, "", false, err
@@ -361,13 +369,18 @@ func (s *graphSession) Snapshot() (*graph.Dump, string, bool, error) {
   if change == nil {
     return nil, serveModeUnchanged, false, nil
   }
-  dump, err := s.buildDump()
-  if err != nil {
-    s.pending = change
-    return nil, "", false, err
+  prepared := s.prepareDumpProjection()
+  publish := prepared.publish
+  prepared.publish = func(ignored map[string]bool) (*graph.Dump, error) {
+    dump, err := publish(ignored)
+    if err != nil {
+      s.pending = change
+      return nil, err
+    }
+    s.pending = nil
+    return dump, nil
   }
-  s.pending = nil
-  return &dump, change.mode, true, nil
+  return prepared, change.mode, true, nil
 }
 
 type graphChange struct {
@@ -396,6 +409,15 @@ func (s *graphSession) nextChange(trackPublicShape bool) (*graphChange, error) {
     return nil, err
   }
   if configChanged {
+    if err := s.reload(); err != nil {
+      return nil, err
+    }
+    return &graphChange{mode: serveModeReload, full: true}, nil
+  }
+
+  // Compare with the parser's captured answers: a later response baseline
+  // could otherwise label an older Program with newer argument bytes.
+  if !s.compiler.Program().CompilerArgumentsAreCurrent() {
     if err := s.reload(); err != nil {
       return nil, err
     }
@@ -477,16 +499,9 @@ func (s *graphSession) nextChange(trackPublicShape bool) (*graphChange, error) {
       mode = serveModeRebuild
       full = true
     }
-    current, exists := s.compiler.SourceText(path)
-    expected := driver.ApplySourcePreambleToFile(path, changed[path], s.compiler.Program().SourcePreamble)
-    if !exists || current != expected {
-      if err := s.reload(); err != nil {
-        return nil, err
-      }
-      return &graphChange{mode: serveModeReload, full: true}, nil
-    }
     source := s.compiler.Program().SourceFile(path)
-    if source == nil {
+    expected := driver.ApplySourcePreambleToFile(path, changed[path], s.compiler.Program().SourcePreamble)
+    if source == nil || sourceInputText(source) != expected {
       if err := s.reload(); err != nil {
         return nil, err
       }
@@ -538,7 +553,7 @@ func (s *graphSession) nextChange(trackPublicShape bool) (*graphChange, error) {
 }
 
 func (s *graphSession) reload() error {
-  next, diags, err := driver.NewSession(s.cwd, s.tsconfig, driver.LoadProgramOptions{})
+  next, diags, err := driver.NewSession(s.cwd, s.tsconfig, s.loadOptions)
   if err != nil {
     return err
   }
@@ -576,6 +591,13 @@ func (s *graphSession) captureState() error {
     return err
   }
   inputs := auxiliaryInputs(program, s.cwd)
+  mapperInputs, err := program.ContentMapperDependencies()
+  if err != nil {
+    return fmt.Errorf("ttscgraph: content mapper dependencies: %w", err)
+  }
+  for _, input := range mapperInputs {
+    inputs = append(inputs, auxiliaryInput{path: input})
+  }
   for _, path := range missingRootInputs(configs, sourceHashes) {
     inputs = append(inputs, auxiliaryInput{path: path})
   }
@@ -621,32 +643,38 @@ func missingRootInputs(configs []*shimtsoptions.ParsedCommandLine, sourceHashes 
   missing := []string{}
   for _, parsed := range configs {
     for _, file := range parsed.FileNames() {
-      if _, tracked := sourceHashes[file]; !tracked {
-        missing = append(missing, file)
+      if _, tracked := sourceHashes[string(file)]; !tracked {
+        missing = append(missing, string(file))
       }
     }
   }
   return missing
 }
 
-func (s *graphSession) buildDump() (graph.Dump, error) {
+func (s *graphSession) prepareDumpProjection() *preparedDumpProjection {
   program := s.compiler.Program()
   built := graph.Build(program)
   graph.ApplyArtifacts(built, s.artifacts)
   // One texts map feeds both the spans and the manifest digests, so the bytes a
   // span points into are provably the bytes the manifest attests to.
   texts := graph.SourceTexts(program)
-  return graph.NewDump(
-    built,
-    s.cwd,
-    s.tsconfig,
-    graph.GitIgnoredFiles(s.cwd, built),
-    texts,
-    graph.DumpOrigin{
-      Provenance:  s.provenance(texts),
-      Diagnostics: graph.NewDiagnostics(program),
-    },
-  )
+  return &preparedDumpProjection{built: built, publish: func(ignored map[string]bool) (*graph.Dump, error) {
+    dump, err := graph.NewDump(
+      built,
+      s.cwd,
+      s.tsconfig,
+      ignored,
+      texts,
+      graph.DumpOrigin{
+        Provenance:  s.provenance(texts),
+        Diagnostics: graph.NewDiagnostics(program),
+      },
+    )
+    if err != nil {
+      return nil, err
+    }
+    return &dump, nil
+  }}
 }
 
 // serveProducer names this binary and the checker it links.
@@ -661,8 +689,10 @@ func serveProducer() graph.Producer {
 func configFiles(configs []*shimtsoptions.ParsedCommandLine) []string {
   files := []string{}
   for _, parsed := range configs {
-    files = append(files, parsed.ConfigName())
-    files = append(files, parsed.ExtendedSourceFiles()...)
+    files = append(files, string(parsed.ConfigName()))
+    for _, extended := range parsed.ExtendedSourceFiles() {
+      files = append(files, string(extended))
+    }
   }
   return compactSortedStrings(files)
 }
@@ -682,9 +712,9 @@ func projectRootFilesFromConfigs(configs []*shimtsoptions.ParsedCommandLine, rel
     if reload {
       current = parsed.ReloadFileNamesOfParsedCommandLine(driver.DefaultFS())
     }
-    config := current.ConfigName()
+    config := string(current.ConfigName())
     for _, file := range current.FileNames() {
-      roots = append(roots, config+"\x00"+file)
+      roots = append(roots, config+"\x00"+string(file))
     }
   }
   return compactSortedStrings(roots)
@@ -697,7 +727,7 @@ func parsedConfigs(program *driver.Program) ([]*shimtsoptions.ParsedCommandLine,
   resolved := make(map[string]*shimtsoptions.ParsedCommandLine)
   for _, parsed := range program.TSProgram.GetResolvedProjectReferences() {
     if parsed != nil {
-      resolved[shimtspath.ResolvePath(parsed.ConfigName())] = parsed
+      resolved[shimtspath.ResolvePath(string(parsed.ConfigName()))] = parsed
     }
   }
   configs := []*shimtsoptions.ParsedCommandLine{}
@@ -706,14 +736,14 @@ func parsedConfigs(program *driver.Program) ([]*shimtsoptions.ParsedCommandLine,
   for len(pending) > 0 {
     parsed := pending[0]
     pending = pending[1:]
-    config := shimtspath.ResolvePath(parsed.ConfigName())
+    config := shimtspath.ResolvePath(string(parsed.ConfigName()))
     if _, exists := seen[config]; exists {
       continue
     }
     seen[config] = struct{}{}
     configs = append(configs, parsed)
-    for _, reference := range parsed.ResolvedProjectReferencePaths() {
-      reference = shimtspath.ResolvePath(reference)
+    for _, referencePath := range parsed.ResolvedProjectReferencePaths() {
+      reference := shimtspath.ResolvePath(string(referencePath))
       child := resolved[reference]
       if child == nil {
         fs := program.FS
@@ -750,8 +780,9 @@ func invalidProjectError(diags []driver.Diagnostic) error {
 //
 // The first is the invalidation state: the hash the next snapshot compares
 // against to decide whether a file moved. It is deliberately not always the
-// file's disk hash — a file that raced the load is recorded under its resident
-// text so the comparison is guaranteed to miss and force a revisit.
+// file's disk hash. A file that raced the load receives a value different from
+// the observed disk hash, forcing a revisit even when disk bytes equal resident
+// text but the current preamble would change the next parsed source.
 //
 // The second is the source manifest's disk evidence: the hex digest of the bytes
 // actually read from disk, present only when the read succeeded. These are
@@ -765,23 +796,23 @@ func hashProgramSources(program *driver.Program) (map[string][sha256.Size]byte, 
   for _, source := range program.TSProgram.SourceFiles() {
     // Virtual sources (tsgo's `bundled:///` libs) have no on-disk identity;
     // real project files always carry an absolute path.
-    if source == nil || !filepath.IsAbs(source.FileName()) {
+    if source == nil || !filepath.IsAbs(string(source.FileName())) {
       continue
     }
-    info, err := os.Stat(source.FileName())
+    info, err := os.Stat(string(source.FileName()))
     if err != nil {
       if errors.Is(err, os.ErrNotExist) {
         // The file vanished while the compiler session was loading. Hash the
         // resident text so the next snapshot revisits the path, observes the
         // deletion, and reloads instead of serving the vanished file forever.
-        hashes[source.FileName()] = sha256.Sum256([]byte(source.Text()))
+        hashes[string(source.FileName())] = sha256.Sum256([]byte(source.Text()))
       }
       continue
     }
     if info.IsDir() {
       continue
     }
-    content, err := os.ReadFile(source.FileName())
+    content, err := os.ReadFile(string(source.FileName()))
     if err != nil {
       return nil, nil, fmt.Errorf("ttscgraph: read %s: %w", source.FileName(), err)
     }
@@ -789,14 +820,23 @@ func hashProgramSources(program *driver.Program) (map[string][sha256.Size]byte, 
     // The bytes were read, so their digest is a fact regardless of whether they
     // match what the checker holds. When they do not, the manifest's text and
     // disk digests disagree, which is precisely what a consumer needs to see.
-    digests[source.FileName()] = graph.Digest(rawHash)
-    expected := driver.ApplySourcePreambleToFile(source.FileName(), string(content), program.SourcePreamble)
-    if source.Text() == expected {
-      hashes[source.FileName()] = rawHash
+    digests[string(source.FileName())] = graph.Digest(rawHash)
+    // Compare disk identity with the compiler's original input. Mapped checker
+    // text can differ by design; upstream retains its pre-mapping text. The
+    // filesystem also strips BOMs and decodes UTF-16 before parsing.
+    decoded, ok := shimvfs.DecodeBytes(string(content))
+    if !ok {
+      return nil, nil, fmt.Errorf("ttscgraph: decode %s", source.FileName())
+    }
+    expected := driver.ApplySourcePreambleToFile(string(source.FileName()), decoded, program.SourcePreamble)
+    if sourceInputText(source) == expected {
+      hashes[string(source.FileName())] = rawHash
     } else {
       // Force the next snapshot to revisit a file that changed while the
       // compiler session was loading instead of blessing mismatched disk text.
-      hashes[source.FileName()] = sha256.Sum256([]byte(source.Text()))
+      mismatchHash := rawHash
+      mismatchHash[0] ^= 0xff
+      hashes[string(source.FileName())] = mismatchHash
     }
   }
   return hashes, digests, nil
@@ -841,7 +881,12 @@ func changedSources(previous map[string][sha256.Size]byte) (map[string]string, b
       return nil, false, fmt.Errorf("ttscgraph: read %s: %w", path, err)
     }
     if sha256.Sum256(content) != oldHash {
-      changed[path] = string(content)
+      // Compiler overlays accept decoded text, not encoded filesystem bytes.
+      decoded, ok := shimvfs.DecodeBytes(string(content))
+      if !ok {
+        return nil, false, fmt.Errorf("ttscgraph: decode %s", path)
+      }
+      changed[path] = decoded
     }
   }
   return changed, false, nil
@@ -931,10 +976,10 @@ func auxiliaryInputs(program *driver.Program, cwd string) []auxiliaryInput {
   }
   for _, source := range program.TSProgram.SourceFiles() {
     file := source.FileName()
-    if file == "" || strings.HasPrefix(file, "bundled:///") {
+    if file == "" || strings.HasPrefix(string(file), "bundled:///") {
       continue
     }
-    directory := filepath.Dir(file)
+    directory := filepath.Dir(string(file))
     for _, path := range appendAncestorInputs(nil, directory, cwd) {
       inputs = append(inputs, auxiliaryInput{path: path})
     }
@@ -1038,12 +1083,18 @@ func runServe(args []string) int {
   fs.SetOutput(stderr)
   cwdFlag := fs.String("cwd", "", "project root (defaults to process cwd)")
   tsconfigFlag := fs.String("tsconfig", "tsconfig.json", "project tsconfig path")
+  permissionFlag := fs.Bool("runExternalCode", false, "allow upstream content mappers (TypeScript 7.1)")
   artifactsFlag := fs.String(
     "artifacts",
     "",
     "path to the artifacts a plugin published (JSON); absent or missing means none",
   )
   if err := fs.Parse(args); err != nil {
+    return 2
+  }
+  options, err := graphCompilerOptions(fs, *permissionFlag)
+  if err != nil {
+    fmt.Fprintf(stderr, "ttscgraph: %v\n", err)
     return 2
   }
   artifacts, artifactsErr := graph.LoadArtifacts(strings.TrimSpace(*artifactsFlag))
@@ -1071,22 +1122,28 @@ func runServe(args []string) int {
   cwd = shimtspath.ResolvePath(cwd)
   tsconfig := strings.TrimSpace(*tsconfigFlag)
 
-  return serveSnapshotsWithArtifacts(os.Stdin, stdout, cwd, tsconfig, artifacts)
+  return serveSnapshotRequests(os.Stdin, stdout, cwd, tsconfig, artifacts, nativeSnapshotPublisher{}, options)
 }
 
 func serveSnapshots(input io.Reader, output io.Writer, cwd, tsconfig string) int {
   return serveSnapshotsWithArtifacts(input, output, cwd, tsconfig, nil)
 }
 
-// serveSnapshotsWithArtifacts is the loop the serve command runs, and
-// serveSnapshots is it with nothing published — the shape every existing case
-// drives, unchanged.
+// serveSnapshotsWithArtifacts serves addressed JSON requests over one compiler
+// session. Its deferred close owns the session through EOF, protocol failure and
+// output failure; unsuccessful projections remain pending for a later request.
 func serveSnapshotsWithArtifacts(
   input io.Reader,
   output io.Writer,
   cwd, tsconfig string,
   artifacts []graph.Artifact,
 ) int {
+  return serveSnapshotRequests(input, output, cwd, tsconfig, artifacts, nativeSnapshotPublisher{}, driver.LoadProgramOptions{})
+}
+
+// serveSnapshotRequests owns real NDJSON decoding, session lifetime and request
+// state. Publication uses its declared port; the default adapter acquires Git.
+func serveSnapshotRequests(input io.Reader, output io.Writer, cwd, tsconfig string, artifacts []graph.Artifact, publisher serveSnapshotPublisher, options driver.LoadProgramOptions) int {
   scanner := bufio.NewScanner(input)
   scanner.Buffer(make([]byte, 64*1024), 1024*1024)
   encoder := json.NewEncoder(output)
@@ -1135,7 +1192,7 @@ func serveSnapshotsWithArtifacts(
     var loadDuration time.Duration
     if session == nil {
       loadStarted := time.Now()
-      created, err := newGraphSessionWithArtifacts(cwd, tsconfig, artifacts)
+      created, err := newGraphSessionWithArtifacts(cwd, tsconfig, artifacts, options)
       loadDuration = time.Since(loadStarted)
       if err != nil {
         if err := encodeServeResponseWithTrace(
@@ -1185,9 +1242,9 @@ func serveSnapshotsWithArtifacts(
     var exportDuration time.Duration
     var err error
     if request.GraphSnapshotVersion == graphSnapshotProtocolVersion {
-      snapshot, mode, changed, semanticDuration, exportDuration, err = session.snapshotShardsWithTiming()
+      snapshot, mode, changed, semanticDuration, exportDuration, err = publisher.shards(session)
     } else {
-      dump, mode, changed, err = session.Snapshot()
+      dump, mode, changed, err = publisher.dump(session)
     }
     response := newServeResponse(request.ID)
     // The envelope answers for THIS session, not for the command in general. An

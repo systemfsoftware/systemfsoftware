@@ -31,6 +31,20 @@ import { make } from "../internal/make";
  * @param incrementor The incrementor.
  * @param statement The statement.
  * @returns The created {@link ForStatement}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Optional initializer, condition and incrementor remain distinct header slots;
+ *   absence preserves the corresponding empty position and body order.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Header pieces and body form one loop outline, with child builders owning
+ *   declarations/expressions instead of parsing a raw header string.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Omitted conditions remain omitted, not replaced with measured loop limits.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains execution ordering and optional header slots with a for-loop
+ *   example separate from acknowledgment tags.
  */
 export const createForStatement = (
   initializer: ForInitializer | undefined,

@@ -20,6 +20,10 @@ import { make } from "../internal/make";
  * @param name The linked name, if any.
  * @param text The trailing link text.
  * @returns The created {@link JSDocLinkCode}.
+ * @evidence contracts/common.md#principled-implementation The linkcode kind preserves code-style annotation spelling and stores the target and suffix unchanged; target resolution and code styling belong to documentation consumers.
+ * @evidence contracts/common.md#clear-and-simple-design The constructor needs only name and text because the discriminant selects code-style syntax without a separate formatting option.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Code styling is expressed through the supported node form rather than replacing a consumer renderer or recognizing particular labels.
+ * @evidence contracts/common.md#meaningful-documentation Native prose documents styling ownership and the verbatim label separator, with an output example and separated paragraphs under the documentation guidance.
  */
 export const createJSDocLinkCode = (
   name: EntityName | JSDocMemberName | undefined,

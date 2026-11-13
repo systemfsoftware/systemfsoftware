@@ -1,0 +1,367 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { createFilesystemPathIdentityContext } from "../../../internal/pathIdentity/createFilesystemPathIdentityContext";
+import { outputText } from "../outputText";
+import { resolveTsgo } from "../resolveTsgo";
+import { spawnNative } from "../spawnNative";
+import { readJsoncFile } from "./readJsoncFile";
+import { selectReferencedProject } from "./selectReferencedProject";
+
+/**
+ * The project that owns `file`: the discovered `tsconfig` itself, or the
+ * project it references that contains the file.
+ *
+ * A solution-style config (`"files": []` plus `references`) owns no files; it
+ * delegates them. Vite, Nx, and many monorepo templates generate that layout,
+ * and a runner that stops at the nearest config compiles the file with the
+ * solution's empty options while the editor, which follows the references,
+ * shows no error. This lookup selects within the declared reference graph:
+ *
+ * 1. A config that declares no `references` owns the file. Nothing is spawned, so
+ *    an ordinary project avoids compiler expansion but still reads its config.
+ * 2. Otherwise, the config owns the file when its own root files contain it.
+ * 3. Otherwise, each reference in declaration order: a referenced config that
+ *    contains the file owns it; one that does not is searched through its own
+ *    references, depth-first. A reference names a config file or a directory
+ *    holding `tsconfig.json`, and a cycle is visited once.
+ * 4. When no project contains the file, the discovered config is kept, so the file
+ *    takes the same out-of-`include` lane it always did.
+ *
+ * Containment is the compiler's own answer, not a reimplementation of
+ * `include`/`exclude` matching: `--showConfig` lists the root files a config
+ * expands to, and each is compared with the file by filesystem identity.
+ * `references` are read from the config itself, because TypeScript never
+ * inherits them through `extends`. Read/parse failures supply no reference
+ * edges; failed compiler invocations or malformed output supply no positive
+ * membership observation. The original discovered config is then a fallback,
+ * not proof that it contains the file. Identity comparisons use observed
+ * realpaths and case capabilities, retaining best-effort spelling when native
+ * identity lookup is unavailable.
+ *
+ * Graph observations are shared only within this lookup, unless the caller
+ * hands in `expansions`, which keeps each config's expanded roots for as long
+ * as the caller keeps the map. Later requests can otherwise see changed
+ * configs, inherited options, directory membership or compiler inputs; a config
+ * pathname alone cannot establish that the expansion is still valid. A file
+ * created after a kept expansion was taken is still expanded for afresh. The
+ * callback observes direct config reads, not every inherited config or compiler
+ * input consulted by expansion. Synchronous compiler work has no explicit
+ * execution deadline in this operation.
+ *
+ * @param props.tsconfig - The config project discovery found for the file.
+ * @param props.file - The file whose project is asked for.
+ * @param props.binary - An explicit TypeScript-Go binary, when one was given.
+ * @param props.env - Complete environment shared by compiler selection and
+ *   root-file expansion; omission inherits the current process environment.
+ * @param props.onConfig - Called with every config this reads, so a caller that
+ *   fingerprints its inputs can record them.
+ * @evidence contracts/common.md#principled-implementation Successful compiler showConfig supplies root membership observations, best-effort filesystem identity compares aliases, and visited identity keys terminate repeated graph states while declaration-order DFS selects the first observed containing project. Failed observations preserve the discovered fallback without certifying membership.
+ * @evidence contracts/common.md#clear-and-simple-design Reference reading, compiler expansion and membership comparison have separate local responsibilities; discovery retains its original fallback when no referenced project contains the target.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Solution handling follows references and actual compiler root lists rather than guessed include patterns or named project layouts; stale cross-request answers are not preserved by compensating target checks.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs state ownership order, fallback, callbacks and lookup-scoped reuse, with parameter explanations separated from acknowledgments.
+ * @evidence contracts/portability.md#os-neutral-implementation Node path operations select native config spellings, actual filesystem identity compares target and roots, and spawnNative owns executable representation rather than applying OS-name case guesses.
+ * @evidence contracts/performance.md#efficient-algorithms Each distinct observed config identity key is visited once in the DFS and receives at most one expansion plus one ctime-based retry; ctime can change for metadata updates as well as creation. Direct config reads/parsing, reference path text/stat work, delegated identity/case probes and binary selection precede or accompany compiler execution. Root-list decoding and membership scans cost their bytes and entries; DFS stack depth follows the reference chain and native recursion limits still apply. The no-reference path avoids a compiler subprocess, not config I/O.
+ * @evidence contracts/performance.md#reuse-equivalent-work The lookup reuses discovered reference edges and filesystem identity observations; visited keys prevent expansion of a repeated observed identity, while later requests rerun because paths alone cannot prove unchanged inheritance, directory membership or compiler selection, unless the caller keeps expansions for a lifetime its own builds already assume. A caller may also keep the configs that declare no reference: such an answer depends on that file alone, so it is reused only while the file's identity, size and both stamps are the ones it was read under. Best-effort identity cannot guarantee deduplication of every physical alias.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Identity maps, visited keys and root observations are lookup-local; only caller-supplied maps retain anything: root lists, one per config, and one metadata signature per config without references, for the caller's lifetime. Synchronous expansion delegates capture cleanup to spawnNative's finally path, whose cleanup failures are suppressed; output storage and child duration have no configured ceiling here. A nonterminating child prevents the lookup from finishing, rather than being released by this graph traversal.
+ */
+export function resolveOwningProjectConfig(props: {
+  /** Absolute or invocation-relative spelling of the discovered config. */
+  tsconfig: string;
+
+  /** Native target path whose root-file membership is being resolved. */
+  file: string;
+
+  /**
+   * Explicit compiler executable; otherwise resolution selects the installed
+   * compiler.
+   */
+  binary?: string;
+
+  /** Complete environment for compiler selection and root-file expansion. */
+  env?: NodeJS.ProcessEnv;
+
+  /** Observe each directly read config, including ones with no reference edges. */
+  onConfig?: (config: string) => void;
+
+  /**
+   * Expanded root files kept across lookups, by config path, for a caller whose
+   * selected builds and compiler environment already hold for the same
+   * lifetime: ttsx builds each owning project once per process
+   * (samchon/ttsc#1747).
+   */
+  expansions?: Map<string, { files: readonly string[]; takenAt: number }>;
+
+  /**
+   * Configs found to declare no reference, by path, with the metadata they had
+   * when read, kept across lookups by a caller that asks once per served
+   * module. Such a config owns the file itself, and only an edit of it can
+   * change that, so an unchanged one is not read and parsed again
+   * (samchon/ttsc#1852). A config that declares references is always read.
+   */
+  unreferenced?: Map<string, string>;
+}): string {
+  const discovered = path.resolve(props.tsconfig);
+  const kept =
+    props.unreferenced === undefined ? undefined : configSignature(discovered);
+  if (kept !== undefined && props.unreferenced!.get(discovered) === kept) {
+    props.onConfig?.(discovered);
+    return discovered;
+  }
+  const discoveredReferences = readReferences(discovered, props.onConfig);
+  if (discoveredReferences.length === 0) {
+    // Only a config that was read whole and names no reference is kept: one
+    // whose references name nothing on disk yet can gain an owner without
+    // being edited. The metadata is taken again after the read, so a config
+    // that moved under it is read once more by the next lookup.
+    if (
+      kept !== undefined &&
+      declaresNoReference(discovered) &&
+      configSignature(discovered) === kept
+    )
+      props.unreferenced!.set(discovered, kept);
+    else props.unreferenced?.delete(discovered);
+    return discovered;
+  }
+  props.unreferenced?.delete(discovered);
+  const identities = createFilesystemPathIdentityContext({
+    throwOnRealpathError: false,
+  });
+  const target = identities.resolve(path.resolve(props.file)).key;
+  /**
+   * Compare a compiler root observation with this lookup's target identity.
+   *
+   * Equal keys compare this lookup's best-effort identity observations; native
+   * lookup failures do not prove physical equivalence. A scan shares the
+   * identity context; no guessed suffix matching, separate membership index or
+   * historical cache is introduced for this one target.
+   */
+  function listed(roots: RootFiles): boolean {
+    return roots.files.some((root) => identities.resolve(root).key === target);
+  }
+
+  /**
+   * Ask whether one project's expanded roots contain the target, retrying once
+   * when target metadata indicates creation during the expansion interval.
+   *
+   * This closure owns the bounded retry, while rootFiles owns compiler
+   * execution and listed owns filesystem identity comparison. The ctime
+   * observation is a race premise, not an atomic snapshot or an arbitrary
+   * delay. Both attempts finish synchronously and only this call retains its
+   * root observations.
+   */
+  function contains(config: string): boolean {
+    const roots = props.expansions?.get(config) ?? expand(config);
+    if (listed(roots)) return true;
+    // Recent ctime permits one retry after a miss; it can reflect a metadata
+    // change rather than creation and is not an atomic freshness proof. A kept
+    // expansion taken before the file appeared is retried the same way.
+    return createdSince(props.file, roots.takenAt) && listed(expand(config));
+  }
+
+  /** Expand `config` now, and keep the expansion when the caller asked to. */
+  function expand(config: string): RootFiles {
+    const roots = rootFiles(config, props.binary, props.env);
+    props.expansions?.set(config, roots);
+    return roots;
+  }
+  return selectReferencedProject(discovered, discoveredReferences, {
+    identity: (config) => identities.resolve(config).key,
+    contains,
+    readReferences: (config) => readReferences(config, props.onConfig),
+  });
+}
+
+/**
+ * The config files `config` references, resolved, in declaration order. A
+ * reference that names nothing on disk is skipped, as the compiler reports it
+ * on its own.
+ *
+ * Only string paths in a references array become candidates. Node anchors them
+ * at this config's native directory and stat distinguishes files from directory
+ * shorthand. References are direct edges, not inherited through extends.
+ *
+ * One pass preserves declaration order without sorting. The caller's visited
+ * set prevents duplicate config traversal; this helper retains no historical
+ * graph and rereads current edges for a later request.
+ */
+function readReferences(
+  config: string,
+  onConfig: ((config: string) => void) | undefined,
+): string[] {
+  onConfig?.(config);
+  let parsed: unknown;
+  try {
+    parsed = readJsoncFile(config);
+  } catch {
+    return [];
+  }
+  const references = (parsed as { references?: unknown }).references;
+  if (!Array.isArray(references)) return [];
+  const out: string[] = [];
+  for (const reference of references) {
+    const spelled = (reference as { path?: unknown } | null)?.path;
+    if (typeof spelled !== "string") continue;
+    const target = path.resolve(path.dirname(config), spelled);
+    const file = isDirectory(target)
+      ? path.join(target, "tsconfig.json")
+      : target;
+    if (isFile(file)) out.push(file);
+  }
+  return out;
+}
+
+/**
+ * Whether `config` parses and its `references` is absent or an empty list, so
+ * no later filesystem change short of editing it can give it a reference edge.
+ */
+function declaresNoReference(config: string): boolean {
+  try {
+    const references = (readJsoncFile(config) as { references?: unknown })
+      .references;
+    return (
+      references === undefined ||
+      (Array.isArray(references) && references.length === 0)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Identity, size and both stamps of a config file, or `undefined` when it
+ * cannot be observed; a write or replacement moves at least one of them.
+ */
+function configSignature(config: string): string | undefined {
+  try {
+    const stats = fs.statSync(config, { bigint: true });
+    return [
+      stats.dev,
+      stats.ino,
+      stats.size,
+      stats.mtimeNs,
+      stats.ctimeNs,
+    ].join(":");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One compiler root-list observation and its wall-clock start time. The
+ * timestamp permits one retry when the target was created during expansion.
+ *
+ * Native root paths remain an array because the consumer compares one target
+ * with a short-circuit scan. This carrier neither proves reuse validity nor
+ * owns cache lifetime; the current containment call owns its observation.
+ */
+interface RootFiles {
+  /** Absolute paths, as the compiler listed them. */
+  files: readonly string[];
+
+  /** `Date.now()` just before the compiler was asked. */
+  takenAt: number;
+}
+
+/**
+ * The root files `config` expands to, as the compiler reports them. An empty
+ * list when the compiler cannot load the config, which then owns nothing.
+ *
+ * There is no cross-request cache. The enclosing graph traversal expands each
+ * visited project once, except for its single concurrent-target retry. Failed
+ * invocations and malformed output remain retryable observations rather than
+ * permanent empty project answers.
+ *
+ * `resolveTsgo` and `spawnNative` own executable selection and argument
+ * boundaries. Only string file entries become native paths relative to the
+ * config directory; include patterns and inherited options are interpreted by
+ * the compiler itself.
+ *
+ * Each expansion uses one completed synchronous subprocess and linear decoding
+ * of reported files. The caller owns graph deduplication and one binary
+ * selection per project; output temporaries are not retained after decoding. No
+ * include approximation or permanent failed answer substitutes for compiler
+ * behavior.
+ */
+function rootFiles(
+  config: string,
+  binary: string | undefined,
+  env: NodeJS.ProcessEnv | undefined,
+): RootFiles {
+  const takenAt = Date.now();
+  let files: string[] = [];
+  try {
+    const directory = path.dirname(config);
+    const tsgo = resolveTsgo({ binary, cwd: directory, env });
+    const result = spawnNative(tsgo.binary, ["-p", config, "--showConfig"], {
+      cwd: directory,
+      env,
+      encoding: "utf8",
+    });
+    if (result.status === 0) {
+      const shown = JSON.parse(outputText(result.stdout)) as {
+        files?: unknown;
+      };
+      if (Array.isArray(shown.files)) {
+        files = shown.files
+          .filter((file): file is string => typeof file === "string")
+          .map((file) => path.resolve(directory, file));
+      }
+    }
+  } catch {
+    files = [];
+  }
+  const roots = { files, takenAt };
+  return roots;
+}
+
+/**
+ * Whether the target's reported metadata change time is at or after `time`.
+ * Unlike modification time preserved by an ordinary copy, ctime can reveal
+ * creation during compiler expansion. Filesystem clock precision can still
+ * limit this race check; it is not a proof of an unchanged config snapshot.
+ *
+ * One native stat and millisecond comparison supplies this premise. Missing or
+ * unreadable files supply no positive answer. Retry count stays with the
+ * caller; this helper owns no retained handle, cache, shell probe or delayed
+ * task.
+ */
+function createdSince(file: string, time: number): boolean {
+  try {
+    return fs.statSync(file).ctimeMs >= time;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a native reference path currently names a directory. Stat failures
+ * supply no positive classification; compiler diagnostics own them.
+ *
+ * Node stat follows symlinks and reads the directory bit without traversing
+ * contents. Classification is current rather than inferred from separators or
+ * cached across mutations, and the synchronous request retains no descriptor.
+ */
+function isDirectory(location: string): boolean {
+  try {
+    return fs.statSync(location).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a native candidate currently names a regular file. Stat failures
+ * exclude the candidate and remain for compiler diagnostics.
+ *
+ * One Node stat follows symlinks and reads the regular-file bit, rather than
+ * guessing from extensions or enumerating directory contents. It retains no
+ * descriptor or classification across later filesystem mutations.
+ */
+function isFile(location: string): boolean {
+  try {
+    return fs.statSync(location).isFile();
+  } catch {
+    return false;
+  }
+}

@@ -1,0 +1,195 @@
+import path from "node:path";
+
+import { normalizePath } from "../filesystem/normalizePath";
+import { pathIsWithin } from "../filesystem/pathIsWithin";
+import { normalizeAliases } from "./normalizeAliases";
+
+/**
+ * Convert bundler aliases into absolute `paths` mappings, in the meaning Vite
+ * gives each replacement (samchon/ttsc#1399).
+ *
+ * Targets are written as absolute paths on purpose: the generated tsconfig
+ * lives in a system temp directory, where TypeScript-Go would reject bare
+ * relative targets (TS5090) and anchor `./`-style ones at the wrong directory.
+ *
+ * Vite substitutes the replacement into the specifier and resolves the result:
+ *
+ * - A replacement with a leading `/` that is not already below the root, such as
+ *   `"/src"`, is tried against the Vite root first and only then as an absolute
+ *   path. Both targets are listed in that order, since `paths` tries its
+ *   targets in order too. Reading it as absolute alone sent every `@/...`
+ *   import to the filesystem root, or on Windows to the drive root, and the
+ *   overlay then overrode the project's own correct `paths` entry. Only an
+ *   alias carrying its Vite root is read this way.
+ * - Any other absolute replacement means itself.
+ * - A relative replacement is resolved against each importing module, and a bare
+ *   one as a package. `paths` can express neither, so each is reported once and
+ *   not forwarded, leaving the tsconfig's own mapping in force.
+ *
+ * @evidence contracts/common.md#principled-implementation Ordered exact and subtree mappings preserve translatable string-alias precedence and target order; a Map represents every valid key, including __proto__, as data before conversion to ordinary own properties.
+ * @evidence contracts/common.md#clear-and-simple-design Classification records eligible replacement targets, then a declaration-order winner pass preserves first-match ownership; normalization/reporting remain separately owned.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Unrepresentable regular expressions and module-relative replacements are not approximated into misleading compiler paths, and native alias keys do not mutate an object prototype.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain target anchoring and the unsupported translations; private reporting comments explain the intentionally different handling of host-injected regular expressions.
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Resolves roots and replacements with node:path and passes every target
+ *   through normalizePath, so the emitted paths use forward slashes on every
+ *   OS.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Translates each alias once; the winner search rescans the declarations
+ *   per eligible key, up to A-times-T candidates for A declarations/T translations.
+ *   Native anchor/target text, normalization and RegExp construction/testing
+ *   add their real costs; no alias count or regex runtime bound is enforced.
+ *   Ordered rescanning preserves string and preceding regex shadowing without
+ *   pretending longest-key compiler lookup has the host's first-match policy.
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   Exact/subtree output keys reuse the selected declaration's translated
+ *   targets within this call. Diagnostic descriptions are shared across calls
+ *   by the reporting owner; compiler-output identity reuse belongs to callers.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   Classification/output maps and copies are call-local, while returned own
+ *   mappings transfer to the caller. The reporting helper retains one description
+ *   per noticed find string for this loaded module's lifetime, without a count/
+ *   byte cap or reset. A description is retained even if stderr writing throws.
+ */
+export function createAliasPaths(aliases: unknown): Record<string, string[]> {
+  const paths = new Map<string, string[]>();
+  const declarations = normalizeAliases(aliases).map((alias) =>
+    typeof alias.find === "string" &&
+    alias.find.endsWith("/") &&
+    alias.replacement.endsWith("/")
+      ? {
+          ...alias,
+          find: alias.find.slice(0, -1),
+          replacement: alias.replacement.slice(0, -1),
+        }
+      : alias,
+  );
+  const translated = new Map<(typeof declarations)[number], string[]>();
+  for (const alias of declarations) {
+    if (typeof alias.find !== "string") {
+      // Vite's array form accepts a `RegExp` find, and `{ find: /^~/ }` is a
+      // common way to spell a prefix alias. A tsconfig `paths` map has no
+      // regular-expression form, so there is nothing to translate it into
+      // (samchon/ttsc#1315). Reducing the simple prefix cases to a string is
+      // possible in principle and deliberately not done: telling `/^~/` from
+      // `/^~(?=\/)/` or `/^@app/` — which matches `@apple` too — means
+      // implementing enough of a regular-expression engine that a wrong
+      // reduction becomes likely, and a mistranslated alias resolves imports to
+      // the wrong file silently, which is worse than not forwarding it.
+      //
+      // Regex/non-string forms are withheld without a notice. Host configs
+      // can contain injected regex aliases, and this adapter has no reliable
+      // origin discriminator; the policy suppresses all such notices rather
+      // than claiming it can identify every user declaration.
+      continue;
+    }
+    if (alias.find.length === 0) {
+      continue;
+    }
+    if (alias.find.includes("*")) {
+      // A `paths` key reads `*` as its own wildcard, so forwarding a `find`
+      // that already contains one cannot preserve the caller's meaning.
+      reportUntranslatableAlias(
+        JSON.stringify(alias.find),
+        'a "paths" key already reads "*" as its own wildcard',
+      );
+      continue;
+    }
+    const key = alias.find;
+    if (key.length === 0) {
+      continue;
+    }
+    const replacement = alias.replacement;
+    let targets: string[];
+    // Vite's root-relative test is a leading `/`, exactly as `vite:resolve`
+    // checks `id[0] === "/"`; a `//` prefix is a UNC-style absolute path. Only
+    // an alias that carries its Vite root has that meaning: every other host
+    // resolves a POSIX absolute replacement as itself, and guessing a root
+    // would put a wrong first target ahead of the one the caller wrote.
+    if (
+      alias.root !== undefined &&
+      replacement.startsWith("/") &&
+      !replacement.startsWith("//")
+    ) {
+      const root = path.resolve(alias.root);
+      const absolute = path.resolve(replacement);
+      targets = pathIsWithin(absolute, root)
+        ? [absolute]
+        : [path.join(root, replacement.slice(1)), absolute];
+    } else if (path.isAbsolute(replacement)) {
+      targets = [replacement];
+    } else {
+      reportUntranslatableAlias(
+        JSON.stringify(alias.find),
+        replacement.startsWith(".")
+          ? `its replacement ${JSON.stringify(replacement)} is relative, which Vite resolves against each importing module`
+          : `its replacement ${JSON.stringify(replacement)} is not a path, which Vite resolves as a package`,
+      );
+      continue;
+    }
+    translated.set(
+      alias,
+      targets.map((target) => normalizePath(target)),
+    );
+  }
+  // TypeScript selects the longest paths key; Vite selects the first matching
+  // declaration. Every more-specific key must therefore carry the first
+  // declaration's replacement, not the later declaration that supplied it.
+  for (const alias of translated.keys()) {
+    const key = alias.find as string;
+    const winner = declarations.find((entry) => {
+      if (typeof entry.find === "string")
+        return entry.find === key || key.startsWith(`${entry.find}/`);
+      if (entry.find instanceof RegExp)
+        return new RegExp(entry.find.source, entry.find.flags).test(key);
+      return false;
+    });
+    const targets = winner === undefined ? undefined : translated.get(winner);
+    if (targets === undefined || typeof winner?.find !== "string") continue;
+    const suffix = key.slice(winner.find.length);
+    const normalized = targets.map((target) => normalizePath(target + suffix));
+    // A find-only trailing slash is not a normal @x prefix. Its translatable
+    // descendants begin with another slash; the bare key is not admitted.
+    if (!key.endsWith("/")) paths.set(key, normalized);
+    paths.set(
+      `${key}/*`,
+      normalized.map((target) => `${target}/*`),
+    );
+  }
+  return Object.fromEntries(paths);
+}
+
+/**
+ * Alias descriptions already reported in this process.
+ *
+ * The message is about configuration rather than about a module:
+ * `resolve.alias` is resolved once and then consulted on every delivery, so
+ * reporting per delivery would repeat one statement about the config for every
+ * file in the bundle. Keyed by the description, so a Vite dev server that
+ * reloads its config reports again only for a new find description, not for
+ * another replacement/reason with the same find. There is no reset or cap.
+ */
+const REPORTED_UNTRANSLATABLE_ALIASES = new Set<string>();
+
+/**
+ * Tell the user once that an alias they declared is not reaching the compile.
+ *
+ * A dropped alias is not silent in its consequence — the compile resolves
+ * through the tsconfig's own `paths`, and a module that resolves for the
+ * bundler but not for the compiler surfaces as the out-of-program report
+ * (samchon/ttsc#1308) — but that report names the module, not the alias, so the
+ * user cannot learn from it that a configuration they wrote was ignored.
+ *
+ * Wildcard, relative and bare string declarations reach this reporter. It
+ * suppresses duplicate find descriptions; it does not prove who authored an
+ * entry. Non-string finds are withheld without reaching this channel.
+ */
+function reportUntranslatableAlias(description: string, reason: string): void {
+  if (REPORTED_UNTRANSLATABLE_ALIASES.has(description)) {
+    return;
+  }
+  REPORTED_UNTRANSLATABLE_ALIASES.add(description);
+  process.stderr.write(
+    `ttsc: the Vite alias ${description} was not forwarded to the compile, because ${reason}. Declare it in your tsconfig's "paths" if ttsc must resolve through it.\n`,
+  );
+}

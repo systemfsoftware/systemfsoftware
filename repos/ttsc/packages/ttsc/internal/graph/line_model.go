@@ -4,12 +4,21 @@ import (
   "unicode/utf8"
 
   shimcore "github.com/microsoft/typescript-go/shim/core"
+  shimscanner "github.com/microsoft/typescript-go/shim/scanner"
 )
 
 // ECMALineStarts returns the byte offset of each logical source line. The
-// compiler is the authority for which bytes end a line, so graph evidence and
-// graph-backed LSP locations cannot drift from its LF, CRLF, CR, LS, and PS
-// coordinates.
+// compiler is the authority for which bytes end a line, so graph evidence
+// cannot drift from its LF, CRLF, CR, LS, and PS coordinates.
+//
+// @evidence contracts/common.md#principled-implementation Compiler-produced ECMA line boundaries are copied into graph byte-offset coordinates without substituting a newline convention.
+// @evidence contracts/common.md#clear-and-simple-design This adapter centralizes the compiler-to-graph integer representation so consumers share the same line model.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts All supported source text uses the compiler API; no fixture-specific terminator table or foreign mutation is introduced.
+// @evidence contracts/common.md#meaningful-documentation The native comment explains byte units and the compiler authority for line terminators, following the documentation skill's separated prose and tags.
+// @evidence contracts/performance.md#efficient-algorithms The compiler first counts LF bytes for initial capacity, then scans all ECMA terminators into its own line slice, which may grow for other terminators. This adapter allocates and copies a second integer slice; total work includes both source scans and line-count copying.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This pure adapter does not coordinate requests; source-snapshot owners retain its resulting line index.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Compiler and output line slices coexist during conversion and scale with the supplied line population without an adapter cap. The temporary compiler slice is call-local; the caller owns the returned index and its lifetime, with no separate retained source/cache or native handle.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation ECMALineStarts computes from its arguments only; it opens no file, builds no path and calls no platform or process API.
 func ECMALineStarts(text string) []int {
   compilerStarts := shimcore.ComputeECMALineStarts(text)
   starts := make([]int, len(compilerStarts))
@@ -19,65 +28,42 @@ func ECMALineStarts(text string) []int {
   return starts
 }
 
-// LineEnd returns the byte offset immediately before line's terminator, or the
-// end of text for its final logical line. starts must come from ECMALineStarts
-// for the same text.
-func LineEnd(text string, starts []int, line int) int {
-  if line < 0 || line >= len(starts) {
-    return len(text)
-  }
-  if line+1 == len(starts) {
-    return len(text)
-  }
-  for i := starts[line]; i < starts[line+1]; {
-    if lineTerminatorWidth(text, i) > 0 {
-      return i
-    }
-    _, size := utf8.DecodeRuneInString(text[i:])
-    if size == 0 {
-      return len(text)
-    }
-    i += size
-  }
-  return starts[line+1]
-}
-
 // FirstCodeOffset advances over leading whitespace and comments so a graph
 // span begins at its declaration rather than its leading trivia.
+//
+// The compiler scanner also recognizes Unicode whitespace, shebangs and
+// conflict-marker trivia. Negative offsets return zero; offsets at or past EOF
+// are returned unchanged without entering the scanner.
+//
+// @evidence contracts/common.md#principled-implementation Compiler SkipTrivia supplies the actual ECMA whitespace, comment, shebang and conflict-marker boundaries for the declaration's byte coordinate.
+// @evidence contracts/common.md#clear-and-simple-design One guarded adapter delegates lexical policy to the compiler instead of maintaining a partial parallel scanner.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The supported scanner API handles all source trivia without a declaration-banner exception or foreign parser mutation.
+// @evidence contracts/common.md#meaningful-documentation The native comment explains the leading-trivia adjustment; tags remain separated as required by the documentation skill.
+// @evidence contracts/performance.md#efficient-algorithms The delegated scanner advances through trivia with UTF-8 decoding and bounded conflict-marker lookahead; boundary bytes may be inspected again. Work follows the scanned range without copying intermediate source text, rather than guaranteeing exactly one inspection per byte.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This span calculation does not own a request cache; its text and starting offset determine a single result.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The function retains no text, indices or tasks after returning.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation FirstCodeOffset computes from its arguments only; it opens no file, builds no path and calls no platform or process API.
 func FirstCodeOffset(text string, pos int) int {
   if pos < 0 {
     return 0
   }
-  for pos < len(text) {
-    width := sourceWhitespaceWidth(text, pos)
-    switch {
-    case width > 0:
-      pos += width
-    case text[pos] == '/' && pos+1 < len(text) && text[pos+1] == '/':
-      pos = LineCommentEnd(text, pos)
-    case text[pos] == '/' && pos+1 < len(text) && text[pos+1] == '*':
-      pos += 2
-      for pos+1 < len(text) && !(text[pos] == '*' && text[pos+1] == '/') {
-        _, size := utf8.DecodeRuneInString(text[pos:])
-        if size == 0 {
-          return len(text)
-        }
-        pos += size
-      }
-      if pos+1 < len(text) {
-        pos += 2
-      } else {
-        return len(text)
-      }
-    default:
-      return pos
-    }
+  if pos >= len(text) {
+    return pos
   }
-  return len(text)
+  return shimscanner.SkipTrivia(text, pos)
 }
 
 // LineCommentEnd returns the byte offset immediately after a // comment and
 // its line terminator, or len(text) when the comment reaches EOF.
+//
+// @evidence contracts/common.md#principled-implementation A forward UTF-8 scan recognizes the same ECMA terminator widths as source indexing and includes the complete terminator in its result.
+// @evidence contracts/common.md#clear-and-simple-design One shared helper gives trivia and signature compaction a common line-comment boundary.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts EOF and terminators follow source syntax without a hardcoded comment shape or parser patch.
+// @evidence contracts/common.md#meaningful-documentation The native comment defines the exclusive byte offset and EOF behavior, with documentation-skill spacing before tags.
+// @evidence contracts/performance.md#efficient-algorithms Cost is linear in this comment's bytes and temporary space is constant.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work The helper computes one comment boundary and does not coordinate repeated requests.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources No resources or source snapshots are retained by this calculation.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation LineCommentEnd computes from its arguments only; it opens no file, builds no path and calls no platform or process API.
 func LineCommentEnd(text string, start int) int {
   for i := start + 2; i < len(text); {
     if width := lineTerminatorWidth(text, i); width > 0 {

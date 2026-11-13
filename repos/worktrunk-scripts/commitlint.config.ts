@@ -1,87 +1,14 @@
 import type { UserConfig } from '@commitlint/types'
-import { execFileSync } from 'node:child_process'
 
-const EXTRA_SCOPES = ['repo', 'deps', 'release', 'ci', 'scripts', 'hooks'] as const
-
-const matchesAny = (...patterns: readonly RegExp[]) => (path: string) => patterns.some((p) => p.test(path))
-
-const isDoc = matchesAny(
-  /\.mdx?$/,
-  /^docs\//,
-  /(^|\/)README\.md$/i,
-  /(^|\/)AGENTS\.md$/i,
-  /(^|\/)CLAUDE\.md$/i,
-  /(^|\/)CHANGELOG\.md$/i,
-)
-
-const isTest = matchesAny(
-  /\.(test|spec|tst)\.(ts|tsx|js|jsx|mjs|cjs)$/,
-  /(^|\/)__tests__\//,
-  /(^|\/)__mocks__\//,
-  /(^|\/)tests\//,
-  /(^|\/)test-helpers\//,
-  /(^|\/)e2e\//,
-  /(^|\/)fixtures\//,
-)
-
-const isCI = matchesAny(
-  /^\.github\/workflows\//,
-  /^\.github\/actions\//,
-  /^\.github\/dependabot\.ya?ml$/,
-)
-
-const isLockfile = matchesAny(
-  /(^|\/)pnpm-lock\.yaml$/,
-  /(^|\/)package-lock\.json$/,
-  /(^|\/)bun\.lockb?$/,
-  /(^|\/)yarn\.lock$/,
-  /(^|\/)deno\.lock$/,
-)
-
-const isTooling = matchesAny(
-  /^\.husky\//,
-  /(^|\/)commitlint\.config\.[mc]?[jt]s$/,
-  /(^|\/)\.releaserc(\..+)?$/,
-  /(^|\/)\.lintstagedrc(\..+)?$/,
-  /(^|\/)tsconfig.*\.json$/,
-  /(^|\/)deno\.jsonc?$/,
-  /(^|\/)dprint\.json$/,
-  /(^|\/)\.editorconfig$/,
-  /(^|\/)\.gitignore$/,
-  /(^|\/)\.prettierrc(\..+)?$/,
-  /(^|\/)package\.json$/,
-  /(^|\/)pnpm-workspace\.yaml$/,
-)
-
-const ALLOWED_BY_SHAPE: readonly {
-  readonly name: string
-  readonly match: (path: string) => boolean
-  readonly allowed: Readonly<Record<string, true>>
-}[] = [
-  { name: 'docs', match: isDoc, allowed: { docs: true, chore: true, ai: true } },
-  { name: 'test', match: isTest, allowed: { test: true, chore: true } },
-  { name: 'CI', match: isCI, allowed: { ci: true, chore: true } },
-  { name: 'lockfile', match: isLockfile, allowed: { deps: true, chore: true } },
-  {
-    name: 'tooling',
-    match: isTooling,
-    allowed: { chore: true, build: true, ci: true, deps: true, ai: true, security: true },
-  },
-]
-
-const stagedFiles = (): readonly string[] => {
-  try {
-    return execFileSync('git', ['diff', '--cached', '--name-only'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .split('\n')
-      .map((l: string) => l.trim())
-      .filter(Boolean)
-  } catch {
-    return []
-  }
-}
+/**
+ * systemfsoftware commitlint config.
+ *
+ * Design rule: a rule is `error` (2) ONLY if a wrong value has real downstream
+ * impact in THIS org. Releases run on changesets (.changeset/*.md), NOT commit
+ * messages, so scope / punctuation / type-vs-diff have ZERO release impact and
+ * must never fail a commit. The one message policy that matters is the
+ * AI-coauthor ban.
+ */
 
 const configuration: UserConfig = {
   extends: ['@commitlint/config-conventional'],
@@ -119,35 +46,14 @@ const configuration: UserConfig = {
               : 'OK',
           ]
         },
-        'type-matches-diff-shape': ({ type }: { type?: string }) => {
-          const files = stagedFiles()
-          if (files.length === 0 || !type) return [true, 'OK']
-          const allMatch = (m: (p: string) => boolean) => files.every(m)
-          for (const shape of ALLOWED_BY_SHAPE) {
-            if (allMatch(shape.match) && !shape.allowed[type]) {
-              const allowed = Object.keys(shape.allowed).sort().join(' / ')
-              return [false, `'${type}' with 100% ${shape.name} paths — REQUIRED type: ${allowed}`]
-            }
-          }
-          if (type === 'feat' || type === 'fix') {
-            const hasProductionSource = files.some(
-              (p) => !isDoc(p) && !isTest(p) && !isCI(p) && !isLockfile(p) && !isTooling(p),
-            )
-            if (!hasProductionSource) {
-              return [
-                false,
-                `'${type}' MUST touch >=1 production source file (none of: docs, test, CI, lockfile, tooling)`,
-              ]
-            }
-          }
-          return [true, 'OK']
-        },
       },
     },
   ],
   rules: {
+    // The one policy that matters.
     'no-ai-coauthors': [2, 'always'],
-    'type-matches-diff-shape': [2, 'always'],
+
+    // Type: tidy log/PR grouping only (releases run on changesets).
     'type-enum': [
       2,
       'always',
@@ -170,20 +76,30 @@ const configuration: UserConfig = {
         'test',
       ],
     ],
-    'scope-enum': [2, 'always', [...EXTRA_SCOPES]],
-    'scope-case': [2, 'always', 'kebab-case'],
     'type-case': [2, 'always', 'lower-case'],
     'type-empty': [2, 'never'],
+
+    // Subject: must exist; everything else about it is cosmetic.
     'subject-case': [0],
     'subject-empty': [2, 'never'],
-    'subject-full-stop': [2, 'never', '.'],
+    'subject-full-stop': [0],
+
+    // Punctuation: zero impact. OFF. (This is the reported pain.)
+    'header-full-stop': [0],
+    'body-full-stop': [0],
+
+    // Scope: zero release impact and agents can't guess it. OFF; nudge casing.
+    'scope-enum': [0],
+    'scope-case': [1, 'always', 'kebab-case'],
+
+    // Length: burns retry tokens, no impact. OFF.
     'header-max-length': [0],
     'body-max-line-length': [0],
     'footer-max-line-length': [0],
-    'body-leading-blank': [0],
-    'footer-leading-blank': [0],
-    'header-full-stop': [2, 'never', '.'],
-    'body-full-stop': [2, 'never', '.'],
+
+    // Readability nudges — warn, never block.
+    'body-leading-blank': [1, 'always'],
+    'footer-leading-blank': [1, 'always'],
     'references-empty': [1, 'never'],
   },
   defaultIgnores: true,

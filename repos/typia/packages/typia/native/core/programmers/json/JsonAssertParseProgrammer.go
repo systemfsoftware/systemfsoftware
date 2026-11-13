@@ -14,6 +14,15 @@ type jsonAssertParseProgrammerNamespace struct{}
 
 var JsonAssertParseProgrammer = jsonAssertParseProgrammerNamespace{}
 
+// JsonAssertParseProgrammer_DecomposeProps is the argument record of
+// JsonAssertParseProgrammer.Decompose, which builds the asserting
+// `json.assertParse` function. Init is the default initializer of the generated
+// `errorFactory` parameter, or nil.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonAssertParseProgrammer.Decompose, which builds the asserting `json.assertParse` function; its 5 fields (Context, Functor, Type, Name, Init) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type JsonAssertParseProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
@@ -23,7 +32,7 @@ type JsonAssertParseProgrammer_DecomposeProps struct {
 }
 
 func (jsonAssertParseProgrammerNamespace) Decompose(props JsonAssertParseProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(jsonParseProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   nativefactories.JsonMetadataFactory.Analyze(nativefactories.JsonMetadataFactory_IProps{
     Method:  props.Functor.Method,
     Checker: props.Context.Checker,
@@ -107,7 +116,7 @@ func (jsonAssertParseProgrammerNamespace) Write(props nativecontext.IProgrammerP
     Name:    props.Name,
     Init:    props.Init,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

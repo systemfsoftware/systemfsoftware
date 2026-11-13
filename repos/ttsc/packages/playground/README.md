@@ -23,7 +23,7 @@ The React components use Tailwind 4 utility classes. See [Tailwind setup](#tailw
 
 | Layer | Exports |
 | --- | --- |
-| **Worker core** | `createWorkerCompiler`, `buildTsconfigJSON`, `installDependenciesIntoMemFS`, `mapDiagnostic`, `pickEmittedJS`, `DEFAULT_*` constants |
+| **Worker core** | `createWorkerCompiler`, `buildTsconfigJSON`, `installDependenciesIntoMemFS`, `mapDiagnostic`, `lineColumnOf`, `pickEmittedJS`, `normalizeError`, `normalizeNodeModulePath`, `DEFAULT_*` constants |
 | **Typia integration** | `createTypiaSourcePackMount`, `installTypiaSourcePack`, `loadTypiaSourcePack` |
 | **Npm installer** | `installPlaygroundDependencies`, `collectExternalPackageNames`, `packageNameFromSpecifier`, `BUILT_IN_PLAYGROUND_PACKAGES` |
 | **Execute sandbox** | `createSandboxRequire`, `loadTypiaRuntimePack` |
@@ -101,7 +101,7 @@ export default function SitePlayground() {
 }
 ```
 
-`sandbox.signal` aborts when source or compiler options change, another Execute starts, or the shell unmounts. Pass it to setup work such as `loadTypiaRuntimePack(url, { signal: sandbox.signal })`. Runtime-pack loads share one request per URL and evict a rejected request so the next Execute retries. Nothing else ends the load: how long a fetch takes belongs to the network, not to a number chosen here. A signal cannot preempt synchronous evaluated user code; use an isolated executor with its own termination mechanism when that boundary matters.
+`sandbox.signal` aborts when source or compiler options change, another Execute starts, the compiler Worker is replaced, or the shell unmounts. Pass it to setup work such as `loadTypiaRuntimePack(url, { signal: sandbox.signal })`. Runtime-pack loads share one request per URL and evict a rejected request so the next Execute retries. Nothing else ends the load: how long a fetch takes belongs to the network, not to a number chosen here. A signal cannot preempt synchronous evaluated user code; use an isolated executor with its own termination mechanism when that boundary matters.
 
 ## Typia integration (optional)
 
@@ -128,7 +128,9 @@ const service = createWorkerCompiler({
 
 The typia pack itself is built by the site (typically with a `pack-typia-sources.cjs`-style script that bundles `typia/`, `@typia/utils`, and `@typia/interface` into a flat JSON map). See the ttsc website's [`build/pack-typia-sources.cjs`](https://github.com/samchon/ttsc/blob/master/website/build/pack-typia-sources.cjs) for the reference implementation.
 
-Calls for one URL share a single in-flight request; any caller's `signal` cancels that shared attempt, and a rejected attempt is evicted so the next compiler request retries the mount without starting another WASM runtime. There is no deadline over the fetch or the JSON body read — the network decides how long it takes. Pass the policy with `createTypiaSourcePackMount({ url, signal })`.
+Calls with the same URL and fetch function share a single in-flight request and decoded pack. Different injected transports have independent caches. Any caller's `signal` cancels its shared attempt, and rejection evicts that attempt so the next compiler request retries mounting without starting another WASM runtime. There is no deadline over the fetch or JSON body read; the network decides how long it takes. Pass cancellation with `createTypiaSourcePackMount({ url, signal })`.
+
+Source and runtime packs must be JSON objects mapping virtual paths to source-text strings. Arrays and non-string entries reject the load before mounting or evaluation. Successful packs assume immutable content at a URL; use a new URL when the content changes.
 
 ## Runtime npm dependency installer
 
@@ -203,7 +205,7 @@ If the wasm registers plugins other than typia / `@ttsc/lint`, pass `typiaPlugin
 
 ## Conventions
 
-- **One type per file.** Public interfaces / types each live under `src/structures/` in a file named after the type. The barrel `structures/index.ts` re-exports everything.
+- **One interface per file.** Public interfaces live under `src/structures/` in a file named after the interface. A callback type alias that only one interface uses, such as `PlaygroundFetch` or `PlaygroundBundleExecutor`, sits in that interface's file. The barrel `structures/index.ts` re-exports everything.
 - **One public function per file.** Internal helpers may be grouped in `compiler/internal/` or `npm/internal/`.
 - **No sub-path exports.** Every public symbol is importable from the package root. Add a sub-path later only when a real consumer needs to avoid pulling React into a Node-only context.
 

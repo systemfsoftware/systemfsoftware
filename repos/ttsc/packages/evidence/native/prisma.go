@@ -163,15 +163,32 @@ func loadPrismaInventories(
   // resident host repeats this every cycle, so an unchanged schema would
   // otherwise be re-parsed on every TypeScript keystroke that rebuilds.
   severity := prismaSetSeverity(config, inventories)
-  digest := prismaContentDigest(root, set.Sources)
+  // The bridge owns additional module/file reads outside this native reader.
+  // Neither a memo hit nor a later disk hash proves those producer inputs.
+  config.inputs.Unavailable()
+  digest := prismaContentDigest(root, set.Sources, config.inputs)
+  trace := newEvidenceBridgeTrace("prisma")
+  if trace != nil {
+    trace.nativeLookup = true
+    trace.record("bridge-lookup", os.Getpid(), map[string]any{
+      "bridge": "prisma", "root": root, "requestId": prismaSetID,
+      "sources": set.Sources, "nativeDigest": digest, "nativeLookup": true,
+    })
+  }
   if outcome, hit := prismaSchemas.lookup(digest); hit {
+    if trace != nil {
+      trace.record("bridge-cache-hit", os.Getpid(), map[string]any{"bridge": "prisma", "nativeDigest": digest})
+    }
     return inventories, append(
       problems,
       prismaUnitsFromOutcome(root, set, inventories, outcome, config)...,
     )
   }
 
-  result, err := normalizePrismaSet(root, set.Sources)
+  if trace != nil {
+    trace.record("bridge-cache-miss", os.Getpid(), map[string]any{"bridge": "prisma", "nativeDigest": digest})
+  }
+  result, err := normalizePrismaSet(root, set.Sources, trace)
   if err != nil {
     message := "Evidence graph could not run its Prisma schema loader: " + causeText(err) + ". Prisma references require Node.js and a resolvable @prisma/prisma-schema-wasm."
     return inventories, problems.add(severity, failPrismaSet(inventories, set, message))
@@ -221,9 +238,12 @@ func prismaOutcomeOf(result prismaNormalizationResult) (prismaSetOutcome, string
 }
 
 // configuredPrismaAddresses lists the schema files every configured Prisma glob
-// selects, claim and reference alike, once per population base.
+// selects, claim and reference alike, once per population base, and drops the
+// list of bases that could not be listed.
 //
-// Order is the digest's, so it must not depend on filesystem enumeration.
+// The list is ordered by address key rather than by filesystem enumeration, so
+// the same configuration answers in one order. The order of the parsed set is
+// not taken from here: `distinctPrismaSources` sorts the spellings it keeps.
 func configuredPrismaAddresses(
   config graphConfig,
 ) ([]artifactAddress, graphDiagnostics) {
@@ -231,6 +251,9 @@ func configuredPrismaAddresses(
   return addresses, problems
 }
 
+// configuredPrismaAddressesWithHealth is `configuredPrismaAddresses` together
+// with the bases whose listing failed, so a caller can report the population as
+// failed rather than as healthy and empty.
 func configuredPrismaAddressesWithHealth(
   config graphConfig,
 ) ([]artifactAddress, []populationBase, graphDiagnostics) {
@@ -251,7 +274,7 @@ func configuredPrismaAddressesWithHealth(
       failedBases = append(failedBases, base)
       continue
     }
-    err := filepath.WalkDir(from, func(current string, entry fs.DirEntry, walkErr error) error {
+    err := base.inputs.WalkDir(from, func(current string, entry fs.DirEntry, walkErr error) error {
       if walkErr != nil {
         // The walk root belongs to its population by construction, so a
         // failure to list it is a failure of the population. The relevance test
@@ -367,7 +390,7 @@ func distinctPrismaSources(root string, addresses []artifactAddress) prismaSourc
       continue
     }
     seen[address.Display] = true
-    identity, err := os.Stat(resolveProjectPath(root, address.Display))
+    identity, err := address.Base.inputs.Stat(resolveProjectPath(root, address.Display))
     var host *physicalSchema
     if err == nil {
       for _, file := range files {
@@ -457,7 +480,8 @@ func prismaInventoriesByDisplay(
 //
 // The symbol is `*` rather than `model`, and the difference is load-bearing. A
 // reference reads an inventory problem only when it selects that problem's
-// symbol (`graph.go:169-174`), so a set that failed to parse would look
+// symbol or the problem's symbol is `*` (the reference materializers in
+// `graph.go`), so a set that failed to parse would look
 // problem-free to a reference selecting only columns or relations — which then
 // reports that its globs "materialized no selected evidence units", sending the
 // author to widen a selector when the schema is what could not be read. A
@@ -540,22 +564,42 @@ func couldContainConfiguredPrisma(
   return false
 }
 
+// normalizePrismaSet retains the real Node request/Run/unmarshal boundary.
+// Optional private trace context pairs a caller's already used lookup digest;
+// direct calls allocate an explicitly unpaired observation. Neither context nor
+// observer outcome is added to the request, result or cache identity.
 func normalizePrismaSet(
   root string,
   sources []string,
+  traces ...*evidenceBridgeTrace,
 ) (prismaNormalizationResult, error) {
+  var trace *evidenceBridgeTrace
+  if len(traces) != 0 {
+    trace = traces[0]
+  } else {
+    trace = newEvidenceBridgeTrace("prisma")
+  }
   request, err := json.Marshal(prismaNormalizationRequest{
     Root: root,
     Sets: []prismaSetRequest{{ID: prismaSetID, Files: sources}},
   })
   if err != nil {
+    trace.preparationFailure(err)
     return prismaNormalizationResult{}, err
+  }
+  if trace != nil {
+    trace.record("bridge-request", os.Getpid(), map[string]any{
+      "bridge": "prisma", "root": root, "requestId": prismaSetID,
+      "sources": sources, "nativeLookup": trace.nativeLookup,
+    })
   }
   node := os.Getenv("TTSC_NODE_BINARY")
   if node == "" {
     node, err = exec.LookPath("node")
     if err != nil {
-      return prismaNormalizationResult{}, errors.New("Node.js executable was not found")
+      failure := errors.New("Node.js executable was not found")
+      trace.preparationFailure(failure)
+      return prismaNormalizationResult{}, failure
     }
   }
   ctx, cancel := context.WithTimeout(context.Background(), prismaBridgeTimeout)
@@ -567,19 +611,42 @@ func normalizePrismaSet(
   stderr := &limitedBuffer{Limit: prismaBridgeErrorLimit}
   command.Stdout = stdout
   command.Stderr = stderr
-  if err := command.Run(); err != nil {
-    if ctx.Err() == context.DeadlineExceeded {
+  start := trace.attempt(command)
+  runErr := command.Run()
+  deadlineExceeded := false
+  if runErr != nil {
+    deadlineExceeded = ctx.Err() == context.DeadlineExceeded
+  }
+  end := time.Time{}
+  if trace != nil {
+    end = time.Now().UTC()
+  }
+  if runErr != nil {
+    trace.result(command, stdout, stderr, start, end, runErr, "not-attempted", nil, nil, nil)
+    if deadlineExceeded {
       return prismaNormalizationResult{}, errors.New("Prisma schema loader exceeded its 60 second timeout")
     }
     detail := strings.TrimSpace(stderr.String())
     if detail == "" {
-      detail = err.Error()
+      detail = runErr.Error()
     }
     return prismaNormalizationResult{}, errors.New(detail)
   }
   var result prismaNormalizationResult
   if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+    trace.result(command, stdout, stderr, start, end, nil, "failed", err, nil, nil)
     return prismaNormalizationResult{}, errors.New("Prisma schema loader returned invalid JSON: " + err.Error())
+  }
+  if trace != nil {
+    documents := make([]string, 0, len(result.Documents))
+    problems := make([]string, 0, len(result.Problems))
+    for _, document := range result.Documents {
+      documents = append(documents, document.ID)
+    }
+    for _, problem := range result.Problems {
+      problems = append(problems, problem.ID)
+    }
+    trace.result(command, stdout, stderr, start, end, nil, "succeeded", nil, documents, problems)
   }
   return result, nil
 }
@@ -645,9 +712,11 @@ func prismaModelUnits(model prismaModel) []*evidenceUnit {
 // so both host a citation here. `//` is discarded by Prisma itself and is the
 // only form that cannot. A top-level unattached `///` run is the one
 // exclusion-only carrier.
-// Every other unusable placement — documenting nothing,
-// documenting something this graph does not address, or burying the tag behind
-// an extra slash — names the move that fixes it.
+//
+// Every other unusable placement, whether a comment trailing code on its own
+// line, documenting nothing, documenting something this graph does not
+// address, or burying the tag behind an extra slash, names the move that fixes
+// it.
 func prismaDeclarationsFromComments(
   comments []prismaCommentRun,
   hosts map[string]*evidenceUnit,
@@ -659,6 +728,19 @@ func prismaDeclarationsFromComments(
   for _, run := range comments {
     severity := levels[run.Path]
     location := run.Path + ":" + decimal(run.Line)
+    if run.Trailing && run.Form != prismaLineComment {
+      // Prisma reads a trailing `///` or `/* */` as documentation of the field
+      // on its own line, so claiming it documents nothing, or that Prisma
+      // discards it, would be false. The graph reads citations only above the
+      // declaration, and this says so.
+      if prismaCommentCarriesTag(run.Body) {
+        problems = problems.add(
+          severity,
+          "Evidence tag at "+location+" sits in a comment that trails code on its own line. A citation is read only from a documentation comment on the lines directly above the model, column, or relation it grounds, so nothing resolves this one. Move the citation directly above that declaration.",
+        )
+      }
+      continue
+    }
     if run.Form != prismaDocComment {
       if prismaCommentCarriesTag(run.Body) {
         problems = problems.add(
@@ -824,12 +906,14 @@ func prismaHostSymbols(host *evidenceUnit) symbolSet {
 // prismaCommentCarriesTag reports whether a comment body opens a citation on
 // any of its lines.
 func prismaCommentCarriesTag(body string) bool {
-  for _, line := range strings.Split(body, "\n") {
-    trimmed := strings.TrimSpace(line)
-    if _, _, found := declarationLine(trimmed); found {
+  for _, region := range documentationRegions(body, false) {
+    if region.fence {
+      continue
+    }
+    if opensAcknowledgement(region.text, region.heading, region.title) {
       return true
     }
-    if prismaBuriedTag(trimmed) {
+    if prismaBuriedTag(region.text) {
       return true
     }
   }
@@ -847,12 +931,14 @@ func prismaCommentCarriesTag(body string) bool {
 // an author reading the file sees a citation that does nothing.
 func prismaBuriedTagLines(body string) []int {
   offsets := []int{}
-  for offset, line := range strings.Split(body, "\n") {
-    trimmed := strings.TrimSpace(line)
-    if _, _, found := declarationLine(trimmed); found {
+  for offset, region := range documentationRegions(body, false) {
+    if region.fence {
       continue
     }
-    if prismaBuriedTag(trimmed) {
+    if opensAcknowledgement(region.text, region.heading, region.title) {
+      continue
+    }
+    if prismaBuriedTag(region.text) {
       offsets = append(offsets, offset)
     }
   }
@@ -862,14 +948,11 @@ func prismaBuriedTagLines(body string) []int {
 // prismaBuriedTag reports whether a line would open a citation once its leading
 // comment punctuation is removed.
 //
-// Two shapes bury a tag, and both are one keystroke from a citation that works.
+// An extra slash buries a tag one keystroke from a citation that works.
 // A fourth slash makes `//// @evidence` a doc comment whose text begins with a
-// slash, and a JSDoc-style block hands Prisma its own asterisks as content:
-// measured, `/** @evidence x */` reaches the parser's documentation as
-// `* @evidence x`, and the multi-line form keeps a leading asterisk on every
-// line of it. In both the tag no longer opens its line, so nothing parses it —
-// and until this stripped asterisks too, nothing reported it either. A schema
-// author arriving from JSDoc writes the second shape by habit.
+// slash. The tag no longer opens its line, so the declaration parser cannot
+// read it. JSDoc-style leading asterisks are different: the shared comment
+// parser already strips them, so those block comments host citations normally.
 //
 // Only leading punctuation is stripped, so prose that merely mentions the tag
 // somewhere in a sentence is untouched. Over-reporting an ordinary comment
@@ -880,8 +963,8 @@ func prismaBuriedTag(trimmed string) bool {
   if stripped == trimmed {
     return false
   }
-  _, _, found := declarationLine(stripped)
-  return found
+  heading, title := documentationHeading(stripped)
+  return opensAcknowledgement(stripped, heading, title)
 }
 
 // prismaNormalizationFailure words a rejected schema identically whether the

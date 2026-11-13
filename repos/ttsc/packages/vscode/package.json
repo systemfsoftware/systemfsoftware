@@ -2,7 +2,7 @@
   "name": "@ttsc/vscode",
   "displayName": "ttsc",
   "description": "TypeScript-Go and ttsc plugin diagnostics, completions, lint actions, and formatting for VS Code.",
-  "version": "0.30.4",
+  "version": "0.37.0",
   "publisher": "samchon",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -98,9 +98,11 @@
     }
   },
   "scripts": {
-    "build": "tsc --noEmit && rimraf lib dist && node build/build.cjs"
+    "build": "tsc --noEmit && rimraf lib dist && node build/build.cjs",
+    "evidence": "evidence"
   },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@types/node": "catalog:utils",
     "@types/vscode": "^1.94.0",
     "@vscode/vsce": "^3.9.2",

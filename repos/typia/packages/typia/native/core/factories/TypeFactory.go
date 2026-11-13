@@ -13,20 +13,46 @@ type typeFactoryNamespace struct{}
 
 var TypeFactory = typeFactoryNamespace{}
 
+// TypeFactory_GetReturnTypeOfClassMethodProps names a method of a class type
+// whose return type is wanted.
+//
+// @evidence contracts/common.md#principled-implementation Finding a method's return type needs the checker, the class type and the method name.
+// @evidence contracts/common.md#clear-and-simple-design A three-field argument record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states what it names.
 type TypeFactory_GetReturnTypeOfClassMethodProps struct {
-  Checker  *shimchecker.Checker
-  Class    *shimchecker.Type
+  // Checker resolves the property and its first call signature; nil yields nil.
+  Checker *shimchecker.Checker
+
+  // Class is the type containing the named property; nil yields nil.
+  Class *shimchecker.Type
+
+  // Function names the property whose first call signature supplies the return
+  // type. Missing properties or call signatures yield nil.
   Function string
 }
 
+// TypeFactory_GetFullNameProps selects the type or symbol whose full name is
+// wanted. A non-nil Type and Checker are required even with an explicit Symbol.
+// AliasTypeArguments is retained for compatibility and is currently not read.
+//
+// @evidence contracts/common.md#principled-implementation The checker and type provide the name fallback and reference type arguments; an explicit symbol overrides the type's symbol. AliasTypeArguments preserves the input shape but the current builder does not consult it.
+// @evidence contracts/common.md#clear-and-simple-design A four-field argument record.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states the selection and the switch.
 type TypeFactory_GetFullNameProps struct {
-  Checker            *shimchecker.Checker
-  Type               *shimchecker.Type
-  Symbol             *shimast.Symbol
+  // Checker renders unnamed types and resolves reference type arguments.
+  Checker *shimchecker.Checker
+
+  // Type supplies the type to name; nil causes the empty result.
+  Type *shimchecker.Type
+
+  // Symbol overrides Type.Symbol when non-nil; it does not replace Type.
+  Symbol *shimast.Symbol
+
+  // AliasTypeArguments is retained but currently has no effect on naming.
   AliasTypeArguments *bool
 }
-
-var typeFactory_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (typeFactoryNamespace) IsFunction(t *shimchecker.Type) bool {
   return TypeFactory.GetFunction(t) != nil
@@ -37,10 +63,10 @@ func (typeFactoryNamespace) GetFunction(t *shimchecker.Type) *shimast.Node {
     return nil
   }
   symbol := t.Symbol()
-  if symbol == nil || len(symbol.Declarations) == 0 {
+  if symbol == nil || len(shimast.SymbolDeclarationsOf(symbol)) == 0 {
     return nil
   }
-  node := symbol.Declarations[0]
+  node := shimast.SymbolDeclarationsOf(symbol)[0]
   if shimast.IsFunctionLike(node) {
     return node
   }
@@ -65,10 +91,10 @@ func (typeFactoryNamespace) GetReturnTypeOfClassMethod(props TypeFactory_GetRetu
     return nil
   }
   symbol := props.Checker.GetPropertyOfType(props.Class, props.Function)
-  if symbol == nil || symbol.ValueDeclaration == nil {
+  if symbol == nil || shimast.SymbolValueDeclarationOf(symbol) == nil {
     return nil
   }
-  functor := props.Checker.GetTypeOfSymbolAtLocation(symbol, symbol.ValueDeclaration)
+  functor := props.Checker.GetTypeOfSymbolAtLocation(symbol, shimast.SymbolValueDeclarationOf(symbol))
   signatures := props.Checker.GetSignaturesOfType(functor, shimchecker.SignatureKindCall)
   if len(signatures) == 0 {
     return nil
@@ -137,10 +163,10 @@ func typeFactory_explore_name(node *shimast.Node, name string) string {
 }
 
 func typeFactory_get_name(symbol *shimast.Symbol) string {
-  if symbol == nil || len(symbol.Declarations) == 0 || symbol.Declarations[0].Parent == nil {
+  if symbol == nil || len(shimast.SymbolDeclarationsOf(symbol)) == 0 || shimast.SymbolDeclarationsOf(symbol)[0].Parent == nil {
     return "__type"
   }
-  return typeFactory_explore_name(symbol.Declarations[0].Parent, symbol.Name)
+  return typeFactory_explore_name(shimast.SymbolDeclarationsOf(symbol)[0].Parent, shimast.SymbolNameOf(symbol))
 }
 
 func typeFactory_get_type_arguments(checker *shimchecker.Checker, t *shimchecker.Type) (output []*shimchecker.Type) {
@@ -154,7 +180,7 @@ func typeFactory_get_type_arguments(checker *shimchecker.Checker, t *shimchecker
 }
 
 func (typeFactoryNamespace) Keyword(t string, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(typeFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   var kind shimast.KeywordTypeSyntaxKind
   switch t {
   case "void":

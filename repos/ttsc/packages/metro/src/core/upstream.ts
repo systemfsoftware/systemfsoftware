@@ -1,25 +1,8 @@
 import { createRequire } from "node:module";
 
-const nodeRequire = createRequire(import.meta.url);
+import type { UpstreamTransformer } from "./UpstreamTransformer";
 
-/**
- * The subset of the Metro Babel-transformer contract this adapter relies on.
- *
- * Metro loads the module named by `transformer.babelTransformerPath` and calls
- * its `transform` once per file, expecting a Babel AST back. `getCacheKey` is
- * an optional export Metro folds into its transform-cache key; Metro invokes it
- * with arguments (e.g. `{ projectRoot, enableBabelRCLookup }`), so it is typed
- * variadic.
- */
-export interface UpstreamTransformer {
-  transform(params: {
-    src: string;
-    filename: string;
-    options: Record<string, unknown>;
-    [key: string]: unknown;
-  }): Promise<{ ast: object }>;
-  getCacheKey?: (...args: unknown[]) => string;
-}
+const nodeRequire = createRequire(import.meta.url);
 
 /**
  * Upstream transformer module specifiers tried (in order) when no explicit
@@ -40,14 +23,55 @@ export const UPSTREAM_CANDIDATES = [
  * 1. An explicit `customPath` (the `upstreamTransformer` option);
  * 2. Each of {@link UPSTREAM_CANDIDATES} in turn.
  *
- * These are declared as optional peers and resolved at runtime against the
- * consumer project, so the adapter carries no Metro/Expo dependency itself.
- * Resolution is not memoised: Node's own module cache already makes the
- * repeated `require` a cheap lookup, and keeping no module-level state lets a
- * changed `upstreamTransformer` always take effect.
+ * `withTtsc` resolves an explicit specifier and the automatic candidates from
+ * the consuming project in the Metro config process, and publishes the absolute
+ * path it found (see {@link locateProjectUpstreamTransformer}). This worker-side
+ * lookup, rooted in the adapter's own location, is what remains for a specifier
+ * the project could not resolve, so the adapter carries no Metro/Expo
+ * dependency itself. Resolution is not memoised: Node's own module cache
+ * already makes the repeated `require` a cheap lookup, and keeping no
+ * module-level state lets a changed `upstreamTransformer` always take effect.
  *
- * `load` is injectable purely so the resolution order and the not-found path
- * can be tested deterministically; production always uses the real `require`.
+ * `load` is the explicit module-loading boundary. Its default uses Node's real
+ * `require`; an injected loader must preserve absence versus failure
+ * semantics.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Node createRequire loads the configured module or documented
+ *   Expo/React-Native candidates. Resolution is separated from execution: only
+ *   known entry-absence codes permit another automatic candidate;
+ *   installed-module initialization failures preserve their cause.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Explicit selection and ordered detection share the loading boundary.
+ *   tryRequire owns absence classification, leaving this function to choose
+ *   the transformer and attach contextual errors.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The loader argument is an explicit dependency-injection boundary, not a
+ *   test-only runtime branch or a patched require.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node resolution accepts project-resolved absolute paths on Windows and
+ *   POSIX. createRequire is rooted at this module via import.meta.url; no
+ *   path is turned into a shell command. Runtime errors propagate through the
+ *   same policy on every OS.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains candidate order, project versus worker
+ *   resolution and absence versus initialization failures. Checked against
+ *   the documentation skill: separate paragraphs state the contract and why
+ *   its nonobvious boundary matters; field comments retain their own useful
+ *   facts.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Keeps no state between calls; loaded modules belong to Node's module cache.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   At most three candidate probes per call, each a require.resolve followed by one require.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   Deliberately unmemoised: Node's module cache makes a repeated require cheap and a changed option must take effect.
  */
 export function resolveUpstreamTransformer(
   customPath?: string,
@@ -99,6 +123,66 @@ export function resolveUpstreamTransformer(
       "(React Native), or set the `upstreamTransformer` option to an explicit " +
       "module path.",
   );
+}
+
+/**
+ * Locate the automatic upstream transformer the consuming project installed,
+ * without executing it.
+ *
+ * The candidates belong to the app, not to this adapter: under pnpm or a linked
+ * workspace the adapter sits outside the app's `node_modules` ancestry, so a
+ * lookup rooted in the adapter cannot see a transformer only the app installed.
+ * `resolve` is rooted in the project; each candidate is tried in
+ * {@link UPSTREAM_CANDIDATES} order and an absent one is skipped, exactly as the
+ * worker's probe skips it. Only resolution runs here, so a broken installation
+ * still fails where the worker loads it, with its own error.
+ *
+ * @param resolve Resolves a module specifier from the project.
+ * @returns The absolute path of the first installed candidate, or `undefined`.
+ * @evidence contracts/common.md#principled-implementation
+ *   The supplied project resolver uses Node module resolution without
+ *   executing candidate code. Only recognized entry-absence errors continue
+ *   probing; other resolver failures propagate.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Project discovery resolves only the shared candidate list; execution is
+ *   deferred to the worker loader that owns initialization failures.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The documented optional-peer order is a product default, not a
+ *   fixture-specific answer. No module methods are replaced.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   The injected resolver owns project filesystem resolution on the host OS.
+ *   This operation compares module specifiers and returns its absolute result
+ *   without inventing separators or quoting a command.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains project ownership, ordered probing,
+ *   nonexecution and the absent result. Checked against the documentation
+ *   skill: separate paragraphs state the contract and why its nonobvious
+ *   boundary matters; field comments retain their own useful facts.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Resolves paths without executing a candidate and retains nothing.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   At most three resolutions, stopping at the first one that succeeds.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   Runs once per withTtsc call, in the config process only.
+ */
+export function locateProjectUpstreamTransformer(
+  resolve: (specifier: string) => string,
+): string | undefined {
+  for (const candidate of UPSTREAM_CANDIDATES) {
+    try {
+      return resolve(candidate);
+    } catch (error) {
+      if (!isCandidateAbsent(error)) throw error;
+    }
+  }
+  return undefined;
 }
 
 /**

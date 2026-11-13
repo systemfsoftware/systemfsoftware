@@ -22,6 +22,19 @@ import { make } from "../internal/make";
  * @param label The label.
  * @param statement The statement.
  * @returns The created {@link LabeledStatement}.
+ * @evidence contracts/common.md#principled-implementation
+ *   asName normalizes the label and the Statement remains its target. Correct
+ *   break/continue scope and label uniqueness depend on caller context.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The label wrapper owns naming, while its body keeps its original node kind.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Labels are explicit syntax rather than generated routing for unexpected cases.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains targeting and typical loop use with a labeled-break example;
+ *   prose, code and acknowledgments are separated as documentation requires.
  */
 export const createLabeledStatement = (
   label: string | Identifier,

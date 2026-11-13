@@ -98,64 +98,8 @@ export declare namespace RpcClient {
       const Discard = false
     >(
       input: Rpc.PayloadConstructor<Current>,
-      options?: Rpc.Success<Current> extends Stream.Stream<infer _A, infer _E, infer _R> ? {
-          readonly asQueue?: AsQueue | undefined
-          readonly streamBufferSize?: number | undefined
-          readonly headers?: Headers.Input | undefined
-          readonly context?: Context.Context<never> | undefined
-        } :
-        {
-          readonly headers?: Headers.Input | undefined
-          readonly context?: Context.Context<never> | undefined
-          /**
-           * Completes once the server acknowledges the call as its handler starts,
-           * after the middleware has run, instead of waiting for the result. The
-           * handler's result and error are not returned, but transport errors,
-           * middleware errors and failures before the handler starts still fail the
-           * call. Over HTTP and workers the call completes after the handler has
-           * finished.
-           */
-          readonly discard?: Discard | undefined
-        }
-    ) => Current extends Rpc.Rpc<
-      infer _Tag,
-      infer _Payload,
-      infer _Success,
-      infer _Error,
-      infer _Middleware,
-      infer _Requires
-    > ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? AsQueue extends true ? Effect.Effect<
-            Queue.Dequeue<
-              _A["Type"],
-              _E["Type"] | _Error["Type"] | E | _Middleware["error"]["Type"] | _Middleware["~ClientError"] | Cause.Done
-            >,
-            never,
-            | Scope.Scope
-            | _Payload["EncodingServices"]
-            | _Success["DecodingServices"]
-            | _Error["DecodingServices"]
-            | _Middleware["error"]["DecodingServices"]
-          >
-        : Stream.Stream<
-          _A["Type"],
-          _E["Type"] | _Error["Type"] | E | _Middleware["error"]["Type"] | _Middleware["~ClientError"],
-          | _Payload["EncodingServices"]
-          | _Success["DecodingServices"]
-          | _Error["DecodingServices"]
-          | _Middleware["error"]["DecodingServices"]
-        >
-      : Effect.Effect<
-        Discard extends true ? void : _Success["Type"],
-        | (Discard extends true ? never : _Error["Type"])
-        | E
-        | _Middleware["error"]["Type"]
-        | _Middleware["~ClientError"],
-        | _Payload["EncodingServices"]
-        | _Success["DecodingServices"]
-        | _Error["DecodingServices"]
-        | _Middleware["error"]["DecodingServices"]
-      > :
-      never
+      options?: Options<Current, AsQueue, Discard>
+    ) => Result<Current, E, AsQueue, Discard>
   }
 
   /**
@@ -173,27 +117,48 @@ export declare namespace RpcClient {
   >(
     tag: Tag,
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
-    options?: Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>> extends Stream.Stream<infer _A, infer _E, infer _R> ? {
-        readonly asQueue?: AsQueue | undefined
-        readonly streamBufferSize?: number | undefined
-        readonly headers?: Headers.Input | undefined
-        readonly context?: Context.Context<never> | undefined
-      } :
-      {
-        readonly headers?: Headers.Input | undefined
-        readonly context?: Context.Context<never> | undefined
-        /**
-         * Completes once the server acknowledges the call as its handler starts,
-         * after the middleware has run, instead of waiting for the result. The
-         * handler's result and error are not returned, but transport errors,
-         * middleware errors and failures before the handler starts still fail the
-         * call. Over HTTP and workers the call completes after the handler has
-         * finished.
-         */
-        readonly discard?: Discard | undefined
-      }
-  ) => Rpcs extends Rpc.Rpc<
-    infer _Tag extends Tag,
+    options?: Options<Rpc.ExtractTag<Rpcs, Tag>, AsQueue, Discard>
+  ) => Result<Rpc.ExtractTag<Rpcs, Tag>, E, AsQueue, Discard>
+
+  /**
+   * The options accepted by a client call for the given RPC(s).
+   *
+   * @stability unstable
+   * @category utility types
+   * @since 4.1.3
+   */
+  export type Options<Current, AsQueue extends boolean, Discard> = Rpc.Success<Current> extends
+    Stream.Stream<infer _A, infer _E, infer _R> ? {
+      readonly asQueue?: AsQueue | undefined
+      readonly streamBufferSize?: number | undefined
+      readonly headers?: Headers.Input | undefined
+      readonly context?: Context.Context<never> | undefined
+    } :
+    {
+      readonly headers?: Headers.Input | undefined
+      readonly context?: Context.Context<never> | undefined
+      /**
+       * Completes once the server acknowledges the call as its handler starts,
+       * after the middleware has run, instead of waiting for the result. The
+       * handler's result and error are not returned, but transport errors,
+       * middleware errors and failures before the handler starts still fail the
+       * call. Over HTTP and workers the call completes after the handler has
+       * finished. A protocol that only delivers requests acknowledges the call
+       * itself once it has delivered the request.
+       */
+      readonly discard?: Discard | undefined
+    }
+
+  /**
+   * The result of a client call for the given RPC(s). Distributes over a union
+   * of RPCs.
+   *
+   * @stability unstable
+   * @category utility types
+   * @since 4.1.3
+   */
+  export type Result<Current, E, AsQueue extends boolean, Discard> = Current extends Rpc.Rpc<
+    infer _Tag,
     infer _Payload,
     infer _Success,
     infer _Error,
@@ -202,7 +167,7 @@ export declare namespace RpcClient {
   > ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? AsQueue extends true ? Effect.Effect<
           Queue.Dequeue<
             _A["Type"],
-            _E["Type"] | _Error["Type"] | E | _Middleware["error"]["Type"] | _Middleware["~ClientError"]
+            _E["Type"] | _Error["Type"] | E | _Middleware["error"]["Type"] | _Middleware["~ClientError"] | Cause.Done
           >,
           never,
           | Scope.Scope
@@ -418,19 +383,18 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
       let fiber: Fiber.Fiber<any, any>
       return Effect.onInterrupt(
         Effect.callback<any, any>((resume) => {
-          // the acknowledgement of a discarded call, held until its send has finished
-          let ack: Exit.Exit<any, any> | undefined
+          let acked = false
           const entry: ClientEntry = {
             _tag: "Effect",
             rpc,
             context,
             resume(exit) {
-              if (discard) {
-                // Interrupting the send could cancel the call, as an HTTP
-                // handler is scoped to its request, so the call completes
-                // once the send has finished too.
-                ack = exit._tag === "Success" ? Exit.void : exit
-                if (fiber?.pollUnsafe()) resume(ack)
+              if (discard && exit._tag === "Success") {
+                // A successful acknowledgement waits for the send to finish, as
+                // interrupting the send could cancel the call: an HTTP handler
+                // is scoped to its request. Failures complete the call at once.
+                acked = true
+                if (fiber?.pollUnsafe()) resume(Exit.void)
                 return
               }
               resume(exit)
@@ -450,8 +414,8 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
             if (exit._tag === "Failure") {
               entries.delete(id)
               return resume(exit)
-            } else if (ack) {
-              return resume(ack)
+            } else if (acked) {
+              return resume(Exit.void)
             }
           })
         }),
@@ -604,8 +568,10 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
         if (!entry || entry._tag !== "Queue") return Effect.void
         return Queue.offerAll(entry.queue, message.values).pipe(
           supportsAck
-            ? Effect.flatMap(() =>
-              options.onFromClient({
+            ? Effect.flatMap((dropped) =>
+              // values are dropped when the queue was shutdown by an interrupted
+              // consumer, so the server should not be asked for more
+              dropped.length > 0 ? Effect.void : options.onFromClient({
                 message: { _tag: "Ack", requestId: message.requestId },
                 context: entry.context
               })
@@ -831,8 +797,10 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
       }
       case "ClientProtocolError": {
         const exit = Exit.fail(message.error)
-        const requestIds = Array.from(entries.keys())
-        entries.clear()
+        const requestIds = message.requestIds === undefined
+          ? Array.from(entries.keys())
+          : message.requestIds.map(RequestId).filter((requestId) => entries.has(requestId))
+        for (const requestId of requestIds) entries.delete(requestId)
         return Effect.forEach(
           requestIds,
           (requestId) => write({ _tag: "Exit", clientId: 0, requestId, exit: exit as any })
@@ -936,6 +904,16 @@ export const withHeaders: {
  *
  * Use to provide the transport boundary for RPC clients over HTTP, WebSocket,
  * workers, sockets, or custom protocols.
+ *
+ * **Details**
+ *
+ * A `Request` that `send` accepts stays pending until a reply names its id: an
+ * `Exit`, or a `ClientProtocolError` that lists it in `requestIds`. Until then
+ * the client keeps the request and the caller's context, unless the caller is
+ * interrupted, the client closes or the connection fails. A transport that
+ * only delivers requests, such as a message queue, writes a void `Exit` for a
+ * `discard` request once the request is delivered, and fails `send` with an
+ * `RpcClientError` for any other request.
  *
  * @stability unstable
  * @category services
@@ -1583,21 +1561,26 @@ export const makeProtocolWorker = (
           undefined
       }).pipe(
         Effect.tapCause((cause) => {
+          const requestIdsByClient = new Map<number, Array<string | number>>()
           for (const [requestId, entry] of entries) {
             if (entry.worker !== backing) continue
             entries.delete(requestId)
             entry.latch.openUnsafe()
+            const requestIds = requestIdsByClient.get(entry.clientId)
+            if (requestIds) requestIds.push(requestId)
+            else requestIdsByClient.set(entry.clientId, [requestId])
           }
-          const error = Cause.findError(cause)
-          return broadcast({
-            _tag: "ClientProtocolError",
-            error: new RpcClientError({
-              reason: Result.isSuccess(error) ? error.success.reason : new RpcClientDefect({
-                message: "Error in worker",
-                cause: Cause.squash(cause)
-              })
+          const found = Cause.findError(cause)
+          const error = new RpcClientError({
+            reason: Result.isSuccess(found) ? found.success.reason : new RpcClientDefect({
+              message: "Error in worker",
+              cause: Cause.squash(cause)
             })
           })
+          return Effect.forEach(
+            requestIdsByClient,
+            ([clientId, requestIds]) => writeResponse(clientId, { _tag: "ClientProtocolError", error, requestIds })
+          )
         }),
         Effect.retry(Schedule.spaced(1000)),
         Effect.annotateLogs({

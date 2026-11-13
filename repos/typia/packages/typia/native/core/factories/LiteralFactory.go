@@ -24,9 +24,19 @@ var LiteralFactory = literalFactoryNamespace{}
 // most schema builders mean by it, so a real `null`, such as the value of
 // `tags.Example<null>`, needs its own marker to survive into the emitted
 // literal and into encoding/json output (samchon/typia#2403).
+//
+// @evidence contracts/common.md#principled-implementation Object writers skip a Go nil as absent, so a real JSON null, such as the value of `tags.Example<null>`, needs a distinct marker value, and its MarshalJSON writes `null`, which keeps it in the emitted literal and in encoding/json output.
+// @evidence contracts/common.md#clear-and-simple-design An empty struct whose zero value is the marker.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The marker is a value type in the writer's contract and nothing is patched.
+// @evidence contracts/common.md#meaningful-documentation The doc explains why the marker exists and cites the issue.
 type LiteralFactory_Null struct{}
 
 // MarshalJSON writes the marker as JSON `null`.
+//
+// @evidence contracts/common.md#principled-implementation Returns the four bytes `null`, which is the JSON spelling of the marker, and never fails.
+// @evidence contracts/common.md#clear-and-simple-design One method.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A constant result.
+// @evidence contracts/common.md#meaningful-documentation The doc states what it writes.
 func (LiteralFactory_Null) MarshalJSON() ([]byte, error) {
   return []byte("null"), nil
 }
@@ -37,8 +47,16 @@ func (LiteralFactory_Null) MarshalJSON() ([]byte, error) {
 // semantically meaningful, such as `components.schemas` (schema-name keyed),
 // which the legacy TS implementation emitted in discovery order. Keys not
 // present in Values, and values that are nil-like, are skipped.
+//
+// @evidence contracts/common.md#principled-implementation A Go map has no iteration order, so an object whose property order matters, such as component schemas in discovery order, carries its keys in a slice and its values in a map; keys without a value and nil-like values are skipped, which matches how the writer treats absent properties.
+// @evidence contracts/common.md#clear-and-simple-design A two-field record read by the literal writer and by MarshalJSON.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Order is explicit data and not recovered from sorting.
+// @evidence contracts/common.md#meaningful-documentation The doc states the ordering and skipping rules.
 type LiteralFactory_OrderedObject struct {
-  Keys   []string
+  // Keys specifies emission order; missing and nil-like values are omitted.
+  Keys []string
+
+  // Values supplies entries by key; entries absent from Keys are not emitted.
   Values map[string]any
 }
 
@@ -48,6 +66,11 @@ type LiteralFactory_OrderedObject struct {
 // fields. Downstream tools marshal schema metadata containing these objects
 // (e.g. nestia's SDK transform), and the raw {Keys, Values} shape corrupted
 // their output.
+//
+// @evidence contracts/common.md#principled-implementation The object is written as a plain JSON object in key order with the skipped entries omitted, using the standard encoder for keys and values, so tools that marshal schema metadata see the object the printer sees and not the raw record fields.
+// @evidence contracts/common.md#clear-and-simple-design One method that writes braces, keys and values around the standard encoder.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts It uses encoding/json for every key and value and no string splicing of values.
+// @evidence contracts/common.md#meaningful-documentation The doc states the output shape and why the raw record must not be serialized.
 func (obj LiteralFactory_OrderedObject) MarshalJSON() ([]byte, error) {
   buffer := bytes.Buffer{}
   buffer.WriteByte('{')
@@ -77,10 +100,8 @@ func (obj LiteralFactory_OrderedObject) MarshalJSON() ([]byte, error) {
   return buffer.Bytes(), nil
 }
 
-var literalFactory_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (literalFactoryNamespace) Write(input any, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(literalFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if input == nil {
     return f.NewKeywordExpression(shimast.KindNullKeyword)
   }
@@ -177,7 +198,7 @@ func literalFactory_fieldName(name string) string {
 }
 
 func literalFactory_writeObject(obj map[string]any, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(literalFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   keys := make([]string, 0, len(obj))
   for key, value := range obj {
     if literalFactory_isNilLike(value) {
@@ -209,7 +230,7 @@ func literalFactory_writeObject(obj map[string]any, emit ...*shimprinter.EmitCon
 }
 
 func literalFactory_writeOrderedObject(obj LiteralFactory_OrderedObject, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(literalFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   properties := make([]*shimast.Node, 0, len(obj.Keys))
   for _, key := range obj.Keys {
     value, ok := obj.Values[key]
@@ -306,7 +327,7 @@ func literalFactory_isNilLike(value any) bool {
 }
 
 func literalFactory_writeArray(array []any, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(literalFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   elements := make([]*shimast.Node, 0, len(array))
   for _, elem := range array {
     elements = append(elements, LiteralFactory.Write(elem, emit...))
@@ -318,7 +339,7 @@ func literalFactory_writeArray(array []any, emit ...*shimprinter.EmitContext) *s
 }
 
 func literalFactory_writeBoolean(value bool, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(literalFactory_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if value {
     return f.NewKeywordExpression(shimast.KindTrueKeyword)
   }
@@ -334,5 +355,5 @@ func literalFactory_writeBigint(value any, emit ...*shimprinter.EmitContext) *sh
 }
 
 func literalFactory_writeString(value string, emit ...*shimprinter.EmitContext) *shimast.Node {
-  return nativecontext.EmitFactoryOf(literalFactory_factory, emit...).NewStringLiteral(value, shimast.TokenFlagsNone)
+  return nativecontext.NodeFactoryOf(emit...).NewStringLiteral(value, shimast.TokenFlagsNone)
 }

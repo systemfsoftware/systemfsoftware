@@ -33,6 +33,20 @@ import { createIdentifier } from "../names/createIdentifier";
  * @param type The type.
  * @param initializer The initializer, if any.
  * @returns The created {@link VariableDeclaration}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Strings normalize to Identifier while supplied BindingName patterns stay
+ *   intact. Definite-assignment marker, type and initializer occupy separate slots.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   This declarator excludes the declaration keyword and termination, owned by
+ *   VariableDeclarationList and VariableStatement rather than duplicated here.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Destructuring is retained as a tree, not rewritten to guessed local names.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains binding-pattern support and absent keyword/semicolon, with
+ *   its corrected declarator example separated from acknowledgment tags.
  */
 export const createVariableDeclaration = (
   name: string | BindingName,

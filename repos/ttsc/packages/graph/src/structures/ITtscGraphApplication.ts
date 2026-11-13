@@ -17,11 +17,13 @@ import { ITtscGraphTrace } from "./ITtscGraphTrace";
  * type relations. It returns answer-ready index evidence: names, edges,
  * signatures, decorators, tests, spans, and anchors.
  *
- * Every returned fact — each name, edge, signature, and span — is
- * compiler-resolved and verified for the snapshot that call synchronized, so
- * trust it without re-checking against files. Where an operation ranks a
- * shortlist against your question (`lookup`, `entrypoints`, `tour`), the facts
- * stay verified but the selection is heuristic: judge whether its coverage
+ * Declaration facts come from the compiler for the synchronized snapshot.
+ * The server derives file containers, containment, property kinds, path-convention test roles and dispatch
+ * hops; lint plugins supply artifact facts. The result's audit distinguishes
+ * these producers. Trust compiler facts without re-checking against files.
+ * Where an operation ranks a shortlist against your question (`lookup`,
+ * `entrypoints`, `tour`), its compiler facts retain that provenance while
+ * selection is heuristic: judge whether its coverage
  * answers you, and a follow-up request or a read of a cited span is fair when
  * it does not.
  *
@@ -62,12 +64,16 @@ import { ITtscGraphTrace } from "./ITtscGraphTrace";
  *
  * ## What to trust
  *
- * Before source edits, every returned fact is compiler-resolved and verified.
- * Never use extra graph calls, repository search, or file reads to doubt,
+ * Before source edits, compiler declaration facts retain the resolution of the
+ * synchronized snapshot. The server derives `file` containers, `contains`
+ * ownership, `property` kinds, `dispatches` hops and path-convention `test`
+ * roles from those declarations. Lint plugins supply document, data-model and API-operation facts; `audit`
+ * identifies these distinct producers. Never use extra graph calls,
+ * repository search, or file reads to doubt,
  * fact-check, re-derive, re-narrate, or re-confirm a returned node, span, edge,
- * signature, decorator, test, reference, step, or anchor. The server resolved
- * each one to the type-checked program for the snapshot the call synced to, and
- * `audit` says so on every result.
+ * signature, decorator, test, reference, step, or anchor. The result projects
+ * the snapshot's facts and identifies their provenance; this server does not
+ * perform a second compiler verification pass.
  *
  * Selection is the separate question. `lookup`, `entrypoints`, and `tour` match
  * your question and return a scored, ranked, per-file-capped, limited
@@ -90,32 +96,45 @@ import { ITtscGraphTrace } from "./ITtscGraphTrace";
  *   `truncated` say whether coverage is settled; when it is not, one more
  *   request is the right move — not a file read to re-verify facts already
  *   given.
+ *
+ * @evidence contracts/common.md#principled-implementation The single async tool maps the discriminated request union to graph outputs, with audit and next separated from returned facts.
+ * @evidence contracts/common.md#clear-and-simple-design One tool owns graph dispatch; request branches keep their own shapes instead of independent nearly identical tools.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts The instruction retains explicit escape and permits legitimate coverage follow-ups without forced graph calls.
+ * @evidence contracts/common.md#meaningful-documentation Markdown-structured native documentation explains request choice, trust boundaries and ranked coverage before the tags.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources signature only: the implementer owns any handle or retained state.
+ * @evidenceExclude contracts/performance.md#efficient-algorithms signature only: the implementer owns the algorithm and its cost.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work signature only: the implementer decides what work is shared.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation signature only: the implementer owns any path or process work.
  */
 export interface ITtscGraphApplication {
   /**
-   * Answer a TypeScript question from the compiler's own index of this
-   * repository.
+   * Answer a TypeScript question from the synchronized source snapshot.
+   * Submit one request:
    *
-   * The graph holds every symbol, call, type, decorator and test, each with its
-   * file and line, resolved from the source on disk now. Submit exactly one
-   * request:
+   * - `tour`: architecture, runtime flow and nearby tests in one orientation
+   * - `trace`: calls, callers or the path from A to B
+   * - `details`: signatures, members and interface implementations
+   * - `lookup`: named declarations
+   * - `entrypoints`: where execution starts
+   * - `overview`: project layers and folders
+   * - `escape`: source bodies, span text or evidence outside the graph
    *
-   * - `tour`: architecture, the runtime flow from the public API to the code that
-   *   does the work, nearby paths, and the tests to read — a whole orientation
-   *   in one call
-   * - `trace`: what a symbol calls, what calls it, or the path from A to B
-   * - `details`: signatures, members, and what implements an interface
-   * - `lookup`: where a named symbol is declared
-   * - `entrypoints`: where execution starts, when the entry is unknown
-   * - `overview`: the project's layers and folder structure
-   *
-   * Every fact in a result is the checker's own resolution, audited before
-   * return, so no fact needs verifying; for the ranked operations (`lookup`,
-   * `entrypoints`, `tour`), judge whether the shortlist covers your question.
-   * Read a file for what the graph does not carry: a body, the text in a span.
+   * `audit` identifies compiler declaration facts, server-derived structure
+   * and plugin artifact facts; it does not claim a second compiler check.
+   * Judge the coverage of ranked `lookup`, `entrypoints` and `tour` shortlists.
+   * Follow `next`; read source for omitted body text or missed coverage.
    *
    * @param props Reasoning plus one graph request
    * @returns Matching `result` union member
+   *
+   * @evidence contracts/common.md#principled-implementation The callable consumes the typed reasoning/request envelope and returns the typed audit, next action and result envelope asynchronously.
+   * @evidence contracts/common.md#clear-and-simple-design One method delegates branch semantics to the request union instead of duplicating parameter lists.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The supported method includes escape and does not require graph use for source bodies.
+   * @evidence contracts/common.md#meaningful-documentation Native prose lists request responsibilities, distinguishes ranking coverage and explains the body-text boundary with param/return tags.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources signature only: the implementer owns any handle or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms signature only: the implementer owns the algorithm and its cost.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work signature only: the implementer decides what work is shared.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation signature only: the implementer owns any path or process work.
    */
   inspect_typescript_graph(
     props: ITtscGraphApplication.IProps,
@@ -123,7 +142,18 @@ export interface ITtscGraphApplication {
 }
 
 export namespace ITtscGraphApplication {
-  /** Draft, review, then submit exactly one graph request or escape. */
+  /**
+   * Draft, review, then submit exactly one graph request or escape.
+   *
+   * @evidence contracts/common.md#principled-implementation Required question, draft, review and discriminated final request represent the public selection protocol without treating rationale as graph evidence.
+   * @evidence contracts/common.md#clear-and-simple-design The final request union owns branch-specific fields; shared selection context is stored once.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Escape remains in the union and question wording is not replaced by a hidden repository-specific prompt.
+   * @evidence contracts/common.md#meaningful-documentation Native member comments explain question preservation, draft correction and one final branch.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IProps {
     /**
      * The code question, in the user's own words.
@@ -154,7 +184,18 @@ export namespace ITtscGraphApplication {
       | ITtscGraphEscape.IRequest;
   }
 
-  /** First-pass plan; `reason` precedes `type` so it is written first. */
+  /**
+   * First-pass plan; `reason` precedes `type` so it is written first.
+   *
+   * @evidence contracts/common.md#principled-implementation Reason explains selection while the request-indexed type union restricts the proposed operation to a supported branch.
+   * @evidence contracts/common.md#clear-and-simple-design Two fields represent the draft without copying branch inputs before review.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts The proposed operation remains caller-authored rather than a forced first call.
+   * @evidence contracts/common.md#meaningful-documentation Native comments explain the selection reason and proposed request type in separate member blocks.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IDraft {
     /** Why this is the smallest useful next step. */
     reason: string;
@@ -163,22 +204,35 @@ export namespace ITtscGraphApplication {
     type: IProps["request"]["type"];
   }
 
-  /** The selected request's output. `result.type` mirrors `request.type`. */
+  /**
+   * The selected request's output. `result.type` mirrors `request.type`.
+   *
+   * @evidence contracts/common.md#principled-implementation Audit, next decision and discriminated result preserve different roles: provenance report, supported follow-up and graph facts.
+   * @evidence contracts/common.md#clear-and-simple-design Shared audit/control fields wrap the existing result branches without duplicating their contents.
+   * @evidence contracts/common.md#prohibited-implementation-shortcuts Ranked selection is explicitly heuristic and cannot be certified complete merely by valid node facts.
+   * @evidence contracts/common.md#meaningful-documentation Separate native paragraphs explain operation-aware audit and ranked coverage; member comments define next and matching result branch.
+   * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources data shape only: it holds no handle, task or retained state.
+   * @evidenceExclude contracts/performance.md#efficient-algorithms data shape only: it contains no loop or algorithm.
+   * @evidenceExclude contracts/performance.md#reuse-equivalent-work data shape only: it computes nothing another request could share.
+   * @evidenceExclude contracts/portability.md#os-neutral-implementation data shape only: it touches no file, path or process.
+   */
   export interface IOutput {
     /**
-     * What the server audited this result against before returning it, in its
-     * own words: every node, span, edge, signature, member, and step in it
-     * resolves to the type-checked program for the snapshot the call synced to,
-     * so opening a file it cites only returns a fact already in it.
+     * The provenance and coverage of the returned projection. Compiler facts
+     * belong to the synchronized program; file containers, containment,
+     * property kinds, path-convention test roles and dispatch hops are server-derived structure. Artifact
+     * facts come from the publishing lint plugin. This text reports those
+     * origins without claiming a second compiler verification pass.
      *
      * The audit is operation-aware. For the walks from a named handle (`trace`,
      * `overview`) it reports the result as the structure the graph holds,
-     * bounded where `truncated` says. For `details` it reports the two halves of
-     * a resolved symbol: its own shape returned whole, its fan-out returned as a
-     * slice with `trace` for the rest. For the ranked operations (`lookup`,
-     * `entrypoints`, `tour`) it adds that the selection is heuristic — matched,
-     * scored, ranked, and limited against the question — so the facts are
-     * verified but the shortlist's coverage is the caller's to judge.
+     * bounded where `truncated` says. For `details` it reports the two halves
+     * of a resolved symbol: its own shape returned whole, its fan-out returned
+     * as a slice with `trace` for the rest. For the ranked operations
+     * (`lookup`, `entrypoints`, `tour`) it adds that the selection is heuristic
+     * — matched, scored, ranked, and limited against the question — so the
+     * facts are verified but the shortlist's coverage is the caller's to
+     * judge.
      */
     audit: string;
 

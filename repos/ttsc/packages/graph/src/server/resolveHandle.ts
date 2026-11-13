@@ -1,13 +1,12 @@
 import { TtscGraphMemory } from "../model/TtscGraphMemory";
 import { parseTtscGraphNodeId } from "../model/TtscGraphNodeId";
-import { ITtscGraphNode } from "../structures/ITtscGraphNode";
+import { TtscGraphReadonly } from "../model/TtscGraphReadonly";
+import { ITtscGraphNode as NodeShape } from "../structures/ITtscGraphNode";
+import type { IResolvedGraphHandle } from "./IResolvedGraphHandle";
 import { exportFanIn } from "./exportSurface";
 import { isSupportPath } from "./pathPolicy";
 
-export interface IResolvedGraphHandle {
-  node?: ITtscGraphNode;
-  candidates?: ITtscGraphNode[];
-}
+type ITtscGraphNode = TtscGraphReadonly<NodeShape>;
 
 /**
  * Resolve a tool handle as an id, an exact symbol name, a dotted suffix, or a
@@ -34,6 +33,15 @@ export interface IResolvedGraphHandle {
  *   method (`db.query`, `app.listen`, `repo.save`), so the member is what it
  *   means, and the candidates come back ranked when several classes declare
  *   it.
+ *
+ * @evidence contracts/common.md#principled-implementation Exact id/name resolution precedes suffix and file/member fallbacks; unique outcomes preserve identity while multiple matches remain candidates.
+ * @evidence contracts/common.md#clear-and-simple-design Resolution helpers each own one handle form and one shared ranker orders ambiguity consistently.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts General handle grammar and compiler export edges guide fallback, not repository-specific expected symbol lists.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs describe supported stale-id, file-qualified and value-receiver spellings plus preserved ambiguity.
+ * @evidence contracts/performance.md#efficient-algorithms Exact id and symbol probes use generation indexes; a dotted-suffix miss can scan V nodes and collect C matches, while ranking their indexed edge neighborhoods retains the best K in O(CK) time and O(K) additional space for the normal small cap.
+ * @evidence contracts/performance.md#reuse-equivalent-work The graph shares id, symbol and adjacency indexes across handle resolutions; each call ranks a fresh candidate set because the spelling and requested limit can differ.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Candidate lists are request-local and returned to the caller; the resolver retains no history, handle or running task.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation looks handles up in in-memory indexes; a path part of an id is matched as text.
  */
 export function resolveGraphHandle(
   graph: TtscGraphMemory,
@@ -142,15 +150,38 @@ function rank(
   candidateLimit: number,
 ): IResolvedGraphHandle {
   if (resolved.candidates === undefined) return resolved;
-  const ranked = resolved.candidates
-    .map((node) => ({ node, score: candidateScore(graph, node) }))
-    .sort((a, b) => {
-      const score = b.score - a.score;
-      return score !== 0 ? score : compareIdentity(a.node.id, b.node.id);
-    })
-    .slice(0, candidateLimit)
-    .map(({ node }) => node);
-  return { candidates: ranked };
+  const candidates = resolved.candidates;
+  const cap = Math.trunc(candidateLimit);
+  const compare = (
+    a: { node: ITtscGraphNode; score: number },
+    b: { node: ITtscGraphNode; score: number },
+  ): number => {
+    const score = b.score - a.score;
+    return score !== 0 ? score : compareIdentity(a.node.id, b.node.id);
+  };
+  // Large or unusual public caps retain Array.slice semantics; the normal
+  // small cap need not sort every ambiguous declaration in the project.
+  if (!Number.isFinite(cap) || cap < 0 || cap > 32) {
+    return {
+      candidates: candidates
+        .map((node) => ({ node, score: candidateScore(graph, node) }))
+        .sort(compare)
+        .slice(0, candidateLimit)
+        .map(({ node }) => node),
+    };
+  }
+  const ranked: Array<{ node: ITtscGraphNode; score: number }> = [];
+  for (const node of candidates) {
+    const item = { node, score: candidateScore(graph, node) };
+    const position = ranked.findIndex((other) => compare(item, other) < 0);
+    if (position < 0) {
+      if (ranked.length < cap) ranked.push(item);
+    } else if (position < cap) {
+      ranked.splice(position, 0, item);
+      if (ranked.length > cap) ranked.pop();
+    }
+  }
+  return { candidates: ranked.map(({ node }) => node) };
 }
 
 /** Compare position-invariant ids without locale-dependent collation. */

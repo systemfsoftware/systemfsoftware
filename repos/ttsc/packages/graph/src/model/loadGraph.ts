@@ -1,31 +1,24 @@
-import { spawnSync } from "node:child_process";
 import typia from "typia";
 
+import { GraphProcessTrace } from "../internal/GraphProcessTrace";
+import { InstalledGraphBinary } from "../internal/InstalledGraphBinary";
 import { captureProcessOutput, ensureExecutable } from "../nativeExecutable";
 import { resolveGraphBinary } from "../resolveGraphBinary";
 import { ITtscGraphDump } from "../structures/ITtscGraphDump";
 import { TtscGraphMemory } from "./TtscGraphMemory";
+import { TtscGraphNativeArguments } from "./TtscGraphNativeArguments";
 import { publishArtifacts } from "./publishedArtifacts";
 
 /**
  * The dump schema version this client reads.
  *
  * Keep it equal to `DumpSchemaVersion` in
- * `packages/ttsc/internal/graph/provenance.go`. The two are hand-synchronized,
- * and `dump_schema_version_matches_the_typescript_client_test.go` reads this
- * constant out of this file and fails if the pair drifts.
+ * `packages/ttsc/internal/graph/provenance.go`. The two are hand-synchronized.
  *
  * Exported because the resident session reads the same dump body over the serve
  * protocol and has to hold it to the same number: the envelope's version and
  * the body's are independent, so a producer can speak this protocol and still
  * send a body from another schema.
- *
- * `scripts/assert-ttscgraph-release-candidate.cjs` reads this declaration out
- * of this file with a regular expression, because it runs against a packaged
- * binary in a workflow that has no reason to have built this package first.
- * Rewriting the declaration — adding a type annotation, splitting the line —
- * makes that script fail loudly rather than silently, and its message names
- * this constant; update its pattern with any such change.
  */
 export const DUMP_SCHEMA_VERSION = 8;
 
@@ -38,33 +31,45 @@ export const DUMP_SCHEMA_VERSION = 8;
  * Throws when the binary cannot be resolved, the dump command fails, or its
  * output is not a readable graph — the server surfaces the failure rather than
  * answering from an empty graph.
+ *
+ * @evidence contracts/common.md#principled-implementation The selected native producer builds the target project and its JSON is schema-version checked and structurally validated before model construction.
+ * @evidence contracts/common.md#clear-and-simple-design One-shot process execution, capture ownership and parse validation have separate helpers; the resident MCP path remains a different lifetime owner.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Failed resolution or native execution throws rather than returning an invented empty graph.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs state direct/viewer usage, project/binary defaults and every externally visible failure boundary.
+ * @evidence contracts/portability.md#os-neutral-implementation Native argv carries cwd, tsconfig and artifact paths without a shell; installation-anchored binary resolution and permission repair account for host execution differences.
+ * @evidence contracts/performance.md#efficient-algorithms One native dump is followed by linear JSON parsing/validation and model indexing; output is file-backed rather than constrained by a guessed pipe budget.
+ * @evidence contracts/performance.md#reuse-equivalent-work Direct loads intentionally build the requested current project anew; callers needing repeated equivalent snapshots use TtscGraphSession's resident producer and model.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources The operation owns two capture descriptors until the finally block disposes them; returned graph ownership transfers to the caller, while artifact storage remains process/project scoped.
  */
 export function loadGraph(
   options: {
     /** Project root the graph is built for (default: `process.cwd()`). */
     cwd?: string;
+
     /** Project tsconfig, relative to `cwd` (default: `tsconfig.json`). */
     tsconfig?: string;
+
+    /** Upstream mapper permission; explicit false overrides inherited flags. */
+    runExternalCode?: boolean;
+
     /**
      * Absolute path to the `ttscgraph` binary. Defaults to the per-platform
-     * binary resolved from the project's installed `ttsc`; pass it explicitly
-     * to point at a custom build.
+     * binary installed with `@ttsc/graph`; pass it explicitly to point at a
+     * custom build.
      */
     binary?: string;
   } = {},
 ): TtscGraphMemory {
   const cwd = options.cwd ?? process.cwd();
   const tsconfig = options.tsconfig ?? "tsconfig.json";
-  // Resolve the platform binary from the selected project cwd, not the caller's
-  // process directory, so a one-shot load names its own installation.
+  const permission = TtscGraphNativeArguments.permission(
+    options.runExternalCode,
+  );
+  // The producer belongs to this package's installation; the selected project
+  // becomes the native process's --cwd and, by its TypeScript line, picks
+  // which of the installation's producers runs.
   const binary = options.binary ?? resolveGraphBinary(process.env, cwd);
-  if (binary === null) {
-    throw new Error(
-      "@ttsc/graph: could not resolve the ttscgraph binary. " +
-        "Install `ttsc` so its platform package is present, " +
-        "or set TTSC_GRAPH_BINARY to an absolute path.",
-    );
-  }
+  if (binary === null) throw new Error(InstalledGraphBinary.missingMessage());
   ensureExecutable(binary);
 
   // The dump goes to a file rather than a pipe, so no output ceiling applies:
@@ -79,8 +84,12 @@ export function loadGraph(
     // before the dump runs, so the producer can resolve a documentation target
     // into a relation rather than leaving it a token. A project with no lint
     // install, or none that publishes, contributes no file and no claim.
-    const artifacts = publishArtifacts({ cwd, tsconfig });
-    result = spawnSync(
+    const artifacts = publishArtifacts({
+      cwd,
+      tsconfig,
+      runExternalCode: options.runExternalCode,
+    });
+    result = GraphProcessTrace.spawnSync(
       binary,
       [
         "dump",
@@ -89,6 +98,7 @@ export function loadGraph(
         "--tsconfig",
         tsconfig,
         ...(artifacts.file === null ? [] : ["--artifacts", artifacts.file]),
+        ...permission,
       ],
       {
         stdio: ["ignore", capture.stdoutFd, capture.stderrFd],
@@ -126,6 +136,15 @@ export function loadGraph(
  * outlives the process that wrote it — this is the one-shot path, and the JSON
  * on disk may be from any build — so the version is the first question to ask
  * of it.
+ *
+ * @evidence contracts/common.md#principled-implementation Parsing to unknown, reading schema version first and then asserting the full wire type reject mismatched producers before interpreting their shape.
+ * @evidence contracts/common.md#clear-and-simple-design This boundary owns dump decoding and validation for direct loads; model construction remains separate.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Malformed JSON and incompatible schemas do not become empty or partially trusted graph facts.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs explain version-before-shape ordering and why persisted dumps require independent validation.
+ * @evidence contracts/performance.md#efficient-algorithms JSON parsing and shape validation process the dump once before model indexing; cost grows with serialized bytes and graph facts.
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work This parser validates a supplied exchange string; loadGraph/session own producer sharing and generation identity.
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources Parsed data transfers to TtscGraphMemory; this operation acquires no native handle or historical cache.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation Parsing serialized graph facts performs no native filesystem or process operation.
  */
 export function parseDump(json: string): ITtscGraphDump {
   let value: unknown;
@@ -148,8 +167,7 @@ export function parseDump(json: string): ITtscGraphDump {
       `@ttsc/graph: ttscgraph dump is schema ${
         version === undefined ? "unknown" : `v${String(version)}`
       }, this client reads v${String(DUMP_SCHEMA_VERSION)}. ` +
-        "Install a matching `ttsc` (the binary resolves from the target " +
-        "project, or from TTSC_GRAPH_BINARY).",
+        InstalledGraphBinary.MISMATCH_REMEDY,
     );
   }
   try {

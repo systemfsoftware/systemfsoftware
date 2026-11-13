@@ -1,0 +1,1102 @@
+import path from "node:path";
+import { type ITtscCompilerTransformation, TtscCompiler } from "ttsc";
+import { compilerUsesCaseSensitiveFileNames } from "ttsc/tsconfig";
+
+import type { ResolvedTtscUnpluginOptions } from "../../options/ResolvedTtscUnpluginOptions";
+import { traceInvocation } from "../../tracing/traceInvocation";
+import type { ITtscProjectMembershipPolicy } from "../../tsconfig/ITtscProjectMembershipPolicy";
+import { mergeMembershipPolicyOverlay } from "../../tsconfig/mergeMembershipPolicyOverlay";
+import { readTsconfigSourceSnapshot } from "../../tsconfig/readTsconfigSourceSnapshot";
+import { TRANSFORM_RESULT_FILESYSTEM } from "../cache/TRANSFORM_RESULT_FILESYSTEM";
+import { TRANSFORM_RESULT_MEMBERSHIP } from "../cache/TRANSFORM_RESULT_MEMBERSHIP";
+import type { TtscCachedProjectTransform } from "../cache/TtscCachedProjectTransform";
+import { refreshFilesystemClockReference } from "../clock/refreshFilesystemClockReference";
+import { reportDivergentDelivery } from "../diagnostics/reportDivergentDelivery";
+import { envelopeDerivation } from "../envelope/envelopeDerivation";
+import { envelopeGraphIndexes } from "../envelope/envelopeGraphIndexes";
+import { generationCaseSensitivity } from "../envelope/generationCaseSensitivity";
+import { selectDeclaredProjectInputKeys } from "../envelope/selectDeclaredProjectInputKeys";
+import { selectExternalInputPaths } from "../envelope/selectExternalInputPaths";
+import { selectNotifiableAbsentInputs } from "../envelope/selectNotifiableAbsentInputs";
+import { selectPluginSourceInputs } from "../envelope/selectPluginSourceInputs";
+import type { TtscTransformFilesystemOperations } from "../filesystem/TtscTransformFilesystemOperations";
+import { createHostPathIdentityContext } from "../filesystem/createHostPathIdentityContext";
+import { preparePluginBuildEnvironments } from "../inputs/preparePluginBuildEnvironments";
+import { collectProjectInputSnapshot } from "../project/collectProjectInputSnapshot";
+import { toProjectKey } from "../project/toProjectKey";
+import { TRANSFORM_ADOPTED_RESULTS } from "../session/TRANSFORM_ADOPTED_RESULTS";
+import type { TtscSharedCompileClaim } from "../session/TtscSharedCompileClaim";
+import { adoptedExternalInputMismatch } from "../session/adoptedExternalInputMismatch";
+import { claimSharedCompile } from "../session/claimSharedCompile";
+import { sharedCompileIdentity } from "../session/sharedCompileIdentity";
+import { sharedCompileState } from "../session/sharedCompileState";
+import type { TtscProjectMutationTracker } from "../tracker/TtscProjectMutationTracker";
+import { createHostInputMutationTracker } from "../tracker/createHostInputMutationTracker";
+import { createProjectMutationTracker } from "../tracker/createProjectMutationTracker";
+import { settleMutationTrackers } from "../tracker/settleMutationTrackers";
+import { trackedInputScopes } from "../tracker/trackedInputScopes";
+import { captureCompilerArguments } from "../tsconfig/captureCompilerArguments";
+import { compilerProjectSpelling } from "../tsconfig/compilerProjectSpelling";
+import { createTransformScratchDirectory } from "../tsconfig/createTransformScratchDirectory";
+import { createTransformTsconfig } from "../tsconfig/createTransformTsconfig";
+import { readTransformTsconfigState } from "../tsconfig/readTransformTsconfigState";
+import { transformScratchEnvironment } from "../tsconfig/transformScratchEnvironment";
+import { hashText } from "../utils/hashText";
+import { captureExternalInputSnapshot } from "../validation/captureExternalInputSnapshot";
+import { captureUniversalHostInputValidation } from "../validation/captureUniversalHostInputValidation";
+import { compilerGraphInputProofFailures } from "../validation/compilerGraphInputProofFailures";
+import { restrictNotificationCoverageToProvenInputs } from "../validation/restrictNotificationCoverageToProvenInputs";
+import { walkSnapshotComplete } from "../validation/walkSnapshotComplete";
+import { witnessExternalDependencies } from "../validation/witnessExternalDependencies";
+import { TRANSFORM_FAILED_GENERATION_VALIDATIONS } from "./TRANSFORM_FAILED_GENERATION_VALIDATIONS";
+import { TRANSFORM_GENERATION_FAILURES } from "./TRANSFORM_GENERATION_FAILURES";
+import type { TtscCompilerMembershipHint } from "./TtscCompilerMembershipHint";
+import { canDeliverCompilerSnapshot } from "./canDeliverCompilerSnapshot";
+import { captureFailedGenerationInputStates } from "./captureFailedGenerationInputStates";
+import { captureTransformSourceHashes } from "./captureTransformSourceHashes";
+import { compilerSnapshotFailureClassifier } from "./compilerSnapshotFailureClassifier";
+import { createGenerationProofFailures } from "./createGenerationProofFailures";
+import { mergeGenerationProofFailures } from "./mergeGenerationProofFailures";
+import { primeCompilerMembership } from "./primeCompilerMembership";
+import { projectWalkFailureFingerprint } from "./projectWalkFailureFingerprint";
+import { projectWalkStable } from "./projectWalkStable";
+import { recordGenerationProofFailure } from "./recordGenerationProofFailure";
+import { recordProjectSnapshotFailures } from "./recordProjectSnapshotFailures";
+import { releaseCaptureResources } from "./releaseCaptureResources";
+import {
+  generationNotificationsAvailable,
+  retainGenerationNotifications,
+} from "./retainGenerationNotifications";
+import { selectPersistentHostInputs } from "./selectPersistentHostInputs";
+import { selectReportedMembershipPolicy } from "./selectReportedMembershipPolicy";
+import { transferCaptureClockReference } from "./transferCaptureClockReference";
+
+const TTSC_SEMANTIC_CONFIG_PATH = "TTSC_SEMANTIC_CONFIG_PATH";
+
+/**
+ * Capture one whole-project transform attempt and all of its reuse proofs.
+ *
+ * Its place in the adapter's invalidation model, and the units beside it, are
+ * mapped in the maintainer page
+ * `website/src/content/docs/development/reference/unplugin-invalidation.mdx`.
+ *
+ * Project walks bracket the compiler; an available compile-time tracker adds an
+ * independent mutation witness. Reported graph/external/host proofs must agree
+ * before a successful generation can be published. Retained observers and the
+ * clock probe transfer only with a returned capture; the finally chain attempts
+ * cleanup of other resources and always releases claim ownership. Native
+ * removal failures can leave storage even after ownership ends.
+ *
+ * @evidence contracts/common.md#principled-implementation Before/after walk agreement, compiler graph read proofs, external dependency witnesses and host validation jointly establish the captured generation's supported reuse premises; adopted publications are validated against their recorded external state on this worker's disk.
+ * @evidence contracts/common.md#clear-and-simple-design One capture owns the compile window and final resource handoff, delegating config overlays, shared compile claiming, input selection, proof composition and tracker operations to their owning helpers.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Scratch config preserves compiler physical anchoring instead of compensating path guesses; local plugin dependencies require pre-compile witnesses, and adopted dependencies match the publisher's recorded state. Unverifiable graph or host input cannot be upgraded to success by a quiet post-compile watcher.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs describe capture proofs and ownership transfer, inline comments explain temporal boundaries and publication policy, and separated props identify inherited facts and host capabilities. The existing proof event also records whether this cache retained native link and raw-name replay capabilities; it observes the supplied table without adding filesystem reads or certifying a proof.
+ * @evidence contracts/portability.md#os-neutral-implementation compilerProjectSpelling anchors physical config meaning, the supplied filesystem owns native observations and tracker capabilities, reported case policy governs membership and transformScratchEnvironment isolates worker environment without mutating host globals.
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Complete pre/post walks pay admitted directory-entry, metadata and file-byte
+ *   work because current declared inputs are learned from this compile. Config
+ *   inheritance/overlay, graph normalization, source baselines and external/host
+ *   proof replay additionally scale with their entries, paths, lists and bytes.
+ *   Set unions deduplicate tracker inputs, and absence selection runs only for
+ *   retained notification use. Native compiler/toolchain work stays delegated;
+ *   context/output transfer and session serialization retain payload costs.
+ *   Both snapshots, proof maps, unions and enumerated-directory set are
+ *   population-sized, independent of the eight retained diagnostic witnesses.
+ *   Enabled private tracing serializes actual invocation, proof premises,
+ *   bounded failure witnesses, tracker roles, release outcomes and publication
+ *   admission through the existing trace sink. Key lists, collected walk
+ *   failures/unstable keys and retained
+ *   tracker witnesses contribute payload cost; these diagnostic copies do not
+ *   repeat native proof. A publication attempt does not establish that its
+ *   store write completed; a resource-release return does not certify every
+ *   backend close or any OS descendant's termination.
+ * @evidence contracts/performance.md#reuse-equivalent-work Complete project state and compile identity coordinate session publication, immutable envelope derivation shares selectors, and a reusable generation transfers captured baselines/observers so later module deliveries avoid equivalent whole-project compilation.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   Snapshot and result storage grow with observed inputs/output bytes; native
+ *   trackers follow admitted directory populations. Compiler/environment worker
+ *   and store owners govern awaited tasks, with no cancellation deadline added
+ *   here. Finally attempts every untransferred tracker closure, scratch removal
+ *   and probe disposal; cleanup failure attempts pending transferred closures
+ *   and preserves an earlier capture error. Native deletion is not guaranteed.
+ *   Only a returned capture receives retained observer/probe ownership; claim
+ *   release stops its heartbeat even when best-effort lock removal fails.
+ */
+export async function captureTransformGeneration(props: {
+  /** Adapter alias paths translated into the transform config overlay. */
+  aliasPaths: Record<string, string[]>;
+
+  /** Compiler options overlaid on the project without editing its source config. */
+  compilerOptions: Record<string, unknown>;
+
+  /** Detached environment paired with the requesting generation's cache key. */
+  compilerEnvironment?: NodeJS.ProcessEnv;
+  /** Explicit override that produced the effective compiler environment. */
+  runExternalCode?: boolean;
+
+  /** Learned native root settings used only to prime this attempt's walk. */
+  compilerMembership?: TtscCompilerMembershipHint;
+
+  /** Native source path whose host delivery initiated the attempt. */
+  currentFile: string;
+
+  /** Host-delivered text compared with the compiler's on-disk source baseline. */
+  currentSource: string;
+
+  /** False for preparation, whose source read is not a host module delivery. */
+  reportDivergence?: boolean;
+
+  /** Optional delivery epoch to which this captured observation belongs. */
+  deliveryEpoch?: number;
+
+  /** Host operations used by walks, identity probes and observer construction. */
+  filesystem: TtscTransformFilesystemOperations;
+
+  /** Native compiler plugins selected for this attempt. */
+  plugins?: ResolvedTtscUnpluginOptions["plugins"];
+
+  /** Common source root, distinct from the original config's plugin anchor. */
+  projectRoot?: string;
+
+  /** Whether complete proof may transfer membership observers to the generation. */
+  retainProjectMembership: boolean;
+
+  /**
+   * Whether the generation may keep watchers whose silence stands in for
+   * re-reading its inputs. False once the host or the environment declares
+   * polling (samchon/ttsc#1395); the generation then validates every delivery
+   * against its recorded state.
+   */
+  retainNotifications: boolean;
+
+  /**
+   * The pooled host session's shared compile store, when the cache shares its
+   * compiles (samchon/ttsc#1390). The attempt then takes another worker's
+   * compile of the same project state, or compiles under the session's lock and
+   * publishes its compile once proven.
+   */
+  session?: string;
+
+  /**
+   * Digest of the exact publication refuted by an earlier attempt. A claim
+   * excludes those bytes but can prove a replacement under the same state;
+   * without an eligible publication it compiles under the existing lock.
+   */
+  rejected?: string;
+
+  /** Whether a project observer should witness mutation during compilation. */
+  trackProjectMembership: boolean;
+
+  /** Native project config named before any generated overlay is materialized. */
+  tsconfig: string;
+
+  /**
+   * Dependency-only paths an earlier compile of this project reported, read
+   * before this compile so the state read after it can be certified
+   * (samchon/ttsc#1541).
+   */
+  witnessedDependencies?: readonly string[];
+
+  /**
+   * The case policy an earlier compile of this project reported
+   * (samchon/ttsc#1545), which primes this attempt's walk before its own
+   * compile reports one.
+   */
+  useCaseSensitiveFileNames?: boolean;
+}): Promise<TtscCachedProjectTransform> {
+  const projectRoot = props.projectRoot ?? path.dirname(props.tsconfig);
+  const scratchDirectory = createTransformScratchDirectory(
+    projectRoot,
+    props.filesystem,
+  );
+  let clockReferenceDirectory: string | undefined;
+  let retainClockReferenceDirectory = false;
+  let tracker: TtscProjectMutationTracker | undefined;
+  let retainTracker = false;
+  let hostInputTracker: TtscProjectMutationTracker | undefined;
+  let candidateTracker: TtscProjectMutationTracker | undefined;
+  let retainHostInputTracker = false;
+  let retainCandidateTracker = false;
+  let sharedClaim:
+    | Extract<TtscSharedCompileClaim, { kind: "compile" }>
+    | undefined;
+  let captured: TtscCachedProjectTransform | undefined;
+  let captureFailed = false;
+  const compileTrace = traceInvocation();
+  try {
+    if (props.retainProjectMembership) {
+      try {
+        clockReferenceDirectory = createTransformScratchDirectory(
+          projectRoot,
+          props.filesystem,
+        );
+      } catch {
+        // A retained probe is an optimization. The live compiler scratch can
+        // still authorize capture, and later validations will compare bytes.
+      }
+    }
+    const materializesConfig =
+      Object.keys(props.compilerOptions).length !== 0 ||
+      Object.keys(props.aliasPaths).length !== 0;
+    // The shared selector's current config address anchors wrapper values and
+    // the plugin config. Physical lookup is best effort; lexical fallback or
+    // a later retarget is not ruled out by this projection (samchon/ttsc#1456).
+    const compilerProject = compilerProjectSpelling(
+      props.tsconfig,
+      projectRoot,
+    );
+    const tsconfigState = readTransformTsconfigState(
+      props.tsconfig,
+      materializesConfig,
+      compilerProject.configDir,
+    );
+    const configured = createTransformTsconfig(
+      props,
+      scratchDirectory,
+      tsconfigState,
+      compilerProject,
+    );
+    const temporaryTsconfig =
+      configured.path === props.tsconfig ? undefined : configured.path;
+    const compilerEnvironment = transformScratchEnvironment(
+      scratchDirectory,
+      props.compilerEnvironment,
+    );
+    if (temporaryTsconfig === undefined) {
+      delete compilerEnvironment[TTSC_SEMANTIC_CONFIG_PATH];
+    } else {
+      // The program's config path is the project's own config, spelled as the
+      // compiler would have spelled it had it been given that config directly.
+      compilerEnvironment[TTSC_SEMANTIC_CONFIG_PATH] = compilerProject.tsconfig;
+    }
+    const identities = createHostPathIdentityContext(props.filesystem);
+    // Read from the project's own tsconfig rather than the generated one: a
+    // relative `outDir` is anchored at the config that declares it, and the
+    // generated config lives in a system temp directory. The caller's
+    // compiler-options overlay still wins, since it wins for the compile too.
+    const membershipPrimer = primeCompilerMembership(
+      mergeMembershipPolicyOverlay(
+        tsconfigState.membershipPolicy,
+        props.compilerOptions,
+        path.dirname(props.tsconfig),
+      ),
+      props.compilerMembership,
+    );
+    const mergedPolicy = membershipPrimer.policy;
+    // The walk before the compile matches root specs under the case policy an
+    // earlier compile reported, or a provisional cache-root approximation
+    // under this attempt's environment. The approximation does not observe
+    // the executable's actual answer; a differing report below refuses this
+    // primed walk and supplies the retry's comparison rule.
+    const primedPolicy: ITtscProjectMembershipPolicy & {
+      useCaseSensitiveFileNames: boolean;
+    } = {
+      ...mergedPolicy,
+      useCaseSensitiveFileNames:
+        props.useCaseSensitiveFileNames ??
+        compilerUsesCaseSensitiveFileNames({
+          env: compilerEnvironment,
+          projectRoot,
+        }),
+    };
+    const before = collectProjectInputSnapshot(
+      projectRoot,
+      identities,
+      props.filesystem,
+      undefined,
+      { policy: primedPolicy },
+    );
+    tracker = props.trackProjectMembership
+      ? await createProjectMutationTracker(
+          before.projectDirectories,
+          new Set(
+            Object.keys(before.hashes)
+              .filter((key) => !before.notificationUnsafeInputs.has(key))
+              .map((key) => path.resolve(projectRoot, key)),
+          ),
+          props.filesystem,
+          primedPolicy,
+        )
+      : undefined;
+    compileTrace?.("bridge-tracker-lifecycle", {
+      pid: process.pid,
+      cwd: projectRoot,
+      data: {
+        phase: "before-compile-or-adoption",
+        role: "project",
+        constructed: tracker !== undefined,
+        tracker:
+          tracker === undefined
+            ? null
+            : {
+                changes: [...tracker.changes],
+                changesOmitted: tracker.changesOmitted,
+                membershipChanged: tracker.membershipChanged,
+              },
+      },
+    });
+    // Plugin-only paths carry no recorded compiler-time reads. Capture their
+    // precompile endpoints for postcompile admission comparisons; matching
+    // endpoints do not independently certify every intervening state
+    // (samchon/ttsc#1541).
+    const dependencyWitness = witnessExternalDependencies(
+      props.witnessedDependencies ?? [],
+      props.filesystem,
+    );
+    // A pooled worker takes another worker's compile of exactly this project
+    // state instead of compiling the whole project again (samchon/ttsc#1390).
+    // Only a complete snapshot names a state. The adopted envelope is then
+    // proven below like one compiled here, against this worker's own
+    // filesystem and inside the window its tracker already watches.
+    const state =
+      props.session !== undefined && before.complete
+        ? sharedCompileState({
+            directories: before.projectDirectories,
+            hashes: before.hashes,
+            // The chain's own text when no wrapper derived a signature from
+            // it, since the walk hashes no config file.
+            tsconfigSignature:
+              tsconfigState.signature ??
+              hashText(
+                JSON.stringify(readTsconfigSourceSnapshot(props.tsconfig)),
+              ),
+          })
+        : undefined;
+    const claim =
+      props.session !== undefined && state !== undefined
+        ? await claimSharedCompile(
+            props.session,
+            sharedCompileIdentity({ ...props, projectRoot }),
+            state,
+            {
+              adopt: true,
+              environment: compilerEnvironment,
+              rejectedPublication: props.rejected,
+            },
+          )
+        : undefined;
+    if (claim?.kind === "compile") {
+      sharedClaim = claim;
+    }
+    const adopted = claim?.kind === "adopt" ? claim.publication : undefined;
+    // The envelope names paths in the scratch directory of whoever compiled
+    // it, and those are what the input selectors below must exclude.
+    const envelopeScratchDirectory =
+      adopted?.scratchDirectory ?? scratchDirectory;
+    const envelopeTemporaryTsconfig =
+      adopted === undefined ? temporaryTsconfig : adopted.temporaryTsconfig;
+    // The compile runs on a worker thread under the compiler's environment,
+    // the host's with the scratch directory as its temporary directory, so the
+    // scratch covers the whole compile while the host's own environment is
+    // never touched (samchon/ttsc#1488), and the host keeps serving other work
+    // while it runs (samchon/ttsc#1391).
+    let result: ITtscCompilerTransformation;
+    if (adopted !== undefined) {
+      result = adopted.result;
+      compileTrace?.("bridge-cache-hit", {
+        pid: process.pid,
+        cwd: projectRoot,
+        data: {
+          operation: "shared-compile-adoption",
+          tsconfig: configured.path,
+        },
+      });
+    } else {
+      compileTrace?.("bridge-lookup", {
+        pid: process.pid,
+        cwd: projectRoot,
+        data: {
+          operation: "TtscCompiler.transformAsync",
+          tsconfig: configured.path,
+        },
+      });
+      try {
+        result = await new TtscCompiler({
+          cwd: projectRoot,
+          // The generated tsconfig (if any) lives outside the project directory,
+          // so declare the real project as the plugin config anchor: utility
+          // plugin config discovery (banner.config.*, strip.config.*,
+          // lint.config.*) and relative configFile resolution walk the project,
+          // never the temp tree. In the passthrough case this equals the
+          // tsconfig's own directory, the default anchor, spelled as the
+          // compiler spells it.
+          pluginConfigDir: compilerProject.configDir,
+          plugins: props.plugins,
+          projectRoot,
+          tsconfig: configured.path,
+          env: compilerEnvironment,
+        }).transformAsync();
+        compileTrace?.("bridge-result", {
+          pid: process.pid,
+          data: {
+            outcome: "returned",
+            type: result.type,
+            ...(result.type === "exception" ? { error: result.error } : {}),
+            projectRoot,
+            tsconfig: configured.path,
+            currentFile: props.currentFile,
+            pluginConfigDir: compilerProject.configDir,
+          },
+        });
+      } catch (error) {
+        compileTrace?.("bridge-result", {
+          pid: process.pid,
+          data: { outcome: "threw", error },
+        });
+        throw error;
+      }
+    }
+    TRANSFORM_RESULT_FILESYSTEM.set(result, props.filesystem);
+    // Everything after the compile matches under the case policy the compiler
+    // reported. A walk before it that primed another policy described another
+    // membership, so the attempt is taken again under the reported one.
+    // Prepare native toolchain authority before post-compile admission. Its
+    // cold subprocess and SDK reads stay off this host's event loop, and the
+    // config/walk/notification checks below include that asynchronous window.
+    await preparePluginBuildEnvironments(
+      result,
+      props.filesystem,
+      undefined,
+      projectRoot,
+    );
+    const { membershipPolicy, membershipPolicyLearned } =
+      selectReportedMembershipPolicy(primedPolicy, result);
+    TRANSFORM_RESULT_MEMBERSHIP.set(result, {
+      // Only the actual complete directory walk authorizes replacing a listing
+      // with program membership. A policy match cannot prove that a linked or
+      // unreadable directory was enumerated, and a changed compiler comparison
+      // answer means the primed walk used another admission policy.
+      enumeratedDirectories:
+        before.directoryComplete && !membershipPolicyLearned
+          ? new Set(before.projectDirectories.map((snapshot) => snapshot.path))
+          : new Set(),
+      policy: membershipPolicy,
+      projectRoot,
+    });
+    const configStable =
+      tsconfigState.signature === undefined ||
+      tsconfigState.signature ===
+        readTransformTsconfigState(
+          props.tsconfig,
+          true,
+          compilerProject.configDir,
+        ).signature;
+    // Mint the generation's clock reference after the compile and before any
+    // signature-recording read below, so every input written before the
+    // compile sits in a provably finished tick when its signature is captured.
+    refreshFilesystemClockReference(
+      clockReferenceDirectory ?? scratchDirectory,
+      props.filesystem,
+    );
+    // Every context capturing this generation below shares the generation's
+    // directory case answers, rather than each asking again (samchon/ttsc#1742).
+    const generationCase = generationCaseSensitivity({
+      filesystem: props.filesystem,
+      projectRoot,
+      result,
+    });
+    const persistentHostInputs = selectPersistentHostInputs({
+      filesystem: props.filesystem,
+      projectRoot,
+      result,
+      scratchDirectory: envelopeScratchDirectory,
+      temporaryTsconfig: envelopeTemporaryTsconfig,
+    });
+    const externalInputPaths = selectExternalInputPaths({
+      filesystem: props.filesystem,
+      membershipPolicy,
+      projectRoot,
+      result,
+      scratchDirectory: envelopeScratchDirectory,
+      temporaryTsconfig: envelopeTemporaryTsconfig,
+    });
+    // A plugin's Go source is as universal an input as any host input, and the
+    // tracker watches it as a whole subtree (samchon/ttsc#1487).
+    const persistentValidationInputs = [
+      ...new Set([
+        ...persistentHostInputs,
+        ...externalInputPaths,
+        ...selectPluginSourceInputs(result).keys(),
+      ]),
+    ];
+    // The generation's absent resolution candidates, which get a watcher of
+    // their own below; watching one is what lets a delivery stop probing it
+    // (samchon/ttsc#1261). The validation manifest stays built from the
+    // universal inputs alone, so nothing else about a candidate changes.
+    //
+    // Derived only where a retained tracker could carry it: a build-scoped
+    // adapter keeps only the compile-time project observer, so probing every
+    // candidate here would be work whose answer nothing can later read.
+    const notifiableAbsence =
+      props.retainProjectMembership && props.retainNotifications
+        ? selectNotifiableAbsentInputs({
+            filesystem: props.filesystem,
+            projectRoot,
+            result,
+            scratchDirectory: envelopeScratchDirectory,
+            temporaryTsconfig: envelopeTemporaryTsconfig,
+          })
+        : { candidates: [], watched: [] };
+    hostInputTracker =
+      props.retainProjectMembership && props.retainNotifications
+        ? await createHostInputMutationTracker(
+            persistentValidationInputs,
+            props.filesystem,
+            // A universal input never reaches the per-input loop that consults a
+            // coverage claim: absent inputs use native candidate probes instead,
+            // re-resolving the recorded spelling on every required validation.
+            new Set(
+              persistentValidationInputs.map((input) => path.resolve(input)),
+            ),
+            "all",
+            projectRoot,
+            trackedInputScopes({
+              filesystem: props.filesystem,
+              inputs: persistentValidationInputs,
+              projectRoot,
+              result,
+            }),
+            generationCase,
+          )
+        : undefined;
+    compileTrace?.("bridge-tracker-lifecycle", {
+      pid: process.pid,
+      cwd: projectRoot,
+      data: {
+        phase: "after-envelope",
+        role: "host",
+        constructed: hostInputTracker !== undefined,
+        tracker:
+          hostInputTracker === undefined
+            ? null
+            : {
+                changes: [...hostInputTracker.changes],
+                changesOmitted: hostInputTracker.changesOmitted,
+                membershipChanged: hostInputTracker.membershipChanged,
+              },
+      },
+    });
+    // The candidates and the directories carrying them get their own tracker,
+    // listening for renames alone. Every event that can make one of these
+    // paths appear is a rename — the file itself, or a component of the path
+    // being created, replaced, or retargeted — so nothing is given up, while a
+    // backend that reports a write below a directory as a change to that
+    // directory's entry (Windows does) would otherwise replace the generation
+    // every time a bundler wrote inside `node_modules`.
+    const absentCandidates = new Set(notifiableAbsence.candidates);
+    candidateTracker =
+      notifiableAbsence.watched.length !== 0
+        ? await createHostInputMutationTracker(
+            notifiableAbsence.watched,
+            props.filesystem,
+            absentCandidates,
+            "rename",
+            projectRoot,
+            // The directories carrying a candidate matter only for being
+            // replaced or retargeted. A candidate itself is left to the
+            // tracker: absent, it is tracked as its first missing component,
+            // and present as a directory, which only a replacement can turn
+            // into the file the compiler asked for, it keeps every event
+            // below it. A recursive delete reports the children before the
+            // directory, and on Windows the directory's own event can still
+            // be in flight when a delivery reads the tracker.
+            new Map(
+              notifiableAbsence.watched
+                .filter((input) => !absentCandidates.has(input))
+                .map((input) => [path.resolve(input), "presence" as const]),
+            ),
+            generationCase,
+          )
+        : undefined;
+    compileTrace?.("bridge-tracker-lifecycle", {
+      pid: process.pid,
+      cwd: projectRoot,
+      data: {
+        phase: "after-envelope",
+        role: "candidate",
+        constructed: candidateTracker !== undefined,
+        tracker:
+          candidateTracker === undefined
+            ? null
+            : {
+                changes: [...candidateTracker.changes],
+                changesOmitted: candidateTracker.changesOmitted,
+                membershipChanged: candidateTracker.membershipChanged,
+              },
+      },
+    });
+    const inputSnapshot = collectProjectInputSnapshot(
+      projectRoot,
+      identities,
+      props.filesystem,
+      undefined,
+      { policy: membershipPolicy },
+    );
+    // Whether the recorded snapshot describes one coherent state of the
+    // project. A membership event during the compile taints it exactly like an
+    // unstable walk pair; whether notifications can be *opened* is a separate
+    // fact, tracked below, because a generation with no watcher is still
+    // provable from its own recorded state.
+    const declaredInputs = selectDeclaredProjectInputKeys({
+      identities,
+      projectInputHashes: inputSnapshot.hashes,
+      projectRoot,
+      result,
+      scratchDirectory: envelopeScratchDirectory,
+    });
+    // Only the tracker opened before the compile decides the verdict (see
+    // `projectWalkStable`). The host-input and candidate trackers are still
+    // settled here so a failed watcher is known before the generation is
+    // published.
+    await settleMutationTrackers([tracker, hostInputTracker, candidateTracker]);
+    const walkStable =
+      !membershipPolicyLearned &&
+      projectWalkStable({
+        before,
+        configStable,
+        declared: declaredInputs,
+        projectRoot,
+        snapshot: inputSnapshot,
+        tracker,
+      });
+    const notificationsAvailable = generationNotificationsAvailable(
+      tracker,
+      hostInputTracker,
+      candidateTracker,
+    );
+    // Ordinary stable captures use the disk baseline below; snapshot-only
+    // delivery later replaces it with the compiler's captured source hash.
+    // Delivered text that differs, because a plugin ordered
+    // before ttsc rewrote the module or the file changed after the host read
+    // it, must not replace them: every sibling delivery compares the disk and
+    // would recompile the project (samchon/ttsc#1394). An actual delivery is reported once
+    // instead, and the file's own compile is served.
+    const currentFileKey = toProjectKey(
+      projectRoot,
+      props.currentFile,
+      identities,
+    );
+    const deliveredHash = hashText(props.currentSource);
+    const diskHash = Object.prototype.hasOwnProperty.call(
+      inputSnapshot.hashes,
+      currentFileKey,
+    )
+      ? inputSnapshot.hashes[currentFileKey]
+      : undefined;
+    const projectInputHashes = { ...inputSnapshot.hashes };
+    const cached: TtscCachedProjectTransform = {
+      compilerArguments: captureCompilerArguments(
+        compilerEnvironment,
+        props.runExternalCode,
+      ),
+      // The pass this compile was started for. Its snapshot describes the
+      // project as of this compile, so it is settled for this pass and any
+      // later pass must re-prove it.
+      ...(props.deliveryEpoch === undefined
+        ? {}
+        : { deliveryEpoch: props.deliveryEpoch }),
+      // Capture the out-of-walk input hashes while the generation is fresh so
+      // cache validation can re-check them; computed before dispose so the
+      // scratch-tree exclusion is the only reason its disposed artifacts never
+      // key the persistent generation.
+      externalInputHashes: {},
+      externalInputRealpaths: {},
+      externalInputPaths,
+      configStateComplete: configStable,
+      projectHeldStill: walkStable,
+      inputHashes: inputSnapshot.hashes,
+      inputSignatures: inputSnapshot.provenSignatures,
+      membershipPolicy,
+      projectDirectories: inputSnapshot.projectDirectories,
+      tsconfig: props.tsconfig,
+      projectSnapshotComplete: false,
+      projectRoot,
+      result,
+      scratchDirectory: envelopeScratchDirectory,
+      servedFiles: new Set(),
+      // Remember the generated temp-dir tsconfig (disposed below) so watch
+      // derivation can drop it from the envelope's config chain; a registered
+      // but deleted file would invalidate every persistent-cache snapshot.
+      ...(envelopeTemporaryTsconfig === undefined
+        ? {}
+        : { temporaryTsconfig: envelopeTemporaryTsconfig }),
+    };
+    cached.snapshotFailureClassifier = compilerSnapshotFailureClassifier(
+      result,
+      projectRoot,
+    );
+    cached.sourceHashes = captureTransformSourceHashes(
+      cached,
+      props.currentFile,
+      diskHash ?? deliveredHash,
+    );
+    // An adopted compile was certified by its publisher, and is matched below
+    // against the state that publisher recorded.
+    const externalInputSnapshot = captureExternalInputSnapshot(
+      cached,
+      externalInputPaths,
+      adopted === undefined ? dependencyWitness : undefined,
+    );
+    cached.externalDependencyInputs = externalInputSnapshot.dependencies;
+    cached.externalInputHashes = externalInputSnapshot.hashes;
+    cached.externalInputObservations = externalInputSnapshot.observations;
+    cached.externalInputRealpaths = externalInputSnapshot.realpaths;
+    cached.externalInputSignatures = externalInputSnapshot.signatures;
+    // An adopted compile holds only while every external input still has the
+    // state its publisher recorded after compiling. Recording this worker's
+    // own reading instead would claim the compile saw inputs it never read.
+    const adoptionFailure =
+      adopted === undefined
+        ? undefined
+        : adoptedExternalInputMismatch(adopted, externalInputSnapshot);
+    // An adopted compile whose external inputs have moved since its publisher
+    // read them, or whose graph proofs this worker cannot confirm against its
+    // own disk, is a verdict about a state already gone, whatever the verdict
+    // was: a failure adopted from the session is compiled again like one whose
+    // own project moved (samchon/ttsc#1458).
+    if (
+      adopted !== undefined &&
+      (adoptionFailure !== undefined || !externalInputSnapshot.complete)
+    ) {
+      cached.projectHeldStill = false;
+    }
+    // A dependency the compile read in a state no witness can confirm leaves
+    // even a verdict of diagnostics about a state that may be gone.
+    if (!externalInputSnapshot.dependenciesProven) {
+      cached.projectHeldStill = false;
+    }
+    // Evaluate every proof family rather than short-circuiting after the first
+    // failed one, so a rejected generation reports every missing premise. The
+    // same checks establish a successful generation's reuse authority.
+    const failures = createGenerationProofFailures(
+      cached.snapshotFailureClassifier,
+    );
+    if (!configStable) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "config-state-changed",
+        path: props.tsconfig,
+      });
+    }
+    if (membershipPolicyLearned) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "membership-policy-learned",
+        path: props.tsconfig,
+      });
+    } else if (!walkStable) {
+      recordProjectSnapshotFailures(failures, {
+        before,
+        declared: declaredInputs,
+        identities,
+        projectRoot,
+        snapshot: inputSnapshot,
+        tracker,
+      });
+    }
+    if (adoptionFailure !== undefined) {
+      recordGenerationProofFailure(failures, {
+        domain: "external",
+        kind: "adopted-state-changed",
+        path: adoptionFailure,
+      });
+    }
+    const graphFailures = compilerGraphInputProofFailures(cached);
+    mergeGenerationProofFailures(failures, graphFailures);
+    mergeGenerationProofFailures(failures, externalInputSnapshot.failures);
+    // Recorded environment reads must hold under the environment this worker
+    // compiles under; a publication recorded under another value is refuted.
+    const universalInputCapture = captureUniversalHostInputValidation(
+      cached,
+      props.currentFile,
+      compilerEnvironment,
+    );
+    restrictNotificationCoverageToProvenInputs(
+      hostInputTracker,
+      cached,
+      universalInputCapture.validation,
+    );
+    mergeGenerationProofFailures(failures, universalInputCapture.failures);
+    const graphProofs =
+      graphFailures.entries.length === 0 && graphFailures.omitted === 0;
+    if (
+      configStable &&
+      graphProofs &&
+      adoptionFailure === undefined &&
+      result.type !== "exception" &&
+      result.graph?.membership !== undefined
+    )
+      cached.compilerMembership = {
+        basis: membershipPrimer.basis,
+        report: result.graph.membership,
+      };
+    const universalInputs = universalInputCapture.validation !== undefined;
+    const stableProjectSnapshot =
+      walkStable &&
+      graphProofs &&
+      externalInputSnapshot.complete &&
+      adoptionFailure === undefined &&
+      universalInputs;
+    const snapshotDeliveryOnly =
+      !stableProjectSnapshot &&
+      canDeliverCompilerSnapshot({
+        result,
+        projectRoot,
+        failures,
+        adopted: adopted !== undefined,
+      });
+    const capturedSource = snapshotDeliveryOnly
+      ? envelopeGraphIndexes(
+          envelopeDerivation(cached),
+          cached,
+        ).inputObservations.get(path.resolve(props.currentFile))?.readFile
+      : undefined;
+    // A source save between the compiler read and the postcompile walk is not
+    // proof of an earlier host rewrite. For a raced snapshot, report one only
+    // when the compiler and disk still agree on this module's source content.
+    if (
+      props.reportDivergence !== false &&
+      diskHash !== undefined &&
+      diskHash !== deliveredHash &&
+      (!snapshotDeliveryOnly ||
+        (before.hashes[currentFileKey] === diskHash &&
+          capturedSource?.ok === true &&
+          capturedSource.hash === diskHash))
+    )
+      reportDivergentDelivery(cached, props.currentFile);
+    // An adopted envelope failed either because the publication does not hold
+    // on this disk or because this worker's own window moved around it, and
+    // only the first speaks against the publication (samchon/ttsc#1479). The
+    // retry refuses only the refuted payload, not a peer's newer publication
+    // under the same projected state. Every replacement retains these proofs.
+    // Diagnostics depend on the failed check's actual compiler generation too.
+    // Its graph and universal observations retain the same proof obligations
+    // as transformed output, including inputs outside root membership.
+    if (
+      adopted !== undefined &&
+      state !== undefined &&
+      claim?.kind === "adopt"
+    ) {
+      TRANSFORM_ADOPTED_RESULTS.set(result, {
+        refuted:
+          adoptionFailure !== undefined ||
+          !externalInputSnapshot.complete ||
+          !(graphProofs && universalInputs),
+        state,
+        publication: claim.fingerprint,
+      });
+    }
+    // Trace the already evaluated admission premises, not a second proof pass.
+    compileTrace?.("bridge-generation-proof", {
+      pid: process.pid,
+      cwd: projectRoot,
+      data: {
+        tsconfig: props.tsconfig,
+        currentFile: props.currentFile,
+        temporaryTsconfig: cached.temporaryTsconfig,
+        scratchDirectory: cached.scratchDirectory,
+        claimKind: claim?.kind ?? null,
+        sharedClaimHeld: sharedClaim !== undefined,
+        state: state ?? null,
+        configStateComplete: cached.configStateComplete,
+        projectHeldStill: cached.projectHeldStill,
+        walkStable,
+        projectWalk: {
+          before: {
+            complete: before.complete,
+            directoryComplete: before.directoryComplete,
+            unstableFiles: [...before.unstableFiles],
+            walkFailures: before.walkFailures,
+          },
+          after: {
+            complete: inputSnapshot.complete,
+            directoryComplete: inputSnapshot.directoryComplete,
+            unstableFiles: [...inputSnapshot.unstableFiles],
+            walkFailures: inputSnapshot.walkFailures,
+          },
+          tracker:
+            tracker === undefined
+              ? null
+              : {
+                  changes: [...tracker.changes],
+                  changesOmitted: tracker.changesOmitted,
+                  membershipChanged: tracker.membershipChanged,
+                },
+        },
+        dependenciesProven: externalInputSnapshot.dependenciesProven,
+        externalSnapshotComplete: externalInputSnapshot.complete,
+        adoptionFailure: adoptionFailure ?? null,
+        nativeProofCapabilities: {
+          readlink: typeof props.filesystem.readlink === "function",
+          readdirRaw: typeof props.filesystem.readdirRaw === "function",
+        },
+        graphProofs,
+        universalInputs,
+        stableProjectSnapshot,
+        resultType: result.type,
+        producerObservationsComplete:
+          result.type === "exception"
+            ? null
+            : (result.observationsComplete ?? null),
+        hostInputProofFailureKeys:
+          result.type === "exception"
+            ? null
+            : Object.keys(result.hostInputProofFailures ?? {}),
+        failures: { entries: failures.entries, omitted: failures.omitted },
+      },
+    });
+    // Publish only a compile that is reusable as captured, so the state it is
+    // published under is the state it read and proved: for a success, the
+    // whole reusable snapshot, the graph's own proofs among them, since an
+    // envelope whose graph proof already failed here fails it in every adopter
+    // too, and a pool then compiles nothing else until its attempts run out;
+    // for a compile that ended in diagnostics, a project that held still, as
+    // the diagnostics are a function of the state, and a pool whose host
+    // discards a worker after each failed run, as Turbopack does, would
+    // otherwise compile the same broken state once per fresh worker and per
+    // module, which on a slow machine outlasted the host's own patience
+    // (samchon/ttsc#1458). An exception stays local: it may come from a
+    // transient plugin crash, which each worker must be free to attempt again,
+    // as without sharing. The external inputs a plugin reports carry no
+    // compile-time proof, only the state recorded right after the compile and
+    // certified against the witness read before it (samchon/ttsc#1541), so
+    // that state travels with the publication for every adopter to match
+    // (samchon/ttsc#1390). Releasing the lock without publishing lets the next
+    // waiter compile.
+    if (sharedClaim !== undefined) {
+      if (
+        result.type !== "exception" &&
+        result.observationsComplete !== false &&
+        Object.keys(result.hostInputProofFailures ?? {}).length === 0 &&
+        (result.type === "success"
+          ? stableProjectSnapshot
+          : walkStable && externalInputSnapshot.dependenciesProven)
+      ) {
+        compileTrace?.("bridge-publication", {
+          pid: process.pid,
+          cwd: projectRoot,
+          data: { action: "publish-attempt", state, resultType: result.type },
+        });
+        await sharedClaim.publish({
+          externalInputHashes: externalInputSnapshot.hashes,
+          externalInputRealpaths: externalInputSnapshot.realpaths,
+          result,
+          scratchDirectory,
+          ...(temporaryTsconfig === undefined ? {} : { temporaryTsconfig }),
+        });
+      } else {
+        compileTrace?.("bridge-publication", {
+          pid: process.pid,
+          cwd: projectRoot,
+          data: { action: "withheld", state, resultType: result.type },
+        });
+      }
+      sharedClaim.release();
+    }
+    if (!stableProjectSnapshot) {
+      TRANSFORM_GENERATION_FAILURES.set(result, failures);
+      TRANSFORM_FAILED_GENERATION_VALIDATIONS.set(result, {
+        cached,
+        declaredInputs,
+        inputStates: captureFailedGenerationInputStates(cached, failures),
+        projectInputHashes,
+        projectWalkComplete: walkSnapshotComplete(
+          inputSnapshot,
+          declaredInputs,
+        ),
+        projectWalkFailures: projectWalkFailureFingerprint(
+          inputSnapshot,
+          declaredInputs,
+          projectRoot,
+          identities,
+        ),
+      });
+    }
+    cached.projectSnapshotComplete = stableProjectSnapshot;
+    cached.snapshotDeliveryOnly = snapshotDeliveryOnly;
+    if (cached.snapshotDeliveryOnly && props.deliveryEpoch !== undefined)
+      cached.passDeliveryOnly = true;
+    if (cached.snapshotDeliveryOnly)
+      cached.sourceHashes = captureTransformSourceHashes(
+        cached,
+        props.currentFile,
+        diskHash ?? deliveredHash,
+      );
+    // Attach notifications only while they can actually prove membership. A
+    // generation that could not open its watchers keeps its recorded snapshot
+    // and validates through it, rather than losing the cache entirely.
+    const retainedNotifications = retainGenerationNotifications({
+      cached,
+      project: tracker,
+      host: hostInputTracker,
+      candidate: candidateTracker,
+      retainProjectMembership: props.retainProjectMembership,
+      retainNotifications: props.retainNotifications,
+      stableProjectSnapshot,
+      notificationsAvailable,
+    });
+    retainTracker = retainedNotifications.project;
+    retainHostInputTracker = retainedNotifications.host;
+    retainCandidateTracker = retainedNotifications.candidate;
+    if (clockReferenceDirectory !== undefined) {
+      retainClockReferenceDirectory = true;
+    }
+    captured = cached;
+  } catch (error) {
+    captureFailed = true;
+    throw error;
+  } finally {
+    // Waiters must never block on a lock whose holder threw.
+    sharedClaim?.release();
+    compileTrace?.("bridge-resource-release", {
+      pid: process.pid,
+      cwd: projectRoot,
+      data: {
+        outcome: "calling",
+        constructed: {
+          project: tracker !== undefined,
+          host: hostInputTracker !== undefined,
+          candidate: candidateTracker !== undefined,
+        },
+        retainProject: retainTracker,
+        retainHost: retainHostInputTracker,
+        retainCandidate: retainCandidateTracker,
+        clockReferenceDirectory,
+        retainClockReference: retainClockReferenceDirectory,
+        captureFailed,
+      },
+    });
+    try {
+      await releaseCaptureResources({
+        project: tracker,
+        host: hostInputTracker,
+        candidate: candidateTracker,
+        retainProject: retainTracker,
+        retainHost: retainHostInputTracker,
+        retainCandidate: retainCandidateTracker,
+        scratchDirectory,
+        clockReferenceDirectory,
+        retainClockReference: retainClockReferenceDirectory,
+        captureFailed,
+      });
+      // A return is not a certificate that every backend close succeeded:
+      // release preserves an earlier capture error over cleanup errors.
+      compileTrace?.("bridge-resource-release", {
+        pid: process.pid,
+        cwd: projectRoot,
+        data: { outcome: "returned", captureFailed },
+      });
+    } catch (error) {
+      compileTrace?.("bridge-resource-release", {
+        pid: process.pid,
+        cwd: projectRoot,
+        data: { outcome: "threw", captureFailed },
+      });
+      throw error;
+    }
+  }
+  if (captured === undefined) {
+    throw new Error("ttsc: transform generation capture produced no result");
+  }
+  transferCaptureClockReference(captured, clockReferenceDirectory);
+  return captured;
+}

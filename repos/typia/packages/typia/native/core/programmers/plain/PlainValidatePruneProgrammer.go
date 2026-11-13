@@ -14,18 +14,35 @@ type plainValidatePruneProgrammerNamespace struct{}
 
 var PlainValidatePruneProgrammer = plainValidatePruneProgrammerNamespace{}
 
+// PlainValidatePruneProgrammer_DecomposeProps is the input of Decompose for the
+// plain validate prune generator: Context (the transform context), Modulo (the
+// call's callee expression), Functor (the collector of the helper functions that
+// the generator emits), Type (the type to generate for) and Name (an optional
+// type name).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs the transform context, the call's callee expression, the collector of the helper functions that the generator emits, the type to generate for and an optional type name, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 5 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type PlainValidatePruneProgrammer_DecomposeProps struct {
+  // Context borrows the checker, emitter and importer for this transform.
   Context nativecontext.ITypiaContext
-  Modulo  *shimast.Node
+
+  // Modulo is the call-site expression forwarded to validation generation.
+  Modulo *shimast.Node
+
+  // Functor collects shared helper declarations and recursive-visit state.
   Functor *nativehelpers.FunctionProgrammer
-  Type    *shimchecker.Type
-  Name    *string
+
+  // Type is the checker type whose input shape is analyzed.
+  Type *shimchecker.Type
+
+  // Name optionally overrides the rendered type name; nil uses the checker name.
+  Name *string
 }
 
-var plainValidatePruneProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (plainValidatePruneProgrammerNamespace) Decompose(props PlainValidatePruneProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(plainValidatePruneProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   validate := nativeprogrammers.ValidateProgrammer.Decompose(nativeprogrammers.ValidateProgrammer_DecomposeProps{
     Context: props.Context,
     Modulo:  props.Modulo,
@@ -106,7 +123,7 @@ func (plainValidatePruneProgrammerNamespace) Write(props nativecontext.IProgramm
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

@@ -31,18 +31,12 @@ var hiddenDeclarationTags = []string{"@internal", "@hidden", "@ignore"}
 // sentence silently delete an obligation. Text after the tag is a comment for
 // humans and is not read.
 func commentHidingTag(comment string) string {
-  comment = strings.TrimSpace(comment)
-  comment = strings.TrimPrefix(comment, "/**")
-  comment = strings.TrimPrefix(comment, "/*")
-  comment = strings.TrimSuffix(comment, "*/")
-  fence := commentFence{}
-  for _, rawLine := range strings.Split(comment, "\n") {
-    line := strings.TrimSpace(rawLine)
-    line = strings.TrimSpace(strings.TrimPrefix(line, "*"))
-    line = strings.TrimSpace(strings.TrimPrefix(line, "///"))
-    if fence.consume(line) {
+  body, _, _ := documentationCommentBody(comment)
+  for _, region := range documentationRegions(body, true) {
+    if region.fence {
       continue
     }
+    line := region.text
     for _, tag := range hiddenDeclarationTags {
       if line != tag && !strings.HasPrefix(line, tag+" ") {
         continue
@@ -65,79 +59,176 @@ func parseCommentDeclarations(
   comment string,
   tagBoundaries bool,
 ) []parsedDeclaration {
-  trimmed := strings.TrimLeftFunc(comment, unicode.IsSpace)
-  leadingLines := strings.Count(comment[:len(comment)-len(trimmed)], "\n")
-  comment = trimmed
-  jsdoc := strings.HasPrefix(comment, "/**") || tagBoundaries
-  comment = strings.TrimPrefix(comment, "/**")
-  comment = strings.TrimPrefix(comment, "/*")
-  comment = strings.TrimSuffix(comment, "*/")
-  lines := strings.Split(comment, "\n")
-  type pendingDeclaration struct {
-    tag        tagKind
-    body       []string
-    lineOffset int
-  }
-  var pending *pendingDeclaration
-  fence := commentFence{}
+  body, leadingLines, documented := documentationCommentBody(comment)
+  return parseRegionDeclarations(
+    documentationRegions(body, false),
+    documented || tagBoundaries,
+    leadingLines,
+  )
+}
+
+// parseRegionDeclarations reads the citations and exclusions of documentation
+// lines whose examples are already classified.
+//
+// It owns the annotation grammar independently of where the lines came from, so
+// every host that can spell an annotation agrees on where one begins, what it
+// says and where it ends. tagBoundaries has the meaning documented on
+// parseCommentDeclarations.
+func parseRegionDeclarations(
+  regions []documentationRegionLine,
+  tagBoundaries bool,
+  leadingLines int,
+) []parsedDeclaration {
+  var pending *pendingAnnotation
   parsed := []parsedDeclaration{}
   flush := func() {
     if pending == nil {
       return
     }
-    target, reason := splitDeclarationBody(strings.Join(pending.body, "\n"))
+    target, reason := pending.split()
     parsed = append(parsed, parsedDeclaration{
-      Tag:        pending.tag,
+      Tag:        pending.opener.tag,
       Target:     target,
       Reason:     reason,
       LineOffset: leadingLines + pending.lineOffset,
     })
     pending = nil
   }
-  for index, rawLine := range lines {
-    line := strings.TrimSpace(rawLine)
-    line = strings.TrimSpace(strings.TrimPrefix(line, "*"))
-    if fence.consume(line) {
-      if pending != nil {
-        pending.body = append(pending.body, line)
+  for index, region := range regions {
+    if region.fence {
+      // An example never supplies prose. A line-form annotation ends at it; a
+      // heading section resumes after it, because headings rather than examples
+      // decide where a section ends.
+      if !pending.section() {
+        flush()
       }
       continue
     }
-    tag, body, found := declarationLine(line)
-    if found {
+    if opener, opened := region.opener(); opened {
       flush()
-      pending = &pendingDeclaration{
-        tag:        tag,
-        body:       []string{body},
-        lineOffset: index,
+      // A review closes the declaration above it in every host, and it does so
+      // regardless of tagBoundaries. That flag answers whether *another tool's*
+      // `@tag` is a boundary, which is a property of the host's comment grammar:
+      // an HTML comment has no field syntax, so `@architecture approved this` is
+      // ordinary prose belonging to the reason above it, and a test pins that.
+      //
+      // A review is not another tool's tag. It belongs to this grammar, so it is
+      // always a boundary. Without this, an `@evidenceReview` written under an
+      // `@evidence` inside one Markdown comment was swallowed into that citation's
+      // reason: the review vanished and the reason grew a sentence its author
+      // addressed to a different question.
+      if !opener.review {
+        pending = &pendingAnnotation{opener: opener, lineOffset: index}
       }
       continue
     }
-    // A review closes the declaration above it in every host, and it does so
-    // regardless of tagBoundaries. That flag answers whether *another tool's*
-    // `@tag` is a boundary, which is a property of the host's comment grammar:
-    // an HTML comment has no field syntax, so `@architecture approved this` is
-    // ordinary prose belonging to the reason above it, and a test pins that.
-    //
-    // A review is not another tool's tag. It belongs to this grammar, so it is
-    // always a boundary. Without this, an `@evidenceReview` written under an
-    // `@evidence` inside one Markdown comment was swallowed into that citation's
-    // reason: the review vanished and the reason grew a sentence its author
-    // addressed to a different question.
-    if _, _, opened := reviewLine(line); opened {
+    if pending.closedBy(region) {
       flush()
       continue
     }
-    if jsdoc && strings.HasPrefix(line, "@") {
+    if tagBoundaries && region.opensTagBoundary() {
       flush()
       continue
     }
     if pending != nil {
-      pending.body = append(pending.body, line)
+      pending.lines = append(pending.lines, region.text)
     }
   }
   flush()
   return parsed
+}
+
+// annotationOpener is the start of one annotation as a documentation line
+// spells it.
+//
+// The line form opens with the tag itself. The heading form is an H2, H3 or H4
+// heading whose title opens with the tag, and it exists for explanations long
+// enough to need paragraphs, lists and subheadings of their own.
+type annotationOpener struct {
+  // review reports a verification statement rather than an acknowledgement.
+  review bool
+
+  // tag is the acknowledgement kind, or for a review the kind it answers for.
+  tag tagKind
+
+  // body is what follows the tag on the opening line: the target, and any
+  // reason or review remainder written beside it.
+  body string
+
+  // heading is the depth of a heading-form opener, or zero for the line form.
+  heading int
+}
+
+// openAnnotation reads the annotation one documentation line opens, if any.
+//
+// A heading of another depth stays an ordinary heading, and no heading opens
+// the line form because its first character is `#`. The five tags share one
+// spelling in both forms, so the two forms cannot disagree about which tag a
+// line carries: the title of a heading is read by the same matchers as a line.
+func openAnnotation(text string, heading int, title string) (annotationOpener, bool) {
+  if heading != 0 {
+    if heading < 2 || heading > 4 {
+      return annotationOpener{}, false
+    }
+    text = title
+  }
+  if tag, body, found := declarationLine(text); found {
+    return annotationOpener{tag: tag, body: body, heading: heading}, true
+  }
+  if reviews, remainder, opened := reviewLine(text); opened {
+    return annotationOpener{review: true, tag: reviews, body: remainder, heading: heading}, true
+  }
+  return annotationOpener{}, false
+}
+
+// opensAcknowledgement reports whether a documentation line opens a citation
+// or an exclusion in either form, for a caller that reports a tag it cannot
+// read and so needs only to know that one is there.
+func opensAcknowledgement(text string, heading int, title string) bool {
+  opener, opened := openAnnotation(text, heading, title)
+  return opened && !opener.review
+}
+
+// pendingAnnotation accumulates one annotation until a boundary ends it.
+type pendingAnnotation struct {
+  opener annotationOpener
+
+  // lines are the documentation lines after the opener that continue it.
+  lines []string
+
+  // lineOffset is the opener's line within the documentation body.
+  lineOffset int
+}
+
+// section reports whether this is a heading-form annotation. A nil receiver is
+// no annotation at all.
+func (pending *pendingAnnotation) section() bool {
+  return pending != nil && pending.opener.heading != 0
+}
+
+// closedBy reports whether a heading ends this annotation's explanation.
+//
+// Only a heading section has that structure. A heading of its own depth or
+// shallower is the next part of the surrounding document; a deeper heading
+// divides the explanation itself and stays inside it. A line-form annotation
+// keeps the continuation it always had, which a heading does not end.
+func (pending *pendingAnnotation) closedBy(region documentationRegionLine) bool {
+  return pending.section() && region.heading != 0 && region.heading <= pending.opener.heading
+}
+
+// split returns the annotation's target and the text after it.
+//
+// A line-form target may be written on the line after its tag, so its lines
+// are split as one body, as they always were. A heading section's target must
+// be on the heading: the heading body is split alone, which keeps the
+// explanation from ever becoming a target and keeps an unterminated link on the
+// heading from borrowing a closing brace from the prose under it.
+func (pending *pendingAnnotation) split() (string, string) {
+  if !pending.section() {
+    return splitDeclarationBody(strings.Join(append([]string{pending.opener.body}, pending.lines...), "\n"))
+  }
+  target, remainder := splitDeclarationBody(pending.opener.body)
+  return target, strings.TrimSpace(strings.Join(append([]string{remainder}, pending.lines...), "\n"))
 }
 
 func declarationLine(line string) (tagKind, string, bool) {
@@ -329,54 +420,56 @@ func (review parsedReview) marker() string {
 // other `@`-opening line closes the review above it, so a review sharing a
 // block with `@param` or a following `@evidence` swallows neither.
 func parseReviews(comment string) []parsedReview {
-  trimmed := strings.TrimLeftFunc(comment, unicode.IsSpace)
-  leadingLines := strings.Count(comment[:len(comment)-len(trimmed)], "\n")
-  comment = trimmed
-  comment = strings.TrimPrefix(comment, "/**")
-  comment = strings.TrimPrefix(comment, "/*")
-  comment = strings.TrimSuffix(comment, "*/")
+  comment, leadingLines, _ := documentationCommentBody(comment)
+  return parseRegionReviews(documentationRegions(comment, true), leadingLines)
+}
+
+// parseRegionReviews reads the reviews of documentation lines whose examples
+// are already classified, under the grammar parseRegionDeclarations applies to
+// acknowledgements. A heading-form review may carry its fingerprint on the
+// heading or open its description with it.
+func parseRegionReviews(regions []documentationRegionLine, leadingLines int) []parsedReview {
   reviews := []parsedReview{}
-  var pending *parsedReview
-  fence := commentFence{}
-  var body []string
+  var pending *pendingAnnotation
   flush := func() {
     if pending == nil {
       return
     }
-    target, remainder := splitDeclarationBody(strings.Join(body, "\n"))
+    target, remainder := pending.split()
     fingerprint, description := splitReviewFingerprint(remainder)
-    pending.Target = target
-    pending.Fingerprint = fingerprint
-    pending.Description = description
-    reviews = append(reviews, *pending)
+    reviews = append(reviews, parsedReview{
+      Reviews:     pending.opener.tag,
+      Target:      target,
+      Fingerprint: fingerprint,
+      Description: description,
+      LineOffset:  leadingLines + pending.lineOffset,
+    })
     pending = nil
-    body = nil
   }
-  for index, rawLine := range strings.Split(comment, "\n") {
-    line := strings.TrimSpace(rawLine)
-    line = strings.TrimSpace(strings.TrimPrefix(line, "*"))
-    line = strings.TrimSpace(strings.TrimPrefix(line, "///"))
-    if fence.consume(line) {
-      if pending != nil {
-        body = append(body, line)
+  for index, region := range regions {
+    if region.fence {
+      if !pending.section() {
+        flush()
       }
       continue
     }
-    if reviews, remainder, opened := reviewLine(line); opened {
+    if opener, opened := region.opener(); opened {
       flush()
-      pending = &parsedReview{
-        Reviews:    reviews,
-        LineOffset: leadingLines + index,
+      if opener.review {
+        pending = &pendingAnnotation{opener: opener, lineOffset: index}
       }
-      body = []string{remainder}
       continue
     }
-    if strings.HasPrefix(line, "@") {
+    if pending.closedBy(region) {
+      flush()
+      continue
+    }
+    if region.opensTagBoundary() {
       flush()
       continue
     }
     if pending != nil {
-      body = append(body, line)
+      pending.lines = append(pending.lines, region.text)
     }
   }
   flush()
@@ -471,8 +564,8 @@ func containsWhitespace(value string) bool {
   return false
 }
 
-// Fences inside documentation are examples, not declarations. Their text is
-// still retained when it belongs to a pending reason or review description.
+// commentFence recognizes example delimiters. Its callers decide whether a
+// recognized example terminates annotation prose or belongs to a TODO's text.
 type commentFence struct {
   marker rune
   length int

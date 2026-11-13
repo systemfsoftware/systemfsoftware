@@ -25,6 +25,11 @@ var metadataDependency_listeners sync.Map
 // MetadataDependency_IListener is what a registered host receives while one
 // file is transformed. `File` is the report; `Unbounded` is the admission that
 // the report cannot be the whole story.
+//
+// @evidence contracts/common.md#principled-implementation A host needs a report channel for consulted files, a channel for the files that decide which declaration a call names, and an admission that the list cannot be complete; the third is optional and the second defaults to the first.
+// @evidence contracts/common.md#clear-and-simple-design Three function fields documented one by one.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The fields carry no state of their own.
+// @evidence contracts/common.md#meaningful-documentation The doc explains the difference between the file and callee channels and what Unbounded means.
 type MetadataDependency_IListener struct {
   // File receives each consulted declaration file name.
   File func(fileName string)
@@ -60,6 +65,11 @@ type MetadataDependency_IListener struct {
 // MetadataDependency_listen registers the listener that receives every
 // consulted declaration file name resolved through `checker`. The caller owns
 // attribution (which transformed file the touches belong to) and filtering.
+//
+// @evidence contracts/common.md#principled-implementation The registry is keyed by checker, a listener without a File function is not registered, and Callee falls back to File, so every touch can be reported without the host handling the unset case.
+// @evidence contracts/common.md#clear-and-simple-design One guard, one default and one map store.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The registry keeps unrelated programs isolated and no listener means every touch is a no-op.
+// @evidence contracts/common.md#meaningful-documentation The doc states who owns attribution.
 func MetadataDependency_listen(checker *nativechecker.Checker, listener MetadataDependency_IListener) {
   if checker == nil || listener.File == nil {
     return
@@ -73,11 +83,21 @@ func MetadataDependency_listen(checker *nativechecker.Checker, listener Metadata
 // MetadataDependency_unbounded raises the admission from outside this package.
 // The transform raises it for a typia call that takes its validated type from
 // the value argument, which no written type node bounds.
+//
+// @evidence contracts/common.md#principled-implementation The transform raises the admission for a call whose validated type comes from its value argument, which no written node bounds, and the call reaches the listener only when one is registered.
+// @evidence contracts/common.md#clear-and-simple-design One delegation to the listener.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No hidden state; without a listener it does nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states which caller raises it and why.
 func MetadataDependency_unbounded(checker *nativechecker.Checker) {
   metadataDependency_listener(checker).unbounded()
 }
 
 // MetadataDependency_release removes the listener registered for `checker`.
+//
+// @evidence contracts/common.md#principled-implementation Deleting the entry for a checker ends the registry reference to it, so the transform host releases its listener when it is done and a stale listener does not report for a later program.
+// @evidence contracts/common.md#clear-and-simple-design One guard and one map delete.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A nil checker is ignored.
+// @evidence contracts/common.md#meaningful-documentation The doc states what is removed.
 func MetadataDependency_release(checker *nativechecker.Checker) {
   if checker == nil {
     return
@@ -87,12 +107,22 @@ func MetadataDependency_release(checker *nativechecker.Checker) {
 
 // MetadataDependency_active reports whether a listener is registered for
 // `checker`, so analysis code can skip walks performed only for collection.
+//
+// @evidence contracts/common.md#principled-implementation A listener is active when it has a File function, which lets analysis skip walks performed only for collection.
+// @evidence contracts/common.md#clear-and-simple-design One delegation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No state is created by asking.
+// @evidence contracts/common.md#meaningful-documentation The doc states the purpose.
 func MetadataDependency_active(checker *nativechecker.Checker) bool {
   return metadataDependency_listener(checker).active()
 }
 
 // MetadataDependency_touchFile reports a source file consulted outside the
 // metadata iterator, so a complete transform dependency list still watches it.
+//
+// @evidence contracts/common.md#principled-implementation A file consulted outside the metadata iterator, such as an LLM evaluation source, is reported directly through the file channel.
+// @evidence contracts/common.md#clear-and-simple-design One guard and one call.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Nothing is reported without a listener.
+// @evidence contracts/common.md#meaningful-documentation The doc states which files it is for.
 func MetadataDependency_touchFile(checker *nativechecker.Checker, fileName string) {
   listener := metadataDependency_listener(checker)
   if listener.File != nil {
@@ -103,6 +133,11 @@ func MetadataDependency_touchFile(checker *nativechecker.Checker, fileName strin
 // MetadataDependency_touchType reports the declaration files of a consulted
 // type: both the structural symbol (interface / class / enum / object literal)
 // and the type-name symbol (a `type` alias), which differ for aliased types.
+//
+// @evidence contracts/common.md#principled-implementation A consulted type is reported through both its structural symbol and its type-name symbol, which differ for aliased types; one visited-symbol set prevents revisiting a shared symbol during this touch, while the host owns file deduplication.
+// @evidence contracts/common.md#clear-and-simple-design One guard, one set and two walks of a symbol.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No walk happens without a listener.
+// @evidence contracts/common.md#meaningful-documentation The doc states the two symbols.
 func MetadataDependency_touchType(checker *nativechecker.Checker, typ *nativechecker.Type) {
   if typ == nil {
     return
@@ -118,6 +153,11 @@ func MetadataDependency_touchType(checker *nativechecker.Checker, typ *nativeche
 
 // MetadataDependency_touchSymbol reports the declaration files of a consulted
 // symbol (e.g. an object property or a heritage target).
+//
+// @evidence contracts/common.md#principled-implementation A consulted symbol such as a property or a heritage target is reported with the declarations it comes from and the written types on them.
+// @evidence contracts/common.md#clear-and-simple-design One guard and one walk.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No walk happens without a listener.
+// @evidence contracts/common.md#meaningful-documentation The doc states the symbols it is used for.
 func MetadataDependency_touchSymbol(checker *nativechecker.Checker, symbol *nativeast.Symbol) {
   listener := metadataDependency_listener(checker)
   if listener.active() == false {
@@ -132,6 +172,11 @@ func MetadataDependency_touchSymbol(checker *nativechecker.Checker, symbol *nati
 // type-graph touches: an alias of an intrinsic (`type Id = string`) leaves no
 // trace on checker types — the checker interns the intrinsic without an alias
 // symbol — so only the written reference can register the alias' own file.
+//
+// @evidence contracts/common.md#principled-implementation A written type node, such as a call-site type argument, is walked for the names it references, because an alias of an intrinsic leaves no trace in checker types, so only the written reference can report the alias's file.
+// @evidence contracts/common.md#clear-and-simple-design One guard and one node walk.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts No walk happens without a listener.
+// @evidence contracts/common.md#meaningful-documentation The doc explains why the syntactic walk is needed.
 func MetadataDependency_touchTypeNode(checker *nativechecker.Checker, node *nativeast.Node) {
   listener := metadataDependency_listener(checker)
   if listener.active() == false || node == nil {
@@ -155,6 +200,11 @@ func MetadataDependency_touchTypeNode(checker *nativechecker.Checker, node *nati
 // for recognized typia calls, because a call that is not typia's today is
 // exactly the one an edit to one of those files makes typia's tomorrow. A
 // callee whose identity no name in it decides raises the unbounded admission.
+//
+// @evidence contracts/common.md#principled-implementation The files that decide which declaration a callee names are reported for every call the transformer examines, not only for typia calls, and a callee whose identity no written name decides raises the unbounded admission.
+// @evidence contracts/common.md#clear-and-simple-design One guard, one walk and one admission.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts The rule is identity-based and does not special-case a file or a name.
+// @evidence contracts/common.md#meaningful-documentation The doc states why every call is examined and when it admits.
 func MetadataDependency_touchCallee(checker *nativechecker.Checker, callee *nativeast.Node) {
   listener := metadataDependency_listener(checker)
   if listener.active() == false || callee == nil {
@@ -308,15 +358,15 @@ func metadataDependency_touchDeclarations(
   // name selects, so all of it belongs to the identity channel -- the alias hops
   // as much as the terminus.
   report := listener.Callee
-  if symbol.Flags&nativeast.SymbolFlagsAlias != 0 {
+  if nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsAlias != 0 {
     metadataDependency_touchPath(checker, listener, symbol, report)
     if resolved := nativechecker.Checker_getAliasedSymbol(checker, symbol); resolved != nil {
       symbol = resolved
     }
   }
-  for _, declaration := range symbol.Declarations {
+  for _, declaration := range nativeast.SymbolDeclarationsOf(symbol) {
     if src := nativeast.GetSourceFileOfNode(declaration); src != nil {
-      report(src.FileName())
+      report(string(src.FileName()))
     }
     if nested && metadataDependency_calleeBounded(declaration) == false {
       listener.unbounded()
@@ -370,12 +420,12 @@ func metadataDependency_touchVisited(
     return
   }
   visited[symbol] = true
-  for _, declaration := range symbol.Declarations {
+  for _, declaration := range nativeast.SymbolDeclarationsOf(symbol) {
     if declaration == nil {
       continue
     }
     if src := nativeast.GetSourceFileOfNode(declaration); src != nil {
-      listener.File(src.FileName())
+      listener.File(string(src.FileName()))
     }
     if metadataDependency_bounded(declaration) == false {
       listener.unbounded()
@@ -661,8 +711,8 @@ func metadataDependency_literal(initializer *nativeast.Node) bool {
 
 // metadataDependency_typeSurface selects the WRITTEN type nodes of a
 // declaration: the whole node for a `type` alias, a mapped type, or a type
-// parameter (constraint and default included), the type parameters and index
-// signatures of an interface or class, the annotation for properties,
+// parameter (constraint and default included), the index signatures of an
+// interface or class, the annotation for properties,
 // parameters, and variables, and parameter types + return type for methods,
 // accessors, and index signatures. Bodies and initializers are excluded — a
 // reference appearing only there is not part of the type the analysis consulted,
@@ -840,7 +890,7 @@ func metadataDependency_resolve(
   if symbol == nil {
     return nil
   }
-  if symbol.Flags&nativeast.SymbolFlagsAlias != 0 {
+  if nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsAlias != 0 {
     // The type walk: a hop reached here was reached because a consulted type is
     // built from what it publishes, so it reports on the consultation channel.
     metadataDependency_touchPath(checker, listener, symbol, listener.File)
@@ -871,7 +921,7 @@ func metadataDependency_touchPath(
   report func(fileName string),
 ) {
   visited := map[*nativeast.Symbol]bool{}
-  for symbol != nil && symbol.Flags&nativeast.SymbolFlagsAlias != 0 && visited[symbol] == false {
+  for symbol != nil && nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsAlias != 0 && visited[symbol] == false {
     visited[symbol] = true
     declaration := nativechecker.Checker_getDeclarationOfAliasSymbol(checker, symbol)
     if declaration == nil {
@@ -879,7 +929,7 @@ func metadataDependency_touchPath(
     }
     // The file that WRITES this hop (the barrel's own `export ... from` line).
     if src := nativeast.GetSourceFileOfNode(declaration); src != nil {
-      report(src.FileName())
+      report(string(src.FileName()))
     }
     specifier := metadataDependency_moduleSpecifier(declaration)
     if specifier == nil {
@@ -898,9 +948,9 @@ func metadataDependency_touchPath(
     if module == nil {
       return
     }
-    for _, moduleDeclaration := range module.Declarations {
+    for _, moduleDeclaration := range nativeast.SymbolDeclarationsOf(module) {
       if src := nativeast.GetSourceFileOfNode(moduleDeclaration); src != nil {
-        report(src.FileName())
+        report(string(src.FileName()))
       }
     }
     symbol = metadataDependency_exported(module, declaration)
@@ -919,13 +969,13 @@ func metadataDependency_touchPath(
 // stops the walk at the module already reported, which loses no edge: the
 // terminus is resolved separately by the checker.
 func metadataDependency_exported(module *nativeast.Symbol, declaration *nativeast.Node) *nativeast.Symbol {
-  if module.Exports == nil {
+  if nativeast.SymbolExportsOf(module) == nil {
     return nil
   }
   switch declaration.Kind {
   case nativeast.KindImportClause:
     // ast.InternalSymbolNameDefault, which the shim does not re-export.
-    return module.Exports["default"]
+    return nativeast.SymbolExportsOf(module)["default"]
   case nativeast.KindImportSpecifier, nativeast.KindExportSpecifier:
     name := declaration.PropertyNameOrName()
     if name == nil {
@@ -933,7 +983,7 @@ func metadataDependency_exported(module *nativeast.Symbol, declaration *nativeas
     }
     switch name.Kind {
     case nativeast.KindIdentifier, nativeast.KindStringLiteral:
-      return module.Exports[name.Text()]
+      return nativeast.SymbolExportsOf(module)[name.Text()]
     }
   }
   return nil

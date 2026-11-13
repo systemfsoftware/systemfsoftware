@@ -34,6 +34,22 @@ import { make } from "../internal/make";
  * @param parameters The parameters.
  * @param type The return type, if any.
  * @returns The created {@link MethodSignature}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Property-name normalization preserves node names and converts strings;
+ *   modifiers, optionality, generics, parameters and return annotation retain
+ *   separate method-member roles without introducing a body.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Shared name conversion avoids a second naming policy, while one signature
+ *   node represents the supported optional and generic combinations.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Method names never trigger alternate signatures, and missing return types
+ *   are not fabricated to satisfy an expected declaration.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native paragraphs describe modifier/name/optional/return order and provide
+ *   a method-member example; every retained argument is documented.
  */
 export const createMethodSignature = (
   modifiers: readonly ModifierLike[] | undefined,

@@ -9,6 +9,18 @@ import (
   schemametadata "github.com/samchon/typia/packages/typia/native/core/schemas/metadata"
 )
 
+// Iterate_metadata_intersection resolves an intersection type.
+//
+// Plain object intersections are left to the object merge. Otherwise each member
+// is analyzed, type tag objects are separated, phantom brands and call-only arms
+// are dropped and exactly one base member must remain, which is analyzed again
+// with the tags attached. Anything else is reported as a nonsensible
+// intersection.
+//
+// @evidence contracts/common.md#principled-implementation A union-distribution reduction and a plain-object test come first, because an intersection of plain objects is merged by the object path. Otherwise every member is analyzed on the collection after taking a registry snapshot, with trial errors captured; type tag objects are separated, a call-signature-only arm is dropped when something else survives, phantom brands (optional or symbol-keyed members only) are dropped, and exactly one single-bucket base must remain, which is analyzed alone with the tags attached to its constants, atomics, templates, arrays, objects, natives, sets or maps; any other combination is an error. Restoring the snapshot rolls back registry maps, order lists, counters and caches; existing named definitions remain shared and are not a deep transaction.
+// @evidence contracts/common.md#clear-and-simple-design One long function that lists the decision steps in order and delegates classification to private helpers (brand and signature tests, never detection, literal disjointness, tag analysis, identity gates); the helpers are private because only this iterator and the explorer need them.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Each rejection reports the exact intersection, and the brand and signature rules are structural; the long inline comments record the cases that a simpler rule would break.
+// @evidence contracts/common.md#meaningful-documentation The doc states the order of steps, and the helpers carry comments with the reasons and issue references.
 func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
   if props.Intersected == true {
     return false
@@ -30,15 +42,23 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
   }
 
   commit := props.Components.Clone()
+  types := props.Type.Types()
   fakeErrors := []MetadataFactory_IError{}
-  children := make([]*schemametadata.MetadataSchema, 0, len(props.Type.Types()))
-  for _, typ := range props.Type.Types() {
+  type failedTrial struct {
+    child      *schemametadata.MetadataSchema
+    start, end int
+  }
+  var failed []failedTrial
+  children := make([]*schemametadata.MetadataSchema, 0, len(types))
+  nonObjectBase := false
+  for _, typ := range types {
+    start := len(fakeErrors)
     options := props.Options
     options.Absorb = true
     options.Functional = false
     explore := props.Explore
     explore.Aliased = false
-    children = append(children, Explore_metadata(Explore_metadata_IProps{
+    child := Explore_metadata(Explore_metadata_IProps{
       Options:     options,
       Checker:     props.Checker,
       Components:  props.Components,
@@ -48,7 +68,29 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
       Intersected: false,
       NoCache:     true,
       Prunable:    true,
-    }))
+    })
+    children = append(children, child)
+    if len(fakeErrors) > start {
+      failed = append(failed, failedTrial{child, start, len(fakeErrors)})
+    }
+    nonObjectBase = nonObjectBase || len(child.Atomics)+len(child.Constants)+len(child.Templates)+
+      len(child.Arrays)+len(child.Tuples)+len(child.Natives)+len(child.Sets)+len(child.Maps) != 0
+  }
+  // Optional fields can be phantom constraints on a non-object data base.
+  // The same fields are real data on an object, including one with a type
+  // tag or a call signature.
+  if nonObjectBase && len(failed) != 0 {
+    kept := fakeErrors[:0]
+    for _, trial := range failed {
+      phantom := iterate_metadata_intersection_is_removable_brand(trial.child) &&
+        !iterate_metadata_intersection_is_type_tag(trial.child.Objects[0].Type)
+      for _, err := range fakeErrors[trial.start:trial.end] {
+        if !phantom || len(err.Messages) != 1 || err.Messages[0] != unsupportedSymbolValue {
+          kept = append(kept, err)
+        }
+      }
+    }
+    fakeErrors = kept
   }
 
   escape := func(out bool) bool {
@@ -131,7 +173,7 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
   // removable" guard below exists to refuse an intersection of nothing but
   // brands, and an arm such as `Record<never, never>` is vacuously a phantom
   // brand, so counting signatures as removable would turn
-  // `call & Record<never, never>` — which the interface spelling accepts — into a
+  // `call & Record<never, never>` ??which the interface spelling accepts ??into a
   // rejection.
   if len(metadatas) > 1 {
     kept := make([]*schemametadata.MetadataSchema, 0, len(metadatas))
@@ -157,7 +199,7 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
       metadatas = kept
       indexes = keptIndexes
     } else if len(kept) == 0 {
-      // Every arm was signatures only — an overload set, a call-and-construct
+      // Every arm was signatures only ??an overload set, a call-and-construct
       // pair, or two constructors. That is a member-free callable, which is what
       // the interface spelling of the same type produces, so this iterator has
       // nothing to merge and hands the type back rather than refusing it.
@@ -187,9 +229,9 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
     }
   }
   // After phantom brands are dropped, exactly one single-bucket base member must
-  // survive (`string & Brand` → string). Two genuine non-object members
-  // (`string[] & number[]`, `A[] & [t…]`, `T1 & T2`, …) — or a multi-bucket
-  // survivor — is an intersection of constraint carriers, a misuse with no sound
+  // survive (`string & Brand` ??string). Two genuine non-object members
+  // (`string[] & number[]`, `A[] & [t??`, `T1 & T2`, ?? ??or a multi-bucket
+  // survivor ??is an intersection of constraint carriers, a misuse with no sound
   // merge, so it stays nonsensible. This subsumes the per-candidate-kind check
   // below, which therefore always collapses to a single candidate.
   if len(metadatas) != 1 || metadatas[0].Size() != 1 {
@@ -315,11 +357,14 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
   options := props.Options
   options.Functional = false
   explore := props.Explore
-  explore.Aliased = false
+  // Attach tags to the surviving structure, not to a new alias wrapper whose
+  // array/object bucket would be empty here. Nested members clear Aliased again
+  // when they descend, so recursive references still retain their aliases.
+  explore.Aliased = true
   explore.Escaped = false
   // Re-explore the surviving base alone (`Intersected: true` short-circuits the
   // intersection handler at the top of this function). TypeScript flattens nested
-  // intersections — `(A & B) & C` is presented as a single `types: [A, B, C]` — so
+  // intersections ??`(A & B) & C` is presented as a single `types: [A, B, C]` ??so
   // `Types()[index]` is always an atomic member, never itself an intersection that
   // would re-enter and leave `props.Metadata` empty.
   Iterate_metadata(IMetadataIteratorProps{
@@ -347,7 +392,7 @@ func Iterate_metadata_intersection(props IMetadataIteratorProps) bool {
 //
 // `((v: number) => string) & { label: string }` and
 // `interface T { (v: number): string; label: string }` are the same type, and
-// only the first reaches this function — the second is one object carrying a
+// only the first reaches this function ??the second is one object carrying a
 // call signature. Without this the first was refused as a nonsensible
 // intersection while the second was accepted, so the answer depended on the
 // spelling (samchon/typia#2276).
@@ -373,15 +418,14 @@ func iterate_metadata_intersection_is_call_signature_only(m *schemametadata.Meta
 // The single-survivor guard lives in the caller: when EVERY member is a plain
 // object, the entry point routes to the object-merge path before this runs, so
 // a required-literal property of a genuine `A & B` object merge is never dropped
-// here — only brands intersected with a primitive/array/template/native are.
+// here ??only brands intersected with a primitive/array/template/native are.
 //
 // A member is removable when it is a single non-recursive object bucket whose
 // every property is phantom: optional, or symbol-keyed. Those two are the only
-// unambiguously phantom markers — an optional property need not be present, and
+// unambiguously phantom markers ??an optional property need not be present, and
 // a symbol-keyed property is never observable on a JSON value. Any required
 // string-keyed property (literal or not) might be real data, so it keeps the
 // intersection nonsensible rather than silently dropping a declared constraint.
-
 
 func iterate_metadata_intersection_is_removable_brand(m *schemametadata.MetadataSchema) bool {
   if m == nil || m.Size() != 1 || len(m.Objects) != 1 {
@@ -573,11 +617,11 @@ func iterate_metadata_intersection_is_removable_object_constraint(
     // A symbol-keyed member is never observable on a JSON value (the canonical
     // nominal brand), so it is phantom and removable. typia's own tag is handled
     // as a constraint, not stripped here; any required string-keyed property might
-    // be real data — both keep the object as a constraint, not a removable brand.
-    if iterate_metadata_intersection_is_symbol_name(symbol.Name) {
+    // be real data ??both keep the object as a constraint, not a removable brand.
+    if iterate_metadata_intersection_is_symbol_name(nativeast.SymbolNameOf(symbol)) {
       continue
     }
-    if symbol.Name == "typia.tag" || symbol.Flags&nativeast.SymbolFlagsOptional == 0 {
+    if nativeast.SymbolNameOf(symbol) == "typia.tag" || nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsOptional == 0 {
       return false
     }
   }
@@ -643,7 +687,7 @@ func iterate_metadata_intersection_identify(
     }
   }
   for _, symbol := range collection.ApparentProperties(checker, typ) {
-    if symbol.Name == "typia.tag" {
+    if nativeast.SymbolNameOf(symbol) == "typia.tag" {
       return iterate_metadata_intersection_identity{Kind: "tag"}
     }
   }
@@ -773,7 +817,7 @@ func iterate_metadata_intersection_is_plain_object_only(
   }
 
   for _, symbol := range collection.ApparentProperties(checker, typ) {
-    if symbol.Name == "typia.tag" {
+    if nativeast.SymbolNameOf(symbol) == "typia.tag" {
       return false
     }
   }
@@ -916,7 +960,7 @@ func iterate_metadata_intersection_has_conflicting_required_literal(
       return false
     }
     for _, symbol := range collection.ApparentProperties(checker, child) {
-      if symbol.Flags&nativeast.SymbolFlagsOptional != 0 {
+      if nativeast.SymbolFlagsOf(symbol)&nativeast.SymbolFlagsOptional != 0 {
         continue
       }
       propertyType := iterate_metadata_intersection_property_type(checker, child, symbol)
@@ -924,14 +968,14 @@ func iterate_metadata_intersection_has_conflicting_required_literal(
       if ok == false {
         continue
       }
-      list := constraints[symbol.Name]
+      list := constraints[nativeast.SymbolNameOf(symbol)]
       for _, prev := range list {
         if iterate_metadata_intersection_literal_disjoint(prev, literal) {
           result = true
           return true
         }
       }
-      constraints[symbol.Name] = append(list, literal)
+      constraints[nativeast.SymbolNameOf(symbol)] = append(list, literal)
     }
     return false
   }
@@ -947,12 +991,12 @@ func iterate_metadata_intersection_property_type(
   if checker == nil || owner == nil || symbol == nil {
     return nil
   }
-  if len(symbol.Declarations) != 0 {
-    if typ := checker.GetTypeOfSymbolAtLocation(symbol, symbol.Declarations[0]); typ != nil {
+  if len(nativeast.SymbolDeclarationsOf(symbol)) != 0 {
+    if typ := checker.GetTypeOfSymbolAtLocation(symbol, nativeast.SymbolDeclarationsOf(symbol)[0]); typ != nil {
       return typ
     }
   }
-  return nativechecker.Checker_getTypeOfPropertyOfType(checker, owner, symbol.Name)
+  return nativechecker.Checker_getTypeOfPropertyOfType(checker, owner, nativeast.SymbolNameOf(symbol))
 }
 
 func iterate_metadata_intersection_literal_set(
@@ -1054,7 +1098,7 @@ func iterate_metadata_intersection_category(
     return "array"
   }
   for _, symbol := range collection.ApparentProperties(checker, typ) {
-    if symbol.Name == "typia.tag" {
+    if nativeast.SymbolNameOf(symbol) == "typia.tag" {
       return "tag"
     }
   }

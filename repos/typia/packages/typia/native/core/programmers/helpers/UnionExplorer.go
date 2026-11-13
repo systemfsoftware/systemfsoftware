@@ -14,6 +14,16 @@ type unionExplorerNamespace struct{}
 
 var UnionExplorer = unionExplorerNamespace{}
 
+// UnionExplorer_IExplore is where a union is being explored. Tracable says
+// whether the path of the value is tracked, Source is where the value is checked
+// (`top` or `function`), From is the kind of parent (`top`, `array` or
+// `object`), Postfix is the path suffix and Start is the index offset of a rest
+// element.
+//
+// @evidence contracts/common.md#principled-implementation It is where a union is being explored; its 5 fields (Tracable, Source, From, Postfix, Start) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type UnionExplorer_IExplore struct {
   Tracable bool
   Source   string
@@ -22,62 +32,133 @@ type UnionExplorer_IExplore struct {
   Start    *int
 }
 
+// UnionExplorer_ObjectConfig is the configuration of UnionExplorer.Object, which
+// supplies the object operations.
+//
+// @evidence contracts/common.md#principled-implementation It is the configuration of UnionExplorer.Object, which supplies the object operations; its 1 members (Objector) are supplied by the caller, so the shared programmer holds no feature-specific behavior.
+// @evidence contracts/common.md#clear-and-simple-design A 1-member record of values and callbacks.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A declaration only.
+// @evidence contracts/common.md#meaningful-documentation The doc states the role.
 type UnionExplorer_ObjectConfig struct {
   Objector UnionExplorer_IObjector
 }
 
+// UnionExplorer_IObjector is the object operations that a feature supplies to
+// UnionExplorer.Object. Checker, Decoder, Unionizer, Failure and Full
+// build the feature's checks and results. Is and Required adapt a generated
+// predicate, rather than receiving the original input value.
+//
+// @evidence contracts/common.md#principled-implementation Checker tests a discriminator, Decoder emits the selected member and Unionizer handles members without a unique property. Failure/Full carry the feature's diagnostic policy; optional Is/Required adapt generated predicates, keeping the union explorer independent of checking or serialization results.
+// @evidence contracts/common.md#clear-and-simple-design The seven callbacks are the operations Object actually consumes; optional predicate/result adapters do not duplicate the feature's decoder or error policy.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A declaration only.
+// @evidence contracts/common.md#meaningful-documentation The doc states the role and the meaning of the members that are not obvious.
 type UnionExplorer_IObjector struct {
   Checker   func(props UnionExplorer_ObjectorCheckerProps) *shimast.Node
   Decoder   func(props UnionExplorer_ObjectorDecoderProps) *shimast.Node
-  Joiner    any
   Unionizer func(props UnionExplorer_ObjectorUnionizerProps) *shimast.Node
   Failure   func(props UnionExplorer_ObjectorFailureProps) *shimast.Node
-  Is        func(exp *shimast.Expression) *shimast.Node
-  Required  func(exp *shimast.Expression) *shimast.Node
-  Full      func(props UnionExplorer_ObjectorFullProps) *shimast.Node
-  Type      *shimast.TypeNode
+
+  // Is optionally adapts the chosen discriminator predicate.
+  Is func(exp *shimast.Expression) *shimast.Node
+
+  // Required optionally adapts a property-presence predicate for a unique key.
+  Required func(exp *shimast.Expression) *shimast.Node
+
+  Full func(props UnionExplorer_ObjectorFullProps) *shimast.Node
 }
 
+// UnionExplorer_ObjectorCheckerProps is the argument of the Checker operation,
+// which tests an input against one metadata schema.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Checker operation, which tests an input against one metadata schema; its 3 fields (Metadata, Input, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type UnionExplorer_ObjectorCheckerProps struct {
   Metadata *nativemetadata.MetadataSchema
   Input    *shimast.Expression
-  Explore  any
+  Explore  UnionExplorer_IExplore
 }
 
+// UnionExplorer_ObjectorDecoderProps is the argument of the Decoder operation,
+// which decodes an input as one object type.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Decoder operation, which decodes an input as one object type; its 3 fields (Input, Object, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ObjectorDecoderProps struct {
   Input   *shimast.Expression
   Object  *nativemetadata.MetadataObjectType
-  Explore any
+  Explore UnionExplorer_IExplore
 }
 
+// UnionExplorer_ObjectorUnionizerProps is the argument of the Unionizer
+// operation, which handles several object types that no property can
+// discriminate.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Unionizer operation, which handles several object types that no property can discriminate; its 3 fields (Objects, Input, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ObjectorUnionizerProps struct {
   Objects []*nativemetadata.MetadataObjectType
   Input   *shimast.Expression
-  Explore any
+  Explore UnionExplorer_IExplore
 }
 
+// UnionExplorer_ObjectorFailureProps is the argument of the Failure operation,
+// which reports that no object type matched.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Failure operation, which reports that no object type matched; its 3 fields (Input, Expected, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ObjectorFailureProps struct {
   Input    *shimast.Expression
   Expected string
-  Explore  any
+  Explore  UnionExplorer_IExplore
 }
 
+// UnionExplorer_ObjectorFullProps is the argument of the Full operation, which
+// wraps a matched condition with the expected description.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Full operation, which wraps a matched condition with the expected description; its 4 fields (Condition, Input, Expected, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ObjectorFullProps struct {
   Condition *shimast.Expression
   Input     *shimast.Expression
   Expected  string
-  Explore   any
+  Explore   UnionExplorer_IExplore
 }
 
+// UnionExplorer_ObjectProps is the argument record of UnionExplorer.Object,
+// which explores a union of object types. Level is the nesting depth: it grows
+// when the object types left after the first discrimination are explored again.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Object, which explores a union of object types; its 6 fields (Config, Level, Objects, Input, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type UnionExplorer_ObjectProps struct {
   Config  UnionExplorer_ObjectConfig
   Level   int
   Objects []*nativemetadata.MetadataObjectType
   Input   *shimast.Expression
-  Explore any
+  Explore UnionExplorer_IExplore
   Emit    *shimprinter.EmitContext
 }
 
+// UnionExplorer_ArrayLikeConfig is the configuration shared by the array, tuple,
+// set and map explorers, which supplies their operations. Empty and Success are
+// the nodes returned for an empty input and for a match.
+//
+// @evidence contracts/common.md#principled-implementation It is the configuration shared by the array, tuple, set and map explorers, which supplies their operations; its 6 members (Checker, Candidate, Decoder, Empty, Success, Failure) are supplied by the caller, so the shared programmer holds no feature-specific behavior.
+// @evidence contracts/common.md#clear-and-simple-design A 6-member record of values and callbacks.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A declaration only.
+// @evidence contracts/common.md#meaningful-documentation The doc states the role and the meaning of the members that are not obvious.
 type UnionExplorer_ArrayLikeConfig struct {
   Checker   func(props UnionExplorer_ArrayLikeCheckerProps) *shimast.Node
   Candidate func(props UnionExplorer_ArrayLikeCandidateProps) *shimast.Node
@@ -87,78 +168,163 @@ type UnionExplorer_ArrayLikeConfig struct {
   Failure   func(props UnionExplorer_ArrayLikeFailureProps) *shimast.Node
 }
 
+// UnionExplorer_ArrayLikeCheckerProps is the argument of the Checker operation
+// of an array-like union, which tests one definition against the input.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Checker operation of an array-like union, which tests one definition against the input; its 4 fields (Input, Definition, Explore, Container) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayLikeCheckerProps struct {
-  Input      *shimast.Expression
+  Input *shimast.Expression
+
+  // Definition is element metadata for arrays/sets, a key/value metadata pair
+  // for maps, or the full MetadataTuple for tuples. The matching explorer and
+  // callback must agree on this representation.
   Definition any
-  Explore    any
-  Container  *shimast.Expression
+
+  Explore UnionExplorer_IExplore
+
+  // Container is the full array expression when Input is only its front value.
+  // Tuple callbacks may need it for container length checks.
+  Container *shimast.Expression
 }
 
+// UnionExplorer_ArrayLikeDecoderProps is the argument of the Decoder operation
+// of an array-like union, which decodes the input as one definition.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Decoder operation of an array-like union, which decodes the input as one definition; its 3 fields (Input, Definition, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayLikeDecoderProps struct {
-  Input      *shimast.Expression
+  Input *shimast.Expression
+
+  // Definition is the full MetadataArray or MetadataTuple selected for decode.
+  // Set/map explorers provide their synthesized MetadataArray representation.
   Definition any
-  Explore    any
+
+  Explore UnionExplorer_IExplore
 }
 
+// UnionExplorer_ArrayLikeCandidateProps is the argument of the Candidate
+// operation of an array-like union, which tests the whole array against one
+// definition before it is decoded.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Candidate operation of an array-like union, which tests the whole array against one definition before it is decoded; its 3 fields (Input, Definition, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayLikeCandidateProps struct {
-  Input      *shimast.Expression
+  Input *shimast.Expression
+
+  // Definition is the full candidate MetadataArray or MetadataTuple; Candidate
+  // validates container constraints before committing to its decoder.
   Definition any
-  Explore    any
+
+  Explore UnionExplorer_IExplore
 }
 
+// UnionExplorer_ArrayLikeFailureProps is the argument of the Failure operation
+// of an array-like union, which reports that no definition matched.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument of the Failure operation of an array-like union, which reports that no definition matched; its 3 fields (Input, Expected, Explore) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayLikeFailureProps struct {
   Input    *shimast.Expression
   Expected string
-  Explore  any
+  Explore  UnionExplorer_IExplore
 }
 
+// UnionExplorer_TupleProps is the argument record of UnionExplorer.Tuple, which
+// explores a union of tuple types.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Tuple, which explores a union of tuple types; its 6 fields (Config, Parameters, Input, Tuples, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_TupleProps struct {
   Config     UnionExplorer_ArrayLikeConfig
   Parameters []*shimast.Node
   Input      *shimast.Expression
   Tuples     []*nativemetadata.MetadataTuple
-  Explore    any
+  Explore    UnionExplorer_IExplore
   Emit       *shimprinter.EmitContext
 }
 
+// UnionExplorer_ArrayProps is the argument record of UnionExplorer.Array, which
+// explores a union of array types.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Array, which explores a union of array types; its 6 fields (Config, Parameters, Input, Arrays, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayProps struct {
   Config     UnionExplorer_ArrayLikeConfig
   Parameters []*shimast.Node
   Input      *shimast.Expression
   Arrays     []*nativemetadata.MetadataArray
-  Explore    any
+  Explore    UnionExplorer_IExplore
   Emit       *shimprinter.EmitContext
 }
 
+// UnionExplorer_ArrayOrTupleProps is the argument record of
+// UnionExplorer.Array_or_tuple, which explores a union of array and tuple
+// definitions in one pass.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Array_or_tuple, which explores a union of array and tuple definitions in one pass; its 6 fields (Config, Parameters, Input, Definitions, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_ArrayOrTupleProps struct {
-  Config      UnionExplorer_ArrayLikeConfig
-  Parameters  []*shimast.Node
-  Input       *shimast.Expression
+  Config     UnionExplorer_ArrayLikeConfig
+  Parameters []*shimast.Node
+  Input      *shimast.Expression
+
+  // Definitions contains MetadataArray and MetadataTuple candidates in the
+  // order supplied by the owning feature; no other dynamic type is supported.
   Definitions []any
-  Explore     any
-  Emit        *shimprinter.EmitContext
+
+  Explore UnionExplorer_IExplore
+  Emit    *shimprinter.EmitContext
 }
 
+// UnionExplorer_SetProps is the argument record of UnionExplorer.Set, which
+// explores a union of set types.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Set, which explores a union of set types; its 6 fields (Config, Parameters, Input, Sets, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_SetProps struct {
   Config     UnionExplorer_ArrayLikeConfig
   Parameters []*shimast.Node
   Input      *shimast.Expression
   Sets       []*nativemetadata.MetadataSet
-  Explore    any
+  Explore    UnionExplorer_IExplore
   Emit       *shimprinter.EmitContext
 }
 
+// UnionExplorer_MapProps is the argument record of UnionExplorer.Map, which
+// explores a union of map types.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of UnionExplorer.Map, which explores a union of map types; its 6 fields (Config, Parameters, Input, Maps, Explore, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type UnionExplorer_MapProps struct {
   Config     UnionExplorer_ArrayLikeConfig
   Parameters []*shimast.Node
   Input      *shimast.Expression
   Maps       []*nativemetadata.MetadataMap
-  Explore    any
+  Explore    UnionExplorer_IExplore
   Emit       *shimprinter.EmitContext
 }
 
 func (unionExplorerNamespace) Object(props UnionExplorer_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if len(props.Objects) == 1 {
     return props.Config.Objector.Decoder(UnionExplorer_ObjectorDecoderProps{
       Input:   props.Input,
@@ -232,7 +398,7 @@ func (unionExplorerNamespace) Object(props UnionExplorer_ObjectProps) *shimast.N
   for i := len(filtered) - 1; i >= 0; i-- {
     spec := filtered[i]
     key := *spec.Property.Key.GetSoleLiteral()
-    accessor := nativefactories.IdentifierFactory.Access(nil, props.Input, key)
+    accessor := nativefactories.IdentifierFactory.Access(props.Emit, props.Input, key)
 
     var pred *shimast.Node
     if spec.Neighbor {
@@ -242,7 +408,7 @@ func (unionExplorerNamespace) Object(props UnionExplorer_ObjectProps) *shimast.N
         Explore:  unionExplorer_with_postfix(props.Explore, false, nativefactories.IdentifierFactory.Postfix(key)),
       })
     } else {
-      pred = nativefactories.ExpressionFactory.IsRequired(accessor)
+      pred = nativefactories.ExpressionFactory.IsRequired(accessor, props.Emit)
       if props.Config.Objector.Required != nil {
         pred = props.Config.Objector.Required(pred)
       }
@@ -329,7 +495,7 @@ func (unionExplorerNamespace) Tuple(props UnionExplorer_TupleProps) *shimast.Nod
 }
 
 func (unionExplorerNamespace) Array(props UnionExplorer_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   definitions := make([]any, 0, len(props.Arrays))
   for _, array := range props.Arrays {
     definitions = append(definitions, array)
@@ -342,7 +508,7 @@ func (unionExplorerNamespace) Array(props UnionExplorer_ArrayProps) *shimast.Nod
         return x.(*nativemetadata.MetadataArray).Type.Value
       },
       Size: func(input *shimast.Expression) *shimast.Node {
-        return nativefactories.IdentifierFactory.Access(nil, input, "length")
+        return nativefactories.IdentifierFactory.Access(props.Emit, input, "length")
       },
       Front: func(input *shimast.Expression) *shimast.Node {
         return f.NewElementAccessExpression(input, nil, nativefactories.ExpressionFactory.Number(0, props.Emit), shimast.NodeFlagsNone)
@@ -361,7 +527,7 @@ func (unionExplorerNamespace) Array(props UnionExplorer_ArrayProps) *shimast.Nod
 }
 
 func (unionExplorerNamespace) Array_or_tuple(props UnionExplorer_ArrayOrTupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   return unionExplorer_check_union_array_like(unionExplorer_check_union_array_likeProps{
     Config: props.Config,
     Accessor: unionExplorer_check_union_array_likeAccessor{
@@ -373,7 +539,7 @@ func (unionExplorerNamespace) Array_or_tuple(props UnionExplorer_ArrayOrTuplePro
         return x
       },
       Size: func(input *shimast.Expression) *shimast.Node {
-        return nativefactories.IdentifierFactory.Access(nil, input, "length")
+        return nativefactories.IdentifierFactory.Access(props.Emit, input, "length")
       },
       Front: func(input *shimast.Expression) *shimast.Node {
         return f.NewElementAccessExpression(input, nil, nativefactories.ExpressionFactory.Number(0, props.Emit), shimast.NodeFlagsNone)
@@ -399,7 +565,7 @@ func (unionExplorerNamespace) Array_or_tuple(props UnionExplorer_ArrayOrTuplePro
 }
 
 func (unionExplorerNamespace) Set(props UnionExplorer_SetProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   definitions := make([]any, 0, len(props.Sets))
   for _, set := range props.Sets {
     definitions = append(definitions, set.Value)
@@ -425,24 +591,24 @@ func (unionExplorerNamespace) Set(props UnionExplorer_SetProps) *shimast.Node {
         return array.(*nativemetadata.MetadataArray).Type.Value
       },
       Size: func(input *shimast.Expression) *shimast.Node {
-        return nativefactories.IdentifierFactory.Access(nil, input, "size")
+        return nativefactories.IdentifierFactory.Access(props.Emit, input, "size")
       },
       Front: func(input *shimast.Expression) *shimast.Node {
         values := f.NewCallExpression(
-          nativefactories.IdentifierFactory.Access(nil, input, "values"),
+          nativefactories.IdentifierFactory.Access(props.Emit, input, "values"),
           nil,
           nil,
           nil,
           shimast.NodeFlagsNone,
         )
         next := f.NewCallExpression(
-          nativefactories.IdentifierFactory.Access(nil, values, "next"),
+          nativefactories.IdentifierFactory.Access(props.Emit, values, "next"),
           nil,
           nil,
           nil,
           shimast.NodeFlagsNone,
         )
-        return nativefactories.IdentifierFactory.Access(nil, next, "value")
+        return nativefactories.IdentifierFactory.Access(props.Emit, next, "value")
       },
       Array: func(input *shimast.Expression) *shimast.Node {
         return f.NewArrayLiteralExpression(
@@ -465,7 +631,7 @@ func (unionExplorerNamespace) Set(props UnionExplorer_SetProps) *shimast.Node {
 }
 
 func (unionExplorerNamespace) Map(props UnionExplorer_MapProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   definitions := make([]any, 0, len(props.Maps))
   for _, m := range props.Maps {
     definitions = append(definitions, m)
@@ -478,24 +644,24 @@ func (unionExplorerNamespace) Map(props UnionExplorer_MapProps) *shimast.Node {
         return []*nativemetadata.MetadataSchema{elements[0], elements[1]}
       },
       Size: func(input *shimast.Expression) *shimast.Node {
-        return nativefactories.IdentifierFactory.Access(nil, input, "size")
+        return nativefactories.IdentifierFactory.Access(props.Emit, input, "size")
       },
       Front: func(input *shimast.Expression) *shimast.Node {
         entries := f.NewCallExpression(
-          nativefactories.IdentifierFactory.Access(nil, input, "entries"),
+          nativefactories.IdentifierFactory.Access(props.Emit, input, "entries"),
           nil,
           nil,
           nil,
           shimast.NodeFlagsNone,
         )
         next := f.NewCallExpression(
-          nativefactories.IdentifierFactory.Access(nil, entries, "next"),
+          nativefactories.IdentifierFactory.Access(props.Emit, entries, "next"),
           nil,
           nil,
           nil,
           shimast.NodeFlagsNone,
         )
-        return nativefactories.IdentifierFactory.Access(nil, next, "value")
+        return nativefactories.IdentifierFactory.Access(props.Emit, next, "value")
       },
       Array: func(input *shimast.Expression) *shimast.Node {
         return f.NewArrayLiteralExpression(
@@ -569,7 +735,7 @@ type unionExplorer_check_union_array_likeProps struct {
   Parameters  []*shimast.Node
   Input       *shimast.Expression
   Definitions []any
-  Explore     any
+  Explore     UnionExplorer_IExplore
   Emit        *shimprinter.EmitContext
 }
 
@@ -583,7 +749,7 @@ type unionExplorer_check_union_array_likeAccessor struct {
 }
 
 func unionExplorer_check_union_array_like(props unionExplorer_check_union_array_likeProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   transform := props.Accessor.Transform
   if transform == nil {
     transform = func(origin any) any { return origin }
@@ -804,7 +970,7 @@ func unionExplorer_check_union_array_like(props unionExplorer_check_union_array_
       nativefactories.StatementFactory.Constant(nativefactories.StatementFactory_ConstantProps{
         Name: "passed",
         Value: f.NewCallExpression(
-          nativefactories.IdentifierFactory.Access(nil, f.NewIdentifier("arrayPredicators"), "filter"),
+          nativefactories.IdentifierFactory.Access(props.Emit, f.NewIdentifier("arrayPredicators"), "filter"),
           nil,
           nil,
           f.NewNodeList([]*shimast.Node{
@@ -875,10 +1041,10 @@ func unionExplorer_check_union_array_like(props unionExplorer_check_union_array_
 }
 
 func unionExplorer_array_if(iterate func(init string, from *shimast.Expression, ifStatement *shimast.Node) *shimast.Node, array *shimast.Node, top *shimast.Node, success *shimast.Expression, candidate bool, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if candidate {
     elementCondition := f.NewCallExpression(
-      nativefactories.IdentifierFactory.Access(nil, array, "every"),
+      f.NewPropertyAccessExpression(array, nil, f.NewIdentifier("every"), shimast.NodeFlagsNone),
       nil,
       nil,
       f.NewNodeList([]*shimast.Node{
@@ -981,7 +1147,7 @@ func unionExplorer_array_if(iterate func(init string, from *shimast.Expression, 
         f.NewIdentifier("passed"),
         f.NewIfStatement(
           f.NewCallExpression(
-            nativefactories.IdentifierFactory.Access(nil, array, "every"),
+            f.NewPropertyAccessExpression(array, nil, f.NewIdentifier("every"), shimast.NodeFlagsNone),
             nil,
             nil,
             f.NewNodeList([]*shimast.Node{
@@ -1036,7 +1202,7 @@ func unionExplorer_array_candidate_condition(element *shimast.Node, candidate bo
   if candidate == false {
     return element
   }
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBinaryExpression(
     nil,
     f.NewCallExpression(
@@ -1053,56 +1219,20 @@ func unionExplorer_array_candidate_condition(element *shimast.Node, candidate bo
 }
 
 func unionExplorer_return_or_statement(node *shimast.Node, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(unionExplorer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if node == nil || node.Kind == shimast.KindReturnStatement {
     return node
   }
   return f.NewReturnStatement(node)
 }
 
-func unionExplorer_with_tracable(base any, tracable bool) any {
-  switch value := base.(type) {
-  case UnionExplorer_IExplore:
-    value.Tracable = tracable
-    return value
-  case *UnionExplorer_IExplore:
-    next := *value
-    next.Tracable = tracable
-    return next
-  case map[string]any:
-    next := map[string]any{}
-    for k, v := range value {
-      next[k] = v
-    }
-    next["tracable"] = tracable
-    return next
-  default:
-    return base
-  }
+func unionExplorer_with_tracable(base UnionExplorer_IExplore, tracable bool) UnionExplorer_IExplore {
+  base.Tracable = tracable
+  return base
 }
 
-func unionExplorer_with_postfix(base any, tracable bool, postfix string) any {
-  switch value := base.(type) {
-  case UnionExplorer_IExplore:
-    value.Tracable = tracable
-    value.Postfix = postfix
-    return value
-  case *UnionExplorer_IExplore:
-    next := *value
-    next.Tracable = tracable
-    next.Postfix = postfix
-    return next
-  case map[string]any:
-    next := map[string]any{}
-    for k, v := range value {
-      next[k] = v
-    }
-    next["tracable"] = tracable
-    next["postfix"] = postfix
-    return next
-  default:
-    return base
-  }
+func unionExplorer_with_postfix(base UnionExplorer_IExplore, tracable bool, postfix string) UnionExplorer_IExplore {
+  base.Tracable = tracable
+  base.Postfix = postfix
+  return base
 }
-
-var unionExplorer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})

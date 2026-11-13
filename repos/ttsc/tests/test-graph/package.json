@@ -1,13 +1,15 @@
 {
   "private": true,
   "name": "@ttsc/test-graph",
-  "version": "0.30.4",
-  "description": "@ttsc/graph MCP server end-to-end tests.",
+  "version": "0.37.0",
+  "description": "Unit tests for @ttsc/graph.",
   "type": "module",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning --import ../../scripts/register-extensionless-ts-loader.mjs --experimental-transform-types src/index.ts"
+    "start": "node --import ../../config/register-unit-loader.mjs src/index.ts",
+    "evidence": "evidence"
   },
   "devDependencies": {
+    "@wrtnlabs/evidence": "catalog:samchon",
     "@ttsc/graph": "workspace:*",
     "@ttsc/testing": "workspace:*",
     "@types/node": "catalog:utils",

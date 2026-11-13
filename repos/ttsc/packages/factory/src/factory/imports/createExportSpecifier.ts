@@ -22,6 +22,20 @@ import { make } from "../internal/make";
  * @param propertyName The original (source) name, when aliased.
  * @param name The name.
  * @returns The created {@link ExportSpecifier}.
+ * @evidence contracts/common.md#principled-implementation
+ *   Optional propertyName is the source name and name is the exposed name;
+ *   string normalization preserves the alias distinction and type-only marker.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The specifier carries binding syntax; NamedExports and ExportDeclaration
+ *   own grouping and any from clause.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Aliasing constructs source syntax rather than mutating an actual export table.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   Native prose explains omitted aliases, string inputs and type-only prefixes,
+ *   with a source-as-target example and separate tag paragraphs.
  */
 export const createExportSpecifier = (
   isTypeOnly: boolean,

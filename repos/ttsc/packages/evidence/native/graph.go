@@ -1,7 +1,6 @@
 package evidence
 
 import (
-  "os"
   "path/filepath"
   "sort"
   "strings"
@@ -13,8 +12,25 @@ type graphRule struct{}
 
 func (graphRule) Name() string { return graphRuleName }
 
+// UsesProjectInputReader declares the actual external-input read boundary.
+// Native readers use the supplied generation reader; external bridges withdraw
+// completeness because their independent module/input reads are not observed.
+func (graphRule) UsesProjectInputReader() bool { return true }
+
 func (graphRule) NeedsTypeChecker() bool { return false }
 
+// Check builds artifact populations and checks each active claim's obligations.
+//
+// Claim populations are loaded first because a healthy empty population owes
+// nothing; its references must not trigger unrelated reads or failures. Failed
+// populations remain active, and their health prevents partial inventories from
+// producing a false coverage result. TypeScript identities come from parsed
+// declarations, while Markdown, Prisma and Swagger retain their own hierarchies.
+//
+// Inventory construction, address resolution and obligation evaluation are
+// separate stages so selectors never invent declarations or decide identity.
+// Successful publication reuses those inventories for editor hints; diagnostics
+// and Program-cycle coordination remain owned by the host's project-rule API.
 func (graphRule) Check(ctx *rule.ProjectContext) {
   if ctx == nil {
     return
@@ -31,6 +47,7 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
     reportProblems(ctx, problems)
     return
   }
+  config.inputs = evidenceInputReader{host: ctx.Inputs}
   resolveGraphSeverities(&config, ctx.Severity)
   config = enabledGraphConfig(config)
   if len(config.Claims) == 0 {
@@ -42,7 +59,7 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
     ctx.Report("Evidence graph could not resolve the project root. Run ttsc with a project config or explicit project root so project-relative evidence globs have one stable base.")
     return
   }
-  info, err := os.Stat(root)
+  info, err := config.inputs.Stat(root)
   if err != nil || !info.IsDir() {
     ctx.Report("Evidence graph project root '" + root + "' is not a readable directory. Fix the ttsc project identity before evaluating evidence globs.")
     return
@@ -62,9 +79,11 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
     ctx.Sources,
     claimPopulationConfig(config, artifactTypeScript),
   )
+  markdownSnapshot := &markdownCapture{}
   markdownClaims, markdownClaimProblems := loadMarkdownInventories(
     root,
     claimPopulationConfig(config, artifactMarkdown),
+    markdownSnapshot,
   )
   prismaClaims, prismaClaimProblems := loadPrismaInventories(
     root,
@@ -89,15 +108,15 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
   config = activeGraphConfig(config, markdownClaims, prismaClaims, typescript)
   governed := map[string]bool{}
   extendTypeScriptInventories(root, ctx.Sources, config, typescript, nil)
-  recordGovernedTypeScriptFiles(ctx.Sources, declared, governed)
-  markdown, markdownProblems := loadMarkdownInventories(root, config)
+  recordGovernedTypeScriptFiles(root, ctx.Sources, declared, governed)
+  markdown, markdownProblems := loadMarkdownInventories(root, config, markdownSnapshot)
   prisma, prismaProblems := loadPrismaInventories(root, config)
   swagger, swaggerProblems := loadSwaggerInventories(root, config)
   diagnostics = append(diagnostics, markdownProblems...)
   diagnostics = append(diagnostics, prismaProblems...)
   diagnostics = append(diagnostics, swaggerProblems...)
   diagnostics = append(diagnostics, unreadableTypeScriptTags(typescript, governed, declared)...)
-  loader := newTypeScriptLoader(root, typescript)
+  loader := newTypeScriptLoader(root, typescript, config.inputs)
   states, stateProblems := materializeClaimStates(
     config,
     markdown,
@@ -112,7 +131,9 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
   if len(diagnostics) == 0 {
     // Published only on a clean evaluation, because the host reads state
     // from a rule that passed and reporting anything marks this one failed
-    // (`linthost/hints.go:147-149`, `linthost/project_engine.go:68-77`).
+    // (`collectProjectHints` in `linthost/hints.go` skips a rule whose status is
+    // not passed, and `projectReporter` in `linthost/project_engine.go` marks a
+    // rule failed once it reports).
     // Setting it unconditionally would not widen the gate; it would only
     // hide where the gate is.
     cycle.Corpus = graphCorpus{
@@ -164,7 +185,7 @@ func claimPopulationConfig(
     claim.References = nil
     claims = append(claims, claim)
   }
-  return graphConfig{Claims: claims}
+  return graphConfig{Claims: claims, inputs: config.inputs}
 }
 
 // activeGraphConfig omits healthy claim populations that contain no own unit
@@ -660,14 +681,13 @@ func evaluateEvidenceGraph(
       continue
     }
     candidates := declarationCandidates(declaration.Target, targets, markdownTargets)
-    // The configuration guard refuses a code population to a claim that
-    // cannot address one, but the address map is built from every claim at
-    // once — so a Markdown claim could still land on a symbol materialized
-    // by some *other* claim's TypeScript reference. Measured: it resolved
-    // silently, which left repository-wide name uniqueness load-bearing
-    // through a door the guard does not cover. Closing it here rather than
-    // by scoping the whole map keeps resolution global for the artifacts
-    // that are addressed by path, where a shared map costs nothing.
+    // The address map is built from every claim at once, so a claim that
+    // addresses code only through a file-qualified link, such as a Markdown
+    // claim, could still land on a symbol materialized by some *other* claim's
+    // TypeScript reference through a plain token. That would resolve silently
+    // and make repository-wide name uniqueness load-bearing. Refusing it here
+    // rather than scoping the whole map keeps resolution global for the
+    // artifacts that are addressed by path, where a shared map costs nothing.
     if declaration.Type != artifactTypeScript {
       addressable, code := splitCodeCandidates(candidates)
       if len(addressable) == 0 && len(code) != 0 {
@@ -937,9 +957,16 @@ func evaluateEvidenceGraph(
           for _, unit := range covered {
             targets = append(targets, "'"+unit.Target+"'")
           }
+          // The exclusion alternative is offered only where this reference
+          // accepts one: a checklist is the pairing `noEvidenceExclude` is allowed
+          // beside, and there the exclusion would be refused as forbidden.
+          repair := "Cite each item this host answers for, or write @evidenceExclude on this scope when none of it applies here."
+          if reference.Spec.Policy.NoExclude {
+            repair = "Cite each item this host answers for; this reference forbids @evidenceExclude."
+          }
           problems = problems.add(
             severity,
-            "Aggregate @evidence target '"+scopesByID[scopeID].Target+"' at "+declaration.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": this reference is a checklist, so a citation answers for the item it names, and this target names a scope containing "+decimal(len(covered))+" item(s) ("+strings.Join(targets, ", ")+") rather than one of them. Cite each item this host answers for, or write @evidenceExclude on this scope when none of it applies here."+untrueTagWarning,
+            "Aggregate @evidence target '"+scopesByID[scopeID].Target+"' at "+declaration.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": this reference is a checklist, so a citation answers for the item it names, and this target names a scope containing "+decimal(len(covered))+" item(s) ("+strings.Join(targets, ", ")+") rather than one of them. "+repair+untrueTagWarning,
           )
           for _, unit := range covered {
             for _, hostID := range keyHosts {
@@ -976,7 +1003,7 @@ func evaluateEvidenceGraph(
           if first := byScope[scopeID]; first != nil {
             problems = problems.add(
               severity,
-              "Duplicate @evidence for '"+scopesByID[scopeID].Target+"' on the same host at "+declaration.location()+"; first declared at "+first.location()+".",
+              "Duplicate @evidence for '"+scopesByID[scopeID].Target+"' on the same host at "+declaration.location()+"; first declared at "+first.location()+". Delete the repeated citation.",
             )
           } else {
             byScope[scopeID] = declaration
@@ -1084,13 +1111,13 @@ func evaluateEvidenceGraph(
           }
           problems = problems.add(
             severity,
-            "Conflicting acknowledgements for '"+conflictingUnit.Target+"' in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": @evidence at "+evidence.location()+" overlaps @evidenceExclude at "+exclusion.location()+". Delete whichever is untrue of this host."+untrueTagWarning,
+            "Conflicting acknowledgements for '"+conflictingUnit.Target+"' in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": @evidence at "+evidence.location()+" overlaps @evidenceExclude at "+exclusion.location()+". Delete whichever of the two is untrue."+untrueTagWarning,
           )
         }
         if duplicateExclusionUnit != nil {
           problems = problems.add(
             severity,
-            "Duplicate @evidenceExclude for '"+duplicateExclusionUnit.Target+"' in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": exclusion at "+declaration.location()+" overlaps exclusion at "+firstExclusion.location()+".",
+            "Duplicate @evidenceExclude for '"+duplicateExclusionUnit.Target+"' in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": exclusion at "+declaration.location()+" overlaps exclusion at "+firstExclusion.location()+". Delete one of the two exclusions.",
           )
         }
       }
@@ -1108,7 +1135,7 @@ func evaluateEvidenceGraph(
           }
           problems = problems.add(
             severity,
-            "Evidence host "+host.Readable+" at "+host.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+" cites "+decimal(count)+" distinct selected evidence unit(s); singleEvidencePerSymbol requires exactly 1. Split this host so each unit has one that owns it, or keep positive @evidence citations on this semantic host to exactly one distinct unit.",
+            "Evidence host "+host.Readable+" at "+host.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+" cites "+decimal(count)+" distinct selected evidence unit(s); singleEvidencePerSymbol requires exactly 1. Keep positive @evidence citations on this semantic host to exactly one distinct unit: cite the one unit it answers for, or split the host so that each unit has a host of its own."+untrueTagWarning,
           )
         }
       }
@@ -1206,9 +1233,18 @@ func evaluateEvidenceGraph(
         host = "unsupported or non-exported declaration"
       }
       if declaration.Tag == tagExclude {
+        // The carriers differ by artifact kind, so the repair names only the ones
+        // this kind has: an unattached run exists in Prisma schemas alone.
+        repair := "Move the exclusion onto a selected host of the claim."
+        switch declaration.Type {
+        case artifactTypeScript:
+          repair = "Move the exclusion onto a supported public export in a matching claim file."
+        case artifactPrisma:
+          repair = "Move the exclusion onto a selected model, column, or relation, or into a top-level unattached '///' run in a matching claim file."
+        }
         problems = problems.add(
           outOfScopeLevels[id],
-          "Out-of-scope @evidenceExclude carrier at "+declaration.location()+" for "+strings.Join(obligations, "; ")+", target '"+displayTarget(declaration.Target)+"': '"+host+"' is not an eligible exclusion carrier in these matching claim files. Move the exclusion to a supported public export or selected declaration host, or use a top-level unattached Prisma documentation comment.",
+          "Out-of-scope @evidenceExclude carrier at "+declaration.location()+" for "+strings.Join(obligations, "; ")+", target '"+displayTarget(declaration.Target)+"': '"+host+"' is not an eligible exclusion carrier in these matching claim files. "+repair+untrueTagWarning,
         )
         continue
       }
@@ -1421,7 +1457,7 @@ func hiddenTargetProblem(
   hidden *evidenceUnit,
   context string,
 ) string {
-  return "Hidden evidence target '" + displayTarget(declaration.Target) + "' at " + declaration.location() + " for " + context + ": " + hidden.Readable + " at " + hidden.location() + " carries '" + hidden.Hidden + "' in its documentation comment, which removes it from the evidence population along with everything nested inside it. Remove the tag if the declaration is public contract, or drop this citation if it is not. Do not remove '@hidden' from the target to make this citation legal." + untrueTagWarning
+  return "Hidden evidence target '" + displayTarget(declaration.Target) + "' at " + declaration.location() + " for " + context + ": " + hidden.Readable + " at " + hidden.location() + " carries '" + hidden.Hidden + "' in its documentation comment, which removes it from the evidence population along with everything nested inside it. Remove the tag if the declaration is public contract, or drop this citation if it is not. Do not remove '" + hidden.Hidden + "' from the target to make this citation legal." + untrueTagWarning
 }
 
 func declarationResolutionUncertain(owners []claimState) bool {
@@ -1659,7 +1695,7 @@ func resolveReferenceEntry(
 ) (string, string) {
   entry := loader.packageEntryModule(reference.Package)
   if entry == "" {
-    return "", claimLabel(claim) + " " + referenceLabel(reference) + " could not resolve the declaration entry of package '" + reference.Package + "'. Install it, or select its declarations with 'files'; the entry is read from the 'types' condition of 'exports', then 'typesVersions', then 'types'."
+    return "", claimLabel(claim) + " " + referenceLabel(reference) + " could not resolve the declaration entry of package '" + reference.Package + "'. Install it, or select its declarations with 'files'; the entry is read from the 'types' condition of 'exports', then 'typesVersions', then 'types' or 'typings'. A package with none of those resolves only when its 'exports' target or 'main' names TypeScript source itself."
   }
   return entry, ""
 }

@@ -18,16 +18,32 @@
  *   (samchon/ttsc#718) reports each transform's derived inputs. Workers retain
  *   them under `node_modules/.cache/ttsc-metro`, compare their generation state
  *   with the exact main-process key baseline, and batch one durable write per
- *   delivered module.
+ *   delivered module. Directory-listing predicates retain their paths
+ *   separately so the next static key captures the exact compiler-accessible
+ *   files and directories, rather than reconstructing an earlier baseline after
+ *   workers have run.
+ *
+ * Native contributor codecs retain separate per-path kind requests; their raw
+ * byte, entry and directory facts are captured anew for the next key. Schema
+ * four snapshots cannot establish those requests and restart with a fresh
+ * epoch. Schema six also records environment names. The static key hashes their
+ * current values and its private baseline retains those digests; workers
+ * compare recorded reads against that baseline before authorizing reuse.
  *
  * Snapshot layout: one main file carrying a random epoch id plus per-worker
  * files with unique names, so concurrent workers never race a shared write.
  * `withTtsc` compacts worker files into the main file before its workers exist,
  * under a process-shared lock for builds using the same project cache. Readers
  * take the union of every file, reading the worker files strictly before the
- * main file: the compactor renames the merged main into place strictly before
- * deleting a worker file, so a worker file that disappears mid-read is always
- * already merged into the main the reader loads afterwards.
+ * main file. The compactor renames each worker file to a claimed name first,
+ * renames the merged main into place next, and deletes the claimed files last.
+ * A name that vanishes between a reader's listing and its read may therefore be
+ * a claim whose merge is not published yet, so the reader lists again until a
+ * pass reads every name it saw, and degrades to a nonce when the directory does
+ * not settle. A claimed file deleted after the merge is already inside the main
+ * the reader loads afterwards. A worker file the compactor could not delete
+ * stays, and the main names it as compacted, so no reader or later compaction
+ * merges it twice.
  *
  * Sound degradations, by design:
  *
@@ -58,6 +74,8 @@ import {
   mergeMembershipPolicyOverlay,
   readProjectMembershipPolicy,
   readTsconfigSourceSnapshot,
+  searchedReferencedProjects,
+  selectReferencedProject,
   watchInputEvidenceMatchesBaseline,
 } from "@ttsc/unplugin/api";
 import type {
@@ -71,8 +89,11 @@ import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import type { SnapshotReadOperations } from "./SnapshotReadOperations";
+import type { TtscMetroProjectView } from "./TtscMetroProjectView";
+
 /** Bumped when the snapshot JSON shape changes; mismatches read as corrupt. */
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 6;
 
 /** Snapshot directory segments under the fingerprint base directory. */
 const SNAPSHOT_DIRECTORY = ["node_modules", ".cache", "ttsc-metro"];
@@ -89,6 +110,20 @@ const WORKER_SNAPSHOT_PREFIX = "graph-inputs.worker-";
 /** Prefix used after a compactor atomically claims an immutable worker file. */
 const CLAIMED_WORKER_SNAPSHOT_PREFIX = "graph-inputs.worker-claimed-";
 
+/**
+ * Listing passes a reader repeats while a listed snapshot name keeps vanishing
+ * before it can be read. Each repeat needs another compactor to rename or
+ * remove a file, so exhausting the bound means the directory is not settling
+ * and the state cannot be proven.
+ */
+const SNAPSHOT_LISTING_ATTEMPTS = 8;
+
+const HOST_SNAPSHOT_READ_OPERATIONS: SnapshotReadOperations = {
+  existsSync: (file) => fs.existsSync(file),
+  readFileSync: (file, encoding) => fs.readFileSync(file, encoding),
+  readdirSync: (directory) => fs.readdirSync(directory),
+};
+
 /** Directory lock serializing the one mutable main-snapshot rewrite. */
 const SNAPSHOT_COMPACTION_LOCK = "snapshot-compaction.lock";
 
@@ -101,29 +136,71 @@ const KEY_BASELINE_PREFIX = "key-baseline-";
 /** Run-token prefix that forces every transformer key to be non-reusable. */
 const NON_REUSABLE_RUN_PREFIX = "nonce:";
 
+/** Requested native codecs, separate from compiler-accessible entry listings. */
+type NativeInputKind = keyof NonNullable<
+  TtscWatchInputBaseline["nativePredicates"]
+>;
+
 /** Union of the snapshot state readable on disk. */
 interface SnapshotState {
+  /** Native environment names read by delivered generations. */
+  environment: string[];
+
+  /** Native version-one kinds to observe again for each recorded path. */
+  nativePredicates: Record<string, NativeInputKind[]>;
+  /** Paths whose compiler-visible immediate entry listings affect output. */
+  accessibleEntries: string[];
+
   /** Random epoch id minted when the main snapshot was created. */
   id: string;
+
   /** Absolute paths of every recorded derived transform input. */
   files: string[];
+
+  /**
+   * The recorded inputs that are plugin source directories, each also in
+   * `files`, whose state the static key carries (samchon/ttsc#1487).
+   */
+  trees: string[];
+
   /** Whether any recorded transform declared volatile output. */
   volatile: boolean;
+
   /** Whether a transform observed state different from its run's static key. */
   tainted: boolean;
 }
 
 /** Serialized shape of the main and worker snapshot files. */
 interface SnapshotDocument {
+  /** Names only; secret environment values are never serialized here. */
+  environment: string[];
+
+  /** Native kind requests, each path also retained in files. */
+  nativePredicates: Record<string, NativeInputKind[]>;
+  /** Recorded listing predicates, each also present in files. */
+  accessibleEntries: string[];
+
+  /**
+   * The claimed worker files this main snapshot already holds, by name. A
+   * compaction removes each claimed file after merging it, and a removal can
+   * fail (a Windows process holding the file); what stays behind is merged
+   * again by no one. Present only on the main snapshot.
+   */
+  compacted?: string[];
+
   files: string[];
   id?: string;
   tainted: boolean;
+  trees: string[];
   version: number;
   volatile: boolean;
 }
 
 /** Main-process input states that one Metro run's static key actually used. */
 interface KeyBaselineDocument {
+  /** Digests of the environment values the static key observed. */
+  environment: Record<string, string>;
+
   inputs: Record<string, TtscWatchInputKeyBaseline>;
   runId: string;
   staticInputs: string[];
@@ -147,6 +224,40 @@ const unhealthySnapshots = new Set<string>();
  * from Metro's cache-key options, the transformer from each file's transform
  * options — all the same value in a real Metro run), else the working directory
  * Metro was launched from.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Node path.resolve provides one agreed base for config preparation, static
+ *   keying and worker recording. A nonempty projectRoot wins; absent or empty
+ *   input uses cwd.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One helper defines the shared base fallback for preparation, keying and
+ *   worker recording instead of giving each boundary its own anchor policy.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   This operation delegates one path resolution and chooses a fallback; it
+ *   owns no collection-processing strategy.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   The base depends on caller input and current cwd; this pure mapping
+ *   coordinates no shared computation.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   It returns a directory string and owns no retained state or handle.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   It computes a directory value without changing the filesystem, foreign
+ *   APIs or consumer-specific behavior.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node path.resolve and process.cwd handle native path roots and separators
+ *   on supported OSes. No URL conversion or process spawning occurs.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains shared base ownership and the absent/empty
+ *   projectRoot fallback. Checked against the documentation skill: separate
+ *   paragraphs state the contract and why its nonobvious boundary matters;
+ *   field comments retain their own useful facts.
  */
 export function resolveFingerprintBase(
   projectRoot: string | undefined,
@@ -159,13 +270,53 @@ export function resolveFingerprintBase(
 }
 
 /**
- * The directories whose walk universes the fingerprint hashes: the base
- * directory, plus the resolved tsconfig's directory when the tsconfig is not
- * already inside the base walk (an explicit out-of-root `project`, or a
- * monorepo-root tsconfig discovered above the app). Matching the transform
- * core's own validation universe keeps the invariant simple: everything the
- * core treats as an input is fingerprinted by the walk, the recorded snapshot,
- * or both.
+ * The directories whose walk universes the fingerprint hashes. Implicit
+ * selection searches from the base upward, so a config at the base uses that
+ * walk and a config above it replaces the base walk with its own directory,
+ * which contains the base. An explicit project inside the base uses the base
+ * walk; one above the base replaces it; one elsewhere adds its directory. The
+ * separate per-file project view can select a nested config below the base.
+ * Matching the transform core's validation universe keeps the invariant simple:
+ * everything it treats as an input is fingerprinted by the walk, the recorded
+ * snapshot, or both.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   The shared project resolver owns tsconfig selection; lexical path
+ *   containment is separate from program membership.
+ *   Blank explicit options mean implicit discovery. An in-root config avoids a
+ *   duplicate whole-tree walk; a config above the base walks its own directory,
+ *   which contains the base, instead of hashing the base subtree twice; an
+ *   unrelated out-of-root config adds its directory because it can supply
+ *   transform inputs.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Project selection delegates to the shared resolver and containment to
+ *   projectViewRoots, separating config ownership from walk-root choice.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   It delegates shared project discovery and computes at most two roots;
+ *   traversal cost belongs to that resolver and the fingerprint operation.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   This mapping retains no discovery result between calls and coordinates
+ *   no completed or in-flight computation.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Roots transfer to the caller; no retained state or handle is acquired.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   No fixture-specific roots or patched filesystem APIs are used.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node resolve and dirname handle Windows drives and POSIX roots. Lexical
+ *   containment compares complete path components with only volume-root case
+ *   normalization; it does not merge distinct native names by OS assumption.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains walk roots, implicit selection and why outside
+ *   configs extend coverage. Checked against the documentation skill:
+ *   separate paragraphs state the contract and why its nonobvious boundary
+ *   matters; field comments retain their own useful facts.
  */
 export function fingerprintRoots(
   base: string,
@@ -194,45 +345,18 @@ function projectViewRoots(
   // the whole project twice on every cache key (samchon/ttsc#1307).
   const resolvedBase = path.resolve(base);
   const directory = path.dirname(path.resolve(tsconfig));
-  const relative = path.relative(resolvedBase, directory);
-  const inside =
-    relative === "" ||
-    (relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative));
+  const inside = pathIsWithin(directory, resolvedBase);
   if (explicitProject === undefined && inside && directory !== resolvedBase) {
     return [directory];
   }
-  return inside ? [resolvedBase] : [resolvedBase, directory];
-}
-
-/**
- * One project, and the membership policy that describes it.
- *
- * The recorder's question is whether the project walk already covers an input,
- * so it needs both the walk's roots and the policy that walk used, and it is
- * wrong exactly when those two describe different projects. Passing them
- * separately made that mismatch expressible — the policy for one project
- * alongside the root of another — and passing the policy alone made it
- * expressible in a quieter way still, since a recorder that resolved its own
- * could describe a different program than the walk hashed. Both halves travel
- * together so neither can be supplied without the other (samchon/ttsc#1316).
- */
-export interface TtscMetroProjectView {
-  /** The base directory both fingerprint sides agree on. */
-  readonly base: string;
-  /** Config candidates observed while selecting this transform's project. */
-  readonly discoveryInputs: readonly TtscWatchInput[];
-  /** The caller's explicit `project`, if any. */
-  readonly explicitProject: string | undefined;
-  /** The membership policy resolved for that project. */
-  readonly policy: ReturnType<typeof readProjectMembershipPolicy>;
-  /** The policy used by the routed static walk. */
-  readonly walkPolicy: ReturnType<typeof readProjectMembershipPolicy>;
-  /** Lexical roots whose fingerprint uses this project's policy. */
-  readonly roots: readonly string[];
-  /** The exact config selected for this project. */
-  readonly tsconfig: string;
+  if (inside) return [resolvedBase];
+  // A config above the base owns a walk that already contains the base
+  // subtree under the same membership policy, so walking the base as well would
+  // hash every file below it twice on each key. A config beside or elsewhere
+  // does not contain the base, so both roots stay.
+  return pathIsWithin(resolvedBase, directory)
+    ? [directory]
+    : [resolvedBase, directory];
 }
 
 /** One stable implicit-project view and the config graph that produced it. */
@@ -249,9 +373,57 @@ interface TtscMetroFingerprintProjectMap {
 /**
  * Resolve one transform's project view, once, for every watch input it reports.
  *
- * Exported because the recorder is asked once per input while the answer is a
- * property of the project, and validating the memo means stat-ing the whole
- * `extends` chain (samchon/ttsc#1316).
+ * Discovery, referenced-project selection and membership policy are resolved
+ * once per delivered module and shared by its recorder batch. The policy is
+ * read from source rather than trusting a cached mtime/size observation, which
+ * could miss same-stamp edits.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Shared project discovery, reference selection and membership-policy APIs
+ *   select the same config as the transform core, retaining positive and
+ *   negative discovery predicates. Consulted routing configs retain current
+ *   content, since their references or admission rules can change the owner.
+ *   Compiler-option overlays are merged through that owner.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Selection records the predicates that chose the project, then one
+ *   createProjectView helper assembles its policy and roots for every input
+ *   in the module's recorder batch.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Discovery follows the ancestor candidates and reference graph; the
+ *   resulting policy and roots are assembled once for the delivered module.
+ *   Candidate predicates and consulted config content are captured once for
+ *   this view, with a lexical-key map merging their overlapping paths in
+ *   linear map operations. Capturing content performs the shared baseline's
+ *   two observations and scales with the consulted config bytes.
+ *
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   The returned view is reused by the module's recorder batch; its selected
+ *   tsconfig is passed to the transform options. Config sources are reread for
+ *   a later module because matching mtime and size cannot establish continued
+ *   equivalence.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Returned project data transfers to the caller. This operation retains no
+ *   process-wide state or handle after discovery completes.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The view is resolved once per module and shared with its batch, avoiding
+ *   independent recorder discovery without hardcoded project or test names.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node absolute paths and host discovery predicates retain native
+ *   filesystem identity. The injected discovery filesystem is an explicit
+ *   observation boundary, and path-relative helpers respect native roots; no
+ *   shell command or global filesystem patch is used.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains selection inputs, returned coupled view,
+ *   discovery evidence and per-module reuse. Checked against the
+ *   documentation skill: separate paragraphs state the contract and why its
+ *   nonobvious boundary matters; field comments retain their own useful
+ *   facts.
  */
 export function resolveProjectView(props: {
   compilerOptions?: Record<string, unknown>;
@@ -270,10 +442,15 @@ export function resolveProjectView(props: {
     explicitProject === undefined
       ? discoverNearestProjectTsconfig(start, props.projectDiscoveryFilesystem)
       : undefined;
-  const tsconfig =
+  const nearest =
     discovery === undefined
       ? resolveProjectTsconfig(start, explicitProject)
       : (discovery.file ?? path.resolve(process.cwd(), "tsconfig.json"));
+  const selection =
+    explicitProject === undefined && props.filename !== undefined
+      ? selectReferencedProject(path.resolve(props.filename), nearest)
+      : { consulted: [], tsconfig: nearest };
+  const tsconfig = selection.tsconfig;
   const discoveryInputs =
     discovery === undefined
       ? [captureProjectDiscoveryInput(tsconfig)]
@@ -282,6 +459,32 @@ export function resolveProjectView(props: {
         );
   if (!discoveryInputs.some((input) => samePath(input.file, tsconfig))) {
     discoveryInputs.push(captureProjectDiscoveryInput(tsconfig));
+  }
+  const discoveryIndexes = new Map(
+    discoveryInputs.map((input, index) => [snapshotPathKey(input.file), index]),
+  );
+  for (const config of selection.consulted) {
+    const baseline = captureWatchInputBaseline(config);
+    const input: TtscWatchInput =
+      baseline === undefined
+        ? { file: config }
+        : {
+            evidence: {
+              identity: baseline.identity,
+              missing: !baseline.fileExists,
+              state: { codec: "host", hash: baseline.hostHash },
+              ...(!baseline.fileExists
+                ? { unavailable: "missing" as const }
+                : {}),
+            },
+            file: config,
+          };
+    const key = snapshotPathKey(config);
+    const index = discoveryIndexes.get(key);
+    if (index === undefined) {
+      discoveryIndexes.set(key, discoveryInputs.length);
+      discoveryInputs.push(input);
+    } else discoveryInputs[index] = input;
   }
   return createProjectView({
     base,
@@ -428,6 +631,30 @@ function fingerprintProjectViews(props: {
       ),
     );
   }
+  // A solution config routes its files to the projects it references, and the
+  // worker compiles those (samchon/ttsc#1397), so their configs and inputs
+  // key the cache as well. The solution's own snapshot covers its list.
+  for (const project of [...projects]) {
+    for (const referenced of searchedReferencedProjects(project.tsconfig)) {
+      if (
+        !fs.existsSync(referenced) ||
+        projects.some((known) => samePath(known.tsconfig, referenced))
+      ) {
+        continue;
+      }
+      projects.push(
+        stableFingerprintProjectView(
+          createProjectView({
+            base: primary.base,
+            compilerOptions: props.compilerOptions,
+            explicitProject: undefined,
+            tsconfig: referenced,
+          }),
+          props.compilerOptions,
+        ),
+      );
+    }
+  }
   const secondMap = findProjectTsconfigs(
     primary.base,
     props.projectDiscoveryFilesystem,
@@ -520,19 +747,20 @@ function sameProjectMap(
   );
 }
 
-/** Host-platform equality for two resolved path spellings. */
+/** Equality of resolved lexical spellings, preserving distinct native names. */
 function samePath(left: string, right: string): boolean {
-  return path.relative(path.resolve(left), path.resolve(right)) === "";
+  return snapshotPathKey(left) === snapshotPathKey(right);
 }
 
 /** Whether one resolved path lies at or below another. */
 function pathIsWithin(child: string, parent: string): boolean {
-  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  const childKey = snapshotPathKey(child);
+  const parentKey = snapshotPathKey(parent);
   return (
-    relative === "" ||
-    (relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative))
+    childKey === parentKey ||
+    childKey.startsWith(
+      parentKey.endsWith(path.sep) ? parentKey : `${parentKey}${path.sep}`,
+    )
   );
 }
 
@@ -540,13 +768,78 @@ function pathIsWithin(child: string, parent: string): boolean {
  * Compute the fingerprint `getCacheKey` folds into Metro's static transformer
  * key. Never throws: any failure degrades to a nonce, which soundly disables
  * cross-run cache reuse for this run instead of serving stale output.
+ *
+ * A successful call makes two complete observations of the routed projects,
+ * config sources and recorded inputs. Work scales with their files and bytes;
+ * it is paid at Metro's static-key boundary, not once per delivered module. The
+ * run baseline retains exact hashes, identities and discovery predicates so a
+ * worker can prove that its generation matches the state keyed here.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   The shared project walker/policy and input-state APIs supply real file,
+ *   config, identity and recorded-input observations. Two complete
+ *   observations must agree before Node sha256 publishes the key and immutable
+ *   run baseline. Missing, volatile, incomplete or changing state yields
+ *   randomBytes nonce, a required withdrawal of reuse rather than a successful
+ *   stale fallback. Injected discovery changes observation only, not
+ *   production results.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The entry point compares two observations and publishes their baseline;
+ *   observeProjectFingerprint owns collecting the complete input universe.
+ *   Nonreusable state has one nonce exit rather than partial-success keys.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Two observations scan project files and recorded inputs, with time driven
+ *   by their bytes and config graph size. Overlapping lexical project walks
+ *   are excluded by routed roots; maps deduplicate config sources. Exact
+ *   content observations are necessary because timestamps do not prove state.
+ *
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   The static key shares transforms only for equal options, config contents,
+ *   file hashes, identities, recorded generation state and requested exact
+ *   compiler-accessible entry listings. Volatile, tainted
+ *   or unstable observations take a fresh nonce; a run baseline must be
+ *   immutable before workers can claim its coverage.
+ *   Recorded environment names contribute digests of their current values;
+ *   the first observation sorts the native environment keys when names exist.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   Observation maps are local to key computation and are released on return.
+ *   The persisted run baseline is owned by snapshot preparation, which sweeps
+ *   old baselines. A long-running worker can retain its loaded baseline until
+ *   worker termination; it owns no open handle here.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Decision values come from the documented inputs and product protocol
+ *   rather than expected test answers. No compensating path is introduced to
+ *   make a known example pass.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node paths/fs preserve native roots and physical identities, including
+ *   symlink-aware discovery. Sorted key representation is deterministic; file
+ *   bytes and host predicates remain inputs. Filesystem failure withdraws
+ *   reuse consistently instead of becoming an OS-specific successful key.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains hex digest versus nonce, repeated observation,
+ *   private baseline publication and failure policy. Checked against the
+ *   documentation skill: separate paragraphs state the contract and why its
+ *   nonobvious boundary matters; field comments retain their own useful
+ *   facts.
  */
 export function computeProjectFingerprint(props: {
+  /** Compiler environment used by this run's workers; defaults to process.env. */
+  environment?: NodeJS.ProcessEnv;
+
   compilerOptions?: Record<string, unknown>;
   explicitProject?: string;
+
   /** Test seam for proving that incomplete implicit enumeration fails closed. */
   projectDiscoveryFilesystem?: TtscProjectTreeDiscoveryFilesystem;
+
   projectRoot?: string;
+
   /** Private identity transported from `withTtsc` to this Metro run. */
   runId?: string;
 }): string {
@@ -558,7 +851,13 @@ export function computeProjectFingerprint(props: {
       throw new Error("Metro's project fingerprint changed while observed.");
     }
     if (props.runId !== undefined) {
-      writeKeyBaseline(base, props.runId, after.inputs, after.staticInputs);
+      writeKeyBaseline(
+        base,
+        props.runId,
+        after.inputs,
+        after.staticInputs,
+        after.environment,
+      );
     }
     const hash = createHash("sha256");
     hash.update(stableStringify(after.fingerprint));
@@ -570,6 +869,7 @@ export function computeProjectFingerprint(props: {
 
 /** One coherent static-key observation and the paths it proves. */
 interface ProjectFingerprintObservation {
+  environment: Record<string, string>;
   fingerprint: unknown;
   inputs: Record<string, TtscWatchInputKeyBaseline>;
   staticInputs: string[];
@@ -577,6 +877,7 @@ interface ProjectFingerprintObservation {
 
 /** Build the complete value hashed by one static key. */
 function observeProjectFingerprint(props: {
+  environment?: NodeJS.ProcessEnv;
   compilerOptions?: Record<string, unknown>;
   explicitProject?: string;
   projectDiscoveryFilesystem?: TtscProjectTreeDiscoveryFilesystem;
@@ -640,16 +941,52 @@ function observeProjectFingerprint(props: {
       });
     }
   }
-  const snapshot = readSnapshotState(resolveFingerprintBase(props.projectRoot));
+  const base = resolveFingerprintBase(props.projectRoot);
+  const snapshot = readSnapshotState(base);
   if (snapshot === undefined || snapshot.volatile || snapshot.tainted) {
     throw new Error("Metro's recorded transform snapshot is not reusable.");
   }
-  const recorded: Record<string, { hash: string; identity: string }> = {};
+  const environment = captureEnvironmentDigests(
+    snapshot.environment,
+    props.environment ?? process.env,
+  );
+  // A plugin's Go source is a recorded input like any other, but no one
+  // path's state stands for the files below it, so the key carries its state
+  // (samchon/ttsc#1487).
+  const trees = new Set(snapshot.trees);
+  const accessibleEntries = new Set(snapshot.accessibleEntries);
+  const recorded: Record<
+    string,
+    {
+      hash: string;
+      identity: string;
+      tree?: string | null;
+      accessibleEntries?: TtscWatchInputBaseline["accessibleEntries"];
+      nativePredicates?: TtscWatchInputBaseline["nativePredicates"];
+    }
+  > = {};
   for (const file of snapshot.files) {
-    const baseline = addBaselineInput(inputs, file);
+    // The project's plugin cache records prove a plugin tree, so a Metro
+    // worker does not read its sources and the SDK again (samchon/ttsc#1725).
+    const baseline = addBaselineInput(
+      inputs,
+      file,
+      undefined,
+      trees.has(file),
+      accessibleEntries.has(file),
+      snapshot.nativePredicates[file],
+      base,
+    );
     recorded[snapshotPathKey(file)] = {
       hash: baseline.hostHash,
       identity: baseline.identity,
+      ...(baseline.tree === undefined ? {} : { tree: baseline.tree }),
+      ...(baseline.accessibleEntries === undefined
+        ? {}
+        : { accessibleEntries: baseline.accessibleEntries }),
+      ...(baseline.nativePredicates === undefined
+        ? {}
+        : { nativePredicates: baseline.nativePredicates }),
     };
   }
   return {
@@ -658,40 +995,150 @@ function observeProjectFingerprint(props: {
         a < b ? -1 : a > b ? 1 : 0,
       ),
       projects: projectFingerprints,
-      snapshot: { id: snapshot.id, inputs: recorded },
+      snapshot: { id: snapshot.id, inputs: recorded, environment },
     },
+    environment,
     inputs,
     staticInputs: [...staticInputs].sort(),
   };
 }
 
-/** Add one lexical path's stable broad state to a key baseline. */
+/** Native environment names are case-insensitive on Windows only. */
+function nativeEnvironmentName(name: string): string {
+  return process.platform === "win32" ? name.toUpperCase() : name;
+}
+
+/** Hash a value separately from absence without persisting its plaintext. */
+function environmentValueDigest(value: string | null): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+/** Capture only recorded names, using Node spawn's native alias selection. */
+function captureEnvironmentDigests(
+  names: readonly string[],
+  environment: NodeJS.ProcessEnv,
+): Record<string, string> {
+  if (names.length === 0) return {};
+  const native = new Map<string, string | undefined>();
+  for (const key of Object.keys(environment).sort()) {
+    const identity = nativeEnvironmentName(key);
+    if (!native.has(identity)) native.set(identity, environment[key]);
+  }
+  return Object.fromEntries(
+    names.map((name) => [
+      name,
+      environmentValueDigest(native.get(name) ?? null),
+    ]),
+  );
+}
+
+/** Serialized names are valid, unique, sorted native identities. */
+function isEnvironmentNames(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (name) =>
+        typeof name === "string" &&
+        name.length !== 0 &&
+        !/[=\x00]/u.test(name) &&
+        nativeEnvironmentName(name) === name,
+    ) &&
+    stableStringify(value) === stableStringify([...new Set(value)].sort())
+  );
+}
+
+/** A run baseline contains a digest for every recorded native name. */
+function isEnvironmentDigests(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    isEnvironmentNames(Object.keys(value).sort()) &&
+    Object.values(value).every(
+      (digest) => typeof digest === "string" && /^[a-f0-9]{64}$/u.test(digest),
+    )
+  );
+}
+
+/**
+ * Add one lexical path's stable broad state to a key baseline, with its plugin
+ * source state when it was recorded as a plugin source directory (`tree`).
+ * Recorded listing predicates request exact immediate accessible entries; these
+ * optional payloads merge only after their shared broad state agrees. Native
+ * kind requests capture the raw producer codec independently of those listings.
+ * The returned state includes every payload already observed at the same key,
+ * so a later alias cannot erase an earlier payload from the fingerprint.
+ */
 function addBaselineInput(
   inputs: Record<string, TtscWatchInputKeyBaseline>,
   file: string,
   staticInputs?: Set<string>,
+  tree = false,
+  accessibleEntries = false,
+  nativePredicates?: readonly NativeInputKind[],
+  projectRoot?: string,
 ): TtscWatchInputBaseline {
   const key = snapshotPathKey(file);
-  const observed = captureWatchInputBaseline(file);
+  const observed = captureWatchInputBaseline(file, undefined, {
+    tree,
+    accessibleEntries,
+    nativePredicates,
+    projectRoot,
+  });
   if (observed === undefined) {
     throw new Error("Unable to read a stable Metro input baseline.");
   }
   const existing = inputs[key];
+  let baseline = observed;
   if (existing !== undefined) {
+    // One path observed as a plugin source and as a plain input compares on
+    // what both observations carry.
+    const {
+      tree: existingTree,
+      accessibleEntries: existingEntries,
+      nativePredicates: existingNative,
+      ...existingState
+    } = existing as TtscWatchInputBaseline;
+    const {
+      tree: observedTree,
+      accessibleEntries: observedEntries,
+      nativePredicates: observedNative,
+      ...observedState
+    } = observed;
     if (
+      Object.entries(existingNative ?? {}).some(
+        ([kind, state]) =>
+          observedNative?.[kind as NativeInputKind] !== undefined &&
+          stableStringify(state) !==
+            stableStringify(observedNative[kind as NativeInputKind]),
+      ) ||
       existing.identity !== observed.identity ||
       existing.fileExists !== observed.fileExists ||
       ("hostHash" in existing &&
-        stableStringify(existing) !== stableStringify(observed))
+        stableStringify(existingState) !== stableStringify(observedState)) ||
+      (existingTree !== undefined &&
+        observedTree !== undefined &&
+        existingTree !== observedTree) ||
+      (existingEntries !== undefined &&
+        observedEntries !== undefined &&
+        (stableStringify(existingEntries.files) !==
+          stableStringify(observedEntries.files) ||
+          stableStringify(existingEntries.directories) !==
+            stableStringify(observedEntries.directories)))
     ) {
       throw new Error("A Metro input changed between baseline observations.");
     }
-    inputs[key] = { ...existing, ...observed };
-  } else {
-    inputs[key] = observed;
+    baseline = {
+      ...existing,
+      ...observed,
+      ...(existingNative === undefined && observedNative === undefined
+        ? {}
+        : { nativePredicates: { ...existingNative, ...observedNative } }),
+    };
   }
+  inputs[key] = baseline;
   staticInputs?.add(key);
-  return observed;
+  return baseline;
 }
 
 /** Add the stable file predicate used by the project-map traversal. */
@@ -741,14 +1188,72 @@ function nonce(): string {
  * token crosses bundle and process boundaries, so `getCacheKey` degrades to a
  * nonce even when neither snapshot location can persist the failure and an old
  * main later reappears.
+ *
+ * Compaction reads the accumulated worker and recovery documents and unions
+ * their recorded paths. Workers have unique names; completed observations are
+ * published before removal. Locked claimed files remain until a later retry.
+ * Old temporary files and run baselines are swept, but recorded input paths
+ * accumulate in the main snapshot and dead-owner election directories remain to
+ * prevent delayed contenders from moving a newer lock. Those populations are
+ * not bounded by a fixed retention budget in this implementation.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Node filesystem APIs atomically publish complete snapshot documents and a
+ *   token-owned compaction lock. Worker claims are merged before deletion;
+ *   retained claims are identified in the main document to prevent replay.
+ *   Definite dead-PID recovery preserves an election record; contention or
+ *   failed persistence returns a private nonreusable token.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   Preparation owns one lock-protected main rewrite. Helpers separate worker
+ *   claims, document parsing, atomic publication and recovery storage, so
+ *   concurrent readers can use the same persisted protocol.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Sets union recorded paths in time proportional to document paths, then
+ *   sorting gives deterministic output. Each claimed worker is merged once;
+ *   readdir and document parsing remain necessary to find pending publishers.
+ *
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   The main document records claimed worker names before removal, preventing
+ *   locked files from replaying completed compaction. The epoch survives only
+ *   trusted, untainted observations; corrupt or lost evidence rotates it.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   Preparation owns its compaction lock and retires it in finally. Claimed
+ *   workers and recovery files are removed after publication; failed removals
+ *   stay represented for retry. Temporary files and baselines have age sweeps,
+ *   but cumulative input paths and stale-owner election records have no fixed
+ *   bound. Removing these without a generation protocol could erase evidence.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Retries serve locked-file/recovery contracts rather than masking an
+ *   uncorrected successful-state assumption.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node join, mkdir, rename and rm implement native cache paths.
+ *   Windows-locked files remain represented for a later removal attempt; only
+ *   a definite process-query absence permits dead-owner recovery. No shell
+ *   process checks or patched fs methods are used.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains new-run preparation, contention, epoch
+ *   rotation, recovery storage and nonreusable tokens. Checked against the
+ *   documentation skill: separate paragraphs state the contract and why its
+ *   nonobvious boundary matters; field comments retain their own useful
+ *   facts.
  */
 export function prepareSnapshot(projectRoot: string | undefined): string {
   const base = resolveFingerprintBase(projectRoot);
   const runId = randomBytes(16).toString("hex");
   let reusable = true;
   let pending: SnapshotDocument = {
+    environment: [],
+    nativePredicates: {},
+    accessibleEntries: [],
     files: [],
     tainted: false,
+    trees: [],
     version: SNAPSHOT_VERSION,
     volatile: false,
   };
@@ -770,9 +1275,8 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
       return `${NON_REUSABLE_RUN_PREFIX}${runId}`;
     }
     // Read the worker files strictly before the main file (see the module doc
-    // comment): a concurrent compactor deletes a worker file only after the
-    // merged main is renamed into place, so whatever this enumeration misses
-    // is already inside the main read below.
+    // comment). The lock keeps another compactor from claiming or deleting a
+    // file during these reads, and a vanished name still forces a fresh listing.
     claimWorkerFiles(directory);
     const recovery = readUnhealthySnapshots(base);
     const workers = readWorkerFiles(directory);
@@ -780,8 +1284,25 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
       throw new Error("Unable to enumerate Metro snapshot state.");
     }
     const main = readMainDocument(directory);
+    const environment = new Set(main?.environment ?? []);
     const files = new Set(main?.files ?? []);
-    const observations = [...recovery.entries, ...workers.entries];
+    const trees = new Set(main?.trees ?? []);
+    const accessibleEntries = new Set(main?.accessibleEntries ?? []);
+    const nativePredicates = mergeNativePredicateRequests(
+      {},
+      main?.nativePredicates ?? {},
+    );
+    const observations = [
+      ...recovery.entries,
+      ...uncompactedWorkerEntries(workers, main),
+    ];
+    // Every claimed file present is recorded before any is removed, so one
+    // whose removal fails, or a compactor that stops between the two, leaves a
+    // file the next compaction knows it already merged.
+    const compacted = workers.paths
+      .filter(isClaimedWorkerSnapshot)
+      .map((file) => path.basename(file))
+      .sort();
     const tainted = observations.some((entry) => entry.tainted);
     const volatile =
       observations.length === 0
@@ -791,8 +1312,16 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
           // able to clear the sticky flag.
           observations.some((entry) => entry.volatile);
     for (const entry of observations) {
+      for (const name of entry.environment) environment.add(name);
+      mergeNativePredicateRequests(nativePredicates, entry.nativePredicates);
       for (const file of entry.files) {
         files.add(file);
+      }
+      for (const tree of entry.trees) {
+        trees.add(tree);
+      }
+      for (const file of entry.accessibleEntries) {
+        accessibleEntries.add(file);
       }
     }
     const recovering =
@@ -800,12 +1329,17 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
       recovery.paths.length !== 0 ||
       recovery.corruptPaths.length !== 0;
     pending = {
+      environment: [...environment].sort(),
+      nativePredicates,
+      accessibleEntries: [...accessibleEntries].sort(),
+      ...(compacted.length !== 0 ? { compacted } : {}),
       files: [...files].sort(),
       id:
         !recovering && workers.corruptPaths.length === 0 && !tainted
           ? (main?.id ?? randomBytes(16).toString("hex"))
           : randomBytes(16).toString("hex"),
       tainted: false,
+      trees: [...trees].sort(),
       version: SNAPSHOT_VERSION,
       volatile,
     };
@@ -821,8 +1355,8 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
       try {
         fs.rmSync(file, { force: true });
       } catch {
-        // A locked worker file stays behind; readers union it, so nothing is
-        // lost, and the next compaction retries.
+        // A locked file stays for a later compaction. The main snapshot names
+        // claimed workers it merged, so readers do not replay them.
       }
     }
     const remainingRecovery = readUnhealthySnapshots(base);
@@ -865,6 +1399,14 @@ export function prepareSnapshot(projectRoot: string | undefined): string {
  * while holding a reusable run identity. A contending process therefore
  * degrades immediately to a nonce. The owner retires the directory atomically
  * after every success or failure path has persisted its verdict.
+ *
+ * A lock is reaped only when its recorded process is proven gone. An owner that
+ * died and whose process id now belongs to a live process, or a lock with an
+ * unreadable owner record, is treated as held: every run that meets it takes a
+ * nonce key and no reuse is lost silently, but the cache stays unusable until
+ * that process exits or
+ * `node_modules/.cache/ttsc-metro/snapshot-compaction.lock` is deleted by hand.
+ * Readers also treat a held lock as unsettled state.
  */
 function acquireSnapshotCompactionLock(
   directory: string,
@@ -964,14 +1506,32 @@ function reapDeadSnapshotCompactionLock(lock: string): void {
   }
 }
 
-/** Treat every process-query failure except a definite missing PID as live. */
+/**
+ * Treat every process-query failure except a definite missing PID as live.
+ *
+ * Signal zero still reaches a Linux zombie, a process that exited and only
+ * waits for its parent to collect it; a parent that never collects, such as a
+ * container's PID 1 that is not an init, keeps it indefinitely. Its `/proc`
+ * status marks it dead once it is the process's last thread (a leader whose own
+ * thread exited reads as a zombie while its other threads run), and it keeps
+ * its id until collected, so a live process is never mistaken for it.
+ */
 function processIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== "ESRCH";
   }
+  if (process.platform !== "linux") return true;
+  let status: string;
+  try {
+    status = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+  } catch {
+    return true;
+  }
+  const state = /^State:\s*(\S)/m.exec(status)?.[1];
+  const threads = /^Threads:\s*(\d+)/m.exec(status)?.[1];
+  return !((state === "Z" || state === "X") && threads === "1");
 }
 
 /**
@@ -1024,14 +1584,116 @@ function listExpiredKeyBaselines(directory: string): string[] {
 
 /**
  * Read the unioned snapshot state, or `undefined` when the main snapshot is
- * missing or any snapshot file is corrupt (a torn or foreign write means the
- * recorded set cannot be trusted, so the caller degrades to a nonce).
+ * missing, any snapshot file is corrupt (a torn or foreign write means the
+ * recorded set cannot be trusted, so the caller degrades to a nonce), or a
+ * concurrent compaction keeps renaming worker files so the listing never
+ * settles or a compaction lock stays held.
+ *
+ * `operations` is the read boundary (existence, listing, file text); the
+ * default reads the real filesystem, and a test passes its own to interleave a
+ * compaction with a listing. A pass is retried at most
+ * {@link SNAPSHOT_LISTING_ATTEMPTS} (8) times with a 5 ms pause between passes,
+ * so a held lock costs a call at most about 40 ms before the state is reported
+ * untrusted; the retry is bounded and holds no resource between passes.
+ *
+ * The result contains sorted absolute file and tree paths, the epoch identity,
+ * and tainted/volatile flags. It reads persisted evidence without revalidating
+ * current file bytes; the fingerprint operation owns that validation. Reading
+ * costs the number and size of outstanding documents plus their unioned paths.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Strict snapshot parsing and Set union read worker documents before the
+ *   main publication, retaining file/tree/volatile/tainted state without
+ *   replaying already compacted claims. This is the owned persisted-input
+ *   protocol, not a separate compiler dependency model.
+ *   A pass is accepted only when no compaction lock existed before or after
+ *   it and the main file is unchanged, because a listing concurrent with a
+ *   rename can return the renamed entry under neither name.
+ *   The read boundary is an optional parameter, so the interleaving can be
+ *   driven deterministically while production reads the real filesystem.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   This reader validates persisted documents and unions their paths without
+ *   recomputing file state. The fingerprint owner handles live validation;
+ *   both reader and compactor share uncompacted-worker classification.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Reading costs document bytes plus Set insertion and final path sorting.
+ *   The compacted-name Set avoids replay and avoids a linear search per worker.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   This read must observe new worker publications; it coordinates no cache
+ *   between calls. Cross-run reuse belongs to computeProjectFingerprint.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Returned snapshot data transfers to the caller. This reader retains no
+ *   state or handle after synchronous reads finish.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Unknown, corrupt or recovery-pending state returns undefined, never an
+ *   invented complete empty set.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node path and fs read native snapshot locations. Locked or unreadable
+ *   directory/documents invalidate the proof on all supported OSes; sorted
+ *   lexical paths remain values, not shell arguments.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains unioned snapshot fields, read ordering and the
+ *   undefined result for untrusted state. Checked against the documentation
+ *   skill: separate paragraphs state the contract and why its nonobvious
+ *   boundary matters; field comments retain their own useful facts.
  */
-export function readSnapshotState(base: string): SnapshotState | undefined {
+export function readSnapshotState(
+  base: string,
+  operations: SnapshotReadOperations = HOST_SNAPSHOT_READ_OPERATIONS,
+): SnapshotState | undefined {
+  const directory = snapshotDirectory(base);
+  const lock = path.join(directory, SNAPSHOT_COMPACTION_LOCK);
+  // A directory listing taken while another process renames entries of that
+  // same directory is not guaranteed to return each renamed entry once: POSIX
+  // leaves it unspecified and NTFS orders entries by name, so a claimed worker
+  // file can appear under neither name, with its inputs not yet in the main
+  // file. A compaction holds the lock from its first claim until after it
+  // publishes the main file, so a pass counts only when no lock existed before
+  // or after it and the main file read the same on both sides. A compaction
+  // wholly inside the pass still changes the main file it publishes.
+  for (let attempt = 0; attempt < SNAPSHOT_LISTING_ATTEMPTS; ++attempt) {
+    if (!operations.existsSync(lock)) {
+      const before = readMainText(directory, operations);
+      const state = readSnapshotStateOnce(base, operations);
+      if (
+        !operations.existsSync(lock) &&
+        readMainText(directory, operations) === before
+      ) {
+        return state;
+      }
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
+  return undefined;
+}
+
+/** The main snapshot's text, or `undefined` when it cannot be read. */
+function readMainText(
+  directory: string,
+  operations: SnapshotReadOperations,
+): string | undefined {
+  try {
+    return operations.readFileSync(path.join(directory, MAIN_SNAPSHOT), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function readSnapshotStateOnce(
+  base: string,
+  operations: SnapshotReadOperations,
+): SnapshotState | undefined {
   if (unhealthySnapshots.has(base)) {
     return undefined;
   }
-  const recovery = readUnhealthySnapshots(base);
+  const recovery = readUnhealthySnapshots(base, operations);
   if (
     !recovery.readable ||
     recovery.paths.length !== 0 ||
@@ -1041,25 +1703,49 @@ export function readSnapshotState(base: string): SnapshotState | undefined {
   }
   const directory = snapshotDirectory(base);
   // Worker files strictly before the main file — see the module doc comment.
-  const workers = readWorkerFiles(directory);
+  const workers = readWorkerFiles(directory, operations);
   if (!workers.readable || workers.corruptPaths.length !== 0) {
     return undefined;
   }
-  const main = readMainDocument(directory);
+  const main = readMainDocument(directory, operations);
   if (main === undefined || typeof main.id !== "string") {
     return undefined;
   }
   const files = new Set(main.files);
+  const environment = new Set(main.environment);
+  const trees = new Set(main.trees);
+  const accessibleEntries = new Set(main.accessibleEntries);
+  const nativePredicates = mergeNativePredicateRequests(
+    {},
+    main.nativePredicates,
+  );
   let volatile = main.volatile;
   let tainted = main.tainted;
-  for (const entry of workers.entries) {
+  for (const entry of uncompactedWorkerEntries(workers, main)) {
+    for (const name of entry.environment) environment.add(name);
+    mergeNativePredicateRequests(nativePredicates, entry.nativePredicates);
     for (const file of entry.files) {
       files.add(file);
+    }
+    for (const tree of entry.trees) {
+      trees.add(tree);
+    }
+    for (const file of entry.accessibleEntries) {
+      accessibleEntries.add(file);
     }
     volatile ||= entry.volatile;
     tainted ||= entry.tainted;
   }
-  return { files: [...files].sort(), id: main.id, tainted, volatile };
+  return {
+    environment: [...environment].sort(),
+    nativePredicates,
+    accessibleEntries: [...accessibleEntries].sort(),
+    files: [...files].sort(),
+    id: main.id,
+    tainted,
+    trees: [...trees].sort(),
+    volatile,
+  };
 }
 
 /**
@@ -1067,13 +1753,93 @@ export function readSnapshotState(base: string): SnapshotState | undefined {
  * any volatile declaration, compares compiler-generation evidence with the
  * matching main-process run baseline, and marks any temporal mismatch tainted.
  * A clean transform also writes a document so it can clear a volatile
- * declaration from an earlier run. One cumulative document is flushed per
- * delivered module; the unique name makes worker writes race-free, and
- * `withTtsc` compacts the files on the next run.
+ * declaration from an earlier run. The first delivery, a delivery that adds a
+ * path, and every delivery once the state is tainted flush one cumulative
+ * document; the unique name makes worker writes race-free, and `withTtsc`
+ * compacts the files on the next run.
+ *
+ * `record` accepts one lexical path without generation evidence; `recordMany`
+ * accepts a module's generation evidence and recorded environment reads;
+ * `recordVolatile` withdraws the file proof for non-file inputs. Without a run
+ * identity every input is retained; production passes the identity whose
+ * immutable baseline was keyed in the main process. An unknown or mismatching
+ * baseline marks the snapshot tainted, and since `record` carries no evidence,
+ * a run identity always reads it as a mismatch. Listing predicates retain their
+ * paths for the next run's key observation; native kind requests survive the
+ * same persistence path without becoming compiler listings or gaining watch
+ * scope. The worker never adds a new disk read to its earlier immutable
+ * baseline. Recorded environment names also survive compaction. Their value
+ * digests must match the run baseline; a new name or a changed value taints the
+ * run. Worker documents retain names only, and private baselines retain digests
+ * rather than plaintext values.
+ *
+ * Sets and baseline maps live for the recorder's worker lifetime and grow with
+ * observed projects and distinct inputs. A flushing delivery serializes the
+ * cumulative recorded set once, not once per input, but a tainted state flushes
+ * on every delivery, so its cost grows with the recorded set for each module. A
+ * failed write remains dirty for retry and tries recovery storage. If both
+ * stores fail, a reusable run throws rather than publishing output backed by
+ * lost evidence.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   One worker closure retains derived inputs and compares their
+ *   compiler-generation evidence and environment-value digests with its
+ *   immutable run baseline. Static coverage is omitted only after a matching
+ *   proof; unknown/volatile inputs persist taint.
+ *   Listing and plugin-tree paths stay in the retained file universe even
+ *   when a static proof already covers them, so optional payloads survive
+ *   subsequent compaction and key capture.
+ *   A first or changed module batch publishes one cumulative atomic document,
+ *   with recovery storage and AggregateError when a reusable generation cannot
+ *   persist either record.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One worker closure owns recorder state; shared recordMany owns evidence
+ *   comparison and batch publication for single and multiple inputs. flush
+ *   owns durability, so volatile observations use the same failure policy.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Sets insert distinct inputs and a cached static-input Set checks coverage
+ *   without searching the whole baseline. A flushing module serializes the
+ *   cumulative paths once, costing their count and encoded bytes rather than
+ *   one cumulative serialization for every input. A tainted state flushes on
+ *   every module, so that cost recurs per delivery until the worker ends.
+ *   Environment reads add one value hash and a baseline lookup per name;
+ *   recorded native names join the cumulative serialized population.
+ *
+ * @evidence contracts/performance.md#reuse-equivalent-work
+ *   Each base loads its immutable run baseline once and shares it across
+ *   module batches. Only matching generation evidence authorizes omission of
+ *   static paths; missing or differing evidence records taint instead.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources
+ *   The worker owns maps of bases, baseline bytes and distinct recorded paths
+ *   until termination. Population grows with projects and inputs observed in
+ *   that worker; there is no fixed eviction budget. Persisted files transfer
+ *   to the next preparation's compactor. No native handle remains open.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The legacy no-run handshake records all paths without claiming static
+ *   coverage.
+ *
+ * @evidence contracts/portability.md#os-neutral-implementation
+ *   Node resolve/join and atomic rename use native paths; unique PID/random
+ *   worker names separate publishers. Windows-locked claims remain readable
+ *   until later compaction, and persistence failures follow the same reuse
+ *   withdrawal contract. No foreign filesystem or process method is replaced.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains record, batch and volatile operations,
+ *   run-baseline matching, cumulative persistence and failure ownership.
+ *   Checked against the documentation skill: separate paragraphs state the
+ *   contract and why its nonobvious boundary matters; field comments retain
+ *   their own useful facts.
  */
 export function createSnapshotRecorder(runId?: string): {
+  /** Record one lexical input without claiming compiler-generation evidence. */
   record: (props: {
     input: string;
+
     /**
      * The project this input belongs to, with the policy its walk uses,
      * resolved once per transform through {@link resolveProjectView}.
@@ -1091,23 +1857,47 @@ export function createSnapshotRecorder(runId?: string): {
      */
     project: TtscMetroProjectView;
   }) => void;
+
+  /** Record one module's input evidence and publish its cumulative snapshot. */
   recordMany: (props: {
+    /** Environment reads that influenced this delivered module. */
+    environmentInputs?: Readonly<Record<string, string | null>>;
+
     inputs: readonly TtscWatchInput[];
     project: TtscMetroProjectView;
   }) => void;
+
+  /** Persist that a project's output depends on inputs a file key cannot prove. */
   recordVolatile: (props: { project: TtscMetroProjectView }) => void;
 } {
   const suffix = `${process.pid.toString(36)}-${randomBytes(6).toString("hex")}`;
   interface BaseState {
+    environment: Set<string>;
+    nativePredicates: Record<string, NativeInputKind[]>;
+    accessibleEntries: Set<string>;
     dirty: boolean;
     files: Set<string>;
     observed: boolean;
     tainted: boolean;
+    trees: Set<string>;
     volatile: boolean;
   }
   const states = new Map<string, BaseState>();
   const baselines = new Map<string, KeyBaselineDocument | null>();
   const baselineStaticInputs = new Map<string, Set<string>>();
+
+  /** Load one immutable run baseline for this recorder's project. */
+  function baselineFor(base: string): KeyBaselineDocument | null {
+    let baseline = baselines.get(base);
+    if (baseline === undefined) {
+      baseline =
+        (runId === undefined ? undefined : readKeyBaseline(base, runId)) ??
+        null;
+      baselines.set(base, baseline);
+      baselineStaticInputs.set(base, new Set(baseline?.staticInputs ?? []));
+    }
+    return baseline;
+  }
 
   function keyBaselineCoverage(
     input: TtscWatchInput,
@@ -1121,12 +1911,7 @@ export function createSnapshotRecorder(runId?: string): {
     if (runId === undefined) {
       return { matches: true, static: false };
     }
-    let baseline = baselines.get(base);
-    if (baseline === undefined) {
-      baseline = readKeyBaseline(base, runId) ?? null;
-      baselines.set(base, baseline);
-      baselineStaticInputs.set(base, new Set(baseline?.staticInputs ?? []));
-    }
+    const baseline = baselineFor(base);
     const key = snapshotPathKey(input.file);
     const expected = baseline?.inputs[key];
     try {
@@ -1151,10 +1936,14 @@ export function createSnapshotRecorder(runId?: string): {
     let state = states.get(base);
     if (state === undefined) {
       state = {
+        environment: new Set(),
+        nativePredicates: {},
+        accessibleEntries: new Set(),
         dirty: false,
         files: new Set(),
         observed: false,
         tainted: false,
+        trees: new Set(),
         volatile: false,
       };
       states.set(base, state);
@@ -1167,8 +1956,12 @@ export function createSnapshotRecorder(runId?: string): {
       return;
     }
     const document: SnapshotDocument = {
+      environment: [...state.environment].sort(),
+      nativePredicates: state.nativePredicates,
+      accessibleEntries: [...state.accessibleEntries].sort(),
       files: [...state.files].sort(),
       tainted: state.tainted,
+      trees: [...state.trees].sort(),
       version: SNAPSHOT_VERSION,
       volatile: state.volatile,
     };
@@ -1203,6 +1996,7 @@ export function createSnapshotRecorder(runId?: string): {
   }
 
   function recordMany(props: {
+    environmentInputs?: Readonly<Record<string, string | null>>;
     inputs: readonly TtscWatchInput[];
     project: TtscMetroProjectView;
   }): void {
@@ -1210,6 +2004,20 @@ export function createSnapshotRecorder(runId?: string): {
     const state = stateFor(props.project);
     const firstObservation = !state.observed;
     state.observed = true;
+    for (const [name, value] of Object.entries(props.environmentInputs ?? {})) {
+      const identity = nativeEnvironmentName(name);
+      if (!state.environment.has(identity)) {
+        state.environment.add(identity);
+        state.dirty = true;
+      }
+      // An unknown read was absent from the main process's key. Refute that
+      // baseline as well as a read whose value changed before delivery.
+      if (
+        baselineFor(base)?.environment[identity] !==
+        environmentValueDigest(value)
+      )
+        state.tainted = true;
+    }
     for (const input of props.inputs) {
       const file = path.resolve(input.file);
       const coverage = keyBaselineCoverage({ ...input, file }, base);
@@ -1219,6 +2027,39 @@ export function createSnapshotRecorder(runId?: string): {
       if (!coverage.static && !state.files.has(file)) {
         state.files.add(file);
         state.dirty = true;
+      }
+      // A plugin source directory is recorded as one, so the next run's key
+      // carries its state (samchon/ttsc#1487).
+      if (input.evidence?.state?.codec === "tree" && !state.trees.has(file)) {
+        state.files.add(file);
+        state.trees.add(file);
+        state.dirty = true;
+      }
+      if (
+        input.evidence?.state?.codec === "predicates" &&
+        input.evidence.state.observation.accessibleEntries !== undefined &&
+        !state.accessibleEntries.has(file)
+      ) {
+        state.files.add(file);
+        state.accessibleEntries.add(file);
+        state.dirty = true;
+      }
+      if (input.evidence?.state?.codec === "predicates") {
+        const predicates = input.evidence.state.observation.nativePredicates;
+        if (predicates !== undefined && predicates.length !== 0) {
+          const previous = state.nativePredicates[file] ?? [];
+          const kinds = [
+            ...new Set([
+              ...previous,
+              ...predicates.map((predicate) => predicate.kind),
+            ]),
+          ].sort();
+          if (kinds.length !== previous.length) {
+            state.files.add(file);
+            state.nativePredicates[file] = kinds;
+            state.dirty = true;
+          }
+        }
       }
     }
     // A clean empty delivery must still clear a volatile verdict from the
@@ -1251,10 +2092,17 @@ export function createSnapshotRecorder(runId?: string): {
   };
 }
 
-/** Filesystem-keyed lexical spelling used by main and worker processes. */
+/**
+ * Lexical spelling used by main and worker processes. Native name case stays
+ * exact because an OS name cannot establish directory case sensitivity. A
+ * differently spelled alias can miss coverage and taint a run, but cannot erase
+ * a distinct input. Only the Windows volume root is case-normalized.
+ */
 function snapshotPathKey(file: string): string {
   const resolved = path.resolve(file);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  if (process.platform !== "win32") return resolved;
+  const root = path.parse(resolved).root;
+  return `${root.toLowerCase()}${resolved.slice(root.length)}`;
 }
 
 /** Persist the exact filesystem state one run's static key observed. */
@@ -1263,6 +2111,7 @@ function writeKeyBaseline(
   runId: string,
   inputs: Record<string, TtscWatchInputKeyBaseline>,
   staticInputs: string[],
+  environment: Record<string, string>,
 ): void {
   if (!isReusableSnapshotRunId(runId)) {
     throw new Error("Invalid Metro snapshot run identity.");
@@ -1275,6 +2124,7 @@ function writeKeyBaseline(
     const existing = readKeyBaseline(base, runId);
     if (
       existing === undefined ||
+      stableStringify(existing.environment) !== stableStringify(environment) ||
       stableStringify(existing.inputs) !== stableStringify(inputs) ||
       stableStringify(existing.staticInputs) !== stableStringify(staticInputs)
     ) {
@@ -1283,6 +2133,7 @@ function writeKeyBaseline(
     return;
   }
   writeSnapshotDocument(file, {
+    environment,
     inputs,
     runId,
     staticInputs,
@@ -1314,6 +2165,7 @@ function readKeyBaseline(
     const document = value as Record<string, unknown>;
     if (
       document.version !== SNAPSHOT_VERSION ||
+      !isEnvironmentDigests(document.environment) ||
       document.runId !== runId ||
       typeof document.inputs !== "object" ||
       document.inputs === null ||
@@ -1374,10 +2226,14 @@ function persistUnhealthySnapshot(
   );
 }
 
-function readUnhealthySnapshots(base: string): SnapshotDocuments {
+function readUnhealthySnapshots(
+  base: string,
+  operations: SnapshotReadOperations = HOST_SNAPSHOT_READ_OPERATIONS,
+): SnapshotDocuments {
   return readSnapshotFiles(
     snapshotCacheDirectory(base),
     UNHEALTHY_SNAPSHOT_PREFIX,
+    operations,
   );
 }
 
@@ -1428,27 +2284,70 @@ function isClaimedWorkerSnapshot(file: string): boolean {
 }
 
 /**
- * Read every worker snapshot file in `directory`. A file that disappears
- * mid-read was compacted (merged into the main snapshot first) and is skipped;
- * a file that exists but does not parse is reported in `corruptPaths` so
- * readers can degrade to a nonce and the compactor can sweep it.
+ * The worker observations the main snapshot does not hold yet: every worker
+ * file except a claimed one it names as compacted, which a removal left
+ * behind.
  */
-function readWorkerFiles(directory: string): {
+function uncompactedWorkerEntries(
+  workers: SnapshotDocuments,
+  main: SnapshotDocument | undefined,
+): SnapshotDocument[] {
+  const compacted = new Set(main?.compacted ?? []);
+  return workers.entries.filter(
+    (_entry, index) => !compacted.has(path.basename(workers.paths[index]!)),
+  );
+}
+
+/**
+ * Read every worker snapshot file in `directory`. A file that disappears
+ * mid-read was renamed by a compactor, so the directory is listed again and the
+ * claimed copy is read under its new name; `readable` is false when the listing
+ * never settles. A file that exists but does not parse is reported in
+ * `corruptPaths` so readers can degrade to a nonce and the compactor can sweep
+ * it.
+ */
+function readWorkerFiles(
+  directory: string,
+  operations: SnapshotReadOperations = HOST_SNAPSHOT_READ_OPERATIONS,
+): {
   corruptPaths: string[];
   entries: SnapshotDocument[];
   paths: string[];
   readable: boolean;
 } {
-  return readSnapshotFiles(directory, WORKER_SNAPSHOT_PREFIX);
+  return readSnapshotFiles(directory, WORKER_SNAPSHOT_PREFIX, operations);
 }
 
 function readSnapshotFiles(
   directory: string,
   prefix: string,
+  operations: SnapshotReadOperations,
 ): SnapshotDocuments {
+  // A name that vanishes between the listing and the read was renamed, not
+  // necessarily merged: compaction claims a worker file under a new name well
+  // before the merged main replaces the old one, so skipping the vanished name
+  // would leave its inputs in neither place the reader looks. List again until
+  // one pass reads every name it listed. The claimed copy then appears under
+  // its own name, and once the merged main is published and the claimed copy
+  // removed the main read that follows holds its content.
+  for (let attempt = 0; attempt < SNAPSHOT_LISTING_ATTEMPTS; ++attempt) {
+    const documents = readSnapshotListing(directory, prefix, operations);
+    if (documents !== undefined) {
+      return documents;
+    }
+  }
+  return { corruptPaths: [], entries: [], paths: [], readable: false };
+}
+
+/** One listing pass, or `undefined` when a listed name vanished before its read. */
+function readSnapshotListing(
+  directory: string,
+  prefix: string,
+  operations: SnapshotReadOperations,
+): SnapshotDocuments | undefined {
   let names: string[];
   try {
-    names = fs.readdirSync(directory);
+    names = operations.readdirSync(directory);
   } catch (error) {
     return {
       corruptPaths: [],
@@ -1467,11 +2366,12 @@ function readSnapshotFiles(
     const file = path.join(directory, name);
     let text: string;
     try {
-      text = fs.readFileSync(file, "utf8");
+      text = operations.readFileSync(file, "utf8");
     } catch (error) {
-      if (!isMissingFileError(error)) {
-        corruptPaths.push(file);
+      if (isMissingFileError(error)) {
+        return undefined;
       }
+      corruptPaths.push(file);
       continue;
     }
     const parsed = parseSnapshotDocument(text);
@@ -1494,10 +2394,13 @@ function isMissingFileError(error: unknown): boolean {
   );
 }
 
-function readMainDocument(directory: string): SnapshotDocument | undefined {
+function readMainDocument(
+  directory: string,
+  operations: SnapshotReadOperations = HOST_SNAPSHOT_READ_OPERATIONS,
+): SnapshotDocument | undefined {
   let text: string;
   try {
-    text = fs.readFileSync(path.join(directory, MAIN_SNAPSHOT), "utf8");
+    text = operations.readFileSync(path.join(directory, MAIN_SNAPSHOT), "utf8");
   } catch {
     return undefined;
   }
@@ -1515,38 +2418,125 @@ function parseSnapshotDocument(text: string): SnapshotDocument | undefined {
     return undefined;
   }
   const document = value as Record<string, unknown>;
+  const fileSet = new Set(Array.isArray(document.files) ? document.files : []);
   const keys = Object.keys(document).sort();
-  const expectedKeys = ["files", "tainted", "version", "volatile"];
-  if (Object.prototype.hasOwnProperty.call(document, "id")) {
-    expectedKeys.push("id");
-    expectedKeys.sort();
+  const expectedKeys = [
+    "environment",
+    "nativePredicates",
+    "accessibleEntries",
+    "files",
+    "tainted",
+    "trees",
+    "version",
+    "volatile",
+  ];
+  for (const optional of ["compacted", "id"]) {
+    if (Object.prototype.hasOwnProperty.call(document, optional)) {
+      expectedKeys.push(optional);
+    }
   }
+  expectedKeys.sort();
   if (
     stableStringify(keys) !== stableStringify(expectedKeys) ||
     document.version !== SNAPSHOT_VERSION ||
+    !isEnvironmentNames(document.environment) ||
+    !isNativePredicateRequests(document.nativePredicates, fileSet) ||
     !Array.isArray(document.files) ||
     document.files.some(
       (entry) =>
         typeof entry !== "string" ||
         !(path.posix.isAbsolute(entry) || path.win32.isAbsolute(entry)),
     ) ||
-    new Set(document.files).size !== document.files.length ||
+    fileSet.size !== document.files.length ||
     stableStringify(document.files) !==
       stableStringify([...document.files].sort()) ||
+    !Array.isArray(document.trees) ||
+    document.trees.some(
+      (entry) => typeof entry !== "string" || !fileSet.has(entry),
+    ) ||
+    new Set(document.trees).size !== document.trees.length ||
+    stableStringify(document.trees) !==
+      stableStringify([...document.trees].sort()) ||
+    !Array.isArray(document.accessibleEntries) ||
+    document.accessibleEntries.some(
+      (entry) => typeof entry !== "string" || !fileSet.has(entry),
+    ) ||
+    new Set(document.accessibleEntries).size !==
+      document.accessibleEntries.length ||
+    stableStringify(document.accessibleEntries) !==
+      stableStringify([...document.accessibleEntries].sort()) ||
     typeof document.tainted !== "boolean" ||
     typeof document.volatile !== "boolean" ||
     (document.id !== undefined &&
-      (typeof document.id !== "string" || !/^[a-f0-9]{32}$/.test(document.id)))
+      (typeof document.id !== "string" ||
+        !/^[a-f0-9]{32}$/.test(document.id))) ||
+    (document.compacted !== undefined &&
+      (!Array.isArray(document.compacted) ||
+        document.compacted.length === 0 ||
+        document.compacted.some(
+          (entry) =>
+            typeof entry !== "string" ||
+            path.basename(entry) !== entry ||
+            !isClaimedWorkerSnapshot(entry),
+        ) ||
+        new Set(document.compacted).size !== document.compacted.length))
   ) {
     return undefined;
   }
   return {
+    environment: document.environment as string[],
+    nativePredicates: document.nativePredicates as Record<
+      string,
+      NativeInputKind[]
+    >,
+    accessibleEntries: document.accessibleEntries as string[],
+    ...(Array.isArray(document.compacted)
+      ? { compacted: document.compacted as string[] }
+      : {}),
     files: document.files as string[],
     ...(typeof document.id === "string" ? { id: document.id } : {}),
     tainted: document.tainted,
+    trees: document.trees as string[],
     version: SNAPSHOT_VERSION,
     volatile: document.volatile,
   };
+}
+
+/** Union supported per-path codec requests without retaining producer digests. */
+function mergeNativePredicateRequests(
+  target: Record<string, NativeInputKind[]>,
+  source: Record<string, NativeInputKind[]>,
+): Record<string, NativeInputKind[]> {
+  for (const [file, kinds] of Object.entries(source)) {
+    target[file] = [...new Set([...(target[file] ?? []), ...kinds])].sort();
+  }
+  return target;
+}
+
+/** Validate persisted native requests against their retained file universe. */
+function isNativePredicateRequests(
+  value: unknown,
+  files: Set<unknown>,
+): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  for (const [file, kinds] of Object.entries(value)) {
+    if (
+      !files.has(file) ||
+      !Array.isArray(kinds) ||
+      kinds.length === 0 ||
+      kinds.length > 4 ||
+      kinds.some(
+        (kind) =>
+          !["directory", "entry", "file", "optional-file"].includes(kind),
+      ) ||
+      stableStringify(kinds) !== stableStringify([...new Set(kinds)].sort())
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Write a snapshot document atomically (unique temp file, then rename). */
@@ -1565,13 +2555,62 @@ function writeSnapshotDocument(
 }
 
 /**
- * JSON-serialise with object keys sorted recursively, so two semantically equal
- * records always hash to the same fingerprint regardless of property order.
+ * Represent acyclic JSON-like records with recursively sorted keys for hashing.
+ * Arrays preserve order and JSON primitives use JSON escaping. This is an
+ * internal key representation, not JSON for interchange.
+ *
+ * Undefined uses an unquoted marker and sparse array slots use a separate
+ * unquoted hole marker, preserving cardinality and the distinction from null
+ * and literal strings. Non-finite numbers, functions, symbols, BigInt and
+ * cyclic structures are unsupported and throw rather than supplying a key.
  * Shared with the transformer's option digest.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   Recursive Object.entries sorting and JSON primitive escaping provide a
+ *   stable internal key representation, not another transport parser. The
+ *   undefined and hole markers cannot collide with quoted string values.
+ *   Array.from visits each slot, preserving length and explicit absence.
+ *   Unsupported primitive values fail instead of aliasing null or absence.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One recursive encoder owns array, record and primitive representations;
+ *   sorted record entries keep ordering policy in that one boundary.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Each visited value is encoded once. Each record sorts its own keys in
+ *   O(k log k), and encoding space follows output bytes plus recursion depth.
+ *   Sorting is necessary for insertion-order-independent record keys.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   This encoder accepts potentially mutable caller records and coordinates
+ *   no cross-call computation; consumers own whether encoded values can recur.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   The encoder returns its owned string and retains no caller data or handle
+ *   after return; temporary recursion state is computation space.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Absence is represented at its owning serializer rather than patched in
+ *   individual key consumers. Unsupported primitives fail explicitly.
+ *
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation
+ *   This operation sorts and encodes caller values for a key; it has no
+ *   native path, filesystem or process boundary.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains sorted keys, the acyclic value domain,
+ *   unsupported JSON interchange and explicit absence markers. Checked
+ *   against the documentation skill: separate paragraphs state the contract
+ *   and why its nonobvious boundary matters; field comments retain their own
+ *   useful facts.
  */
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
+    return `[${Array.from(value, (item, index) =>
+      Object.prototype.hasOwnProperty.call(value, index)
+        ? stableStringify(item)
+        : "hole",
+    ).join(",")}]`;
   }
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
@@ -1579,5 +2618,13 @@ export function stableStringify(value: unknown): string {
       .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  if (value === undefined) return "undefined";
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new TypeError("Cannot fingerprint a non-finite number.");
+  }
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) {
+    throw new TypeError("Cannot fingerprint an unsupported primitive value.");
+  }
+  return encoded;
 }

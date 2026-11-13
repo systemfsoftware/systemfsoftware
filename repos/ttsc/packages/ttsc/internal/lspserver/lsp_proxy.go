@@ -45,12 +45,11 @@ const (
   methodExecuteCommand         = "workspace/executeCommand"
   methodCancelRequest          = "$/cancelRequest"
   methodFormatting             = "textDocument/formatting"
-  methodDocumentSymbol         = "textDocument/documentSymbol"
-  methodReferences             = "textDocument/references"
   methodCompletion             = "textDocument/completion"
   methodCompletionResolve      = "completionItem/resolve"
   methodInitialized            = "initialized"
   methodExit                   = "exit"
+  methodShutdown               = "shutdown"
   methodPluginSelectionChanged = "ttsc/pluginSelectionChanged"
 
   // methodDidChangeWatchedFiles is the only notification an editor sends for a
@@ -86,41 +85,70 @@ const utf8BOM = "\uFEFF"
 // ProxyOptions wires the byte-level proxy together. ttscserver creates
 // the upstream pipes around `tsgo --lsp --stdio` and hands the proxy
 // editor stdio plus those pipe ends.
+//
+// Run owns one source session and invokes Close once for an io.Closer source on
+// cancellation or completion. This does not certify that custom Close joins its
+// work. Transport owners must close blocked streams on cancellation.
+//
+// @evidence contracts/common.md#principled-implementation Separate editor and upstream streams model both directions; optional source/provider values and advertisement policy preserve contribution ownership.
+// @evidence contracts/common.md#clear-and-simple-design One options value injects dependencies without global transport or provider mutation.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Command prefixing is explicit host registry policy and supported provider injection replaces no foreign methods.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs document source lifetime, transport cancellation and optional capability policy with member spacing under the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation io streams abstract native transport; OS-dependent stream closability remains the transport owner's explicit responsibility.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Options choose no processing algorithm.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Source and proxy operations own computation sharing.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources This dependency value executes no acquisition or release; Run and transport/source owners perform cleanup under their own lifetime contracts.
 type ProxyOptions struct {
-  EditorIn    io.Reader
-  EditorOut   io.Writer
-  UpstreamIn  io.Writer // we write here; the tsgo LSP process reads
-  UpstreamOut io.Reader // the tsgo LSP process writes here; we read
-  Source      PluginSource
+  // EditorIn supplies client frames; its owner must unblock native reads when
+  // cancellation requires the editor pump to return.
+  EditorIn io.Reader
+
+  // EditorOut receives serialized client-bound frames.
+  EditorOut io.Writer
+
+  // UpstreamIn receives frames consumed by the upstream LSP process.
+  UpstreamIn io.Writer
+
+  // UpstreamOut supplies frames produced by the upstream LSP process.
+  UpstreamOut io.Reader
+
+  // Source provides plugin contributions; nil selects NullPluginSource.
+  Source PluginSource
+
   // SuppressExecuteCommandProvider keeps ttsc command ids out of the
   // initialize response for clients that register wrapper commands themselves.
   SuppressExecuteCommandProvider bool
+
   // SuppressedExecuteCommandIDs filters specific ttsc command ids out of the
   // initialize response while leaving other PluginSource command ids advertised.
   SuppressedExecuteCommandIDs []string
+
   // ExecuteCommandIDPrefix is prepended to advertised command ids. Hosts that
   // run multiple proxy instances in one global command registry use this to
   // avoid collisions; incoming prefixed ids are mapped back before dispatch.
   ExecuteCommandIDPrefix string
-  // SymbolProvider answers textDocument/documentSymbol and
-  // textDocument/references from ttsc's compiler-backed code graph. tsgo
-  // implements both methods, so the proxy forwards to tsgo whenever it
-  // advertises the capability and consults this provider only as a fallback
-  // (tsgo did not advertise) or when ForceLocalSymbolProvider is set. Nil leaves
-  // both methods forwarded to tsgo unconditionally.
-  SymbolProvider SymbolProvider
-  // ForceLocalSymbolProvider answers documentSymbol/references from
-  // SymbolProvider even when upstream tsgo advertises the capability. It serves
-  // a raw-LSP graph consumer (such as @samchon/graph) that wants graph-derived
-  // declarations and usages instead of tsgo's language-service answers. Ignored
-  // when SymbolProvider is nil.
-  ForceLocalSymbolProvider bool
 }
 
 // Proxy bridges the editor and an upstream tsgo LSP process, intercepting
 // the message types ttsc cares about (publishDiagnostics merge, code
 // action augmentation, executeCommand for ttsc-owned commands).
+//
+// One instance serves one session. Tracked editor requests have response and
+// cancellation cleanup; proxy-originated client callbacks have separate response
+// and send-failure cleanup. A peer that never responds may leave an entry for
+// the session. Document text is discarded on close, while generation histories
+// remain to prevent late work from regaining the closed generation's validity.
+//
+// @evidence contracts/common.md#principled-implementation Pending IDs preserve string/numeric distinctions; diagnostic generations revoke even a first unpublished computation, while formatting captures live text with its document generation and permits dirty text only until that generation changes.
+// @evidence contracts/common.md#clear-and-simple-design Locks separate frame serialization, request correlation, diagnostic state and watcher reconciliation; helpers own method-specific wire handling.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts UTF-16 negotiation aligns the compiler and plugin protocols at initialization rather than applying compensating position patches per response.
+// @evidence contracts/common.md#meaningful-documentation Native prose states session scope and historical-state retention; field paragraphs identify lock ownership under the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Native disk and URI boundaries use shared decoding/path APIs, while protocol positions and CRLF framing do not depend on native text conventions.
+// @evidenceExclude contracts/performance.md#efficient-algorithms Run and method handlers choose processing algorithms; this type represents protected state.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Query and refresh owners establish sharing validity rather than the state declaration.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources This type groups retained state without executing acquisition or release; Run and handlers own cleanup attempts, and unacknowledged entries and generation histories can remain for the session.
 type Proxy struct {
+  sourceCloseOnce                sync.Once
   editorIn                       io.Reader
   editorOut                      io.Writer
   upstreamIn                     io.Writer
@@ -129,8 +157,6 @@ type Proxy struct {
   suppressExecuteCommandProvider bool
   suppressedExecuteCommandIDs    map[string]struct{}
   executeCommandIDPrefix         string
-  symbolProvider                 SymbolProvider
-  forceLocalSymbolProvider       bool
 
   writeMu         sync.Mutex // serializes WriteFrame calls to editorOut
   upstreamWriteMu sync.Mutex // serializes writes to upstreamIn
@@ -142,11 +168,18 @@ type Proxy struct {
   // editorRequestedExit.
   editorExit atomic.Bool
 
+  // editorShutdown records that the editor sent the LSP `shutdown` request,
+  // which decides the status an `exit` ends the session with; see
+  // editorRequestedShutdown.
+  editorShutdown atomic.Bool
+
   pendingMu      sync.Mutex
   pendingActions map[string]pendingCodeActionRequest
+
   // pendingCompletions holds the plugin items computed for a forwarded
   // completion request, keyed by request id, until upstream answers it.
-  pendingCompletions       map[string]pendingCompletionRequest
+  pendingCompletions map[string]pendingCompletionRequest
+
   pendingAugmentingActions map[string]struct{}
   pendingLocalActions      map[string]struct{}
   pendingCommands          map[string]struct{}
@@ -154,23 +187,32 @@ type Proxy struct {
   pendingInitialize        map[string]struct{}
   clientRequestSequence    atomic.Uint64
 
-  capabilityMu                   sync.Mutex
-  upstreamCodeActionProvider     bool
-  upstreamDocumentSymbolProvider bool
-  upstreamReferencesProvider     bool
+  capabilityMu               sync.Mutex
+  upstreamCodeActionProvider bool
+
   // initializeAnswered records that the editor has received the augmented
   // capabilities, which is what makes a later trigger character "late".
   initializeAnswered bool
+
   // advertisedCompletionTriggers is the trigger set the editor was told about:
   // tsgo's own characters plus whatever the corpus contributed at that moment.
   // A refresh that produces a trigger outside this set cannot reach the editor
   // without a restart, so the proxy says so once per character.
   advertisedCompletionTriggers map[string]struct{}
-  reportedCompletionTriggers   map[string]struct{}
-  projectInputWatchDynamic     bool
-  projectInputWatchRelative    bool
 
-  diagnosticsMu               sync.Mutex
+  reportedCompletionTriggers map[string]struct{}
+  projectInputWatchDynamic   bool
+  projectInputWatchRelative  bool
+
+  // diagnosticsMu guards the diagnostics and document state below, and is
+  // never held across a frame write. A writer that decides a frame from this
+  // state holds writeMu across the decision and the write, which keeps frames
+  // in the order their decisions were made, and releases diagnosticsMu before
+  // the write blocks on an editor that is not reading yet: the editor pump
+  // takes diagnosticsMu for every document notification before it forwards
+  // the notification upstream, and must never wait on a publication.
+  diagnosticsMu sync.Mutex
+
   upstreamDiagnostics         map[string]cachedDiagnostics
   pluginDiagnostics           map[string]cachedDiagnostics
   projectDiagnostics          cachedDiagnostics
@@ -180,6 +222,7 @@ type Proxy struct {
   documentGeneration          map[string]uint64
   dirtyDocuments              map[string]struct{}
   dirtyVersions               map[string]*int
+
   // documentText caches the live editor buffer per uri so the
   // textDocument/formatting handler can format the in-memory text instead
   // of the on-disk file. didOpen / full-sync didChange seed it with the full
@@ -229,8 +272,27 @@ type cachedDiagnostics struct {
   diagnostics []json.RawMessage
 }
 
-// NewProxy returns a Proxy ready to Run. The PluginSource is required;
-// pass NullPluginSource{} for a no-contribution setup.
+type completionHintObserverSource interface {
+  SetCompletionHintsObserver(func())
+}
+
+type projectInputObserverSource interface {
+  SetProjectInputsObserver(func())
+}
+
+// NewProxy returns a Proxy ready to Run. A nil source selects NullPluginSource.
+// The instance serves one session and takes its source's Close responsibility.
+// Optional observer setters are invoked during construction; an embedding that
+// never runs the proxy must arrange their removal and source closure itself.
+//
+// @evidence contracts/common.md#principled-implementation Initialized maps represent empty correlation and diagnostic state; optional observers connect later source publications to the same proxy session.
+// @evidence contracts/common.md#clear-and-simple-design Constructor dependency capture leaves transport startup to Run and native execution to the source.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Nil source is the explicit no-plugin state; optional interfaces preserve older source capabilities without replacing methods.
+// @evidence contracts/common.md#meaningful-documentation Native prose documents nil default, one-session use and source closure ownership, following the documentation skill.
+// @evidenceExclude contracts/portability.md#os-neutral-implementation Construction captures injected streams and protocol policy without opening native paths or processes.
+// @evidence contracts/performance.md#efficient-algorithms Suppressed command IDs are scanned and hashed once, including their string bytes, into a caller-independent set; empty maps and one buffered error channel add fixed setup. Optional observer setters are synchronous delegated calls whose custom-source cost is not bounded here.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work Construction captures dependencies; serving operations coordinate source and refresh reuse.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Source-held observers can retain the proxy even after the embedding drops its reference. Run teardown removes those registrations and attempts source closure once, ignoring its error; previously copied callbacks and their spawned tasks are not joined by removal. Constructing without Run leaves removal and closure with the embedding. Suppressed string bytes and later session populations have no constructor-imposed budget.
 func NewProxy(opts ProxyOptions) *Proxy {
   source := opts.Source
   if source == nil {
@@ -245,8 +307,6 @@ func NewProxy(opts ProxyOptions) *Proxy {
     suppressExecuteCommandProvider: opts.SuppressExecuteCommandProvider,
     suppressedExecuteCommandIDs:    commandIDSet(opts.SuppressedExecuteCommandIDs),
     executeCommandIDPrefix:         opts.ExecuteCommandIDPrefix,
-    symbolProvider:                 opts.SymbolProvider,
-    forceLocalSymbolProvider:       opts.ForceLocalSymbolProvider,
     asyncErrCh:                     make(chan error, 1),
     pendingActions:                 make(map[string]pendingCodeActionRequest),
     pendingAugmentingActions:       make(map[string]struct{}),
@@ -266,14 +326,8 @@ func NewProxy(opts ProxyOptions) *Proxy {
   // Optional-interface assertion for the same reason pluginCompletionHints uses
   // one: a source that publishes no corpus, NullPluginSource included, simply
   // never reports one changing.
-  type completionHintObserverSource interface {
-    SetCompletionHintsObserver(func())
-  }
   if observed, ok := source.(completionHintObserverSource); ok {
     observed.SetCompletionHintsObserver(proxy.completionHintsRefreshed)
-  }
-  type projectInputObserverSource interface {
-    SetProjectInputsObserver(func())
   }
   if observed, ok := source.(projectInputObserverSource); ok {
     observed.SetProjectInputsObserver(func() {
@@ -283,28 +337,55 @@ func NewProxy(opts ProxyOptions) *Proxy {
   return proxy
 }
 
-// Run drives both pump goroutines until they return. Pumps return when
-// their input stream closes (ErrFrameClosed), when context cancellation
-// has already been observed by the upstream/editor closers, or when a
-// pipe write fails. ErrFrameClosed and context.Canceled are folded into
-// a nil result so editor shutdown does not look like a crash.
+// Run waits for the two pump results, except that upstream completion after
+// an editor exit notification can end the session while the editor pump is
+// still blocked. ErrFrameClosed, context.Canceled and os.ErrClosed are omitted
+// from the returned first error. Context cancellation requests source shutdown;
+// interrupting blocked injected streams remains their owner's responsibility.
+//
+// Once the editor has sent `exit` and the upstream has ended, Run returns
+// without waiting for the editor's stream to close: `exit` ends the session,
+// so the return does not require closing an injected editor stream to interrupt
+// its read. This exception is not a join of that remaining pump.
+//
+// @evidence contracts/common.md#principled-implementation Two pumps dispatch complete frames; generation guards reject stale contributions and initialized position negotiation fixes UTF-16 before live buffer conversions.
+// @evidence contracts/common.md#clear-and-simple-design Method helpers separate correlation, local contributions and passthrough; one source-close boundary coordinates cancellation and completion.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Local answers require actual command/capability ownership; malformed unsupported payloads pass through rather than being repaired into expected responses. Older optional sources use explicit interface capability checks.
+// @evidence contracts/common.md#meaningful-documentation Native paragraphs explain stream termination and the editor-exit exception, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Native disk reads and physical input matching stay behind path helpers; negotiated UTF-16 and protocol URI spelling remain distinct from native bytes and path case capability.
+// @evidence contracts/performance.md#efficient-algorithms Each pump frames and parses an envelope before routing; handlers also decode method payloads and can marshal rewritten responses. The wait loop itself has constant per-result bookkeeping, while delegated text scans, producer calls, native input probes and registration reconciliation retain their input-dependent costs. Frame caps do not bound stream duration or all session populations.
+// @evidence contracts/performance.md#reuse-equivalent-work The session retains live text, producer corpora and diagnostic publications under their document/producer guards. Owner-scoped invalidation and refresh coalescing coordinate requests; they do not independently authenticate daemon Program equivalence or a common producer capture. Actual cache validity and native execution remain with their owners.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Session correlation, document text and diagnostic state grow with traffic without a general byte/history budget. Teardown stops pending timer/scheduler admission and requests source closure once; timer callbacks already begun, copied observers and local request tasks are not joined. Stopping the context AfterFunc does not wait for an already-started shutdown callback. Custom streams can block indefinitely; the editor-exit exception can return before its pump completes, and closure errors are ignored.
 func (p *Proxy) Run(ctx context.Context) error {
+  stopSourceCancellation := context.AfterFunc(ctx, p.shutdownResidentPlugins)
+  defer stopSourceCancellation()
   defer p.stopProjectDiagnosticRefresh()
-  errCh := make(chan error, 2)
-  go func() { errCh <- p.pumpEditorToUpstream(ctx) }()
-  go func() { errCh <- p.pumpUpstreamToEditor(ctx) }()
+  defer p.shutdownResidentPlugins()
+  editorDone := make(chan error, 1)
+  upstreamDone := make(chan error, 1)
+  go func() { editorDone <- p.pumpEditorToUpstream(ctx) }()
+  go func() { upstreamDone <- p.pumpUpstreamToEditor(ctx) }()
 
   var first error
-  for completed := 0; completed < 2; {
+  editorPending, upstreamPending := true, true
+  for editorPending || upstreamPending {
     var err error
     select {
-    case err = <-errCh:
-      completed++
+    case err = <-editorDone:
+      editorPending = false
+    case err = <-upstreamDone:
+      upstreamPending = false
     case err = <-p.asyncErrCh:
     }
-    if first == nil && err != nil && !errors.Is(err, ErrFrameClosed) && !errors.Is(err, context.Canceled) {
+    // RunLSPServer closes the editor input itself when the session ends, and a
+    // read that closing ends reports os.ErrClosed: ttsc's own teardown, not a
+    // fault of the session.
+    if first == nil && err != nil && !errors.Is(err, ErrFrameClosed) && !errors.Is(err, context.Canceled) && !errors.Is(err, os.ErrClosed) {
       first = err
       p.closeAfterPumpError()
+    }
+    if !upstreamPending && p.editorRequestedExit() {
+      break
     }
   }
   return first
@@ -356,6 +437,12 @@ func (p *Proxy) pumpEditorToUpstream(_ context.Context) error {
     if env.IsNotification() && env.Method == methodInitialized {
       go p.projectInputWatchInitialized()
     }
+    // Nothing follows `exit` upstream. Ending its input lets a runner that
+    // waits for its stdin to drain before returning, as exec.Cmd.Wait does,
+    // finish once tsgo has quit, instead of waiting on this pump.
+    if env.IsNotification() && env.Method == methodExit {
+      p.closeUpstreamInput()
+    }
   }
 }
 
@@ -389,7 +476,6 @@ func (p *Proxy) handleEditorEnvelope(env Envelope, body []byte) (bool, error) {
     }
   case methodDidSave:
     if env.IsNotification() {
-      p.invalidateSymbolProvider()
       p.invalidateResidentPlugins(env)
       p.refreshPluginCompletionHints()
       p.publishPluginDiagnosticsForDocumentNotification(env)
@@ -406,7 +492,6 @@ func (p *Proxy) handleEditorEnvelope(env Envelope, body []byte) (bool, error) {
     }
   case methodDidChange:
     if env.IsNotification() {
-      p.invalidateSymbolProvider()
       // No resident invalidation on didChange: the buffer is dirty but disk is
       // unchanged, so the warm Program (built from disk) stays valid, and plugin
       // diagnostics and code actions are suppressed while dirty anyway. didSave
@@ -445,18 +530,14 @@ func (p *Proxy) handleEditorEnvelope(env Envelope, body []byte) (bool, error) {
     if env.IsRequest() {
       return p.handleCodeActionRequest(env)
     }
-  case methodDocumentSymbol:
-    if env.IsRequest() {
-      return p.handleDocumentSymbolRequest(env)
-    }
-  case methodReferences:
-    if env.IsRequest() {
-      return p.handleReferencesRequest(env)
-    }
   case methodCompletion:
     return p.handleCompletionRequest(env)
   case methodCompletionResolve:
     return p.handleCompletionResolveRequest(env)
+  case methodShutdown:
+    if env.IsRequest() {
+      p.editorShutdown.Store(true)
+    }
   case methodExit:
     if env.IsNotification() {
       p.editorExit.Store(true)
@@ -477,9 +558,9 @@ func (p *Proxy) handleEditorEnvelope(env Envelope, body []byte) (bool, error) {
 // client offers `general.positionEncodings`, the server picks one, and every
 // position on that session is counted in the winner. tsgo selects `utf-8`
 // whenever a client offers it, but ttsc computes positions of its own — the
-// incremental buffer cache, plugin completion, the lint sidecar's diagnostic,
-// fix, suggestion and formatting ranges, and the graph symbol provider — and
-// every one of those counts UTF-16 code units. Because the sidecar protocol
+// incremental buffer cache, plugin completion, and the lint sidecar's
+// diagnostic, fix, suggestion and formatting ranges — and every one of those
+// counts UTF-16 code units. Because the sidecar protocol
 // carries no encoding field, a session negotiated as `utf-8` would put tsgo's
 // half of each response on byte columns and ttsc's half on UTF-16 columns.
 //
@@ -533,9 +614,9 @@ func constrainInitializePositionEncoding(env Envelope, body []byte) []byte {
   if err != nil {
     return body
   }
-  // Re-encode only the subtree that changed: every sibling value stays the
-  // client's original bytes, so a large or unusually shaped initialize payload
-  // reaches tsgo exactly as it was sent.
+  // Preserve sibling JSON values in the rebuilt parameter subtrees. Marshaling
+  // can change their byte spelling/whitespace and serializes the parsed Envelope;
+  // only the earlier pass-through branches preserve the complete original bytes.
   general["positionEncodings"] = constrained
   encodedGeneral, err := json.Marshal(general)
   if err != nil {
@@ -586,6 +667,13 @@ func (p *Proxy) editorRequestedExit() bool {
   return p.editorExit.Load()
 }
 
+// editorRequestedShutdown reports whether the editor sent the LSP `shutdown`
+// request. The specification ends the session after `exit` with status 0
+// when `shutdown` came first and 1 when it did not.
+func (p *Proxy) editorRequestedShutdown() bool {
+  return p.editorShutdown.Load()
+}
+
 func (p *Proxy) rememberInitializeRequest(env Envelope) {
   key := env.IDKey()
   if key == "" {
@@ -614,7 +702,7 @@ func (p *Proxy) rememberInitializeRequest(env Envelope) {
   p.pendingInitialize[key] = struct{}{}
 }
 
-// forgetCancelledRequest removes any pending codeAction entry whose id
+// forgetCancelledRequest removes pending local or forwarded requests whose id
 // the editor cancelled. The notification still flows to upstream so
 // tsgo can respond with its own cancellation error. The id is keyed
 // through the shared normalizer so a cancel for `1.0` deletes an entry
@@ -857,11 +945,11 @@ func (p *Proxy) completeExecuteCommand(env Envelope, key string, command string,
     p.reportAsyncError(p.writeExecuteCommandErrorIfClean(env.ID, pending, fmt.Sprintf("ttsc command %q failed: %v", command, err)))
     return
   }
-  // Cycle 1 returns the WorkspaceEdit inside the executeCommand response
-  // instead of sending workspace/applyEdit as a server→client request.
-  // ttsc owns both ends (its VS Code extension), so the extension applies
-  // the edit on its side. Sticking to one direction avoids tracking our
-  // own outgoing request ids in the proxy.
+  // The WorkspaceEdit is returned inside the executeCommand response instead
+  // of being sent as a workspace/applyEdit server→client request. ttsc owns
+  // both ends (its VS Code extension), so the extension applies the edit on
+  // its side. Sticking to one direction avoids tracking the proxy's own
+  // outgoing request ids for this path.
   p.reportAsyncError(p.writeExecuteCommandResultIfClean(env.ID, pending, edit))
 }
 
@@ -877,9 +965,9 @@ type contentExecutor interface {
 // document formatter. Unlike the workspace/executeCommand path, this handler
 // intentionally formats the live (possibly dirty) editor buffer: it reads the
 // cached buffer text and passes it to the sidecar so formatOnSave works before
-// the file is written to disk. It therefore does NOT go through the
-// dirty-document guard that writeExecuteCommandResultIfClean applies to the
-// executeCommand path.
+// the file is written to disk. Dirty state itself does not reject formatting,
+// but a subsequent edit or close revokes the captured document generation.
+// Local request cancellation shares the executeCommand pending registry.
 //
 // When ttsc does not own ttsc.format.document the request is forwarded to
 // upstream tsgo (return false). The handler never surfaces an error to the
@@ -898,17 +986,26 @@ func (p *Proxy) handleFormattingRequest(env Envelope) (bool, error) {
     return false, nil
   }
   uri := params.TextDocument.URI
-  go p.completeFormattingRequest(env, uri)
+  p.diagnosticsMu.Lock()
+  content, hasContent := p.documentText[uri]
+  generation := p.documentGeneration[uri]
+  p.diagnosticsMu.Unlock()
+  key := env.IDKey()
+  if key != "" {
+    p.pendingMu.Lock()
+    p.pendingCommands[key] = struct{}{}
+    p.pendingMu.Unlock()
+  }
+  go p.completeFormattingRequest(env, uri, key, generation, content, hasContent)
   return true, nil
 }
 
-func (p *Proxy) completeFormattingRequest(env Envelope, uri string) {
+func (p *Proxy) completeFormattingRequest(env Envelope, uri string, key string, generation uint64, content string, hasContent bool) {
   // hasContent distinguishes "the proxy has a buffer to format in-memory" from
   // "no buffer; let the sidecar read disk". An empty cached buffer is a valid
   // document state (the user cleared the file), so the empty string must NOT be
   // overloaded as the no-buffer sentinel: a cache hit always yields
   // hasContent=true even when the buffer is "".
-  content, hasContent := p.cachedDocumentText(uri)
   if !hasContent {
     if file, fileOK := filePathFromURI(uri); fileOK {
       if disk, err := os.ReadFile(file); err == nil {
@@ -924,12 +1021,23 @@ func (p *Proxy) completeFormattingRequest(env Envelope, uri string) {
   // logs the underlying sidecar failure to its own stderr writer, so the proxy
   // does not need a separate log sink here.
   edit, err := p.executeFormatCommand(uri, content, hasContent)
-  if err != nil {
-    p.reportAsyncError(p.writeResult(env.ID, []LSPTextEdit{}))
+  if key != "" && !p.takePendingCommand(key) {
     return
   }
-  edits := formattingTextEdits(edit, uri)
-  p.reportAsyncError(p.writeResult(env.ID, edits))
+  edits := []LSPTextEdit{}
+  if err == nil {
+    edits = formattingTextEdits(edit, uri)
+  }
+  // As with local code actions and executeCommand, serialize the generation
+  // decision with the frame write, without holding document state across I/O.
+  p.writeMu.Lock()
+  defer p.writeMu.Unlock()
+  p.diagnosticsMu.Lock()
+  if p.documentGeneration[uri] != generation {
+    edits = []LSPTextEdit{}
+  }
+  p.diagnosticsMu.Unlock()
+  p.reportAsyncError(p.writeResultLocked(env.ID, edits))
 }
 
 // executeFormatCommand runs ttsc.format.document against the supplied buffer
@@ -1304,16 +1412,15 @@ func (p *Proxy) publishPluginDiagnosticsForDidOpen(env Envelope) error {
   p.markDocumentClean(params.TextDocument.URI)
   // A clean open is a disk-snapshot boundary, not merely a diagnostics trigger.
   // The buffer equalling disk right now says nothing about when the warm Program
-  // and the symbol graph last read that file: the document may have been closed
-  // across a branch switch, a `git pull`, a generator run, or an edit in a second
-  // editor. Refresh both compiler-backed caches for this document before the
+  // last read that file: the document may have been closed across a branch
+  // switch, a `git pull`, a generator run, or an edit in a second editor.
+  // Refresh the resident plugin Program for this document before the
   // asynchronous Diagnostics call below is scheduled, so the published findings
   // describe the text the editor just opened.
   //
   // The dirty branch above deliberately does not invalidate: it publishes an
   // empty set and reports nothing until the buffer reaches disk, so there is no
   // stale answer to prevent.
-  p.invalidateSymbolProvider()
   p.invalidateResidentPluginsForURIs(params.TextDocument.URI)
   generation, projectGeneration := p.nextDiagnosticsGenerations(params.TextDocument.URI)
   go p.publishMergedPluginDiagnostics(params.TextDocument.URI, params.TextDocument.Version, false, generation, projectGeneration)
@@ -1358,9 +1465,9 @@ func (p *Proxy) writePublishDiagnosticsIfCurrent(uri string, version *int, diagn
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
   _, dirty := p.dirtyDocuments[uri]
   current := p.diagnosticGeneration[uri] == generation && !dirty
+  p.diagnosticsMu.Unlock()
   if !current {
     return nil
   }
@@ -1383,24 +1490,20 @@ func (p *Proxy) writeProjectDiagnosticsIfCurrent(
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
   if p.projectDiagnosticGeneration != generation ||
     len(p.dirtyDocuments) != 0 {
+    p.diagnosticsMu.Unlock()
     return projectDiagnosticsWriteResult{}, nil
   }
 
+  var frames [][]byte
   previousURI := p.projectDiagnosticsURI
   previousHadDiagnostics := len(p.projectDiagnostics.diagnostics) > 0
   changedURI := previousURI != "" && previousURI != publication.URI
   if changedURI {
     p.projectDiagnosticsURI = ""
     p.projectDiagnostics = cachedDiagnostics{}
-    if err := WriteFrame(
-      p.editorOut,
-      p.publishDiagnosticsBody(previousURI, nil, p.mergedDiagnosticsLocked(previousURI)),
-    ); err != nil {
-      return projectDiagnosticsWriteResult{}, err
-    }
+    frames = append(frames, p.publishDiagnosticsBody(previousURI, nil, p.mergedDiagnosticsLocked(previousURI)))
   }
 
   p.projectDiagnosticsURI = publication.URI
@@ -1409,13 +1512,15 @@ func (p *Proxy) writeProjectDiagnosticsIfCurrent(
     !publishEmpty &&
     !previousHadDiagnostics &&
     !changedURI {
+    p.diagnosticsMu.Unlock()
     return projectDiagnosticsWriteResult{accepted: true}, nil
   }
-  if err := WriteFrame(
-    p.editorOut,
-    p.publishDiagnosticsBody(publication.URI, nil, p.mergedDiagnosticsLocked(publication.URI)),
-  ); err != nil {
-    return projectDiagnosticsWriteResult{}, err
+  frames = append(frames, p.publishDiagnosticsBody(publication.URI, nil, p.mergedDiagnosticsLocked(publication.URI)))
+  p.diagnosticsMu.Unlock()
+  for _, frame := range frames {
+    if err := WriteFrame(p.editorOut, frame); err != nil {
+      return projectDiagnosticsWriteResult{}, err
+    }
   }
   return projectDiagnosticsWriteResult{
     accepted:     true,
@@ -1455,11 +1560,11 @@ func (p *Proxy) writeLocalCodeActionsResultIfCurrent(id json.RawMessage, actions
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
   if _, dirty := p.dirtyDocuments[pending.uri]; dirty || p.documentGeneration[pending.uri] != pending.generation {
     actions = []LSPCodeAction{}
   }
   actions = p.rewriteCodeActionCommands(actions)
+  p.diagnosticsMu.Unlock()
   return p.writeResultLocked(id, actions)
 }
 
@@ -1467,11 +1572,12 @@ func (p *Proxy) writeAugmentedCodeActionFrameIfCurrent(pending pendingCodeAction
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
+  frame := augmented
   if _, dirty := p.dirtyDocuments[pending.uri]; dirty || p.documentGeneration[pending.uri] != pending.generation {
-    return WriteFrame(p.editorOut, fallback)
+    frame = fallback
   }
-  return WriteFrame(p.editorOut, augmented)
+  p.diagnosticsMu.Unlock()
+  return WriteFrame(p.editorOut, frame)
 }
 
 func (p *Proxy) publishDiagnosticsBody(uri string, version *int, diagnostics []json.RawMessage) []byte {
@@ -1803,7 +1909,8 @@ func filePathFromURI(raw string) (string, bool) {
     return "", false
   }
   path := parsed.Path
-  if parsed.Host != "" {
+  // RFC 8089 gives localhost the same local meaning as an absent authority.
+  if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
     path = "//" + parsed.Host + path
   }
   if path == "" {
@@ -1933,11 +2040,6 @@ func (p *Proxy) augmentInitializeResult(env Envelope) ([]byte, bool) {
   }
   codeActionProvider := caps["codeActionProvider"]
   p.setUpstreamCodeActionProvider(codeActionProvider)
-  // Record whether upstream tsgo answers documentSymbol/references itself. The
-  // per-method handlers forward to tsgo when it does, so this must be set before
-  // the shouldAnswer* checks below read it.
-  p.setUpstreamDocumentSymbolProvider(caps["documentSymbolProvider"])
-  p.setUpstreamReferencesProvider(caps["referencesProvider"])
   codeActionKinds := p.pluginCodeActionKinds()
   changed := false
   if (len(sourceCommands) > 0 || len(codeActionKinds) > 0) && codeActionProvider == nil {
@@ -1991,20 +2093,6 @@ func (p *Proxy) augmentInitializeResult(env Envelope) ([]byte, bool) {
       caps["documentFormattingProvider"] = true
       changed = true
     }
-  }
-  // Advertise documentSymbol/references only when the proxy will actually answer
-  // them locally — upstream tsgo did not advertise the capability (fallback) or
-  // ForceLocalSymbolProvider is set. When tsgo advertises and the flag is off,
-  // the method is forwarded to tsgo, whose own capability already tells the
-  // editor to send the request, so its (possibly richer) capability is left
-  // untouched here.
-  if p.shouldAnswerDocumentSymbolLocally() && !capabilityAdvertised(caps["documentSymbolProvider"]) {
-    caps["documentSymbolProvider"] = true
-    changed = true
-  }
-  if p.shouldAnswerReferencesLocally() && !capabilityAdvertised(caps["referencesProvider"]) {
-    caps["referencesProvider"] = true
-    changed = true
   }
   if !changed {
     return nil, false
@@ -2262,57 +2350,6 @@ func (p *Proxy) setUpstreamCodeActionProvider(value any) {
   p.upstreamCodeActionProvider = provides
 }
 
-func (p *Proxy) setUpstreamDocumentSymbolProvider(value any) {
-  p.capabilityMu.Lock()
-  defer p.capabilityMu.Unlock()
-  p.upstreamDocumentSymbolProvider = capabilityAdvertised(value)
-}
-
-func (p *Proxy) setUpstreamReferencesProvider(value any) {
-  p.capabilityMu.Lock()
-  defer p.capabilityMu.Unlock()
-  p.upstreamReferencesProvider = capabilityAdvertised(value)
-}
-
-// shouldAnswerDocumentSymbolLocally reports whether the proxy answers
-// textDocument/documentSymbol from the local SymbolProvider instead of
-// forwarding to upstream tsgo: a provider must be wired, and either the caller
-// forced it or tsgo did not advertise the capability.
-func (p *Proxy) shouldAnswerDocumentSymbolLocally() bool {
-  if p.symbolProvider == nil {
-    return false
-  }
-  if p.forceLocalSymbolProvider {
-    return true
-  }
-  p.capabilityMu.Lock()
-  defer p.capabilityMu.Unlock()
-  return !p.upstreamDocumentSymbolProvider
-}
-
-// shouldAnswerReferencesLocally mirrors shouldAnswerDocumentSymbolLocally for
-// textDocument/references.
-func (p *Proxy) shouldAnswerReferencesLocally() bool {
-  if p.symbolProvider == nil {
-    return false
-  }
-  if p.forceLocalSymbolProvider {
-    return true
-  }
-  p.capabilityMu.Lock()
-  defer p.capabilityMu.Unlock()
-  return !p.upstreamReferencesProvider
-}
-
-// invalidateSymbolProvider drops the SymbolProvider's cached compiler state so
-// the next documentSymbol/references request reflects the latest sources. It is
-// a no-op when no provider is wired.
-func (p *Proxy) invalidateSymbolProvider() {
-  if p.symbolProvider != nil {
-    p.symbolProvider.Invalidate()
-  }
-}
-
 // invalidateResidentPlugins tells a resident plugin source that a document
 // changed on disk, passing the saved document's URI so the daemon can update
 // that file incrementally; an unparseable notification falls back to a full
@@ -2405,7 +2442,7 @@ const (
   fileChangeTypeDeleted = 3
 )
 
-// invalidateForWatchedFileChanges refreshes both compiler-backed caches for a
+// invalidateForWatchedFileChanges refreshes the resident plugin Program for a
 // workspace/didChangeWatchedFiles batch, which is the only notification carrying
 // an on-disk change to a file the editor does not have open.
 //
@@ -2431,7 +2468,6 @@ func (p *Proxy) invalidateForWatchedFileChanges(env Envelope) error {
     } `json:"changes"`
   }
   if len(env.Params) == 0 || json.Unmarshal(env.Params, &params) != nil {
-    p.invalidateSymbolProvider()
     p.invalidateResidentPluginsForURIs()
     p.refreshPluginCompletionHints()
     return nil
@@ -2494,7 +2530,6 @@ func (p *Proxy) invalidateForWatchedFileChanges(env Envelope) error {
     }
     uris = append(uris, change.URI)
   }
-  p.invalidateSymbolProvider()
   if !localizable || len(uris) == 0 {
     p.invalidateResidentPluginsForURIs()
   } else {
@@ -2531,19 +2566,22 @@ func (p *Proxy) invalidateForWatchedFileChanges(env Envelope) error {
 // Upstream diagnostics are left in place: the compiler owns its own answer for
 // the same document, and the editor may legitimately keep showing it while the
 // buffer is still open. Bumping the diagnostic generation discards any in-flight
-// computation started against the pre-deletion Program. A document ttsc never
-// published for is a no-op, which is the ordinary case.
+// computation started against the pre-deletion Program, including its first
+// unpublished computation. A clear frame is needed only for existing findings.
 func (p *Proxy) withdrawPluginDiagnosticsForDeletedDocument(uri string) error {
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
-  if len(p.pluginDiagnostics[uri].diagnostics) == 0 {
-    return nil
-  }
+  hadDiagnostics := len(p.pluginDiagnostics[uri].diagnostics) > 0
   delete(p.pluginDiagnostics, uri)
   p.diagnosticGeneration[uri]++
-  return WriteFrame(p.editorOut, p.publishDiagnosticsBody(uri, nil, p.mergedDiagnosticsLocked(uri)))
+  if !hadDiagnostics {
+    p.diagnosticsMu.Unlock()
+    return nil
+  }
+  body := p.publishDiagnosticsBody(uri, nil, p.mergedDiagnosticsLocked(uri))
+  p.diagnosticsMu.Unlock()
+  return WriteFrame(p.editorOut, body)
 }
 
 // watchedFileChangeIsLocalizable reports whether one watched-file entry can be
@@ -2849,6 +2887,7 @@ func (p *Proxy) stopProjectDiagnosticRefresh() {
   p.projectDiagnosticRefreshPending = false
   p.pendingProjectDiagnosticAllOwners = false
   p.pendingProjectDiagnosticOwners = nil
+  p.projectDiagnosticsRefresh.close()
 }
 
 func (p *Proxy) resumePendingProjectDiagnosticRefresh() {
@@ -2962,24 +3001,24 @@ func isProjectConfigURI(uri string) bool {
 // The children also exit on their own when the parent closes their stdin at
 // process exit, so this is the graceful path, not the only one.
 func (p *Proxy) shutdownResidentPlugins() {
-  type residentShutdown interface{ shutdownResidents() }
-  if source, ok := p.source.(residentShutdown); ok {
-    source.shutdownResidents()
-  }
-}
-
-// capabilityAdvertised reports whether an LSP server-capability value means the
-// server implements the capability: boolean true, or an options object. Absent
-// (nil), false, or any other shape counts as unsupported.
-func capabilityAdvertised(value any) bool {
-  switch v := value.(type) {
-  case bool:
-    return v
-  case map[string]any:
-    return v != nil
-  default:
-    return false
-  }
+  p.sourceCloseOnce.Do(func() {
+    // Release source-held references to this completed proxy. A callback
+    // already copied by an in-flight refresh may still finish independently.
+    if observed, ok := p.source.(completionHintObserverSource); ok {
+      observed.SetCompletionHintsObserver(nil)
+    }
+    if observed, ok := p.source.(projectInputObserverSource); ok {
+      observed.SetProjectInputsObserver(nil)
+    }
+    if source, ok := p.source.(io.Closer); ok {
+      _ = source.Close()
+      return
+    }
+    type residentShutdown interface{ shutdownResidents() }
+    if source, ok := p.source.(residentShutdown); ok {
+      source.shutdownResidents()
+    }
+  })
 }
 
 func mergeCommandIDs(existing any, additions []string) []string {
@@ -3129,11 +3168,11 @@ func (p *Proxy) writeExecuteCommandResultIfClean(id json.RawMessage, pending pen
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
   dirty := p.documentGenerationsChangedLocked(pending.argumentGenerations) ||
     p.argumentsContainDirtyDocumentLocked(pending.args) ||
     p.workspaceEditTargetsChangedLocked(edit, pending.documentGenerations) ||
     p.workspaceEditTargetsDirtyDocumentLocked(edit)
+  p.diagnosticsMu.Unlock()
   if dirty || edit == nil {
     return p.writeResultLocked(id, nil)
   }
@@ -3144,12 +3183,12 @@ func (p *Proxy) writeExecuteCommandErrorIfClean(id json.RawMessage, pending pend
   p.writeMu.Lock()
   defer p.writeMu.Unlock()
   p.diagnosticsMu.Lock()
-  defer p.diagnosticsMu.Unlock()
   stale := p.documentGenerationsChangedLocked(pending.argumentGenerations) ||
     p.argumentsContainDirtyDocumentLocked(pending.args)
   if len(pending.argumentGenerations) == 0 {
     stale = p.documentGenerationsChangedLocked(pending.documentGenerations)
   }
+  p.diagnosticsMu.Unlock()
   if stale {
     return p.writeResultLocked(id, nil)
   }

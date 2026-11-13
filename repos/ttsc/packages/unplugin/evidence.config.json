@@ -1,0 +1,35 @@
+{
+  "severity": "error",
+  "claims": [
+    {
+      "name": "TypeScript production declarations",
+      "type": "typescript",
+      "files": ["src/**/*.ts"],
+      "symbol": ["type", "function"],
+      "reference": {
+        "type": "markdown",
+        "root": "../../.agents/skills",
+        "files": [
+          "contracts/common.md",
+          "contracts/portability.md",
+          "contracts/performance.md"
+        ],
+        "symbol": "h2",
+        "checklist": true
+      }
+    },
+    {
+      "name": "Native fixture lifetime tests",
+      "type": "go",
+      "files": ["test/fixtures/native-transform-producer/*_test.go"],
+      "symbol": "function",
+      "reference": {
+        "type": "markdown",
+        "root": "../../.agents/skills",
+        "files": ["contracts/testing.md"],
+        "symbol": "h2",
+        "checklist": true
+      }
+    }
+  ]
+}

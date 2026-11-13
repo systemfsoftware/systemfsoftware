@@ -1,6 +1,6 @@
 {
   "name": "@typia/utils",
-  "version": "15.0.1",
+  "version": "15.4.0",
   "description": "Superfast runtime validators with only one line",
   "main": "src/index.ts",
   "exports": {
@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "rimraf lib && ttsc && rolldown -c",
-    "dev": "ttsc --watch"
+    "dev": "ttsc --watch",
+    "evidence": "evidence"
   },
   "repository": {
     "type": "git",
@@ -28,7 +29,7 @@
     "rimraf": "catalog:utils",
     "rolldown": "catalog:rolldown",
     "tinyglobby": "^0.2.12",
-    "ttsc": "catalog:typescript",
+    "ttsc": "catalog:samchon",
     "typescript": "catalog:typescript"
   },
   "sideEffects": false,

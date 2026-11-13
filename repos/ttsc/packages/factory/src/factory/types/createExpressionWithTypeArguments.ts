@@ -23,6 +23,21 @@ import { make } from "../internal/make";
  * @param expression The base expression.
  * @param typeArguments The generic type arguments, if any.
  * @returns The created {@link ExpressionWithTypeArguments}.
+ * @evidence contracts/common.md#principled-implementation
+ *   The expression and optional type arguments remain separate children of the
+ *   heritage expression, preserving its base and generic argument order.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One outline node serves heritage clauses without synthesizing a call or a
+ *   declaration; the parent determines extends/implements placement.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   The builder neither resolves base classes nor special-cases their names;
+ *   argument omission is represented directly rather than patched in text.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The example shows the expression itself without a statement terminator;
+ *   JSDoc documents the base expression and optional argument list.
  */
 export const createExpressionWithTypeArguments = (
   expression: Expression,

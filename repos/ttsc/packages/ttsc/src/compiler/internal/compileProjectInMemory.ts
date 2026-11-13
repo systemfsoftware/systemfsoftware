@@ -2,33 +2,62 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { createCanonicalTempDirectory } from "../../internal/createCanonicalTempDirectory";
-import { hasProjectPluginEntries } from "../../plugin/internal/loadProjectPlugins";
+import { hasProjectPluginEntries } from "../../plugin/internal/load/hasProjectPluginEntries";
 import type { ITtscCompilerContext } from "../../structures/ITtscCompilerContext";
 import type { ITtscCompilerDiagnostic } from "../../structures/ITtscCompilerDiagnostic";
+import type { ITtscCompilerTransformation } from "../../structures/ITtscCompilerTransformation";
 import type { ITtscParsedProjectConfig } from "../../structures/internal/ITtscParsedProjectConfig";
 import type { TtscBuildResult } from "../../structures/internal/TtscBuildResult";
+import { PrivateCompilerOutput } from "./PrivateCompilerOutput";
+import { runBuild } from "./build/runBuild";
 import { buildNativeCompiler } from "./buildNativeCompiler";
-import { isOutsideRelativePath, packageRootDir } from "./paths";
+import { outputText } from "./outputText";
+import { packageRootDir } from "./packageRootDir";
+import { parseGraphInputObservations } from "./parseNativeTransformOutput";
 import { readProjectConfig } from "./project/readProjectConfig";
-import { runBuild } from "./runBuild";
-import { inheritedSidecarEnv } from "./sharedHostHelpers";
-import { outputText, spawnNative } from "./spawnNative";
+import { SidecarEnvironment } from "./sharedHost/SidecarEnvironment";
+import { inheritedSidecarEnv } from "./sharedHost/inheritedSidecarEnv";
+import { spawnNative } from "./spawnNative";
 
 /**
- * Compile a project and capture emitted files without writing to the project
- * tree.
+ * Compile a project while capturing emitted outputs instead of placing those
+ * outputs in the project tree. Compiler/plugin caches and plugin side effects
+ * remain owned by their normal paths; this is not a no-filesystem-write mode.
  *
- * When no plugins are configured the fast path spawns the native ttsc compiler
- * host (`cmd/ttsc api-compile`) which returns a structured JSON response
- * containing diagnostics and an output file map. When plugins are present the
- * slow path goes through `runBuild` into a temp directory and reads the files
- * back from disk.
+ * When no plugins are configured the native path spawns the native ttsc
+ * compiler host (`cmd/ttsc api-compile`) which returns a structured JSON
+ * response containing diagnostics and an output file map. When plugins are
+ * present the plugin path goes through `runBuild` into a temp directory and
+ * reads the files back from disk. Independent recovery checks use the same
+ * private destinations, with a separate incremental-state file that is not an
+ * emitted API artifact. Actual emission state remains in returned partial
+ * output.
+ *
+ * A native response must contain a string-valued output record. Plugin output
+ * storage removal is attempted before returning. If removal also fails after a
+ * thrown operation failure, both are retained in an AggregateError with the
+ * original cause. An unsuccessful returned build retains its diagnostics and
+ * partial output in that aggregate; removal failure after success propagates
+ * directly.
  *
  * @returns A map of output path → file content plus a `TtscBuildResult` with
  *   diagnostics and the exit status.
+ * @evidence contracts/common.md#principled-implementation The plugin-free API host supplies a required text-output record and structured diagnostics; plugin projects use the existing build owner and read its isolated emitted files with the project's output-key convention, translating private map/state coordinates back to their original artifact locations.
+ * @evidence contracts/common.md#clear-and-simple-design One router separates structured native capture from plugin-backed disk emission while project discovery, native execution and build semantics remain with their owning helpers.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Plugin discovery failure routes through the build's real diagnostic path, and an absent or malformed native output record cannot become an empty successful compile.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs describe both compile lanes and output-key ownership; separated return members explain diagnostics/status versus emitted content under documentation guidance.
+ * @evidence contracts/performance.md#efficient-algorithms Project discovery/plugin admission and native-host source/cache construction are delegated costs of this call. The native lane captures, decodes and parses complete JSON output; the plugin lane visits E entries, sorts F paths with path-text comparison costs and reads emitted bytes once. Native I/O, compiler work, output-key text and temporary storage grow with their actual inputs; no measured lane speed ranking is claimed.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work Each compile observes potentially changed source and plugin effects; this API owns no proven equivalent-generation cache. The native binary builder independently reuses its valid artifact.
+ *
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Native capture cleanup is best effort in spawnNative; plugin emission owns one accepted temporary tree through finally removal, while temp acquisition has its own failure limitations. Cleanup failure propagates after success and aggregates with a thrown failure or a build outcome carrying nonzero status or error diagnostics, preserving its diagnostics and partial output rather than masking it.
+ * @evidence contracts/portability.md#os-neutral-implementation Native paths use Node resolution and argument arrays; inheritedSidecarEnv owns child environment spelling and the private output owner preserves native output destinations and protocol key spelling, including literal POSIX backslashes.
  */
 export function compileProjectInMemory(options: ITtscCompilerContext): {
+  /** Emitted content under the project's native API output-key convention. */
   output: Record<string, string>;
+
+  /** Compiler diagnostics, exit status and textual failure context. */
   result: TtscBuildResult;
 } {
   const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -41,9 +70,13 @@ export function compileProjectInMemory(options: ITtscCompilerContext): {
     return compileProjectWithPlugins(options, cwd, project);
   }
   const tsconfig = project.path;
+  const env = inheritedSidecarEnv(options.env, options.binary);
   const binary = buildNativeCompiler({
     cacheBaseDir: project.root,
-    cacheDir: options.cacheDir ?? options.env?.TTSC_CACHE_DIR,
+    cacheDir:
+      options.cacheDir ??
+      SidecarEnvironment.read(options.env, "TTSC_CACHE_DIR"),
+    env,
     packageRoot: packageRootDir(),
   });
   const res = spawnNative(
@@ -51,7 +84,7 @@ export function compileProjectInMemory(options: ITtscCompilerContext): {
     ["api-compile", "--cwd", project.root, "--tsconfig", tsconfig],
     {
       cwd: project.root,
-      env: inheritedSidecarEnv(options.env),
+      env,
     },
   );
   if (res.error) {
@@ -68,6 +101,10 @@ export function compileProjectInMemory(options: ITtscCompilerContext): {
     output: output.output,
     result: {
       diagnostics: output.diagnostics,
+      emittedSources: output.emittedSources,
+      ...(output.compilerObservations === undefined
+        ? {}
+        : { compilerObservations: output.compilerObservations }),
       status: res.status ?? 1,
       stdout: "",
       stderr: outputText(res.stderr),
@@ -80,7 +117,11 @@ function hasConfiguredPlugins(
   options: ITtscCompilerContext,
   project: ITtscParsedProjectConfig,
 ): boolean {
-  return hasProjectPluginEntries(project, options.plugins);
+  return hasProjectPluginEntries(
+    project,
+    options.plugins,
+    options.pluginConfigDir,
+  );
 }
 
 /**
@@ -108,106 +149,86 @@ function compileProjectWithPlugins(
   cwd: string,
   project: ITtscParsedProjectConfig,
 ): {
+  /** Emitted content under the same project-relative keys as the native API. */
   output: Record<string, string>;
+
+  /** Compiler diagnostics, process status and textual failure context. */
   result: TtscBuildResult;
 } {
   const tempRoot = createCanonicalTempDirectory("ttsc-api-output-");
-  const tempOutDir = path.join(tempRoot, "out");
+  let outcome: ReturnType<typeof compileProjectInMemory> | undefined;
+  let failed = false;
+  let failure: unknown;
   try {
+    const layout = PrivateCompilerOutput.create(project, tempRoot);
     const result = runBuild({
       ...options,
       cwd,
       emit: true,
       forceListEmittedFiles: true,
-      outDir: tempOutDir,
-      // The temp directory is an `outDir` this lane injected so the emit can be
-      // read back as strings; the project need not declare one at all. tsgo
-      // answers an inferred common source directory with TS5011 as soon as any
-      // `outDir` is in play, so pin the root it would infer. The keys
-      // `outputKeyMapper` builds are unchanged by it — that root is exactly the
-      // layout tsgo already lays the emit out against (issue #1172).
-      pinInferredRootDir: true,
+      outDir: layout.destinations.outDir ?? undefined,
+      privateOutputDestinations: layout.destinations,
+      // Private output adds an outDir to source-adjacent projects. Pin only
+      // their layout root; configured roots and bundle-only layouts retain
+      // the compiler's containment and option validity.
+      pinInferredRootDir: layout.pinInferredRootDir,
       quiet: true,
       resolvedProject: project,
       structuredDiagnostics: true,
       tsconfig: project.path,
     });
-    return {
-      output: readOutputDirectory(tempOutDir, outputKeyMapper(project)),
+    outcome = {
+      output: PrivateCompilerOutput.read(
+        project,
+        tempRoot,
+        layout.originalPath,
+        layout.destinations.tsBuildInfoFile,
+        layout.destinations.diagnosticsTsBuildInfoFile,
+      ),
       result,
     };
+    return outcome;
+  } catch (error) {
+    failed = true;
+    failure = error;
+    throw error;
   } finally {
-    fs.rmSync(tempRoot, { force: true, recursive: true });
-  }
-}
-
-/**
- * Build a function that maps a path relative to the temp output directory to
- * the key used in the returned `output` map.
- *
- * When `outDir` is inside the project root the key is relative to the project
- * root (preserving the `outDir` prefix). When `outDir` is outside the project
- * root the key is absolute-style (`/absolute/outDir/relative`). When `outDir`
- * is absent the key is the bare relative path.
- */
-function outputKeyMapper(
-  project: ITtscParsedProjectConfig,
-): (relativePath: string) => string {
-  const outDir = project.compilerOptions.outDir;
-  if (!outDir) {
-    return (relativePath) => relativePath;
-  }
-  const relativeOutDir = path.relative(project.root, outDir);
-  if (relativeOutDir !== "" && !isOutsideRelativePath(relativeOutDir)) {
-    const prefix = pathToKey(relativeOutDir);
-    return (relativePath) => path.posix.join(prefix, relativePath);
-  }
-  return (relativePath) => pathToKey(path.join(outDir, relativePath));
-}
-
-/** Read every file in `directory` recursively and return a `path→content` map. */
-function readOutputDirectory(
-  directory: string,
-  keyOf: (relativePath: string) => string,
-): Record<string, string> {
-  const output: Record<string, string> = {};
-  if (!fs.existsSync(directory)) {
-    return output;
-  }
-  for (const file of listFiles(directory)) {
-    output[keyOf(pathToKey(path.relative(directory, file)))] = fs.readFileSync(
-      file,
-      "utf8",
-    );
-  }
-  return output;
-}
-
-/** Recursively list all files under `directory`, sorted for stable output. */
-function listFiles(directory: string): string[] {
-  const out: string[] = [];
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const location = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...listFiles(location));
-    } else if (entry.isFile()) {
-      out.push(location);
+    try {
+      fs.rmSync(tempRoot, { force: true, recursive: true });
+    } catch (cleanupError) {
+      if (failed) {
+        throw new AggregateError(
+          [failure, cleanupError],
+          "ttsc: project compilation and temporary output cleanup failed",
+          { cause: failure },
+        );
+      }
+      if (
+        outcome !== undefined &&
+        (outcome.result.status !== 0 ||
+          outcome.result.diagnostics.some(
+            (diagnostic) => diagnostic.category === "error",
+          ))
+      ) {
+        throw new AggregateError(
+          [outcome, cleanupError],
+          "ttsc: unsuccessful project compilation and temporary output cleanup failed",
+          { cause: outcome },
+        );
+      }
+      throw cleanupError;
     }
   }
-  return out.sort();
-}
-
-/** Normalise a file path to a forward-slash key suitable for the output map. */
-function pathToKey(file: string): string {
-  return file.replace(/\\/g, "/");
 }
 
 /**
  * Parse the JSON envelope written by the native compiler host to stdout.
  *
- * On success returns `{ diagnostics, output }`. On JSON parse failure throws a
- * descriptive error using stderr (preferred) or stdout as context, so callers
- * see the original compiler error rather than a generic JSON parse message.
+ * On success returns diagnostics, output and optional emitted-source
+ * provenance. Missing legacy provenance remains unknown. Malformed provenance
+ * is rejected. On JSON parse failure throws a descriptive error using stderr
+ * (preferred) or stdout as context, so callers see the original compiler error
+ * rather than a generic JSON parse message.
  */
 function parseNativeCompileOutput(
   stdout: string,
@@ -215,17 +236,72 @@ function parseNativeCompileOutput(
 ): {
   diagnostics: ITtscCompilerDiagnostic[];
   output: Record<string, string>;
+  emittedSources?: Record<string, readonly string[]>;
+  compilerObservations?: Record<
+    string,
+    ITtscCompilerTransformation.IInputObservation
+  >;
 } {
   try {
     const parsed = JSON.parse(stdout) as {
       diagnostics?: ITtscCompilerDiagnostic[];
       output?: Record<string, string>;
+      emittedSources?: Record<string, readonly string[]>;
+      observations?: unknown;
+      observationsComplete?: unknown;
     };
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      typeof parsed.output !== "object" ||
+      parsed.output === null ||
+      Array.isArray(parsed.output) ||
+      !Object.values(parsed.output).every((value) => typeof value === "string")
+    ) {
+      throw new Error(
+        "ttsc: native compiler host returned an invalid output map",
+      );
+    }
+    if (
+      parsed.emittedSources !== undefined &&
+      (typeof parsed.emittedSources !== "object" ||
+        parsed.emittedSources === null ||
+        Array.isArray(parsed.emittedSources) ||
+        !Object.entries(parsed.emittedSources).every(
+          ([output, sources]) =>
+            path.isAbsolute(output) &&
+            Array.isArray(sources) &&
+            sources.every(
+              (source) => typeof source === "string" && path.isAbsolute(source),
+            ),
+        ))
+    ) {
+      throw new Error(
+        "ttsc: native compiler host returned invalid emit provenance",
+      );
+    }
+    // The population is proof only when the host called it complete and every
+    // entry is a well-formed predicate at an absolute path; anything less is
+    // dropped whole, so the result is simply not provable without a compile.
+    const observed =
+      parsed.observationsComplete === true
+        ? parseGraphInputObservations(parsed.observations)
+        : {};
     return {
-      diagnostics: parsed.diagnostics ?? [],
-      output: parsed.output ?? {},
+      diagnostics: Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [],
+      output: parsed.output,
+      emittedSources: parsed.emittedSources,
+      ...(observed.observations !== undefined &&
+      observed.failures === undefined &&
+      Object.keys(observed.observations).every((file) => path.isAbsolute(file))
+        ? { compilerObservations: observed.observations }
+        : {}),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && !(error instanceof SyntaxError)) {
+      throw error;
+    }
     throw new Error(
       (stderr || stdout).trim() ||
         "ttsc: native compiler host returned no output",

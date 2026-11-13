@@ -25,6 +25,21 @@ import { make } from "../internal/make";
  * @param head The leading text up to the first interpolation.
  * @param templateSpans The interpolated spans.
  * @returns The created {@link TemplateLiteralTypeNode}.
+ * @evidence contracts/common.md#principled-implementation
+ *   The head and ordered type spans preserve template boundaries; each span
+ *   carries its interpolated type and following literal instead of a value expression.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   The parent composes existing head/span nodes and leaves escaping to literal
+ *   emission, without enumerating the strings denoted by the template type.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Literal prefixes do not select fabricated string unions or fixture-specific
+ *   output; all supplied spans remain in their original order.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   JSDoc explains head/span boundary ownership and illustrates the complete
+ *   type without a statement terminator; both child inputs are documented.
  */
 export const createTemplateLiteralType = (
   head: TemplateHead,

@@ -10,20 +10,44 @@ type functionalValidateFunctionProgrammerNamespace struct{}
 
 var FunctionalValidateFunctionProgrammer = functionalValidateFunctionProgrammerNamespace{}
 
+// FunctionalValidateFunctionProgrammer_IConfig selects the generator's variants:
+// Equals is the strict form that also rejects properties the type does not
+// declare.
+//
+// @evidence contracts/common.md#principled-implementation Each variant of the generator is one boolean or option on a record, so the transformers pick a form by naming the field and no second code path is copied.
+// @evidence contracts/common.md#clear-and-simple-design A record of 1 field.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc states what each field selects.
 type FunctionalValidateFunctionProgrammer_IConfig struct {
+  // Equals rejects surplus properties in addition to checking declared values.
   Equals bool
 }
 
+// FunctionalValidateFunctionProgrammer_IProps is the input of Write for the
+// validate function generator: Context (the transform context), Modulo (the
+// call's callee expression), Config (the configuration), Declaration (the
+// function declaration) and Expression (the function expression).
+//
+// @evidence contracts/common.md#principled-implementation Write needs the transform context, the call's callee expression, the configuration, the function declaration and the function expression, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 5 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type FunctionalValidateFunctionProgrammer_IProps struct {
-  Context     nativecontext.ITypiaContext
-  Modulo      *shimast.Node
-  Config      FunctionalValidateFunctionProgrammer_IConfig
-  Declaration *shimast.Node
-  Expression  *shimast.Node
-  Init        *shimast.Node
-}
+  // Context borrows the checker, emitter and importer for this transform.
+  Context nativecontext.ITypiaContext
 
-var functionalValidateProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
+  // Modulo identifies the typia call for helper naming and diagnostics.
+  Modulo *shimast.Node
+
+  // Config selects ordinary validation or rejection of surplus properties.
+  Config FunctionalValidateFunctionProgrammer_IConfig
+
+  // Declaration supplies parameter bindings and the checker return signature.
+  Declaration *shimast.Node
+
+  // Expression is the original callable, invoked with the wrapper receiver.
+  Expression *shimast.Node
+}
 
 func (functionalValidateFunctionProgrammerNamespace) Write(props FunctionalValidateFunctionProgrammer_IProps) *shimast.Node {
   p := FunctionalValidateParametersProgrammer.Decompose(FunctionalValidateParametersProgrammer_IDecomposeProps{
@@ -39,7 +63,7 @@ func (functionalValidateFunctionProgrammerNamespace) Write(props FunctionalValid
     Expression:  props.Expression,
     Declaration: props.Declaration,
   })
-  f := nativecontext.EmitFactoryOf(functionalValidateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   statements := append([]*shimast.Node{}, p.Functions...)
   statements = append(statements, r.Functions...)
   body := append([]*shimast.Node{}, p.Statements...)
@@ -72,7 +96,7 @@ func (functionalValidateFunctionProgrammerNamespace) HookErrors(props struct {
   Expression *shimast.Node
   Replacer   *shimast.Node
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(functionalValidateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativefactories.IdentifierFactory.Access(props.Context.Emit, props.Expression, "map"),
     nil,
@@ -128,7 +152,7 @@ func (functionalValidateFunctionProgrammerNamespace) GetReturnTypeNode(props str
   if typ == nil {
     return nil
   }
-  f := nativecontext.EmitFactoryOf(functionalValidateProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Async {
     var inner *shimast.Node
     if typ.Kind == shimast.KindTypeReference {
@@ -163,7 +187,7 @@ func functionalValidateProgrammer_import_type(context nativecontext.ITypiaContex
     return importer.Type(props)
   }
   if str, ok := props.Name.(string); ok {
-    f := nativecontext.EmitFactoryOf(functionalValidateProgrammer_factory, context.Emit)
+    f := nativecontext.NodeFactoryOf(context.Emit)
     return f.NewTypeReferenceNode(f.NewIdentifier(str), f.NewNodeList(props.Arguments))
   }
   return props.Name.(*shimast.Node)

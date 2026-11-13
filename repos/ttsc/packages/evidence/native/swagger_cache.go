@@ -3,7 +3,6 @@ package evidence
 import (
   "crypto/sha256"
   "encoding/hex"
-  "os"
   "strings"
   "sync"
 )
@@ -33,7 +32,9 @@ const swaggerCacheLimit = 64
 var swaggerDocuments = newSwaggerCache()
 
 // swaggerRemoteDocuments remembers a URL's operations for the process lifetime,
-// keyed by the address rather than by content.
+// keyed by the address rather than by content, within the same entry bound as
+// the local cache: a session reading more distinct URLs than the bound fetches
+// the oldest again.
 //
 // A remote document has no key without fetching it, so it cannot be revalidated
 // the way a local file is. The choice is therefore not "cache or revalidate" but
@@ -65,7 +66,7 @@ var swaggerRemoteDocuments = newSwaggerCache()
 // non-empty. Inferring rejection from the message would turn a reason-less
 // failure into zero operations and no diagnostic — a rejected document that
 // reads exactly like an empty but passing one, which is the shape
-// `test_evidence_graph_reports_swagger_source_failures` exists to forbid.
+// `TestSwaggerReportsARejectionThatCarriesNoReason` exists to forbid.
 type swaggerDocumentOutcome struct {
   Operations []swaggerOperation
   Rejected   bool
@@ -126,18 +127,20 @@ func (cache *swaggerCache) store(digest string, outcome swaggerDocumentOutcome) 
 //
 // The digest is the whole cache key, which is what makes staleness structural
 // rather than improbable: identical bytes normalize to identical operations, so
-// a hit can only return what the current file means. An edit, a truncation, or
-// a same-length replacement all change the digest and miss. A missing or
-// unreadable file yields no digest and is normalized as before, which keeps the
-// normalizer's own diagnostic for it.
+// a hit returns what the current file means to the normalizer that first read
+// it. The key names no project root and no normalizer installation. An edit, a
+// truncation, or a same-length replacement all change the digest and miss. A
+// missing or unreadable file yields no digest and is normalized as before, which
+// keeps the normalizer's own diagnostic for it.
 //
 // An HTTP(S) source never participates. A URL has no validator without a
 // fetch, and the fetch is most of what the normalizer costs, so a remote
 // document cannot be shown unchanged without paying the price of finding out.
-func swaggerContentDigests(root string, sources []string) map[string]string {
+func swaggerContentDigests(root string, sources []string, readers ...evidenceInputReader) map[string]string {
+  inputs := inputReader(readers)
   digests := map[string]string{}
   for _, source := range sources {
-    digest := swaggerContentDigest(root, source)
+    digest := swaggerContentDigest(root, source, inputs)
     if digest != "" {
       digests[source] = digest
     }
@@ -145,11 +148,12 @@ func swaggerContentDigests(root string, sources []string) map[string]string {
   return digests
 }
 
-func swaggerContentDigest(root string, source string) string {
+func swaggerContentDigest(root string, source string, readers ...evidenceInputReader) string {
+  inputs := inputReader(readers)
   if isRemoteSwaggerSource(source) {
     return ""
   }
-  content, err := os.ReadFile(swaggerSourcePath(root, source))
+  content, err := inputs.ReadFile(swaggerSourcePath(root, source))
   if err != nil {
     return ""
   }
@@ -262,7 +266,7 @@ func swaggerUnitsFromOutcome(
 // that trails off after a colon reads like a formatting bug rather than a
 // broken document.
 func swaggerNormalizationFailure(source string, message string) string {
-  reason := causeReason(strings.TrimSpace(message))
+  reason := causeReason(strings.TrimSpace(redactSwaggerError(source, message)))
   if reason == "" {
     reason = "the normalizer reported no reason"
   }

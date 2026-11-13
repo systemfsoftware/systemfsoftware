@@ -12,6 +12,15 @@ type notationJoinerNamespace struct{}
 
 var NotationJoiner = notationJoinerNamespace{}
 
+// NotationJoiner_ObjectProps is the argument record of NotationJoiner.Object,
+// which builds the renamed object. Rename converts a static key, DynamicRename
+// and DynamicAssign build the key conversion and the assignment for a dynamic
+// key, and ThrowCollision builds the error for two keys that convert to one.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of NotationJoiner.Object, which builds the renamed object; its 7 fields (Rename, DynamicRename, DynamicAssign, ThrowCollision, Input, Entries, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 7-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type NotationJoiner_ObjectProps struct {
   Rename         func(str string) string
   DynamicRename  func() *shimast.Node
@@ -22,24 +31,36 @@ type NotationJoiner_ObjectProps struct {
   Emit           *shimprinter.EmitContext
 }
 
+// NotationJoiner_TupleProps is the argument record of NotationJoiner.Tuple,
+// which builds the converted tuple from its element and rest expressions.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of NotationJoiner.Tuple, which builds the converted tuple from its element and rest expressions; its 3 fields (Elements, Rest, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type NotationJoiner_TupleProps struct {
   Elements []*shimast.Expression
   Rest     *shimast.Expression
   Emit     *shimprinter.EmitContext
 }
 
+// NotationJoiner_ArrayProps is the argument record of NotationJoiner.Array,
+// which converts an array by mapping its elements with Arrow.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of NotationJoiner.Array, which converts an array by mapping its elements with Arrow; its 3 fields (Input, Arrow, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type NotationJoiner_ArrayProps struct {
   Input *shimast.Expression
   Arrow *shimast.Expression
   Emit  *shimprinter.EmitContext
 }
 
-var notationJoiner_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (notationJoinerNamespace) Object(props NotationJoiner_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if len(props.Entries) == 0 {
-    return f.NewIdentifier("{}")
+    return f.NewObjectLiteralExpression(f.NewNodeList(nil), false)
   }
 
   regular := []IExpressionEntry{}
@@ -112,7 +133,7 @@ func (notationJoinerNamespace) Object(props NotationJoiner_ObjectProps) *shimast
                 output,
                 sources,
                 key,
-                entry.Expression,
+                cloneJoiner_dynamic_value(entry, props.Emit),
                 props.DynamicRename(),
               }),
               shimast.NodeFlagsNone,
@@ -192,7 +213,7 @@ func (notationJoinerNamespace) Object(props NotationJoiner_ObjectProps) *shimast
 }
 
 func (notationJoinerNamespace) Tuple(props NotationJoiner_TupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   elements := make([]*shimast.Node, 0, len(props.Elements)+1)
   for _, elem := range props.Elements {
     elements = append(elements, elem)
@@ -210,9 +231,9 @@ func (notationJoinerNamespace) Tuple(props NotationJoiner_TupleProps) *shimast.N
 }
 
 func (notationJoinerNamespace) Array(props NotationJoiner_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   return f.NewCallExpression(
-    nativefactories.IdentifierFactory.Access(nil, props.Input, "map"),
+    nativefactories.IdentifierFactory.Access(props.Emit, props.Input, "map"),
     nil,
     nil,
     f.NewNodeList([]*shimast.Node{props.Arrow}),
@@ -221,18 +242,14 @@ func (notationJoinerNamespace) Array(props NotationJoiner_ArrayProps) *shimast.N
 }
 
 func notationJoiner_regular_skip(regular []IExpressionEntry, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(notationJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   elements := make([]*shimast.Node, 0, len(regular))
   for _, entry := range regular {
     elements = append(elements, f.NewStringLiteral(*entry.Key.GetSoleLiteral(), shimast.TokenFlagsNone))
   }
   return f.NewIfStatement(
     f.NewCallExpression(
-      nativefactories.IdentifierFactory.Access(
-        nil,
-        f.NewArrayLiteralExpression(f.NewNodeList(elements), false),
-        "some",
-      ),
+      f.NewPropertyAccessExpression(f.NewArrayLiteralExpression(f.NewNodeList(elements), false), nil, f.NewIdentifier("some"), shimast.NodeFlagsNone),
       nil,
       nil,
       f.NewNodeList([]*shimast.Node{

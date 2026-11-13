@@ -1,61 +1,7 @@
-import type { TtscUnpluginOptions } from "@ttsc/unplugin/api";
-
-/**
- * Options accepted by {@link withTtsc} and the Metro transformer.
- *
- * The `project` / `compilerOptions` / `plugins` fields are inherited from
- * `@ttsc/unplugin` so the Metro adapter speaks the exact same configuration
- * language as every other bundler integration. The remaining fields are
- * Metro-specific.
- *
- * Every field is JSON-serialisable on purpose: `withTtsc` runs in the Metro
- * **config** process, but the transformer runs in Metro's **worker** processes,
- * so the resolved options have to survive a structured-clone / env round-trip
- * to reach them (see {@link serializeOptions}). That is why `include`/`exclude`
- * are plain substring patterns rather than `RegExp`.
- */
-export interface TtscMetroOptions extends TtscUnpluginOptions {
-  /**
-   * Explicit module path of the upstream Metro Babel transformer to delegate to
-   * after the ttsc pass.
-   *
-   * When omitted it is auto-detected: `@expo/metro-config/babel-transformer`
-   * first (Expo), then `@react-native/metro-babel-transformer`, then the legacy
-   * `metro-react-native-babel-transformer`.
-   */
-  upstreamTransformer?: string;
-
-  /**
-   * Substring patterns; when non-empty only files whose path contains one of
-   * them are run through the ttsc pass. Non-matching files are passed straight
-   * to the upstream transformer.
-   */
-  include?: string[];
-
-  /**
-   * Substring patterns; files whose path contains one of them skip the ttsc
-   * pass and go straight to the upstream transformer. Applied after
-   * {@link include}.
-   */
-  exclude?: string[];
-}
-
-/**
- * Fully-resolved options, split into the ttsc-side overlay and Metro-side
- * knobs.
- */
-export interface ResolvedTtscMetroOptions {
-  /** Options forwarded verbatim to the `@ttsc/unplugin` transform core. */
-  ttsc: TtscUnpluginOptions;
-  /** Explicit upstream transformer module path, or `undefined` to auto-detect. */
-  upstreamTransformer?: string;
-  /** Resolved include patterns (never `undefined`). */
-  include: string[];
-  /** Resolved exclude patterns (never `undefined`). */
-  exclude: string[];
-  /** Private run identity shared by `getCacheKey` and Metro workers. */
-  snapshotRunId?: string;
-}
+import type {
+  ResolvedTtscMetroOptions,
+  TtscMetroOptions,
+} from "./TtscMetroOptions";
 
 /**
  * Environment variable that carries the resolved options from the Metro config
@@ -72,6 +18,42 @@ export const ENV_KEY = "TTSC_METRO_OPTIONS";
 /**
  * Serialise user options for transport to the worker processes via
  * {@link ENV_KEY}.
+ *
+ * A supplied private run identity is written into the payload. This function
+ * returns JSON without publishing the environment variable or mutating options.
+ * Values must be JSON-serialisable; serialization errors propagate.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   JSON.stringify and object spread encode the declared worker transport.
+ *   JSON failures propagate rather than inventing a successful payload.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   A single serializer owns the config-to-worker payload. Publication stays
+ *   with withTtsc, so encoding has no environment side effect.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   A supplied private run identity overrides that transport field; this
+ *   operation returns bytes and does not replace process methods, loader
+ *   internals or caller options.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains the JSON payload, supplied run identity and
+ *   serialization failure boundary. Checked against the documentation skill:
+ *   separate paragraphs state the contract and why its nonobvious boundary
+ *   matters; field comments retain their own useful facts.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Returns a string and keeps no state or handle.
+ *
+ * @evidenceExclude contracts/performance.md#efficient-algorithms
+ *   One JSON.stringify of the user's small options record per config load.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   Runs once per Metro config load; there is no repeated work to share.
+ *
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation
+ *   JSON.stringify escapes backslashes, so a Windows path in the options
+ *   round-trips; no path is interpreted.
  */
 export function serializeOptions(
   options: TtscMetroOptions,
@@ -86,18 +68,64 @@ export function serializeOptions(
 /**
  * Reconstruct the resolved options inside a worker process.
  *
- * Reads {@link ENV_KEY}; when it is unset or malformed the adapter falls back to
- * defaults, which means "auto-discover `tsconfig.json` and read its configured
- * plugins", the standard ttsc behaviour, and the right thing for a project that
- * called `withTtsc(config)` with no explicit options.
+ * Reads {@link ENV_KEY}; when it is unset or contains invalid JSON or a
+ * non-object payload, the adapter falls back to defaults: auto-discover
+ * `tsconfig.json` and read its configured plugins. This is the standard ttsc
+ * behaviour for a project that called `withTtsc(config)` with no explicit
+ * options.
+ *
+ * Common compiler options, including `precompile` entries and `projectRoot`,
+ * survive transport without interpreting their paths in the config host. A
+ * present `plugins` property is forwarded even when its value is `false`;
+ * omission leaves plugin selection to the project. The include/exclude filters
+ * and precompile entry list retain only strings; invalid arrays become empty
+ * lists. Only a non-empty string is accepted as the private run identity.
+ *
+ * @evidence contracts/common.md#principled-implementation
+ *   JSON.parse reads the adapter-owned environment channel. The parser accepts
+ *   only object payloads, filters include/exclude to strings and preserves
+ *   plugins field presence so false differs from omission.
+ *
+ * @evidence contracts/common.md#clear-and-simple-design
+ *   One reconstruction function separates transport parsing and string-array
+ *   normalization from the resolved object workers consume.
+ *
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts
+ *   Invalid JSON and non-object payloads use documented defaults, not a failed
+ *   compiler fallback; this parser patches no global APIs.
+ *
+ * @evidence contracts/common.md#meaningful-documentation
+ *   The native JSDoc explains absent, invalid-JSON and non-object defaults,
+ *   plugin-presence semantics and filter normalization. Checked against the
+ *   documentation skill: separate paragraphs state the contract and why its
+ *   nonobvious boundary matters; field comments retain their own useful
+ *   facts.
+ *
+ * @evidenceExclude contracts/performance.md#bound-retention-and-release-resources
+ *   Returns a fresh object and keeps no state or handle.
+ *
+ * @evidence contracts/performance.md#efficient-algorithms
+ *   Parsing visits the payload bytes and filtering visits the include, exclude and precompile arrays once. Returned arrays retain only their string entries, with storage proportional to the accepted entries and their text.
+ *
+ * @evidenceExclude contracts/performance.md#reuse-equivalent-work
+ *   The transformer calls it once per worker and memoises the result in options().
+ *
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation
+ *   Reads one environment variable as JSON and resolves no path.
  */
 export function resolveOptionsFromEnv(): ResolvedTtscMetroOptions {
   const raw = process.env[ENV_KEY];
   const parsed = parse(raw);
   return {
     ttsc: {
+      precompile:
+        parsed.precompile === undefined
+          ? undefined
+          : toStringArray(parsed.precompile),
       project: parsed.project,
+      projectRoot: parsed.projectRoot,
       compilerOptions: parsed.compilerOptions,
+      runExternalCode: parsed.runExternalCode,
       ...("plugins" in parsed ? { plugins: parsed.plugins } : {}),
     },
     upstreamTransformer:

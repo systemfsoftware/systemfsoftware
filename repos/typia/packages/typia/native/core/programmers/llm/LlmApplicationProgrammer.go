@@ -17,15 +17,16 @@ type llmApplicationProgrammerNamespace struct{}
 
 var LlmApplicationProgrammer = llmApplicationProgrammerNamespace{}
 
-type LlmApplicationProgrammer_IProps struct {
-  Context nativecontext.ITypiaContext
-  Modulo  *shimast.Node
-  Type    any
-  Name    *string
-  Init    *shimast.Node
-  Config  map[string]any
-}
-
+// LlmApplicationProgrammer_IWriteProps is the argument record of
+// LlmApplicationProgrammer.Write, which builds the LLM function-calling
+// application of a class type. Config is the call's literal configuration, Name
+// the written class name and ConfigArgument the configuration expression that is
+// passed through to the generated call.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of LlmApplicationProgrammer.Write, which builds the LLM function-calling application of a class type; its 6 fields (Context, Modulo, Metadata, Config, Name, ConfigArgument) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type LlmApplicationProgrammer_IWriteProps struct {
   Context        nativecontext.ITypiaContext
   Modulo         *shimast.Node
@@ -34,8 +35,6 @@ type LlmApplicationProgrammer_IWriteProps struct {
   Name           *string
   ConfigArgument *shimast.Node
 }
-
-var llmApplicationProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (llmApplicationProgrammerNamespace) Write(props LlmApplicationProgrammer_IWriteProps) *shimast.Node {
   application := LlmApplicationProgrammer.WriteApplication(struct {
@@ -51,7 +50,7 @@ func (llmApplicationProgrammerNamespace) Write(props LlmApplicationProgrammer_IW
     Config:   props.Config,
     Name:     props.Name,
   })
-  f := nativecontext.EmitFactoryOf(llmApplicationProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   var arguments []*shimast.TypeNode
   if props.Name != nil {
     arguments = []*shimast.TypeNode{llmProgrammer_type_reference(*props.Name, props.Context.Emit)}

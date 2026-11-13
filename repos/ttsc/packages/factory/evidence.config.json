@@ -1,0 +1,18 @@
+{
+  "severity": "error",
+  "claims": [
+    {
+      "name": "TypeScript types and functions",
+      "type": "typescript",
+      "files": ["src/**/*.ts"],
+      "symbol": ["type", "function"],
+      "reference": {
+        "type": "markdown",
+        "root": "../../.agents/skills",
+        "files": ["contracts/common.md"],
+        "symbol": "h2",
+        "checklist": true
+      }
+    }
+  ]
+}

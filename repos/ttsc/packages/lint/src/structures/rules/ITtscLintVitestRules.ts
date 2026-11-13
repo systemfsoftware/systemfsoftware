@@ -9,6 +9,11 @@ import type { TtscLintRuleSetting } from "../TtscLintRuleSetting";
  * titles, conditional logic, valid `expect` shape.
  *
  * @reference https://github.com/vitest-dev/eslint-plugin-vitest
+ *
+ * @evidence contracts/common.md#principled-implementation Optional vitest keys represent independent runner policies through severity-only settings, retaining a distinct namespace despite shared Jest-style source syntax.
+ * @evidence contracts/common.md#clear-and-simple-design One map groups Vitest test-source concerns and reuses the common severity union without coupling it to the Jest family type.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts The declared Vitest policy names are public configuration entries rather than production branches introduced solely for this repository's tests.
+ * @evidence contracts/common.md#meaningful-documentation Native family prose identifies Vitest and member comments explain collection, assertion and callback concerns; paragraph and member separation follow documentation guidance.
  */
 export interface ITtscLintVitestRules {
   /**
@@ -20,8 +25,9 @@ export interface ITtscLintVitestRules {
   "vitest/expect-expect"?: TtscLintRuleSetting;
 
   /**
-   * Reject `expect(...)` calls under `if`/`try`/`catch` or other conditional
-   * branches in Vitest tests.
+   * Reject recognized `expect(...)` calls in conditional or loop syntax inside
+   * test callbacks. The native conditional-kind set does not include
+   * try/catch.
    *
    * A branch that never runs turns the assertion into a silent no-op rather
    * than a failure.
@@ -51,7 +57,8 @@ export interface ITtscLintVitestRules {
   "vitest/no-disabled-tests"?: TtscLintRuleSetting;
 
   /**
-   * Reject `done` callback parameters in Vitest tests and lifecycle hooks.
+   * Reject any first callback parameter in recognized Vitest tests and hooks,
+   * regardless of whether its name is `done`.
    *
    * The callback style predates async/await and makes failure propagation easy
    * to miss; return a Promise or mark the body `async` instead.
@@ -92,11 +99,11 @@ export interface ITtscLintVitestRules {
   "vitest/no-standalone-expect"?: TtscLintRuleSetting;
 
   /**
-   * Reject `return` statements that return non-Promise values from a Vitest
-   * test callback.
+   * Reject explicit return statements in recognized Vitest test callbacks,
+   * including bare returns and returned Promises; return types are not
+   * inferred.
    *
-   * The runner ignores the value and following code is dead, which usually
-   * masks a missing `await` or stray early-exit.
+   * The rule is an AST source policy and does not execute runner completion.
    *
    * @reference https://github.com/vitest-dev/eslint-plugin-vitest/blob/main/docs/rules/no-test-return-statement.md
    */
@@ -116,16 +123,17 @@ export interface ITtscLintVitestRules {
   /**
    * Validate the shape of Vitest `describe` callbacks.
    *
-   * The callback must be synchronous and take no arguments — the runner ignores
-   * returned Promises and `done`-style parameters at the describe level.
+   * The native check requires a function callback without an async modifier. It
+   * does not validate parameter count or infer returned Promise types.
    *
    * @reference https://github.com/vitest-dev/eslint-plugin-vitest/blob/main/docs/rules/valid-describe-callback.md
    */
   "vitest/valid-describe-callback"?: TtscLintRuleSetting;
 
   /**
-   * Validate `expect(...)` arity and matcher chaining: exactly one argument,
-   * terminated by a matcher call, and async matchers properly awaited.
+   * Require at least one `expect(...)` argument and a terminating matcher call,
+   * permitting `not`, `resolves`, and `rejects` property links. The native
+   * check does not impose a maximum arity or validate asynchronous handling.
    *
    * Malformed expects either throw at runtime or pass without asserting
    * anything.

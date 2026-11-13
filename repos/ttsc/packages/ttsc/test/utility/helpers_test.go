@@ -27,10 +27,72 @@ type apiTransformResult struct {
 }
 
 type utilityTransformResult struct {
-  HostInputHashes    map[string]*string `json:"hostInputHashes,omitempty"`
-  HostInputRealpaths map[string]*string `json:"hostInputRealpaths,omitempty"`
-  HostInputs         []string           `json:"hostInputs,omitempty"`
-  TypeScript         map[string]string  `json:"typescript"`
+  HostInputHashes    map[string]*string          `json:"hostInputHashes,omitempty"`
+  HostInputRealpaths map[string]*string          `json:"hostInputRealpaths,omitempty"`
+  HostInputs         []string                    `json:"hostInputs,omitempty"`
+  SourceMaps         map[string]utilitySourceMap `json:"sourceMaps,omitempty"`
+  TypeScript         map[string]string           `json:"typescript"`
+}
+
+// utilitySourceMap is the version 3 source map the transform envelope carries
+// per printed file.
+type utilitySourceMap struct {
+  File           string    `json:"file"`
+  Mappings       string    `json:"mappings"`
+  Sources        []string  `json:"sources"`
+  SourcesContent []*string `json:"sourcesContent"`
+  Version        int       `json:"version"`
+}
+
+// sourceMapSegment is one decoded mapping: a generated position and the
+// source position it maps to.
+type sourceMapSegment struct {
+  GeneratedLine, GeneratedColumn, Source, SourceLine, SourceColumn int
+}
+
+// decodeSourceMapMappings decodes a version 3 `mappings` string into its
+// segments that carry a source position.
+func decodeSourceMapMappings(t *testing.T, mappings string) []sourceMapSegment {
+  t.Helper()
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  var segments []sourceMapSegment
+  source, sourceLine, sourceColumn := 0, 0, 0
+  for line, text := range strings.Split(mappings, ";") {
+    column := 0
+    for _, encoded := range strings.Split(text, ",") {
+      if encoded == "" {
+        continue
+      }
+      var fields []int
+      value, shift := 0, 0
+      for _, char := range encoded {
+        digit := strings.IndexRune(alphabet, char)
+        if digit < 0 {
+          t.Fatalf("invalid base64 VLQ %q in %q", char, mappings)
+        }
+        value += (digit & 31) << shift
+        if digit&32 != 0 {
+          shift += 5
+          continue
+        }
+        if value&1 != 0 {
+          fields = append(fields, -(value >> 1))
+        } else {
+          fields = append(fields, value>>1)
+        }
+        value, shift = 0, 0
+      }
+      column += fields[0]
+      if len(fields) < 4 {
+        continue
+      }
+      source += fields[1]
+      sourceLine += fields[2]
+      sourceColumn += fields[3]
+      segments = append(segments, sourceMapSegment{line, column, source, sourceLine, sourceColumn})
+    }
+  }
+  return segments
 }
 
 // packageRoot returns the `packages/ttsc` module root from this black-box test
@@ -122,8 +184,30 @@ func captureUtilityOutput(t *testing.T, fn func() int) (int, string, string) {
   }
   errReader, errWriter, err := os.Pipe()
   if err != nil {
+    _ = outReader.Close()
+    _ = outWriter.Close()
     t.Fatal(err)
   }
+  defer func() {
+    os.Stdout, os.Stderr = prevOut, prevErr
+    _ = outWriter.Close()
+    _ = errWriter.Close()
+    _ = outReader.Close()
+    _ = errReader.Close()
+  }()
+  type capture struct {
+    bytes []byte
+    err   error
+  }
+  read := func(reader *os.File) <-chan capture {
+    completed := make(chan capture, 1)
+    go func() {
+      bytes, err := io.ReadAll(reader)
+      completed <- capture{bytes, err}
+    }()
+    return completed
+  }
+  outResult, errResult := read(outReader), read(errReader)
   os.Stdout = outWriter
   os.Stderr = errWriter
   code := fn()
@@ -135,13 +219,13 @@ func captureUtilityOutput(t *testing.T, fn func() int) (int, string, string) {
   }
   os.Stdout = prevOut
   os.Stderr = prevErr
-  out, err := io.ReadAll(outReader)
-  if err != nil {
-    t.Fatal(err)
+  out := <-outResult
+  if out.err != nil {
+    t.Fatal(out.err)
   }
-  errOut, err := io.ReadAll(errReader)
-  if err != nil {
-    t.Fatal(err)
+  errOut := <-errResult
+  if errOut.err != nil {
+    t.Fatal(errOut.err)
   }
-  return code, string(out), string(errOut)
+  return code, string(out.bytes), string(errOut.bytes)
 }

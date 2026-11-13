@@ -120,6 +120,20 @@ func residentCheckPath(location string) (string, bool) {
 // RunCheckServe runs the check-stage watch daemon. It accepts the same base
 // arguments as `check`, reads one JSON request per line, and emits one response
 // per request until stdin closes.
+//
+// One invocation owns one warm Program and drops its reference on exit or incompatible
+// changes. Requests are served serially; callers supply nonnil streams. Exit
+// status 2 reports startup, input or response-write failure, while request
+// failures appear in each response.
+//
+// @evidence contracts/common.md#principled-implementation The line protocol separates fixed compiler options from filesystem transitions, resets rule state per cycle and rebuilds when an unknown non-external path changes program topology.
+// @evidence contracts/common.md#clear-and-simple-design The loop owns protocol lifetime and one state object owns the warm Program. Each processed request creates fresh engines and output buffers; the Program can retain its latest project-cycle memo until update, the next diagnostic run or close.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Supported incremental compiler updates implement compatible edits and a real program reload handles topology changes instead of layered retries over stale source.
+// @evidence contracts/common.md#meaningful-documentation Native prose states serial stream ownership, Program release and exit-versus-response failures; tags are separated.
+// @evidence contracts/portability.md#os-neutral-implementation Filesystem inputs use native filepath and shared file-URI conversion, with physical canonical identities for external dependencies; no shell command or guessed platform separator implements watch transitions.
+// @evidence contracts/performance.md#efficient-algorithms Each request parses its line bytes and normalizes declared external/changed paths. Source membership scans n Program files for each of c changed paths and again during applyChange, with path comparison/physical-identity work; supported compiler updates and dependency-validated config loads add their own input-dependent work. Diagnostics still traverse selected sources/rules and format/encode findings. Temporary request/response space grows with path lists, line bytes and diagnostic bytes; no globally linear transition or unmeasured speedup is claimed.
+// @evidence contracts/performance.md#reuse-equivalent-work One warm Program serves the fixed-option session when the caller reports compatible transitions. Explicit invalidation and unknown non-external paths drop it; known paths use the supported UpdateProgram result and checker refresh, and a newly required missing checker forces reload. Config loading revalidates recorded executable dependencies under its cache premises. New engines and cleared project-cycle memos avoid replaying prior request results; omitted changes or incorrectly declared external paths are not independently discovered by this protocol.
+// @evidence contracts/performance.md#bound-retention-and-release-resources The state holds at most one current Program reference, not a bound on source/checker bytes. Invalidation, incompatible transition, recovered request panic and loop exit close its standalone checker and drop that reference; compiler-owned backing becomes reclaimable when otherwise unreferenced. The current Program can keep the latest project-cycle memo until an update, successful diagnostic setup or close. Request buffers and encoded responses are temporary, while delegated config caches retain their own process/disk history without eviction here. There is no input-line/response byte cap or caller cancellation deadline; blocked streams or user evaluators can keep the synchronous session alive.
 func RunCheckServe(in io.Reader, out io.Writer, args []string) int {
   var startup bytes.Buffer
   base, err := parseSubcommandFlagsWithIO(
@@ -141,7 +155,10 @@ func RunCheckServe(in io.Reader, out io.Writer, args []string) int {
   for {
     raw, readErr := reader.ReadString('\n')
     if line := strings.TrimSpace(raw); line != "" {
-      handleServeCheckLine(line, base, state, encoder)
+      if err := handleServeCheckLine(line, base, state, encoder); err != nil {
+        fmt.Fprintf(os.Stderr, "@ttsc/lint check-serve: write error: %v\n", err)
+        return 2
+      }
     }
     if readErr != nil {
       if readErr != io.EOF {
@@ -158,7 +175,7 @@ func handleServeCheckLine(
   base *subcommandOpts,
   state *residentCheckState,
   encoder *json.Encoder,
-) {
+) (writeErr error) {
   response := serveCheckResponse{Status: 2}
   defer func() {
     if recovered := recover(); recovered != nil {
@@ -174,7 +191,7 @@ func handleServeCheckLine(
       ProgramUpdates: state.programUpdates,
       Reused:         response.Telemetry.Reused,
     }
-    _ = encoder.Encode(response)
+    writeErr = encoder.Encode(response)
   }()
 
   var req serveCheckRequest
@@ -186,6 +203,7 @@ func handleServeCheckLine(
     return
   }
   response = state.run(base, state.apply(req))
+  return
 }
 
 func (s *residentCheckState) run(
@@ -210,6 +228,7 @@ func (s *residentCheckState) run(
     return s.response(2, stdout, stderr, false)
   }
   engine.SetSerial(opts.singleThreaded)
+  engine.SetCurrentDirectory(opts.cwd)
 
   if s.program == nil || (engine.NeedsTypeChecker() && s.program.checker == nil) {
     if s.program != nil {
@@ -226,6 +245,7 @@ func (s *residentCheckState) run(
         singleThreaded:     opts.singleThreaded,
         checkers:           opts.checkers,
         tsgoArgs:           opts.tsgoArgs,
+        tsgoArgsCwd:        opts.tsgoArgsCwd,
         projectIdentity:    opts.projectIdentity,
       },
     )

@@ -43,6 +43,19 @@ const SHARE_URL_WARN_BYTES = 2000;
 
 type Tab = "javascript" | "lint";
 
+/**
+ * Coordinate the compiler Worker, dependency graph, controlled editors and
+ * site execution hook. Compile epochs and Worker generations fence stale RPC
+ * results; Execute has its own cancellation boundary.
+ *
+ * Source-root removal replaces the Worker and all dependency maps together.
+ * Site execution owns isolation; cancellation cannot preempt synchronous code.
+ *
+ * @evidence contracts/common.md#principled-implementation Epoch and generation checks precede asynchronous state publication; serialized dependency mutations reconcile stale writes before reuse, and removed roots trigger full graph replacement. Execute receives a source snapshot and attempt signal without invalidating independent compile work.
+ * @evidence contracts/common.md#clear-and-simple-design The shell owns React state and delegates Worker transport, dependency solving, lifecycle fencing and display to their named operations; separate compile and Execute boundaries serve their different invalidation rules.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Generation resets correct actual obsolete-worker state rather than wrapping errors with unbounded retry; ordinary plugin and transport errors stay visible and only terminal runtime failures require replacement.
+ * @evidence contracts/common.md#meaningful-documentation Native paragraphs define ownership, stale-result boundaries and isolation limits; local comments explain dependency replacement and callback dependencies under the documentation skill.
+ */
 export function PlaygroundShell({
   workerUrl,
   defaultScript,
@@ -103,11 +116,10 @@ export function PlaygroundShell({
   // Direct source roots selecting the mounted graph. Removing one requires a
   // full solve and worker replacement so obsolete package files cannot survive.
   const dependencyRoots = useRef<Set<string>>(new Set());
-  // Accumulated runtime-file map produced by every successful
-  // installPlaygroundDependencies call. Threaded through to executeBundle so
-  // the in-page Execute sandbox's require can resolve any npm package the
-  // user installed (without it, `import {v4} from "uuid"` compiles fine but
-  // Execute throws because the worker mounts uuid into the wasm MemFS only).
+  // Runtime-file map for the current dependency graph. Additive installs merge
+  // files; removing a source root replaces the map after a full solve. Pass it
+  // to executeBundle so its require can resolve current npm dependencies.
+  // The compiler's MemFS mount alone does not make them available to Execute.
   const runtimeDependencyFiles = useRef<Record<string, string>>({});
   const sourceVersion = useRef(0);
   const latestSource = useRef(source);

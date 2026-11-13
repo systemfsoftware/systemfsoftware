@@ -1,3 +1,10 @@
+import type { RawDump } from "./structures/RawDump";
+import type { RawEdge } from "./structures/RawEdge";
+import type { RawNode } from "./structures/RawNode";
+import type { ViewerLink } from "./structures/ViewerLink";
+import type { ViewerNode } from "./structures/ViewerNode";
+import type { ViewerPayload } from "./structures/ViewerPayload";
+
 // Reduce a raw `ttscgraph dump` to the payload the bundled 3D viewer renders.
 // The same pure transform is copied in
 // website/src/components/graph/TtscWebsiteGraphReduce.ts and
@@ -7,56 +14,6 @@
 // by tests/test-graph rather than by this comment. The CLI reduces in Node
 // before serving, so the browser viewer only ever renders a ready
 // `{ nodes, links }`.
-
-export interface RawNode {
-  id: string;
-  name: string;
-  kind: string;
-  file: string;
-  external?: boolean;
-  ignored?: boolean;
-}
-
-export interface RawEdge {
-  from: string;
-  to: string;
-  kind: string;
-}
-
-export interface RawDump {
-  project?: string;
-  nodes: RawNode[];
-  edges: RawEdge[];
-}
-
-export interface ViewerNode {
-  id: string;
-  name: string;
-  kind: string;
-  file: string;
-  degree: number;
-}
-
-export interface ViewerLink {
-  source: string;
-  target: string;
-  kind: string;
-}
-
-export interface ViewerPayload {
-  project: string;
-  counts: {
-    rawNodes: number;
-    rawEdges: number;
-    nodes: number;
-    links: number;
-    droppedExternal: number;
-    droppedIgnored: number;
-    droppedByCap: number;
-  };
-  nodes: ViewerNode[];
-  links: ViewerLink[];
-}
 
 function posix(p: string): string {
   return p.replace(/\\/g, "/");
@@ -233,9 +190,25 @@ const DISPLAY_KIND: Record<string, string> = {
 };
 
 function displayKind(kind: string): string {
-  return DISPLAY_KIND[kind] ?? kind;
+  return Object.hasOwn(DISPLAY_KIND, kind) ? DISPLAY_KIND[kind]! : kind;
 }
 
+/**
+ * Project a dump into a connected viewer graph, retaining high-degree nodes.
+ *
+ * Current portable coordinates retain their spelling. Legacy absolute paths are
+ * rerooted together, and node ids and edge endpoints use the same rewrite.
+ * Boundary and cap counters explain selection; isolated nodes are not drawn.
+ *
+ * @evidence contracts/common.md#principled-implementation Boundary selection precedes induced-edge filtering and degree ranking; final edge membership and matching identity rewrites preserve the displayed subgraph.
+ * @evidence contracts/common.md#clear-and-simple-design Pure projection separates path/identity codec, degree calculation and display-family mapping through private helpers.
+ * @evidence contracts/common.md#prohibited-implementation-shortcuts Paths outside the common root keep identity rather than collapse to basename; filters use producer flags and general kinds without fixture lists.
+ * @evidence contracts/common.md#meaningful-documentation Native prose explains legacy/current coordinates and selection losses; DTO members document identity, degree and each counter.
+ * @evidence contracts/performance.md#efficient-algorithms Node/edge scans and degree maps cost O(N+E); degree selection sorts at most N nodes, adding O(N log N), with temporary maps/arrays proportional to the input.
+ * @evidence contracts/performance.md#reuse-equivalent-work Within one projection, indexed live/kept id sets and degree maps serve multiple filters; callers share the resulting payload across render requests rather than repeat reduction.
+ * @evidence contracts/performance.md#bound-retention-and-release-resources Temporary arrays and indexes become unreachable after return; the caller owns only selected DTO arrays and counts, with selected populations bounded by maxNodes and induced edges.
+ * @evidenceExclude contracts/portability.md#os-neutral-implementation rewrites path strings as text (separators and common root); it never opens, stats or resolves them.
+ */
 export function reduce(
   raw: RawDump,
   {

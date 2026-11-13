@@ -1,11 +1,25 @@
-# worktrunk-config
+# worktrunk-scripts
 
-> Deno worktree hooks for `worktrunk` automating environment setup, warm-copy indexing, and path isolation.
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
 
-When creating isolated git worktrees, new checkouts often start cold: index databases must be rebuilt from scratch, nested `.git` references break across directory boundaries, and development dependencies require manual setup. This repository provides executable TypeScript hooks that wire into `worktrunk` lifecycle events (`pre-start`, `post-start`, `post-switch`, `pre-merge`) to make every worktree immediately ready for development.
+Deno hooks for [worktrunk](https://github.com/max-sixty/worktrunk). A new `git worktree` starts empty: its `.git` pointer is absolute, its gitdir links are broken once a directory moves, and its dependencies and codegraph index are missing. These scripts run on worktrunk's lifecycle events and set each new worktree up.
+
+## What each hook does
+
+| Script              | Event                           | What it does                                                                                                                                                        |
+| :------------------ | :------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pre-start.ts`      | before a worktree is created    | Makes the worktree's `.git` pointer and gitdir links relative, then links the shared entries it needs from the primary worktree. Skips any entry the primary lacks. |
+| `copy-codegraph.ts` | after it starts                 | Provisions a codegraph MCP instance for the worktree. If the codegraph MCP is unavailable, it logs that and skips.                                                  |
+| `post-switch.ts`    | after switching into a worktree | Runs the post-switch step for that worktree.                                                                                                                        |
+| `pre-merge.ts`      | before a merge                  | Removes the worktree's symlinked entries, then stages the rest with `git add -A`.                                                                                   |
+
+Three more scripts are standalone and can be wired the same way: `install-deps.ts` installs dependencies for the package manager it recognizes, `run-package-script.ts` runs one named `package.json` script through the lockfile's package manager, and `generate-artifacts.ts` runs the build system it recognizes. Each skips when it recognizes none. A repo sets the install flags for `install-deps.ts` in its `package.json`, under `"worktrunk": { "installArgs": [...] }`. `run-package-script.ts <worktree_path> <script> [--best-effort]` skips when the repo's `package.json` has no such script, and `--best-effort` logs a failing script without failing the hook. `worktree-to-relative.ts` and `convert-to-relative-paths.ts` rewrite existing worktrees' `.git` paths to relative ones, once, and are idempotent.
+
+## Use it
+
+Install [Deno](https://deno.land/) and worktrunk, then point `.config/wt.toml` in your primary repository at the scripts:
 
 ```toml
-# .config/wt.toml
 [hooks]
 pre-start = "deno run --allow-read --allow-write --allow-run --allow-env ./scripts/pre-start.ts {{worktree_path}} {{primary_worktree_path}}"
 post-start = "deno run --allow-read --allow-write --allow-run --allow-env ./scripts/copy-codegraph.ts {{worktree_path}} {{primary_worktree_path}}"
@@ -13,45 +27,14 @@ post-switch = "deno run --allow-run ./scripts/post-switch.ts {{worktree_path}}"
 pre-merge = "deno run --allow-read --allow-write --allow-run ./scripts/pre-merge.ts {{worktree_path}}"
 ```
 
-## Quick Start
+Each script takes the worktree path as its first argument. `pre-start.ts` and `copy-codegraph.ts` also take the primary worktree path as an optional second argument. When it is omitted, the script finds the primary repository from the shared git common directory.
 
-Ensure [Deno](https://deno.land/) is installed on your workstation, then verify the codebase:
-
-```bash
-git clone https://github.com/systemfsoftware/worktrunk-scripts.git
-cd worktrunk-scripts
-deno task check
-```
-
-The hooks execute directly with `deno run` using explicit permission flags declared in each script's shebang.
-
-## Design
-
-Scripts under `scripts/` are standalone CLI entrypoints invoked by `worktrunk` lifecycle events. Shared helpers (git resolution, relative path mapping, filesystem utilities) live under `scripts/lib/`.
-
-## Configuration
-
-In your primary repository, configure `worktrunk` to call the desired hook scripts in `.config/wt.toml`. Every script accepts standard arguments supplied by the runner:
-
-```bash
-deno run --allow-read --allow-write --allow-run --allow-env ./scripts/<hook-name>.ts <worktree_path> [primary_path]
-```
-
-If the secondary `primary_path` argument is omitted, the hook automatically resolves the primary repository root using the shared git common directory.
-
-## Quality Gates
-
-Code formatting and linting are enforced via `dprint` and `deno lint`:
-
-```bash
-deno task fmt       # Format all files using dprint
-deno task check     # Run dprint verification and deno lint
-```
+Every script declares its Deno permissions in its shebang and runs without `-A`. To check the scripts, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
 
-Development setup, conventions, and workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
+Setup, the check command and the layout rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-See [LICENSE](LICENSE) for terms.
+Apache 2.0. See [LICENSE](LICENSE).

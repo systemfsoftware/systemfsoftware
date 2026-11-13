@@ -25,13 +25,17 @@ type dumpPathMapper struct {
   mappingErr     error
 }
 
-func newDumpPathMapper(project string) *dumpPathMapper {
+func newDumpPathMapper(project string, caseSensitive ...bool) *dumpPathMapper {
+  sensitive := true
+  if len(caseSensitive) != 0 {
+    sensitive = caseSensitive[0]
+  }
   raw := shimtspath.NormalizePath(shimtspath.NormalizeSlashes(project))
   normalized := canonicalDumpPath(raw)
   mapper := &dumpPathMapper{
     rawProject:     raw,
     project:        normalized,
-    caseSensitive:  dumpPathRootIsCaseSensitive(normalized),
+    caseSensitive:  sensitive,
     canonicalize:   canonicalDumpPath,
     rawToWire:      map[string]string{},
     physicalToWire: map[string]string{},
@@ -39,14 +43,28 @@ func newDumpPathMapper(project string) *dumpPathMapper {
   }
   if normalized == "" || shimtspath.GetRootLength(normalized) == 0 {
     mapper.mappingErr = fmt.Errorf("ttscgraph: project root %q is not absolute", project)
+  } else if len(caseSensitive) > 1 {
+    mapper.mappingErr = fmt.Errorf("ttscgraph: path projection accepts at most one case policy")
   }
   return mapper
 }
 
-// WireProject returns the canonical filesystem base that owns every relative
+// WireProject returns the best-effort canonical base used for every relative
 // wire path emitted by this package.
-func WireProject(project string) (string, error) {
-  mapper := newDumpPathMapper(project)
+// The optional policy is the producing Program's UseCaseSensitiveFileNames;
+// without a producer, paths retain exact spelling rather than guessing from
+// drive, UNC or POSIX syntax. Supply at most one policy value.
+//
+// @evidence contracts/common.md#principled-implementation The shared mapper checks absolute root syntax and policy arity before publishing a best-effort base; missing or unresolved native paths can retain lexical spelling, without physical identity authentication.
+// @evidence contracts/common.md#clear-and-simple-design A narrow adapter delegates all path policy to one mapper constructor.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Invalid roots remain errors rather than receiving a fixture-specific fallback base.
+// @evidence contracts/common.md#meaningful-documentation Native prose identifies the canonical base shared by relative wire paths, with documentation-skill tag spacing.
+// @evidence contracts/portability.md#os-neutral-implementation Host-compatible paths use best-effort EvalSymlinks and ancestor fallback. Supplied compiler case policy controls comparison, not authentication of physical spelling or per-directory filesystem behavior.
+// @evidence contracts/performance.md#efficient-algorithms Work includes project normalization and native EvalSymlinks attempts up the ancestor chain, plus suffix reconstruction and fixed map setup. Path bytes, depth and native resolution work contribute; it is not one native query.
+// @evidenceExclude contracts/performance.md#reuse-equivalent-work This single-base adapter owns no repeated mapping consumers; callers projecting many paths retain one mapper.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The call-local mapper owns no historical cache or handle; its temporary native/path storage becomes unreachable while the returned coordinate transfers to the caller.
+func WireProject(project string, caseSensitive ...bool) (string, error) {
+  mapper := newDumpPathMapper(project, caseSensitive...)
   return mapper.project, mapper.err()
 }
 
@@ -55,8 +73,18 @@ func WireProject(project string) (string, error) {
 // keep one dumpPathMapper so collision detection spans every path; callers
 // shaping a single source/config coordinate use this helper and receive the
 // same filesystem-alias and cross-root behavior.
-func WirePath(project, file string) (string, error) {
-  mapper := newDumpPathMapper(project)
+// The optional case policy follows WireProject's producer-owned convention.
+//
+// @evidence contracts/common.md#principled-implementation One source/config coordinate uses the complete dump's alias resolution and cross-root checks.
+// @evidence contracts/common.md#clear-and-simple-design The mapper owns all identity policy; this adapter returns one coordinate and its accumulated error.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Paths on another native root fail rather than collapsing to a misleading package tail or guessed relative identity.
+// @evidence contracts/common.md#meaningful-documentation Native prose distinguishes single-coordinate callers from whole-graph collision ownership, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Host-compatible paths attempt native alias resolution, falling back to existing ancestors or lexical spelling. Supplied compiler case policy, or exact spelling without it, is not a per-directory case or snapshot proof.
+// @evidence contracts/performance.md#efficient-algorithms Project and selected-path normalization, native ancestor resolution, relative projection and string-key hashing/comparison contribute. Depth and symlink/native work are not bounded by two string lengths alone.
+// @evidence contracts/performance.md#reuse-equivalent-work Within this projection, mapper keys reuse successful normalized/policy-folded raw projections and physical claims. Separate aliases can require new native resolution; wider collision detection requires a shared mapper and stable caller inputs.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The call-local mapper/path maps become unreachable; returned path strings transfer to the caller. No historical cache or native handle is retained by this adapter.
+func WirePath(project, file string, caseSensitive ...bool) (string, error) {
+  mapper := newDumpPathMapper(project, caseSensitive...)
   wire := mapper.mapPath(file)
   return wire, mapper.err()
 }
@@ -65,16 +93,36 @@ func WirePath(project, file string) (string, error) {
 // the same portable vocabulary as NewDumpFacts. Resident stores use it when a
 // wire-level external reference count must be reconciled with the immutable
 // graph.Node cache, whose keys retain compiler-physical paths.
-func WireNodeID(project, id string) (string, error) {
-  ids, err := WireNodeIDs(project, []string{id})
+// The optional case policy follows WireProject's producer-owned convention.
+//
+// @evidence contracts/common.md#principled-implementation The parser maps the declaration path and module-name path component, preserving other decoded symbol names and kind strings. It checks grammar separators, not vocabulary or producer authenticity.
+// @evidence contracts/common.md#clear-and-simple-design The single-ID adapter delegates to the batch mapper, sharing its grammar and error semantics.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Missing separators or empty name/kind suffixes return codec errors, while arbitrary nonempty kind strings are not validated here. No fixture-specific endpoint is substituted.
+// @evidence contracts/common.md#meaningful-documentation Native prose explains native-cache versus wire-store identity reconciliation, with documentation-skill spacing.
+// @evidence contracts/portability.md#os-neutral-implementation The shared best-effort mapper retains native ancestor/lexical fallback limits and supplied case policy; protocol parsing does not authenticate filesystem aliases or freeze a snapshot.
+// @evidence contracts/performance.md#efficient-algorithms ID decoding/re-encoding and map string keys add byte costs to project/path normalization and native ancestor-resolution attempts. Work is independent of graph population, not native depth or symlink traversal.
+// @evidence contracts/performance.md#reuse-equivalent-work It shares the same batch implementation and mapper-local alias cache; no output is reused across unrelated snapshots.
+// @evidenceExclude contracts/performance.md#bound-retention-and-release-resources The local batch/mapper storage becomes unreachable and one returned ID string transfers to the caller. No historical cache or native handle is owned; temporary bytes follow ID/path inputs.
+func WireNodeID(project, id string, caseSensitive ...bool) (string, error) {
+  ids, err := WireNodeIDs(project, []string{id}, caseSensitive...)
   return ids[id], err
 }
 
 // WireNodeIDs maps a set of internal node IDs through one path mapper. Sharing
-// the mapper preserves cross-ID collision detection and resolves each repeated
-// filesystem alias only once per snapshot generation.
-func WireNodeIDs(project string, ids []string) (map[string]string, error) {
-  mapper := newDumpPathMapper(project)
+// the mapper preserves policy-relative collision detection and reuses each repeated
+// successful raw-path projection within this call, without freezing native aliases.
+// The optional case policy follows WireProject's producer-owned convention.
+//
+// @evidence contracts/common.md#principled-implementation All IDs share detected path-collision checks under supplied case policy and best-effort canonical spelling. Policy-folded or unresolved paths are not independent physical identities, and input stability remains the caller's responsibility.
+// @evidence contracts/common.md#clear-and-simple-design One loop composes the node grammar with the reusable path boundary.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Malformed grammar returns nil/error immediately; cross-root or collision errors are latched and returned after the loop, potentially with an output map. Callers must reject errored projections rather than use partial coordinates.
+// @evidence contracts/common.md#meaningful-documentation Native prose states shared collision detection and generation-local alias resolution, following the documentation skill.
+// @evidence contracts/portability.md#os-neutral-implementation Filesystem-bearing components use protocol slashes and host-compatible best-effort native resolution; supplied compiler case policy is not proof of each directory's physical identity.
+// @evidence contracts/performance.md#efficient-algorithms Aggregate ID decoding/re-encoding, string-key hashing/comparison and project/path projection costs include native ancestor attempts and symlink work. Repeated successful raw keys reuse mapping; distinct aliases can still require separate native queries.
+// @evidence contracts/performance.md#reuse-equivalent-work Repeated successful raw keys reuse results within this call; physical aliases still require their own canonicalization before a shared claim is found. Each invocation creates a new mapper, not a stable filesystem snapshot.
+// @evidence contracts/performance.md#bound-retention-and-release-resources Uncapped raw/physical/wire caches and output strings grow with batch path populations and byte lengths. Local maps become unreachable on return; successful output transfers to the caller, and detected mapping error can accompany an output map. No historical eviction policy or native handle is owned.
+func WireNodeIDs(project string, ids []string, caseSensitive ...bool) (map[string]string, error) {
+  mapper := newDumpPathMapper(project, caseSensitive...)
   wireIDs := make(map[string]string, len(ids))
   for _, id := range ids {
     wire, err := wireNodeID(mapper, id)
@@ -124,7 +172,8 @@ func (m *dumpPathMapper) mapPath(file string) string {
 
   rawPhysical := normalized
   if shimtspath.GetRootLength(rawPhysical) == 0 {
-    rawPhysical = shimtspath.GetNormalizedAbsolutePath(rawPhysical, m.rawProject)
+    // m.rawProject is rooted whenever m.project is: canonicalDumpPath keeps an unrooted spelling unrooted, and mapPath returned above for an unrooted m.project.
+    rawPhysical = shimtspath.GetNormalizedAbsolutePath(rawPhysical, shimtspath.RootedDirectoryPathFromAbsolute(m.rawProject))
   }
   rawKey := m.pathKey(rawPhysical)
   if wire, ok := m.rawToWire[rawKey]; ok {
@@ -139,11 +188,11 @@ func (m *dumpPathMapper) mapPath(file string) string {
     ))
     return rawPhysical
   }
-  options := shimtspath.ComparePathsOptions{
-    CurrentDirectory:          m.project,
-    UseCaseSensitiveFileNames: m.caseSensitive,
+  caseSensitivity := shimtspath.CaseInsensitive
+  if m.caseSensitive {
+    caseSensitivity = shimtspath.CaseSensitive
   }
-  wire := shimtspath.GetRelativePathFromDirectory(m.project, physical, options)
+  wire := shimtspath.RelativePathFromDirectoryWith(caseSensitivity, m.project, physical)
   if shimtspath.GetRootLength(wire) != 0 {
     m.fail(fmt.Errorf(
       "ttscgraph: source path %q cannot be represented relative to project %q because they are on different filesystem roots",
@@ -248,18 +297,6 @@ func dumpPathUsesHostFilesystem(path string) bool {
     return strings.HasPrefix(path, "//") || (len(path) >= 2 && path[1] == ':')
   }
   return strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "//")
-}
-
-// Windows drive and UNC roots use case-insensitive path comparison. POSIX
-// roots remain case-sensitive. This decision follows the path's own grammar so
-// synthetic Windows/UNC fixtures behave the same on every CI host.
-func dumpPathRootIsCaseSensitive(path string) bool {
-  rootLength := shimtspath.GetRootLength(path)
-  if rootLength == 0 {
-    return true
-  }
-  root := path[:rootLength]
-  return !(strings.HasPrefix(root, "//") || (len(root) >= 2 && root[1] == ':'))
 }
 
 // dumpPathRootsEqual compares filesystem roots before asking tspath for a

@@ -20,6 +20,13 @@ var HttpHeadersProgrammer = httpHeadersProgrammerNamespace{}
 
 const HttpHeadersProgrammer_INPUT_TYPE = "Record<string, string | string[] | undefined>"
 
+// HttpHeadersProgrammer_DecomposeProps is the argument record of
+// HttpHeadersProgrammer.Decompose, which builds the headers decoder.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpHeadersProgrammer.Decompose, which builds the headers decoder; its 4 fields (Context, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type HttpHeadersProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
@@ -27,10 +34,8 @@ type HttpHeadersProgrammer_DecomposeProps struct {
   Name    *string
 }
 
-var httpHeadersProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (httpHeadersProgrammerNamespace) Decompose(props HttpHeadersProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   collection := schemametadata.NewMetadataCollection()
   result := nativefactories.MetadataFactory.Analyze(nativefactories.MetadataFactory_IProps{
     Checker: props.Context.Checker,
@@ -97,7 +102,7 @@ func (httpHeadersProgrammerNamespace) Write(props nativecontext.IProgrammerProps
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -210,7 +215,7 @@ func httpHeadersProgrammer_decode_object(props struct {
   Context nativecontext.ITypiaContext
   Object  *schemametadata.MetadataObjectType
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := f.NewIdentifier("output")
   optionals := []string{}
   properties := make([]*shimast.Node, 0, len(props.Object.Properties))
@@ -267,7 +272,7 @@ func httpHeadersProgrammer_decode_regular_property(props struct {
   Context  nativecontext.ITypiaContext
   Property *schemametadata.MetadataProperty
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   key := httpProgrammer_property_key(props.Property)
   value := props.Property.Value
   typ, isArray := httpProgrammer_decode_type(value, false)
@@ -324,7 +329,7 @@ func httpHeadersProgrammer_decode_regular_property(props struct {
 // (samchon/typia#2447), and a non-string element type is read by the same
 // reader other array headers use.
 func httpHeadersProgrammer_decode_set_cookie(context nativecontext.ITypiaContext, typ string, input *shimast.Node, required bool) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   array := input
   single := input
   if typ != "string" {
@@ -369,7 +374,7 @@ func httpHeadersProgrammer_decode_value(props struct {
   if props.Type == "string" {
     return props.Input
   }
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     httpParameterProgrammer_internal(props.Context, "httpHeaderRead"+httpParameterProgrammer_capitalize(props.Type)),
     nil,
@@ -390,7 +395,7 @@ func httpHeadersProgrammer_decode_array(props struct {
   // requested for non-string types; string[] headers map inline (str => str.trim())
   // and must not pull in a non-existent _httpHeaderReadString helper. Mirrors the
   // scalar path (decode_value), which short-circuits string before building a reader.
-  f := nativecontext.EmitFactoryOf(httpHeadersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   var reader *shimast.Node
   if props.Type == "string" {
     reader = f.NewArrowFunction(

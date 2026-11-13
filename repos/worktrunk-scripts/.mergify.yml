@@ -1,0 +1,39 @@
+# Mergify: policy lives in systemfsoftware/.github (.mergify.yml). This file only names this repo's CI checks.
+extends: .github
+queue_rules:
+  # Checked on the PR itself before it enters the queue.
+  - name: subtree
+    merge_method: merge
+    queue_conditions:
+      # Org convention (systemfsoftware/.github README, "Subtree PRs"): one commit
+      # carries both trailers, and the PR history is not linear.
+      - 'commits[*].commit_message ~= (?ms)\A(?=.*^git-subtree-dir: \S+$)(?=.*^git-subtree-split: [0-9a-f]{40}$)'
+      - -linear-history
+      - check-success = check
+    # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
+    merge_conditions:
+      - check-success = check
+
+  - name: default
+    # Checked on the PR itself before it enters the queue.
+    queue_conditions:
+      # Ruling 9 (SYS-1246): subtree PRs merge via the subtree queue above; a subtree
+      # claim without trailers matches no queue and cannot merge at all. The claim is
+      # the org definition (systemfsoftware/.github README, "Subtree PRs"): a standalone
+      # vendoring verb and standalone "subtree(s)" in the title, on a PR that adds or
+      # modifies a file under a vendoring directory.
+      - "-commits[*].commit_message ~= (?m)^git-subtree-dir: \\S+$"
+      - not:
+          and:
+            - 'title ~= (?i)(?<![\w.-])(add|pull|update|sync|vendor|vendored|vendoring|refresh|import|bump|upgrade)(?!\.?[\w-])'
+            - 'title ~= (?i)(?<![\w.-])subtrees?(?!\.?[\w-])'
+            - or:
+                - "added-files ~= ^(vendor|vendored|third[_-]party|external|repos|subtrees?)/"
+                - "modified-files ~= ^(vendor|vendored|third[_-]party|external|repos|subtrees?)/"
+      # This repo's declared subtree prefix: hand edits without trailers cannot merge.
+      - -added-files ~= ^repos/constitution/
+      - -modified-files ~= ^repos/constitution/
+      - check-success = check
+    # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
+    merge_conditions:
+      - check-success = check
