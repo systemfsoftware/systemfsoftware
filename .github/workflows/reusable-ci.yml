@@ -1,0 +1,73 @@
+name: CI (reusable)
+
+# One job per pull request. A pull request runs the repository's fast command; a Mergify queue draft
+# (head ref `mergify/merge-queue/*`) and a push to main run its full command. The squash-message lint is a step of
+# the same job, so a pull request pays the runner and Nix setup once.
+on:
+  workflow_call:
+    inputs:
+      install:
+        description: Command that installs the workspace, run inside the dev shell
+        required: false
+        type: string
+        default: pnpm install --frozen-lockfile
+      fast:
+        description: Command a pull request runs, inside the dev shell
+        required: true
+        type: string
+      full:
+        description: Command a Mergify queue draft and a push to main run, inside the dev shell
+        required: true
+        type: string
+      shell:
+        description: Flake reference whose dev shell runs the commands
+        required: false
+        type: string
+        default: .
+      runs-on:
+        description: JSON label list for the job
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      timeout-minutes:
+        required: false
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: ${{ runner.environment == 'github-hosted' && 'blob:none' || '' }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-substituters = https://nix.systemfsoftware.com
+            extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      - name: Install, lint the squash message, then run the checks
+        env:
+          SHELL_REF: ${{ inputs.shell }}
+          INSTALL: ${{ inputs.install }}
+          COMMAND: ${{ (github.event_name != 'pull_request' || startsWith(github.head_ref, 'mergify/merge-queue/')) && inputs.full || inputs.fast }}
+          LINT_COMMITS: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') && github.actor != 'dependabot[bot]' }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          nix develop "$SHELL_REF" --command bash -euo pipefail -c '
+            eval "$INSTALL"
+            if [ "$LINT_COMMITS" = true ]; then
+              pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
+            fi
+            eval "$COMMAND"
+          '
