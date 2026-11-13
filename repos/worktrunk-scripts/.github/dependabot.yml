@@ -1,0 +1,20 @@
+# The org's one Dependabot configuration (public-repo standard, item 5). Only the ecosystems and the extra
+# major-version ignores differ by repository. The 3-day cooldown matches pnpm's minimumReleaseAge; vendored
+# subtrees under repos/ are never updated in place; @systemfsoftware/* moves with the flake input.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    labels:
+      - "automerge"
+    groups:
+      github-actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
