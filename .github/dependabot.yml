@@ -119,3 +119,17 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+  # Vendored subtrees are updated by subtree pulls only. A security update ignores `exclude-paths`, so the vendored
+  # lockfiles also get an ecosystem entry that ignores every dependency.
+  - package-ecosystem: "npm"
+    directories:
+      - "/repos/alchemy"
+      - "/repos/effect"
+      - "/repos/ttsc"
+      - "/repos/typia"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
