@@ -1,5 +1,8 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "futureFlags": {
+    "affectedUsingTaskInputs": true
+  },
   "agentGuidance": false,
   "globalDependencies": [
     "scripts/tools/patch-tsgo-if-needed.mjs"
