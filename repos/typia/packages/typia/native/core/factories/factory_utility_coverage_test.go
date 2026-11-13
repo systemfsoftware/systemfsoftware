@@ -4,6 +4,7 @@
 package factories
 
 import (
+  nativecontext "github.com/samchon/typia/packages/typia/native/core/context"
   "math/big"
   "os"
   "path/filepath"
@@ -21,18 +22,23 @@ import (
 // TestFactoryUtilityCoverage covers small factory helpers.
 //
 // Most factory paths are exercised through TypeScript transforms, but simple
-// AST helper branches and text-formatting helpers do not need a compiler
-// program. This test keeps those deterministic helper checks local to the
-// factories package.
+// AST helper branches and text-formatting helpers are called directly. The
+// checker-backed type-name cases also load a temporary TypeScript fixture in
+// process. Both remain local to the factories package.
 //
 // 1. Generate numeric range predicates for all supported numeric tags.
 // 2. Exercise bigint, object, currying, self-call, and escaped-text helpers.
 // 3. Cover comment merging and statement helper branches.
 // 4. Verify fallback AST, literal, protobuf, sequence validation, and type-tag factory paths.
 // 5. Resolve TypeScript checker-backed type names and synthetic function declarations.
+//
+// @evidence contracts/testing.md#behavioral-verification Small factory helpers are called directly: numeric and bigint range predicates, currying, self-call, escaped-text and comment-merging helpers. Roughly half of the assertions only require a non-nil AST node, so they detect a missing result and not a wrong one; the others compare exact text or structure.
+// @evidence contracts/testing.md#independent-expectations Where text is compared the expectations are authored literals; the non-nil checks have no independent expectation and certify only that a node was produced. This is a limitation of the test, not a verification of emitted code.
+// @evidence contracts/testing.md#distinguishing-cases Every supported numeric tag, bigint, object, currying and escaping branch is visited once; most branches have no negative twin, so an over-matching helper could still pass.
+// @evidence contracts/testing.md#execution-ownership The typia_native_internal Go command (go -C packages/typia/test test -tags typia_native_internal ../native/...) runs this same-package unit Test in process. AST helpers use the node factory; checker-backed cases write a temporary TypeScript fixture, load it through driver.LoadProgram, and close the program. No compiler or JavaScript subprocess is launched.
 func TestFactoryUtilityCoverage(t *testing.T) {
   emit := shimprinter.NewEmitContext()
-  input := expressionFactory_factory.NewIdentifier("input")
+  input := nativecontext.NodeFactoryOf().NewIdentifier("input")
   for _, name := range []string{"int32", "uint32", "int64", "uint64", "float", "double", "unknown"} {
     if NumericRangeFactory.Number(name, input) == nil {
       t.Fatalf("number range %s returned nil", name)
@@ -58,26 +64,26 @@ func TestFactoryUtilityCoverage(t *testing.T) {
   if ExpressionFactory.IsArray(input) == nil ||
     ExpressionFactory.IsObject(ExpressionFactory_IsObjectProps{Input: input, CheckNull: true, CheckArray: true}) == nil ||
     ExpressionFactory.IsInstanceOf("Date", input) == nil ||
-    ExpressionFactory.Coalesce(input, expressionFactory_factory.NewIdentifier("fallback")) == nil {
+    ExpressionFactory.Coalesce(input, nativecontext.NodeFactoryOf().NewIdentifier("fallback")) == nil {
     t.Fatal("basic expression factory branch returned nil")
   }
   if ExpressionFactory.Currying(ExpressionFactory_CurryingProps{
-    Function:  expressionFactory_factory.NewIdentifier("fn"),
+    Function:  nativecontext.NodeFactoryOf().NewIdentifier("fn"),
     Arguments: nil,
   }) == nil {
     t.Fatal("zero-argument currying returned nil")
   }
   if ExpressionFactory.Currying(ExpressionFactory_CurryingProps{
-    Function: expressionFactory_factory.NewIdentifier("fn"),
+    Function: nativecontext.NodeFactoryOf().NewIdentifier("fn"),
     Arguments: []*shimast.Expression{
-      expressionFactory_factory.NewIdentifier("a"),
-      expressionFactory_factory.NewIdentifier("b"),
+      nativecontext.NodeFactoryOf().NewIdentifier("a"),
+      nativecontext.NodeFactoryOf().NewIdentifier("b"),
     },
   }) == nil {
     t.Fatal("multi-argument currying returned nil")
   }
-  call := expressionFactory_factory.NewCallExpression(
-    expressionFactory_factory.NewIdentifier("already"),
+  call := nativecontext.NodeFactoryOf().NewCallExpression(
+    nativecontext.NodeFactoryOf().NewIdentifier("already"),
     nil,
     nil,
     nil,
@@ -96,7 +102,7 @@ func TestFactoryUtilityCoverage(t *testing.T) {
     t.Fatal("identifier escaped text mismatch")
   }
   if ExpressionFactory.GetEscapedText(ExpressionFactory_GetEscapedTextProps{
-    Input: expressionFactory_factory.NewStringLiteral("text", shimast.TokenFlagsNone),
+    Input: nativecontext.NodeFactoryOf().NewStringLiteral("text", shimast.TokenFlagsNone),
   }) != "text" {
     t.Fatal("string escaped text mismatch")
   }
@@ -197,7 +203,7 @@ export let inner!: Outer.Inner;
   if assignedSymbol == nil {
     t.Fatal("holder.assigned symbol was not found")
   }
-  assignedType := prog.Checker.GetTypeOfSymbolAtLocation(assignedSymbol, assignedSymbol.ValueDeclaration)
+  assignedType := prog.Checker.GetTypeOfSymbolAtLocation(assignedSymbol, shimast.SymbolValueDeclarationOf(assignedSymbol))
   assignedDeclaredType := shimchecker.Checker_getTypeOfSymbol(prog.Checker, assignedSymbol)
   if TypeFactory.GetFunction(assignedDeclaredType) == nil && TypeFactory.GetFunction(assignedType) == nil {
     t.Fatal("property assignment initializer should be recognized as function-like")
@@ -207,7 +213,7 @@ export let inner!: Outer.Inner;
   if fieldSymbol == nil {
     t.Fatal("example.field symbol was not found")
   }
-  fieldType := prog.Checker.GetTypeOfSymbolAtLocation(fieldSymbol, fieldSymbol.ValueDeclaration)
+  fieldType := prog.Checker.GetTypeOfSymbolAtLocation(fieldSymbol, shimast.SymbolValueDeclarationOf(fieldSymbol))
   fieldDeclaredType := shimchecker.Checker_getTypeOfSymbol(prog.Checker, fieldSymbol)
   if TypeFactory.GetFunction(fieldDeclaredType) == nil && TypeFactory.GetFunction(fieldType) == nil {
     t.Fatal("property declaration initializer should be recognized as function-like")
@@ -254,7 +260,7 @@ export let inner!: Outer.Inner;
   }
   if IdentifierFactory.Parameter("value", nil, nil) == nil ||
     IdentifierFactory.Parameter(input, TypeFactory.Keyword("string"), nil) == nil ||
-    IdentifierFactory.Parameter(123, nil, expressionFactory_factory.NewToken(shimast.KindQuestionToken)) == nil {
+    IdentifierFactory.Parameter(123, nil, nativecontext.NodeFactoryOf().NewToken(shimast.KindQuestionToken)) == nil {
     t.Fatal("identifier parameter branch returned nil")
   }
 
@@ -304,12 +310,12 @@ export let inner!: Outer.Inner;
     t.Fatal("literal factory branch returned nil")
   }
   if TemplateFactory.Generate([]*shimast.Expression{
-    expressionFactory_factory.NewStringLiteral("a", shimast.TokenFlagsNone),
-    expressionFactory_factory.NewStringLiteral("b", shimast.TokenFlagsNone),
+    nativecontext.NodeFactoryOf().NewStringLiteral("a", shimast.TokenFlagsNone),
+    nativecontext.NodeFactoryOf().NewStringLiteral("b", shimast.TokenFlagsNone),
   }) == nil || TemplateFactory.Generate([]*shimast.Expression{
-    expressionFactory_factory.NewStringLiteral("a", shimast.TokenFlagsNone),
+    nativecontext.NodeFactoryOf().NewStringLiteral("a", shimast.TokenFlagsNone),
     input,
-    expressionFactory_factory.NewStringLiteral("b", shimast.TokenFlagsNone),
+    nativecontext.NodeFactoryOf().NewStringLiteral("b", shimast.TokenFlagsNone),
   }) == nil {
     t.Fatal("template factory branch returned nil")
   }
@@ -867,7 +873,7 @@ export let inner!: Outer.Inner;
 type factoryUtilityImporter struct{}
 
 func (factoryUtilityImporter) Internal(name string) *shimast.Node {
-  return expressionFactory_factory.NewIdentifier(name)
+  return nativecontext.NodeFactoryOf().NewIdentifier(name)
 }
 
 func factoryUtilitySequenceTag(value int) schemametadata.IMetadataTypeTag {
@@ -888,15 +894,15 @@ func factoryUtilityMustPanic(t *testing.T, run func()) {
 }
 
 func (factoryUtilityImporter) Instance(props ExpressionFactory_IInstance) *shimast.Node {
-  return expressionFactory_factory.NewIdentifier(props.Name)
+  return nativecontext.NodeFactoryOf().NewIdentifier(props.Name)
 }
 
 func (factoryUtilityImporter) Namespace(props ExpressionFactory_INamespace) *shimast.Node {
-  return expressionFactory_factory.NewIdentifier(props.Name)
+  return nativecontext.NodeFactoryOf().NewIdentifier(props.Name)
 }
 
 func (factoryUtilityImporter) Default(props ExpressionFactory_IDefault) *shimast.Node {
-  return expressionFactory_factory.NewIdentifier(props.Name)
+  return nativecontext.NodeFactoryOf().NewIdentifier(props.Name)
 }
 
 func factoryUtilityLiteralMetadata(value string) *schemametadata.MetadataSchema {

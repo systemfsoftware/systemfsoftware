@@ -13,25 +13,22 @@ type llmParametersProgrammerNamespace struct{}
 
 var LlmParametersProgrammer = llmParametersProgrammerNamespace{}
 
-type LlmParametersProgrammer_IProps struct {
-  Context nativecontext.ITypiaContext
-  Modulo  *shimast.Node
-  Type    any
-  Name    *string
-  Init    *shimast.Node
-  Config  map[string]any
-}
-
+// LlmParametersProgrammer_IWriteProps is the argument record of
+// LlmParametersProgrammer.Write, which builds the LLM parameters schema of a
+// type. Config is the call's literal configuration.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of LlmParametersProgrammer.Write, which builds the LLM parameters schema of a type; its 3 fields (Context, Metadata, Config) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type LlmParametersProgrammer_IWriteProps struct {
   Context  nativecontext.ITypiaContext
   Metadata *schemametadata.MetadataSchema
   Config   map[string]any
 }
 
-var llmParametersProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (llmParametersProgrammerNamespace) Write(props LlmParametersProgrammer_IWriteProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(llmParametersProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   typeNode := llmProgrammer_import_type(props.Context, nativecontext.ImportProgrammer_TypeProps{
     File: "typia",
     Name: f.NewIdentifier("ILlmSchema.IParameters"),

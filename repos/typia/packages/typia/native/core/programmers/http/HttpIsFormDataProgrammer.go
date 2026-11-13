@@ -15,14 +15,20 @@ type httpIsFormDataProgrammerNamespace struct{}
 
 var HttpIsFormDataProgrammer = httpIsFormDataProgrammerNamespace{}
 
+// HttpIsFormDataProgrammer_DecomposeProps is the argument record of
+// HttpIsFormDataProgrammer.Decompose, which builds the form-data decoder that
+// answers null for an invalid input.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpIsFormDataProgrammer.Decompose, which builds the form-data decoder that answers null for an invalid input; its 4 fields (Context, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type HttpIsFormDataProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
   Type    *shimchecker.Type
   Name    *string
 }
-
-var httpIsProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (httpIsFormDataProgrammerNamespace) Decompose(props HttpIsFormDataProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   is := nativeprogrammers.IsProgrammer.Decompose(nativeprogrammers.IsProgrammer_DecomposeProps{
@@ -49,7 +55,7 @@ func (httpIsFormDataProgrammerNamespace) Write(props nativecontext.IProgrammerPr
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -57,7 +63,7 @@ func (httpIsFormDataProgrammerNamespace) Write(props nativecontext.IProgrammerPr
 }
 
 func httpProgrammer_is_result(is nativeinternal.FeatureProgrammer_IDecomposed, decode nativeinternal.FeatureProgrammer_IDecomposed, emit ...*shimprinter.EmitContext) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(httpIsProgrammer_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   decodeArrow := decode.Arrow.AsArrowFunction()
   output := decodeArrow.Type
   if output == nil {

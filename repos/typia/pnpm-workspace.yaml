@@ -12,26 +12,34 @@ overrides:
   # the monorepo's langchain / mcp / vercel integrations keep their zod 3.x.
   zod@4: 4.1.12
 catalogs:
-  typescript:
+  samchon:
     # The ttsc family releases in lockstep, so the whole family takes its
     # version from the &ttsc anchor: set it on ttsc alone. @ttsc/unplugin peers
     # on its exact matching ttsc, and website.yml clones the ttsc sibling at
     # the installed @ttsc/wasm version to build the browser-playground host
     # that website/compiler/cmd/playground implements.
-    ttsc: &ttsc ^0.28.1
+    ttsc: &ttsc ^0.37.0
     '@ttsc/unplugin': *ttsc
     '@ttsc/playground': *ttsc
     '@ttsc/wasm': *ttsc
+    '@ttsc/lint': *ttsc
+    '@ttsc/evidence': *ttsc
+    '@wrtnlabs/evidence': ^0.2.1
+    tstl: ^3.0.0
+    tgrid: ^1.2.1
+  typescript:
     ts-node: ^10.9.2
-    typescript: ^7.0.2
+    typescript: 7.1.0-dev.20261020.3
+  typescript-7-0:
+    typescript: 7.0.2
   rolldown:
     rolldown: ^1.1.5
   utils:
-    '@nestia/e2e': ^10.0.2
+    yaml: ^2.9.1
+    acorn: 8.16.0
+    '@nestia/e2e': ^14.0.3
     '@types/node': ^25.3.0
     '@types/uuid': ^11.0.0
     openai: ^6.16.0
     rimraf: ^6.1.2
     uuid: ^13.0.0
-    tstl: ^3.0.0
-    tgrid: ^1.2.1

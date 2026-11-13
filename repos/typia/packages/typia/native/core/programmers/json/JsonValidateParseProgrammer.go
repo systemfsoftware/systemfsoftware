@@ -14,6 +14,14 @@ type jsonValidateParseProgrammerNamespace struct{}
 
 var JsonValidateParseProgrammer = jsonValidateParseProgrammerNamespace{}
 
+// JsonValidateParseProgrammer_DecomposeProps is the argument record of
+// JsonValidateParseProgrammer.Decompose, which builds the `json.validateParse`
+// function.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonValidateParseProgrammer.Decompose, which builds the `json.validateParse` function; its 5 fields (Context, Modulo, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type JsonValidateParseProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Modulo  *shimast.Node
@@ -35,7 +43,7 @@ func (jsonValidateParseProgrammerNamespace) Decompose(props JsonValidateParsePro
     Name:    props.Name,
   })
 
-  f := nativecontext.EmitFactoryOf(jsonParseProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return nativeinternal.FeatureProgrammer_IDecomposed{
     Functions: validate.Functions,
     Statements: append(append([]*shimast.Node{}, validate.Statements...), nativefactories.StatementFactory.Constant(nativefactories.StatementFactory_ConstantProps{
@@ -97,7 +105,7 @@ func (jsonValidateParseProgrammerNamespace) Write(props nativecontext.IProgramme
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

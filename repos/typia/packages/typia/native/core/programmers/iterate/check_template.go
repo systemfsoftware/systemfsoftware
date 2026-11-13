@@ -12,6 +12,13 @@ import (
   nativemetadata "github.com/samchon/typia/packages/typia/native/core/schemas/metadata"
 )
 
+// Check_templateProps is the argument record of Check_template, which builds the
+// check entry of template literal types.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of Check_template, which builds the check entry of template literal types; its 4 fields (Context, Templates, Input, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type Check_templateProps struct {
   Context   nativecontext.ITypiaContext
   Templates []*nativemetadata.MetadataTemplate
@@ -19,8 +26,16 @@ type Check_templateProps struct {
   Emit      *shimprinter.EmitContext
 }
 
+// Check_template builds the check entry of template literal types: a string
+// guard plus one `RegExp(...).test` per template, with the type tags inlined
+// into the member when several templates are neighbors.
+//
+// @evidence contracts/common.md#principled-implementation It builds the check entry of template literal types: a string guard plus one structural regex per template. Whole-string and captured-placeholder tag conditions use the common string-tag lowering, including backtracking and union members, so standard Pattern tags share the file cache without changing structural matching.
+// @evidence contracts/common.md#clear-and-simple-design One exported function; the pieces that repeat live in private helpers of the same file.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Its inputs are its arguments and the context they carry, and it keeps no state of its own.
+// @evidence contracts/common.md#meaningful-documentation The doc states what it builds.
 func Check_template(props Check_templateProps) nativehelpers.ICheckEntry {
-  f := nativecontext.EmitFactoryOf(check_template_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   conditions := []*shimast.Node{
     f.NewBinaryExpression(
       nil,
@@ -110,7 +125,7 @@ func check_template_type_tags(props Check_templateProps, tpl *nativemetadata.Met
     for _, tag := range tags {
       conditions = append(conditions, nativehelpers.ICheckEntry_ICondition{
         Expected:   tpl.GetBaseName() + " & " + tag.Name,
-        Expression: check_string_transpile(props.Context, tag.Validate)(props.Input),
+        Expression: check_string_transpile(props.Context, tag)(props.Input),
       })
     }
     for _, tag := range row {
@@ -238,7 +253,7 @@ func check_template_value_conditions(props Check_templateProps, base string, ato
       for _, tag := range check_string_filter_validate(row) {
         conditions = append(conditions, nativehelpers.ICheckEntry_ICondition{
           Expected:   base + " & " + tag.Name,
-          Expression: check_string_transpile(props.Context, tag.Validate)(input),
+          Expression: check_string_transpile(props.Context, tag)(input),
         })
       }
       for _, tag := range row {
@@ -253,7 +268,7 @@ func check_template_value_conditions(props Check_templateProps, base string, ato
 }
 
 func check_template_coerce_input(kind string, input *shimast.Expression, emit *shimprinter.EmitContext) *shimast.Expression {
-  f := nativecontext.EmitFactoryOf(check_template_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   coerce := ""
   switch kind {
   case "number":
@@ -280,7 +295,7 @@ func check_template_coerce_input(kind string, input *shimast.Expression, emit *s
 // check_template_value_conditions so direct captures and backtracking slices
 // share the same path.
 func check_template_capture_input(pattern string, capture templateCapture, input *shimast.Expression, emit *shimprinter.EmitContext) *shimast.Expression {
-  f := nativecontext.EmitFactoryOf(check_template_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   element := f.NewElementAccessExpression(
     f.NewCallExpression(
       f.NewIdentifier("RegExp(/"+pattern+"/).exec"),
@@ -303,7 +318,7 @@ func check_template_capture_input(pattern string, capture templateCapture, input
 // semantics without repeating the same suffix search or committing to
 // RegExp.exec's single greedy capture.
 func check_template_backtracking(props Check_templateProps, tpl *nativemetadata.MetadataTemplate) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(check_template_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   statements := make([]*shimast.Node, 0, (len(tpl.Row)+1)*2+1)
   for index := 0; index <= len(tpl.Row); index++ {
     memoName := fmt.Sprintf("_templateMemo%d", index)
@@ -393,7 +408,7 @@ func check_template_backtracking(props Check_templateProps, tpl *nativemetadata.
 }
 
 func check_template_backtracking_step(props Check_templateProps, tpl *nativemetadata.MetadataTemplate, index int, offset *shimast.Expression) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(check_template_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if index == len(tpl.Row) {
     return f.NewBinaryExpression(
       nil,
@@ -523,7 +538,7 @@ func check_template_backtracking_step(props Check_templateProps, tpl *nativemeta
 }
 
 func check_template_backtracking_call(index int, offset *shimast.Expression, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(check_template_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return f.NewCallExpression(
     f.NewIdentifier(fmt.Sprintf("_templateVisit%d", index)),
     nil,
@@ -596,7 +611,7 @@ func check_template_inline_tags(props Check_templateProps, tpl *nativemetadata.M
     tags := check_string_filter_validate(row)
     expressions := make([]*shimast.Node, 0, len(tags))
     for _, tag := range tags {
-      expressions = append(expressions, check_string_transpile(props.Context, tag.Validate)(props.Input))
+      expressions = append(expressions, check_string_transpile(props.Context, tag)(props.Input))
     }
     for _, tag := range row {
       if condition := check_exclude_condition("string", tag, props.Input, props.Emit); condition != nil {
@@ -638,7 +653,7 @@ func check_template_inline_interpolation_tags(props Check_templateProps, tpl *na
 }
 
 func check_template_reduce(expressions []*shimast.Node, operator shimast.Kind, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(check_template_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if len(expressions) == 0 {
     return f.NewKeywordExpression(shimast.KindTrueKeyword)
   }
@@ -654,5 +669,3 @@ func check_template_reduce(expressions []*shimast.Node, operator shimast.Kind, e
   }
   return output
 }
-
-var check_template_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})

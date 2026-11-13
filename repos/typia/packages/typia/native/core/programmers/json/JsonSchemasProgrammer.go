@@ -15,12 +15,28 @@ type jsonSchemasProgrammerNamespace struct{}
 
 var JsonSchemasProgrammer = jsonSchemasProgrammerNamespace{}
 
+// JsonSchemasProgrammer_IWriteProps is the argument record of
+// JsonSchemasProgrammer.Write, which builds the JSON schemas of several types.
+// Version is the OpenAPI version to emit.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonSchemasProgrammer.Write, which builds the JSON schemas of several types; its 3 fields (Context, Version, Metadatas) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type JsonSchemasProgrammer_IWriteProps struct {
   Context   nativecontext.ITypiaContext
   Version   string
   Metadatas []*nativemetadata.MetadataSchema
 }
 
+// JsonSchemasProgrammer_IJsonSchemaCollection is the result of
+// JsonSchemasProgrammer: the version, the shared components and the schema of
+// each type.
+//
+// @evidence contracts/common.md#principled-implementation It is the result of JsonSchemasProgrammer: the version, the shared components and the schema of each type; its 3 fields (Version, Components, Schemas) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type JsonSchemasProgrammer_IJsonSchemaCollection struct {
   Version    string
   Components *nativeiterate.OpenApi_IComponents
@@ -125,6 +141,7 @@ func jsonSchemasProgrammer_writeV3_1(metadataList []*nativemetadata.MetadataSche
   components := &nativeiterate.OpenApi_IComponents{
     Schemas: map[string]nativeiterate.JsonSchema{},
   }
+  components.ReserveSchemaNames(metadataList)
   generator := func(metadata *nativemetadata.MetadataSchema) nativeiterate.JsonSchema {
     return nativeiterate.Json_schema_station(nativeiterate.Json_schema_station_props{
       BlockNever: true,

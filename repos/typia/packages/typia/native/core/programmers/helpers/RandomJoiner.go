@@ -22,8 +22,24 @@ var RandomJoiner = randomJoinerNamespace{}
 // which escape it happened to own would make a depth bound unstatable.
 const RandomJoiner_RECURSION_CUTOFF = 5
 
+// RandomJoiner_Decoder is the callback that generates the random expression of
+// one metadata schema.
+//
+// @evidence contracts/common.md#principled-implementation It is the callback that generates the random expression of one metadata schema.
+// @evidence contracts/common.md#clear-and-simple-design A single type declaration.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A declaration only.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the type is.
 type RandomJoiner_Decoder func(metadata *nativemetadata.MetadataSchema) *shimast.Node
 
+// RandomJoiner_ArrayProps is the argument record of RandomJoiner.Array, which
+// builds a random array of the array type. Recursive marks an array type that
+// refers to itself, and Schema holds the constraint keywords that are written
+// into the call as a literal.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of RandomJoiner.Array, which builds a random array of the array type; its 6 fields (Decode, Recursive, Expression, Array, Schema, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type RandomJoiner_ArrayProps struct {
   Decode     RandomJoiner_Decoder
   Recursive  bool
@@ -33,12 +49,27 @@ type RandomJoiner_ArrayProps struct {
   Emit       *shimprinter.EmitContext
 }
 
+// RandomJoiner_RecursiveArrayGuardProps is the argument record of the recursion
+// questions of RandomJoiner: whether a recursive array needs the depth guard,
+// and whether the array, object or tuple has a recursive owner path.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of the recursion questions of RandomJoiner: whether a recursive array needs the depth guard, and whether the array, object or tuple has a recursive owner path; its 3 fields (Array, Object, Tuple) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type RandomJoiner_RecursiveArrayGuardProps struct {
   Array  *nativemetadata.MetadataArrayType
   Object *nativemetadata.MetadataObjectType
   Tuple  *nativemetadata.MetadataTupleType
 }
 
+// RandomJoiner_TupleProps is the argument record of RandomJoiner.Tuple, which
+// builds a random tuple from the element schemas.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of RandomJoiner.Tuple, which builds a random tuple from the element schemas; its 5 fields (Decode, Elements, ArrayExpression, HasDepth, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type RandomJoiner_TupleProps struct {
   Decode          RandomJoiner_Decoder
   Elements        []*nativemetadata.MetadataSchema
@@ -51,13 +82,29 @@ type RandomJoiner_TupleProps struct {
   Emit     *shimprinter.EmitContext
 }
 
+// RandomJoiner_ObjectProps is the argument record of RandomJoiner.Object, which
+// builds a random object. OptionalProperty and StrictOptionalUndefined classify
+// a property schema, and Optional builds the condition for including an optional
+// property. A nil Optional callback includes the property.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of RandomJoiner.Object, which builds a random object; its 6 fields (Decode, Object, OptionalProperty, StrictOptionalUndefined, Optional, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 6-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type RandomJoiner_ObjectProps struct {
-  Decode                  RandomJoiner_Decoder
-  Object                  *nativemetadata.MetadataObjectType
-  OptionalProperty        func(*nativemetadata.MetadataSchema) bool
+  Decode RandomJoiner_Decoder
+  Object *nativemetadata.MetadataObjectType
+
+  // OptionalProperty selects properties emitted through conditional spreads.
+  OptionalProperty func(*nativemetadata.MetadataSchema) bool
+
+  // StrictOptionalUndefined removes optionality from the included value schema.
   StrictOptionalUndefined func(*nativemetadata.MetadataSchema) bool
-  Optional                func() *shimast.Node
-  Emit                    *shimprinter.EmitContext
+
+  // Optional returns the inclusion condition, not an absence condition.
+  Optional func() *shimast.Node
+
+  Emit *shimprinter.EmitContext
 }
 
 type randomJoiner_DynamicPropertyProps struct {
@@ -66,10 +113,8 @@ type randomJoiner_DynamicPropertyProps struct {
   Emit     *shimprinter.EmitContext
 }
 
-var randomJoiner_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (randomJoinerNamespace) Array(props RandomJoiner_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(randomJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   properties := []*shimast.Node{}
   if props.Schema != nil {
     keys := make([]string, 0, len(props.Schema))
@@ -681,7 +726,7 @@ func randomJoiner_is_recursive_metadata(
 }
 
 func (randomJoinerNamespace) Tuple(props RandomJoiner_TupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(randomJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   elements := make([]*shimast.Node, 0, len(props.Elements))
   for _, elem := range props.Elements {
     if elem != nil && elem.Rest != nil {
@@ -716,7 +761,7 @@ func (randomJoinerNamespace) Tuple(props RandomJoiner_TupleProps) *shimast.Node 
 }
 
 func (randomJoinerNamespace) Object(props RandomJoiner_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(randomJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if len(props.Object.Properties) == 0 {
     return nativefactories.LiteralFactory.Write(map[string]any{}, props.Emit)
   }
@@ -775,7 +820,7 @@ func (randomJoinerNamespace) Object(props RandomJoiner_ObjectProps) *shimast.Nod
 }
 
 func randomJoiner_dynamicProperty(props randomJoiner_DynamicPropertyProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(randomJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   tuple := nativemetadata.MetadataTuple_create(nativemetadata.MetadataTuple{
     Type: nativemetadata.MetadataTupleType_create(nativemetadata.MetadataTupleType{
       Name:      fmt.Sprintf("[%s, %s]", props.Property.Key.GetName(), props.Property.Value.GetName()),
@@ -801,7 +846,7 @@ func randomJoiner_dynamicProperty(props randomJoiner_DynamicPropertyProps) *shim
   metadata := nativemetadata.MetadataSchema_initialize()
   metadata.Arrays = []*nativemetadata.MetadataArray{array}
   return f.NewCallExpression(
-    nativefactories.IdentifierFactory.Access(nil, f.NewIdentifier("Object"), "fromEntries"),
+    nativefactories.IdentifierFactory.Access(props.Emit, f.NewIdentifier("Object"), "fromEntries"),
     nil,
     nil,
     f.NewNodeList([]*shimast.Node{

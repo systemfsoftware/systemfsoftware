@@ -16,18 +16,40 @@ type cloneJoinerNamespace struct{}
 
 var CloneJoiner = cloneJoinerNamespace{}
 
+// CloneJoiner_ObjectProps is the argument record of CloneJoiner.Object, which
+// builds the cloned object.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of CloneJoiner.Object, which builds the cloned object; its 3 fields (Input, Entries, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type CloneJoiner_ObjectProps struct {
   Input   *shimast.Expression
   Entries []IExpressionEntry
   Emit    *shimprinter.EmitContext
 }
 
+// CloneJoiner_TupleProps is the argument record of CloneJoiner.Tuple, which
+// builds the cloned tuple from its element and rest expressions.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of CloneJoiner.Tuple, which builds the cloned tuple from its element and rest expressions; its 3 fields (Elements, Rest, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type CloneJoiner_TupleProps struct {
   Elements []*shimast.Expression
   Rest     *shimast.Expression
   Emit     *shimprinter.EmitContext
 }
 
+// CloneJoiner_OptionalElementProps is the argument record of
+// CloneJoiner.OptionalTupleElement, which clones an optional tuple element at
+// Index.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of CloneJoiner.OptionalTupleElement, which clones an optional tuple element at Index; its 4 fields (Input, Value, Index, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type CloneJoiner_OptionalElementProps struct {
   Input *shimast.Expression
   Value *shimast.Expression
@@ -35,18 +57,23 @@ type CloneJoiner_OptionalElementProps struct {
   Emit  *shimprinter.EmitContext
 }
 
+// CloneJoiner_ArrayProps is the argument record of CloneJoiner.Array, which
+// clones an array by mapping its elements with Arrow.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of CloneJoiner.Array, which clones an array by mapping its elements with Arrow; its 3 fields (Input, Arrow, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type CloneJoiner_ArrayProps struct {
   Input *shimast.Expression
   Arrow *shimast.Expression
   Emit  *shimprinter.EmitContext
 }
 
-var cloneJoiner_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (cloneJoinerNamespace) Object(props CloneJoiner_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if len(props.Entries) == 0 {
-    return f.NewIdentifier("{}")
+    return f.NewObjectLiteralExpression(f.NewNodeList(nil), false)
   }
 
   regular := []IExpressionEntry{}
@@ -116,7 +143,7 @@ func (cloneJoinerNamespace) Object(props CloneJoiner_ObjectProps) *shimast.Node 
               f.NewElementAccessExpression(output, nil, key, shimast.NodeFlagsNone),
               nil,
               f.NewToken(shimast.KindEqualsToken),
-              entry.Expression,
+              cloneJoiner_dynamic_value(entry, props.Emit),
             ),
           ),
           f.NewContinueStatement(nil),
@@ -155,6 +182,19 @@ func (cloneJoinerNamespace) Object(props CloneJoiner_ObjectProps) *shimast.Node 
   )
 }
 
+// Index-signature validation can admit a present undefined value. Preserve it
+// without passing it to a decoder that expects the declared value type.
+func cloneJoiner_dynamic_value(entry IExpressionEntry, emit *shimprinter.EmitContext) *shimast.Node {
+  f := nativecontext.NodeFactoryOf(emit)
+  return nativefactories.ExpressionFactory.Conditional(
+    f.NewBinaryExpression(nil, entry.Input, nil, f.NewToken(shimast.KindExclamationEqualsEqualsToken),
+      f.NewVoidExpression(f.NewNumericLiteral("0", shimast.TokenFlagsNone))),
+    entry.Expression,
+    entry.Input,
+    emit,
+  )
+}
+
 func cloneJoiner_optional_condition(entry IExpressionEntry, input *shimast.Expression, emit ...*shimprinter.EmitContext) *shimast.Node {
   if entry.StrictOptionalUndefined {
     return nativefactories.ExpressionFactory.IsRequired(entry.Input, emit...)
@@ -163,7 +203,7 @@ func cloneJoiner_optional_condition(entry IExpressionEntry, input *shimast.Expre
   if key == nil {
     return nativefactories.ExpressionFactory.IsRequired(entry.Input, emit...)
   }
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBinaryExpression(
     nil,
     nativefactories.ExpressionFactory.IsRequired(entry.Input, emit...),
@@ -180,7 +220,7 @@ func cloneJoiner_optional_condition(entry IExpressionEntry, input *shimast.Expre
 }
 
 func (cloneJoinerNamespace) Tuple(props CloneJoiner_TupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   elements := make([]*shimast.Node, 0, len(props.Elements)+1)
   for _, elem := range props.Elements {
     elements = append(elements, elem)
@@ -204,7 +244,7 @@ func (cloneJoinerNamespace) Tuple(props CloneJoiner_TupleProps) *shimast.Node {
 // for `[string, number?]` stays `["a"]` (length 1) and round-trips under
 // `compare.equals`, while a present optional keeps its value.
 func (cloneJoinerNamespace) OptionalTupleElement(props CloneJoiner_OptionalElementProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   condition := f.NewBinaryExpression(
     nil,
     nativefactories.ExpressionFactory.Number(props.Index, props.Emit),
@@ -223,9 +263,9 @@ func (cloneJoinerNamespace) OptionalTupleElement(props CloneJoiner_OptionalEleme
 }
 
 func (cloneJoinerNamespace) Array(props CloneJoiner_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   return f.NewCallExpression(
-    nativefactories.IdentifierFactory.Access(nil, props.Input, "map"),
+    nativefactories.IdentifierFactory.Access(props.Emit, props.Input, "map"),
     nil,
     nil,
     f.NewNodeList([]*shimast.Node{props.Arrow}),
@@ -234,18 +274,14 @@ func (cloneJoinerNamespace) Array(props CloneJoiner_ArrayProps) *shimast.Node {
 }
 
 func cloneJoiner_regular_skip(regular []IExpressionEntry, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(cloneJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   elements := make([]*shimast.Node, 0, len(regular))
   for _, entry := range regular {
     elements = append(elements, f.NewStringLiteral(*entry.Key.GetSoleLiteral(), shimast.TokenFlagsNone))
   }
   return f.NewIfStatement(
     f.NewCallExpression(
-      nativefactories.IdentifierFactory.Access(
-        nil,
-        f.NewArrayLiteralExpression(f.NewNodeList(elements), false),
-        "some",
-      ),
+      f.NewPropertyAccessExpression(f.NewArrayLiteralExpression(f.NewNodeList(elements), false), nil, f.NewIdentifier("some"), shimast.NodeFlagsNone),
       nil,
       nil,
       f.NewNodeList([]*shimast.Node{

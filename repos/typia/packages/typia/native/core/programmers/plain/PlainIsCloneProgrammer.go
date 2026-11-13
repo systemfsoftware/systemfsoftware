@@ -14,17 +14,31 @@ type plainIsCloneProgrammerNamespace struct{}
 
 var PlainIsCloneProgrammer = plainIsCloneProgrammerNamespace{}
 
+// PlainIsCloneProgrammer_DecomposeProps is the input of Decompose for the plain
+// is clone generator: Context (the transform context), Functor (the collector of
+// the helper functions that the generator emits), Type (the type to generate
+// for) and Name (an optional type name).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs the transform context, the collector of the helper functions that the generator emits, the type to generate for and an optional type name, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 4 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type PlainIsCloneProgrammer_DecomposeProps struct {
+  // Context borrows the checker, emitter and importer for this transform.
   Context nativecontext.ITypiaContext
+
+  // Functor collects shared helper declarations and recursive-visit state.
   Functor *nativehelpers.FunctionProgrammer
-  Type    *shimchecker.Type
-  Name    *string
+
+  // Type is the checker type whose input shape is analyzed.
+  Type *shimchecker.Type
+
+  // Name optionally overrides the rendered type name; nil uses the checker name.
+  Name *string
 }
 
-var plainIsCloneProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (plainIsCloneProgrammerNamespace) Decompose(props PlainIsCloneProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(plainIsCloneProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   is := nativeprogrammers.IsProgrammer.Decompose(nativeprogrammers.IsProgrammer_DecomposeProps{
     Context: props.Context,
     Functor: props.Functor,
@@ -99,7 +113,7 @@ func (plainIsCloneProgrammerNamespace) Write(props nativecontext.IProgrammerProp
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,

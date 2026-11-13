@@ -76,7 +76,7 @@ Each issue remains an evidence and acceptance unit inside the combined diff. Kee
 
 Promote every reproduced defect class, consequence-matrix boundary, and mutation that caught an implementation error into a permanent regression discoverable by and executed from a canonical package or root command. A maintained repository probe is acceptable only when its exact command is a required, non-skippable coverage-matrix cell and mutation evidence proves that command fails. A dormant or one-off scratch witness is not enough when the same class could recur after the campaign.
 
-Follow the development skill for test shape and narrow-then-broad local evidence. Do not treat a local build or test result as a substitute for the pull request's ordinary CI acceptance gate. After the source, tests, documentation, fixtures, and generated consequences are ready, run `pnpm format` and include its integrated result in the same pull request.
+Follow the development skill for test shape and [local partial tests versus full GitHub CI coverage](../development/SKILL.md#validation). Do not treat a local build or test result as a substitute for the pull request's ordinary CI acceptance gate. Defer `pnpm format` until the final pre-merge cleanup after implementation and CI repairs are complete, and include its integrated result in the same pull request.
 
 If implementation disproves, narrows, or externally blocks an issue, reopen the evidence and revalidate that conclusion from primary sources before changing the claimed scope. Record the evidence on the issue and pull-request thread, update the campaign ledger, and close a confirmed-invalid issue. Do not leave an orphan issue or pretend an unresolved accepted issue was completed.
 
@@ -93,7 +93,7 @@ Two boundaries remain strict because overlap would destroy the evidence:
 
 ## Validate With CI And Self-Review
 
-Commit and push the formatted integrated snapshot, then let every ordinary pull-request check run. Start solo Self-Review immediately over that exact base-to-head diff while CI executes.
+Commit and push the integrated snapshot, then let every ordinary pull-request check run. Start solo Self-Review immediately over that exact base-to-head diff while CI executes.
 
 Submit every Self-Review finding round and the final clean round as a formal GitHub pull-request review with the `COMMENT` event. Attach line-specific findings as inline review comments and summarize round-wide findings or the clean conclusion in the review body; do not post ordinary issue-style pull-request comments for Self-Review.
 
@@ -104,7 +104,7 @@ CI and review are independent gates:
 - CI must prove every configured build, type-check, test, packaging, and platform lane.
 - Self-Review must prove requirement fidelity, consequence coverage, issue-by-issue acceptance, test quality, documentation, generated output, and risks not encoded in CI.
 
-Treat native emitters, shared metadata, common runtime helpers, package manifests or declarations, CLI or generator code, and test or oracle infrastructure as integration-sensitive. Before merging such a change, record the exact `origin/master` and pull-request head SHAs plus the integration-command manifest hash, construct their prospective merge result in a disposable checkout, and run the complete frozen canonical command set for root build, test, static analysis, generated artifacts, and clean packed consumers. Add a gate when the change warrants one, but never omit a manifest gate on a narrower consequence claim. An unavailable or failed mandatory gate blocks merge. Re-read `origin/master` before merge and restart the gate if it changed, and verify the exact merge SHA with the same command set afterward. Do not turn master red.
+Treat native emitters, shared metadata, common runtime helpers, package manifests or declarations, CLI or generator code, and test or oracle infrastructure as integration-sensitive. Before merging such a change, record the exact `origin/master` and pull-request head SHAs plus the integration-command manifest hash. Assign every frozen gate to its execution owner: local partial regressions or GitHub CI for full suites. Require the complete canonical build, test, static-analysis, generated-artifact and clean-packed-consumer coverage against the prospective merge result; GitHub's pull-request merge-ref checks may supply that result without a duplicate local full run. Use a disposable checkout only for necessary scoped probes. Add a gate when warranted, but never omit a manifest gate on a narrower consequence claim. An unavailable or failed mandatory gate blocks merge. Re-read `origin/master` before merge and restart affected evidence if it changed, then verify the exact merge SHA through the same assigned local/CI gates. Do not turn master red.
 
 Prove the regression tests are sensitive before merge: in a disposable checkout, revert or mutate only the product fix while retaining the tests, and require the expected assertions to fail while adjacent controls still pass.
 
@@ -112,9 +112,8 @@ When any gate finds a defect:
 
 1. Diagnose the real cause from the CI log, review evidence, or gate output.
 2. Correct the source and complete the corresponding regression coverage.
-3. Run `pnpm format`.
-4. Commit and push the correction to the same pull request.
-5. Let the new CI run to completion and restart Self-Review as a fresh complete round over the new head.
+3. Commit and push the correction to the same pull request without a per-commit formatter run.
+4. Let the new CI run to completion and restart Self-Review as a fresh complete round over the new head.
 
 Fix every red CI lane in the same pull request even when the failure predates the campaign or is unrelated to the campaign's original issues. Do not dismiss it as another contributor's failure.
 
@@ -126,12 +125,14 @@ Merge only with user authorization, including a campaign-local standing authoriz
 
 Before merging, reconcile the closing keywords against what survives at `HEAD`. `git log origin/master..HEAD` shows every message the squash will concatenate, including commits a later one reverted, so read the whole range and confirm each issue the merge will close has a surviving fix.
 
+Run `pnpm format` at this final cleanup gate and commit any resulting changes. Require green CI and a clean Self-Review on the resulting head before merge; formatter changes never bypass those gates.
+
 After merge:
 
 1. Verify GitHub records the pull request as merged into the intended target and every linked issue has the correct final state. Reopen any issue the squash merge closed without a surviving fix, and comment that the merge closed it mechanically.
 2. Confirm the checkout has no unpushed or uncommitted work worth preserving.
 3. Switch back to `master`, pull with `git pull --ff-only`, and delete the local topic branch.
-4. Preserve compact command evidence and result hashes in the campaign knowledge base, then remove every disposable mutable root the cycle created: disposable mutation checkouts, `GOCACHE`, `GOTMPDIR`, `TTSC_CACHE_DIR`, generated-output roots, tarballs under `experiments/tarballs/`, and clean-consumer install roots. Confirm no live process uses a path before deleting it, delete only the exact proven path, and verify it is absent.
+4. Preserve compact command evidence and result hashes in the campaign knowledge base, then remove every disposable mutable root the cycle created: disposable mutation checkouts, `GOCACHE`, `GOTMPDIR`, `TTSC_CACHE_DIR`, generated-output roots, task-owned tarballs, and clean-consumer install roots. Confirm no live process uses a path before deleting it, delete only the exact proven path, and verify it is absent.
 5. Never bulk-delete a shared temporary directory, a shared ttsc cache directory, an installed toolchain, or an asset whose ownership is uncertain.
 
 Formatting belongs to the unified cycle pull request, so a separate post-campaign formatting pull request is not part of this solo workflow.

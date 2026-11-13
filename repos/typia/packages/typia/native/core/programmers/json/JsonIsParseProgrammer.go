@@ -14,14 +14,19 @@ type jsonIsParseProgrammerNamespace struct{}
 
 var JsonIsParseProgrammer = jsonIsParseProgrammerNamespace{}
 
+// JsonIsParseProgrammer_DecomposeProps is the argument record of
+// JsonIsParseProgrammer.Decompose, which builds the `json.isParse` function.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of JsonIsParseProgrammer.Decompose, which builds the `json.isParse` function; its 4 fields (Context, Functor, Type, Name) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type JsonIsParseProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
   Type    *shimchecker.Type
   Name    *string
 }
-
-var jsonParseProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (jsonIsParseProgrammerNamespace) Decompose(props JsonIsParseProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   is := nativeprogrammers.IsProgrammer.Decompose(nativeprogrammers.IsProgrammer_DecomposeProps{
@@ -35,7 +40,7 @@ func (jsonIsParseProgrammerNamespace) Decompose(props JsonIsParseProgrammer_Deco
     Name:    props.Name,
   })
 
-  f := nativecontext.EmitFactoryOf(jsonParseProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return nativeinternal.FeatureProgrammer_IDecomposed{
     Functions: is.Functions,
     Statements: append(append([]*shimast.Node{}, is.Statements...), nativefactories.StatementFactory.Constant(nativefactories.StatementFactory_ConstantProps{
@@ -107,7 +112,7 @@ func (jsonIsParseProgrammerNamespace) Write(props nativecontext.IProgrammerProps
     Type:    props.Type,
     Name:    props.Name,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -143,7 +148,7 @@ func jsonProgrammer_import_type(context nativecontext.ITypiaContext, props nativ
   if importer := context.Importer; importer != nil {
     return importer.Type(props)
   }
-  f := nativecontext.EmitFactoryOf(jsonParseProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   if str, ok := props.Name.(string); ok {
     return f.NewTypeReferenceNode(f.NewIdentifier(str), f.NewNodeList(props.Arguments))
   }
@@ -151,7 +156,7 @@ func jsonProgrammer_import_type(context nativecontext.ITypiaContext, props nativ
 }
 
 func jsonProgrammer_typeReference(context nativecontext.ITypiaContext, typ *shimchecker.Type, name *string) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(jsonParseProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   if name != nil {
     return f.NewTypeReferenceNode(f.NewIdentifier(*name), nil)
   }

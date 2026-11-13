@@ -14,6 +14,15 @@ type httpAssertFormDataProgrammerNamespace struct{}
 
 var HttpAssertFormDataProgrammer = httpAssertFormDataProgrammerNamespace{}
 
+// HttpAssertFormDataProgrammer_DecomposeProps is the argument record of
+// HttpAssertFormDataProgrammer.Decompose, which builds the asserting form-data
+// decoder. Init is the default initializer of the generated `errorFactory`
+// parameter, or nil.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of HttpAssertFormDataProgrammer.Decompose, which builds the asserting form-data decoder; its 5 fields (Context, Functor, Type, Name, Init) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 5-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is and explains its non-obvious fields.
 type HttpAssertFormDataProgrammer_DecomposeProps struct {
   Context nativecontext.ITypiaContext
   Functor *nativehelpers.FunctionProgrammer
@@ -21,8 +30,6 @@ type HttpAssertFormDataProgrammer_DecomposeProps struct {
   Name    *string
   Init    *shimast.Node
 }
-
-var httpAssertProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
 
 func (httpAssertFormDataProgrammerNamespace) Decompose(props HttpAssertFormDataProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
   assert := nativeprogrammers.AssertProgrammer.Decompose(nativeprogrammers.AssertProgrammer_DecomposeProps{
@@ -54,7 +61,7 @@ func (httpAssertFormDataProgrammerNamespace) Write(props nativecontext.IProgramm
     Name:    props.Name,
     Init:    props.Init,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -62,7 +69,7 @@ func (httpAssertFormDataProgrammerNamespace) Write(props nativecontext.IProgramm
 }
 
 func httpProgrammer_assert_result(context nativecontext.ITypiaContext, init *shimast.Node, assert nativeinternal.FeatureProgrammer_IDecomposed, decode nativeinternal.FeatureProgrammer_IDecomposed) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(httpAssertProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   decodeArrow := decode.Arrow.AsArrowFunction()
   statements := append([]*shimast.Node{}, assert.Statements...)
   statements = append(statements, decode.Statements...)

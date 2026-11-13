@@ -15,11 +15,25 @@ type stringifyJoinerNamespace struct{}
 
 var StringifyJoiner = stringifyJoinerNamespace{}
 
+// StringifyJoiner_ObjectProps is the argument record of StringifyJoiner.Object,
+// which builds the JSON text of an object from its property entries.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of StringifyJoiner.Object, which builds the JSON text of an object from its property entries; its 2 fields (Context, Entries) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 2-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type StringifyJoiner_ObjectProps struct {
   Context nativecontext.ITypiaContext
   Entries []IExpressionEntry
 }
 
+// StringifyJoiner_ArrayProps is the argument record of StringifyJoiner.Array,
+// which builds the JSON text of an array from its element arrow.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of StringifyJoiner.Array, which builds the JSON text of an array from its element arrow; its 4 fields (Context, Input, Arrow, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 4-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type StringifyJoiner_ArrayProps struct {
   Context nativecontext.ITypiaContext
   Input   *shimast.Expression
@@ -27,16 +41,21 @@ type StringifyJoiner_ArrayProps struct {
   Emit    *shimprinter.EmitContext
 }
 
+// StringifyJoiner_TupleProps is the argument record of StringifyJoiner.Tuple,
+// which builds the JSON text of a tuple from its element and rest expressions.
+//
+// @evidence contracts/common.md#principled-implementation It is the argument record of StringifyJoiner.Tuple, which builds the JSON text of a tuple from its element and rest expressions; its 3 fields (Elements, Rest, Emit) are named so that a producer and a consumer cannot transpose them.
+// @evidence contracts/common.md#clear-and-simple-design A 3-field record with no methods.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record: it derives, defaults and validates nothing.
+// @evidence contracts/common.md#meaningful-documentation The doc states what the record is.
 type StringifyJoiner_TupleProps struct {
   Elements []*shimast.Expression
   Rest     *shimast.Expression
   Emit     *shimprinter.EmitContext
 }
 
-var stringifyJoiner_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (stringifyJoinerNamespace) Object(props StringifyJoiner_ObjectProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if len(props.Entries) == 0 {
     return f.NewStringLiteral("{}", shimast.TokenFlagsNone)
   }
@@ -96,7 +115,7 @@ func (stringifyJoinerNamespace) Object(props StringifyJoiner_ObjectProps) *shima
 // runtime whatever the element type declares, so this is not confined to `any`
 // (#2253).
 func (stringifyJoinerNamespace) Array(props StringifyJoiner_ArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   return nativefactories.TemplateFactory.Generate([]*shimast.Node{
     f.NewStringLiteral("[", shimast.TokenFlagsNone),
     f.NewCallExpression(
@@ -111,7 +130,7 @@ func (stringifyJoinerNamespace) Array(props StringifyJoiner_ArrayProps) *shimast
 }
 
 func (stringifyJoinerNamespace) Tuple(props StringifyJoiner_TupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, props.Emit)
+  f := nativecontext.NodeFactoryOf(props.Emit)
   if len(props.Elements) == 0 {
     return f.NewStringLiteral("[]", shimast.TokenFlagsNone)
   }
@@ -137,7 +156,7 @@ func (stringifyJoinerNamespace) Tuple(props StringifyJoiner_TupleProps) *shimast
 }
 
 func stringifyJoiner_regular_properties(context nativecontext.ITypiaContext, regular []IExpressionEntry, dynamic []IExpressionEntry, emit ...*shimprinter.EmitContext) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   output := []*shimast.Node{}
   // Members keep their declaration order, which is what the guide promises and
   // what `JSON.stringify` produces for a value assigned in that order. They used
@@ -217,21 +236,26 @@ func stringifyJoiner_entry_omittable(entry IExpressionEntry) bool {
     stringifyJoiner_result_undefinable(entry.Meta)
 }
 
-// stringifyJoiner_result_undefinable reports whether a value that is present can
+// StringifyJoiner_ResultUndefinable reports whether a value that is present can
 // still serialize to nothing, which is the case an input test cannot see.
 //
 // `any` and `unknown` are serialized by JSON.stringify, which answers
 // `undefined` for a function, a symbol, and a `toJSON` returning nothing. A
 // declared `toJSON` is the same case without `any`: the member's text is its
 // return value, so a return type that admits `undefined` admits a member with no
-// text (#2253).
-// StringifyJoiner_ResultUndefinable exposes the same question to the element
-// positions the joiner does not build itself, so a tuple slot and an object
+// text (#2253). The joiner and the element positions it does not build itself,
+// such as a tuple slot, ask this one question, so a tuple slot and an object
 // member classify a value identically.
+//
+// @evidence contracts/common.md#principled-implementation The shared metadata classifier selects Any (the representation of any/unknown) or an escaped toJSON return admitting undefined. Their serialized result can disappear while input is present; direct function members are handled separately by the surrounding joiner.
+// @evidence contracts/common.md#clear-and-simple-design A one-line exported delegate over the package-private classifier.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts Both positions call one classifier and the rule is not repeated.
+// @evidence contracts/common.md#meaningful-documentation The doc states the cases and cites #2253.
 func StringifyJoiner_ResultUndefinable(meta *nativemetadata.MetadataSchema) bool {
   return stringifyJoiner_result_undefinable(meta)
 }
 
+// stringifyJoiner_result_undefinable implements StringifyJoiner_ResultUndefinable.
 func stringifyJoiner_result_undefinable(meta *nativemetadata.MetadataSchema) bool {
   if meta == nil {
     return false
@@ -243,7 +267,7 @@ func stringifyJoiner_result_undefinable(meta *nativemetadata.MetadataSchema) boo
 }
 
 func stringifyJoiner_regular_condition(entry IExpressionEntry, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   conditions := []*shimast.Node{}
   if !entry.Meta.IsRequired() || entry.Meta.Any {
     conditions = append(conditions, f.NewBinaryExpression(
@@ -267,7 +291,7 @@ func stringifyJoiner_regular_condition(entry IExpressionEntry, emit ...*shimprin
 }
 
 func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dynamic []IExpressionEntry, regular []string, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   statements := []*shimast.Node{
     f.NewIfStatement(
       f.NewBinaryExpression(
@@ -284,7 +308,7 @@ func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dyn
   output := func() *shimast.Node {
     mapped := f.NewCallExpression(
       nativefactories.IdentifierFactory.Access(
-        nil,
+        context.Emit,
         f.NewCallExpression(
           f.NewIdentifier("Object.entries"),
           nil,
@@ -312,7 +336,7 @@ func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dyn
       shimast.NodeFlagsNone,
     )
     filtered := f.NewCallExpression(
-      nativefactories.IdentifierFactory.Access(nil, mapped, "filter"),
+      nativefactories.IdentifierFactory.Access(context.Emit, mapped, "filter"),
       nil,
       nil,
       f.NewNodeList([]*shimast.Node{
@@ -335,7 +359,7 @@ func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dyn
       shimast.NodeFlagsNone,
     )
     return f.NewCallExpression(
-      nativefactories.IdentifierFactory.Access(nil, filtered, "join"),
+      nativefactories.IdentifierFactory.Access(context.Emit, filtered, "join"),
       nil,
       nil,
       f.NewNodeList([]*shimast.Node{f.NewStringLiteral(",", shimast.TokenFlagsNone)}),
@@ -350,7 +374,7 @@ func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dyn
     statements = append(statements, f.NewIfStatement(
       f.NewCallExpression(
         nativefactories.IdentifierFactory.Access(
-          nil,
+          context.Emit,
           f.NewArrayLiteralExpression(f.NewNodeList(elements), false),
           "some",
         ),
@@ -389,7 +413,7 @@ func stringifyJoiner_dynamic_properties(context nativecontext.ITypiaContext, dyn
 }
 
 func stringifyJoiner_stringify(context nativecontext.ITypiaContext, entry IExpressionEntry, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   head := nativefactories.TemplateFactory.Generate([]*shimast.Node{
     f.NewCallExpression(
       f.NewIdentifier("JSON.stringify"),
@@ -425,7 +449,7 @@ func stringifyJoiner_stringify(context nativecontext.ITypiaContext, entry IExpre
 }
 
 func stringifyJoiner_regular_arrow(emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewArrowFunction(
     nil,
     nil,
@@ -444,7 +468,7 @@ func stringifyJoiner_regular_arrow(emit ...*shimprinter.EmitContext) *shimast.No
 }
 
 func stringifyJoiner_binding_pattern(emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   return f.NewBindingPattern(
     shimast.KindArrayBindingPattern,
     f.NewNodeList([]*shimast.Node{
@@ -455,7 +479,7 @@ func stringifyJoiner_binding_pattern(emit ...*shimprinter.EmitContext) *shimast.
 }
 
 func stringifyJoiner_reduce(expressions []*shimast.Node, operator shimast.Kind, emit ...*shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(stringifyJoiner_factory, emit...)
+  f := nativecontext.NodeFactoryOf(emit...)
   if len(expressions) == 0 {
     return f.NewKeywordExpression(shimast.KindFalseKeyword)
   }
@@ -470,7 +494,7 @@ func stringifyJoiner_internal(context nativecontext.ITypiaContext, name string) 
   if importer := context.Importer; importer != nil {
     return importer.Internal(name)
   }
-  return nativecontext.EmitFactoryOf(stringifyJoiner_factory, context.Emit).NewIdentifier(name)
+  return nativecontext.NodeFactoryOf(context.Emit).NewIdentifier(name)
 }
 
 func stringifyJoiner_all_string_literals(elements []*shimast.Expression) bool {
@@ -508,12 +532,5 @@ func stringifyJoiner_escape_template(text string) string {
 }
 
 func joinStrings(values []string, sep string) string {
-  if len(values) == 0 {
-    return ""
-  }
-  output := values[0]
-  for _, value := range values[1:] {
-    output += sep + value
-  }
-  return output
+  return strings.Join(values, sep)
 }

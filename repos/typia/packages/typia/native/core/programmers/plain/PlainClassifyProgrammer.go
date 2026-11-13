@@ -21,12 +21,32 @@ type plainClassifyProgrammerNamespace struct{}
 
 var PlainClassifyProgrammer = plainClassifyProgrammerNamespace{}
 
+// PlainClassifyProgrammer_DecomposeProps is the input of Decompose for the plain
+// classify generator: Validated (whether an enclosing check has already
+// validated the input), Context (the transform context), Functor (the collector
+// of the helper functions that the generator emits), Type (the type to generate
+// for), Name (an optional type name) and Modulo (the call's callee expression).
+//
+// @evidence contracts/common.md#principled-implementation Decompose needs whether an enclosing check has already validated the input, the transform context, the collector of the helper functions that the generator emits, the type to generate for, an optional type name and the call's callee expression, and the record carries them in one argument.
+// @evidence contracts/common.md#clear-and-simple-design A flat argument record of 6 fields.
+// @evidence contracts/common.md#prohibited-implementation-shortcuts A data record.
+// @evidence contracts/common.md#meaningful-documentation The doc names each field.
 type PlainClassifyProgrammer_DecomposeProps struct {
+  // Validated selects a separate is-helper namespace from enclosing assertion helpers.
   Validated bool
-  Context   nativecontext.ITypiaContext
-  Functor   *nativehelpers.FunctionProgrammer
-  Type      *shimchecker.Type
-  Name      *string
+
+  // Context borrows the checker, emitter and importer for this transform.
+  Context nativecontext.ITypiaContext
+
+  // Functor collects shared helper declarations and recursive-visit state.
+  Functor *nativehelpers.FunctionProgrammer
+
+  // Type is the checker type whose input shape is analyzed.
+  Type *shimchecker.Type
+
+  // Name optionally overrides the rendered type name; nil uses the checker name.
+  Name *string
+
   // Modulo is the call-site node (the typia.plain.classify(...) call). Its
   // source file anchors cross-module class value-import specifiers for the
   // from/new construction strategies; nil falls back to a bare identifier.
@@ -46,10 +66,8 @@ const plainClassifyProgrammer_PREFIX = "_y"
 const plainClassifyProgrammer_IS_PREFIX = "_i"
 const plainClassifyProgrammer_IS_PREFIX_VALIDATED = "_yi"
 
-var plainClassifyProgrammer_factory = shimast.NewNodeFactory(shimast.NodeFactoryHooks{})
-
 func (plainClassifyProgrammerNamespace) Decompose(props PlainClassifyProgrammer_DecomposeProps) nativeinternal.FeatureProgrammer_IDecomposed {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   // The union construction ladder discriminates members with IsProgrammer.Decode
   // (is-check helper calls), so those helpers must exist in the classify IIFE,
   // emitted via the Addition. UNVALIDATED uses the sole "_i" namespace (a non-union
@@ -120,7 +138,7 @@ func (plainClassifyProgrammerNamespace) Write(props nativecontext.IProgrammerPro
     Validated: false,
     Modulo:    props.Modulo,
   })
-  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{
+  return nativeinternal.FeatureProgrammer.WriteDecomposed(nativeinternal.FeatureProgrammer_WriteDecomposedProps{Emit: props.Context.Emit,
     Modulo:  props.Modulo,
     Functor: functor,
     Result:  result,
@@ -133,7 +151,7 @@ func plainClassifyProgrammer_write_array_functions(props struct {
   Functor    *nativehelpers.FunctionProgrammer
   Collection *schemametadata.MetadataCollection
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := []*shimast.Node{}
   for _, typ := range props.Collection.Arrays() {
     if typ.Recursive == false {
@@ -148,7 +166,7 @@ func plainClassifyProgrammer_write_array_functions(props struct {
       Value: f.NewArrowFunction(
         nil,
         nil,
-        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{
+        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{Emit: props.Context.Emit,
           Config: nativeinternal.FeatureProgrammer_ParameterConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
           Type:   nativefactories.TypeFactory.Keyword("any", props.Context.Emit),
           Input:  f.NewIdentifier("input"),
@@ -189,7 +207,7 @@ func plainClassifyProgrammer_write_tuple_functions(props struct {
   Functor    *nativehelpers.FunctionProgrammer
   Collection *schemametadata.MetadataCollection
 }) []*shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   output := []*shimast.Node{}
   for _, tuple := range props.Collection.Tuples() {
     if tuple.Recursive == false {
@@ -204,7 +222,7 @@ func plainClassifyProgrammer_write_tuple_functions(props struct {
       Value: f.NewArrowFunction(
         nil,
         nil,
-        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{
+        f.NewNodeList(nativeinternal.FeatureProgrammer.ParameterDeclarations(nativeinternal.FeatureProgrammer_ParameterDeclarationsProps{Emit: props.Context.Emit,
           Config: nativeinternal.FeatureProgrammer_ParameterConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
           Type:   nativefactories.TypeFactory.Keyword("any", props.Context.Emit),
           Input:  f.NewIdentifier("input"),
@@ -244,7 +262,7 @@ func plainClassifyProgrammer_decode(props struct {
   Metadata *schemametadata.MetadataSchema
   Explore  nativeinternal.FeatureProgrammer_IExplore
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Metadata.Any ||
     plainClassifyProgrammer_some_arrays(props.Metadata.Arrays, func(a *schemametadata.MetadataArray) bool { return a.Type.Value.Any }) ||
     plainClassifyProgrammer_some_tuples(props.Metadata.Tuples, func(t *schemametadata.MetadataTuple) bool {
@@ -315,7 +333,7 @@ func plainClassifyProgrammer_decode(props struct {
     unions = append(unions, plainClassifyProgrammer_IUnion{
       Type: "array",
       Is: func() *shimast.Node {
-        return nativefactories.ExpressionFactory.IsArray(props.Input)
+        return nativefactories.ExpressionFactory.IsArray(props.Input, props.Context.Emit)
       },
       Value: func() *shimast.Node {
         explore := props.Explore
@@ -335,7 +353,7 @@ func plainClassifyProgrammer_decode(props struct {
     unions = append(unions, plainClassifyProgrammer_IUnion{
       Type: "set",
       Is: func() *shimast.Node {
-        return nativefactories.ExpressionFactory.IsInstanceOf("Set", props.Input)
+        return nativefactories.ExpressionFactory.IsInstanceOf("Set", props.Input, props.Context.Emit)
       },
       Value: func() *shimast.Node {
         explore := props.Explore
@@ -355,7 +373,7 @@ func plainClassifyProgrammer_decode(props struct {
     unions = append(unions, plainClassifyProgrammer_IUnion{
       Type: "map",
       Is: func() *shimast.Node {
-        return nativefactories.ExpressionFactory.IsInstanceOf("Map", props.Input)
+        return nativefactories.ExpressionFactory.IsInstanceOf("Map", props.Input, props.Context.Emit)
       },
       Value: func() *shimast.Node {
         explore := props.Explore
@@ -376,7 +394,7 @@ func plainClassifyProgrammer_decode(props struct {
     unions = append(unions, plainClassifyProgrammer_IUnion{
       Type: "native",
       Is: func() *shimast.Node {
-        return nativefactories.ExpressionFactory.IsInstanceOf(native.Name, props.Input)
+        return nativefactories.ExpressionFactory.IsInstanceOf(native.Name, props.Input, props.Context.Emit)
       },
       Value: func() *shimast.Node {
         if _, ok := schemametadata.MetadataSchema_atomicLikeNative(native.Name); ok {
@@ -404,7 +422,7 @@ func plainClassifyProgrammer_decode(props struct {
           CheckNull:  true,
           CheckArray: false,
           Input:      props.Input,
-        })
+        }, props.Context.Emit)
       },
       Value: func() *shimast.Node {
         explore := props.Explore
@@ -480,13 +498,13 @@ type plainClassifyProgrammer_decodeArrayProps struct {
 }
 
 func plainClassifyProgrammer_decode_array(props plainClassifyProgrammer_decodeArrayProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Array.Type.Recursive {
     return f.NewCallExpression(
       f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%sa%d", props.Config.Prefix, *props.Array.Type.Index))),
       nil,
       nil,
-      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
         Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
         Explore: plainClassifyProgrammer_explore_with(props.Explore, "function", "array"),
         Input:   props.Input,
@@ -498,7 +516,7 @@ func plainClassifyProgrammer_decode_array(props plainClassifyProgrammer_decodeAr
 }
 
 func plainClassifyProgrammer_decode_array_inline(props plainClassifyProgrammer_decodeArrayProps) *shimast.Node {
-  return nativeinternal.FeatureProgrammer.Decode_array(nativeinternal.FeatureProgrammer_DecodeArrayProps{
+  return nativeinternal.FeatureProgrammer.Decode_array(nativeinternal.FeatureProgrammer_DecodeArrayProps{Emit: props.Context.Emit,
     Config: nativeinternal.FeatureProgrammer_DecodeArrayConfig{
       Trace:   props.Config.Trace,
       Path:    props.Config.Path,
@@ -532,13 +550,13 @@ type plainClassifyProgrammer_decodeTupleProps struct {
 }
 
 func plainClassifyProgrammer_decode_tuple(props plainClassifyProgrammer_decodeTupleProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if props.Tuple.Type.Recursive {
     return f.NewCallExpression(
       f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%st%d", props.Config.Prefix, *props.Tuple.Type.Index))),
       nil,
       nil,
-      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+      f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
         Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
         Explore: plainClassifyProgrammer_explore_with(props.Explore, "function", props.Explore.From),
         Input:   props.Input,
@@ -566,7 +584,7 @@ type plainClassifyProgrammer_decodeTupleInlineProps struct {
 }
 
 func plainClassifyProgrammer_decode_tuple_inline(props plainClassifyProgrammer_decodeTupleInlineProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   elements := []*shimast.Node{}
   for index, elem := range props.Tuple.Elements {
     if elem.Rest != nil {
@@ -648,7 +666,7 @@ func plainClassifyProgrammer_decode_native(props struct {
   Type    string
   Input   *shimast.Node
 }) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   switch props.Type {
   case "Date", "Uint8Array", "Uint8ClampedArray", "Uint16Array", "Uint32Array", "BigUint64Array", "Int8Array", "Int16Array", "Int32Array", "BigInt64Array", "Float32Array", "Float64Array":
     return f.NewNewExpression(
@@ -678,7 +696,7 @@ func plainClassifyProgrammer_decode_native(props struct {
 }
 
 func plainClassifyProgrammer_decode_native_buffer(typ string, input *shimast.Node, emit *shimprinter.EmitContext) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, emit)
+  f := nativecontext.NodeFactoryOf(emit)
   return nativefactories.ExpressionFactory.SelfCall(
     emit,
     f.NewBlock(f.NewNodeList([]*shimast.Node{
@@ -726,7 +744,7 @@ type plainClassifyProgrammer_exploreArraysProps struct {
 }
 
 func plainClassifyProgrammer_explore_arrays(props plainClassifyProgrammer_exploreArraysProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativehelpers.UnionExplorer.Array(nativehelpers.UnionExplorer_ArrayProps{
       Config: nativehelpers.UnionExplorer_ArrayLikeConfig{
@@ -737,7 +755,7 @@ func plainClassifyProgrammer_explore_arrays(props plainClassifyProgrammer_explor
             Prefix:   props.Functor.IsPrefix(),
             Input:    v.Input,
             Metadata: v.Definition.(*schemametadata.MetadataSchema),
-            Explore:  plainClassifyProgrammer_checker_explore(v.Explore),
+            Explore:  v.Explore,
           })
         },
         Decoder: func(v nativehelpers.UnionExplorer_ArrayLikeDecoderProps) *shimast.Node {
@@ -747,7 +765,7 @@ func plainClassifyProgrammer_explore_arrays(props plainClassifyProgrammer_explor
             Functor: props.Functor,
             Input:   v.Input,
             Array:   v.Definition.(*schemametadata.MetadataArray),
-            Explore: plainClassifyProgrammer_feature_explore(v.Explore),
+            Explore: v.Explore,
           })
         },
         Empty:   f.NewIdentifier("[]"),
@@ -784,7 +802,7 @@ type plainClassifyProgrammer_exploreSetsProps struct {
 }
 
 func plainClassifyProgrammer_explore_sets(props plainClassifyProgrammer_exploreSetsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativehelpers.UnionExplorer.Set(nativehelpers.UnionExplorer_SetProps{
       Config: nativehelpers.UnionExplorer_ArrayLikeConfig{
@@ -795,7 +813,7 @@ func plainClassifyProgrammer_explore_sets(props plainClassifyProgrammer_exploreS
             Prefix:   props.Functor.IsPrefix(),
             Input:    v.Input,
             Metadata: v.Definition.(*schemametadata.MetadataSchema),
-            Explore:  plainClassifyProgrammer_checker_explore(v.Explore),
+            Explore:  v.Explore,
           })
         },
         Decoder: func(v nativehelpers.UnionExplorer_ArrayLikeDecoderProps) *shimast.Node {
@@ -809,7 +827,7 @@ func plainClassifyProgrammer_explore_sets(props plainClassifyProgrammer_exploreS
                 Functor: props.Functor,
                 Input:   v.Input,
                 Array:   v.Definition.(*schemametadata.MetadataArray),
-                Explore: plainClassifyProgrammer_feature_explore(v.Explore),
+                Explore: v.Explore,
               }),
             }),
           )
@@ -852,7 +870,7 @@ type plainClassifyProgrammer_exploreMapsProps struct {
 }
 
 func plainClassifyProgrammer_explore_maps(props plainClassifyProgrammer_exploreMapsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewCallExpression(
     nativehelpers.UnionExplorer.Map(nativehelpers.UnionExplorer_MapProps{
       Config: nativehelpers.UnionExplorer_ArrayLikeConfig{
@@ -890,7 +908,7 @@ func plainClassifyProgrammer_explore_maps(props plainClassifyProgrammer_exploreM
                 Functor: props.Functor,
                 Input:   v.Input,
                 Array:   v.Definition.(*schemametadata.MetadataArray),
-                Explore: plainClassifyProgrammer_feature_explore(v.Explore),
+                Explore: v.Explore,
               }),
             }),
           )
@@ -936,7 +954,7 @@ type plainClassifyProgrammer_exploreObjectsProps struct {
 }
 
 func plainClassifyProgrammer_explore_objects(props plainClassifyProgrammer_exploreObjectsProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   if len(props.Metadata.Objects) == 1 {
     return plainClassifyProgrammer_decode_object(struct {
       Functor *nativehelpers.FunctionProgrammer
@@ -958,7 +976,7 @@ func plainClassifyProgrammer_explore_objects(props plainClassifyProgrammer_explo
     f.NewIdentifier(props.Functor.UseLocal(fmt.Sprintf("%su%d", plainClassifyProgrammer_PREFIX, index))),
     nil,
     nil,
-    f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{
+    f.NewNodeList(nativeinternal.FeatureProgrammer.ArgumentsArray(nativeinternal.FeatureProgrammer_ArgumentsArrayProps{Emit: props.Context.Emit,
       Config:  nativeinternal.FeatureProgrammer_ArgumentsArrayConfig{Path: props.Config.Path, Trace: props.Config.Trace, Visited: props.Functor.Visited()},
       Input:   props.Input,
       Explore: props.Explore,
@@ -973,7 +991,7 @@ func plainClassifyProgrammer_configure(props struct {
   Modulo   *shimast.Node
   IsPrefix string
 }) nativeinternal.FeatureProgrammer_IConfig {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   config := nativeinternal.FeatureProgrammer_IConfig{}
 
   // from/new construction strategies (classify-scoped, never on the shared
@@ -989,14 +1007,9 @@ func plainClassifyProgrammer_configure(props struct {
   // below byte-identical.
   var unionMembers []plainClassifyProgrammer_member
   callFile := plainClassifyProgrammer_call_file(props.Modulo)
-  // classRefOf resolves a named class to a value reference for the field-copy
-  // path (Object.create(<Class>.prototype) in ClassifyJoiner and the recursion
-  // guard allocator). Bare identifier when the class is in lexical scope at the
-  // call site (same file, or source unknown); a relative value import otherwise
-  // — without it a cross-module field-copied class is referenced by an
-  // unimported identifier and throws ReferenceError at runtime. (A default-
-  // exported cross-module class still resolves via a named import here; the
-  // from/new construct path resolves default vs named precisely via class_ref.)
+  // classRefOf resolves a class's usable value reference for both the field-copy
+  // joiner and recursion allocator. Same-file values use lexical bindings;
+  // cross-module values use relative named or default imports.
   classRefOf := func(obj *schemametadata.MetadataObjectType) *shimast.Node {
     // Only a real `class` has a runtime value to Object.create against. An
     // interface / type alias / anonymous object literal (including a RECURSIVE
@@ -1007,12 +1020,9 @@ func plainClassifyProgrammer_configure(props struct {
     if obj == nil || !obj.IsClass {
       return nil
     }
-    // The runtime value reference. obj.Name is the qualified metadata name, which
-    // is already a usable value for a plain or namespaced class ("NS.Plain"
-    // prints verbatim). Two cases need a different binding: a NAMED class
-    // expression (ValueRef = the `const X` binding, since obj.Name is the inner
-    // class name), and a generic instantiation (obj.Name is "Container<string>" —
-    // strip the type arguments to the bare constructor "Container").
+    // Prefer the enclosing variable binding for named or unnamed class
+    // expressions. Otherwise the qualified metadata name identifies the class;
+    // generic instantiations remove their erased type arguments.
     name := obj.Name
     if obj.ValueRef != "" {
       name = obj.ValueRef
@@ -1082,16 +1092,10 @@ func plainClassifyProgrammer_configure(props struct {
   }
   config.Visited = props.Functor.Visited
   config.VisitGuard = func(next nativeinternal.FeatureProgrammer_VisitGuardProps) *shimast.Node {
-    // The recursion guard registers its allocator in the WeakMap as the
-    // canonical output for a revisited input, so for a named class it must be a
-    // prototype-bearing instance — otherwise Object.assign onto a plain {} drops
-    // the prototype and `x instanceof Class` fails on the recursive arm. Mirror
-    // ClassifyJoiner.Object's literal/named split (same *MetadataObjectType
-    // pointer, so IsLiteral() agrees): Object.create(<Name>.prototype) for a
-    // named class, {} for a literal/anonymous shape. The class is referenced by
-    // bare identifier (lexical scope); cross-module support arrives with the
-    // from/new Importer.Instance slice, which must update this allocator AND
-    // ClassifyJoiner.Object together.
+    // Register the same prototype-bearing output chosen by ClassifyJoiner.
+    // Nonliteral objects with a usable class reference use Object.create;
+    // literal shapes and classes without a usable value reference allocate {}.
+    // classRefOf handles lexical bindings and cross-module imports for both.
     var allocator *shimast.Node
     classRef := classRefOf(next.Object)
     if next.Object != nil && !next.Object.IsLiteral() && classRef != nil {
@@ -1118,8 +1122,7 @@ func plainClassifyProgrammer_configure(props struct {
     // _yo<index> joiner — keeps a self-referential class field-copying at nested
     // positions while still constructing at the root.
     if next.Explore.From == "top" {
-      // class-TYPE UNION: discriminate the input and construct the matched member
-      // (the tail = the ordinary union decode lets non-class members pass through).
+      // Class-TYPE UNION: construct or decode the first matched member.
       if len(unionMembers) != 0 {
         // Every union member (class + non-class) is in the ladder, so the tail is
         // the no-match fallback: return the input unchanged. Decoding next.Metadata
@@ -1162,7 +1165,7 @@ func plainClassifyProgrammer_configure(props struct {
         Prefix:   props.Functor.IsPrefix(),
         Input:    next.Input,
         Metadata: next.Metadata,
-        Explore:  plainClassifyProgrammer_checker_explore(next.Explore),
+        Explore:  next.Explore,
       })
     },
     Decoder: func(next nativeinternal.FeatureProgrammer_ObjectorDecoderProps) *shimast.Node {
@@ -1188,7 +1191,7 @@ func plainClassifyProgrammer_configure(props struct {
       })
     },
     Unionizer: func(next nativeinternal.FeatureProgrammer_ObjectorUnionizerProps) *shimast.Node {
-      return nativeiterate.Decode_union_object(nativeiterate.Decode_union_objectProps{
+      return nativeiterate.Decode_union_object(nativeiterate.Decode_union_objectProps{Emit: props.Context.Emit,
         Checker: func(v nativeiterate.Decode_union_object_next) *shimast.Node {
           return nativeprogrammers.IsProgrammer.Decode_object(nativeprogrammers.IsProgrammer_DecodeObjectProps{
             Context: props.Context,
@@ -1196,7 +1199,7 @@ func plainClassifyProgrammer_configure(props struct {
             Prefix:  props.Functor.IsPrefix(),
             Input:   v.Input,
             Object:  v.Object,
-            Explore: plainClassifyProgrammer_feature_explore(v.Explore),
+            Explore: v.Explore,
           })
         },
         Decoder: func(v nativeiterate.Decode_union_object_next) *shimast.Node {
@@ -1209,7 +1212,7 @@ func plainClassifyProgrammer_configure(props struct {
             Functor: props.Functor,
             Input:   v.Input,
             Object:  v.Object,
-            Explore: plainClassifyProgrammer_feature_explore(v.Explore),
+            Explore: v.Explore,
           })
         },
         Success: func(exp *shimast.Node) *shimast.Node { return exp },
@@ -1494,8 +1497,8 @@ func plainClassifyProgrammer_choose_seed(
     return seedT == nil ||
       seedT.Flags()&(shimchecker.TypeFlagsAny|shimchecker.TypeFlagsUnknown) != 0
   }
-  if fromSym != nil && fromSym.ValueDeclaration != nil {
-    fnT := checker.GetTypeOfSymbolAtLocation(fromSym, fromSym.ValueDeclaration)
+  if fromSym != nil && shimast.SymbolValueDeclarationOf(fromSym) != nil {
+    fnT := checker.GetTypeOfSymbolAtLocation(fromSym, shimast.SymbolValueDeclarationOf(fromSym))
     if sigs := checker.GetSignaturesOfType(fnT, shimchecker.SignatureKindCall); len(sigs) != 0 {
       sig := sigs[len(sigs)-1]
       if plainClassifyProgrammer_arity_ok(checker, sig) {
@@ -1520,8 +1523,8 @@ func plainClassifyProgrammer_choose_seed(
 }
 
 // plainClassifyProgrammer_is_abstract reports whether the class TYPE is abstract
-// — its construct signature is un-`new`-able at runtime (`new C` throws "Cannot
-// create an instance of an abstract class"). The `abstract` keyword sits on the
+// — TypeScript rejects construction through its abstract construct signature,
+// although the abstract modifier is erased from JavaScript. The keyword sits on the
 // CLASS declaration, not the constructor declaration, so it is read from the
 // class symbol's declaration (the same node class_ref / emplace_metadata_object
 // read for Default/Private). An abstract class therefore field-copies, exactly
@@ -1532,10 +1535,10 @@ func plainClassifyProgrammer_is_abstract(static *shimchecker.Type) bool {
     return false
   }
   sym := static.Symbol()
-  if sym == nil || len(sym.Declarations) == 0 {
+  if sym == nil || len(shimast.SymbolDeclarationsOf(sym)) == 0 {
     return false
   }
-  return sym.Declarations[0].ModifierFlags()&shimast.ModifierFlagsAbstract != 0
+  return shimast.SymbolDeclarationsOf(sym)[0].ModifierFlags()&shimast.ModifierFlagsAbstract != 0
 }
 
 // plainClassifyProgrammer_ctor_public reports whether a construct signature is
@@ -1608,11 +1611,6 @@ func plainClassifyProgrammer_tuple_seed(checker *shimchecker.Checker, restParamT
   return args[0] // first element is the seed (P in `[infer P, ...Rest]`)
 }
 
-// plainClassifyProgrammer_validation_type returns the type assertClassify /
-// validateClassify must validate the INPUT against. For a class-TYPE target the
-// input is NOT typeof C: it is the from/new SEED (validate the seed), or, when
-// field-copy is selected, the instance shape. For an instance / plain type it
-// is the type itself. Mirrors the detection in plainClassifyProgrammer_initialize.
 // plainClassifyProgrammer_call_file resolves the absolute path of the classify
 // call site (from the Modulo node) — used to decide a same-file vs cross-module
 // class reference. "" when unresolvable.
@@ -1621,13 +1619,18 @@ func plainClassifyProgrammer_call_file(modulo *shimast.Node) string {
     return ""
   }
   if src := shimast.GetSourceFileOfNode(modulo); src != nil {
-    if abs, err := filepath.Abs(src.FileName()); err == nil {
+    if abs, err := filepath.Abs(string(src.FileName())); err == nil {
       return abs
     }
   }
   return ""
 }
 
+// plainClassifyProgrammer_validation_type returns the type assertClassify /
+// validateClassify must validate the INPUT against. For a class-TYPE target the
+// input is NOT typeof C: it is the from/new SEED (validate the seed), or, when
+// field-copy is selected, the instance shape. For an instance / plain type it
+// is the type itself. Mirrors the detection in plainClassifyProgrammer_initialize.
 func plainClassifyProgrammer_validation_type(ctx nativecontext.ITypiaContext, static *shimchecker.Type, callFile string) *shimchecker.Type {
   checker := ctx.Checker
   // class-TYPE UNION: assert/validate must check the SEED union (seedA | seedB |
@@ -1716,7 +1719,7 @@ func plainClassifyProgrammer_constructor_nature(checker *shimchecker.Checker, st
   // a class TYPE (typeof C): its symbol is a class declaration. This holds even
   // for a PRIVATE-constructor class (whose construct signature may be filtered
   // by accessibility), so the static-factory arm still applies — Point.from.
-  if sym := static.Symbol(); sym != nil && sym.Flags&shimast.SymbolFlagsClass != 0 {
+  if sym := static.Symbol(); sym != nil && shimast.SymbolFlagsOf(sym)&shimast.SymbolFlagsClass != 0 {
     return true
   }
   // a constructor type without a class symbol (anonymous class, `new () => X`)
@@ -1734,12 +1737,12 @@ func plainClassifyProgrammer_constructor_nature(checker *shimchecker.Checker, st
 // (same file), or a value import (default/named) when it is declared in another
 // module. Returns nil when the class symbol cannot be located.
 func plainClassifyProgrammer_class_ref(ctx nativecontext.ITypiaContext, static *shimchecker.Type, callFile string) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, ctx.Emit)
+  f := nativecontext.NodeFactoryOf(ctx.Emit)
   sym := static.Symbol()
-  if sym == nil || len(sym.Declarations) == 0 {
+  if sym == nil || len(shimast.SymbolDeclarationsOf(sym)) == 0 {
     return nil
   }
-  decl := sym.Declarations[0]
+  decl := shimast.SymbolDeclarationsOf(sym)[0]
   // The runtime value name to construct against. The class symbol name is not
   // always a usable binding: a class declared inside a `namespace` binds as
   // `NS.Inner.C` (mirror the qualified name the field-copy path derives), and a
@@ -1753,7 +1756,7 @@ func plainClassifyProgrammer_class_ref(ctx nativecontext.ITypiaContext, static *
       return nil
     }
   } else {
-    valueName = plainClassifyProgrammer_qualified_name(decl.Parent, sym.Name)
+    valueName = plainClassifyProgrammer_qualified_name(decl.Parent, shimast.SymbolNameOf(sym))
   }
   src := shimast.GetSourceFileOfNode(decl)
   // `default` (an anonymous `export default class {}`) and an empty name are not
@@ -1768,7 +1771,7 @@ func plainClassifyProgrammer_class_ref(ctx nativecontext.ITypiaContext, static *
   if src == nil {
     return bare
   }
-  classFileAbs, err := filepath.Abs(src.FileName())
+  classFileAbs, err := filepath.Abs(string(src.FileName()))
   if err != nil || callFile == "" || classFileAbs == callFile {
     return bare
   }
@@ -1858,7 +1861,7 @@ func plainClassifyProgrammer_is_default_export(
     if target == nil {
       continue
     }
-    if target == sym || (len(target.Declarations) != 0 && target.Declarations[0] == decl) {
+    if target == sym || (len(shimast.SymbolDeclarationsOf(target)) != 0 && shimast.SymbolDeclarationsOf(target)[0] == decl) {
       return true
     }
   }
@@ -1877,7 +1880,7 @@ func plainClassifyProgrammer_construct(
   input *shimast.Node,
   st *plainClassifyProgrammer_strategy,
 ) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, ctx.Emit)
+  f := nativecontext.NodeFactoryOf(ctx.Emit)
   decoded := plainClassifyProgrammer_decode(struct {
     Context  nativecontext.ITypiaContext
     Config   nativeinternal.FeatureProgrammer_IConfig
@@ -1922,14 +1925,10 @@ type plainClassifyProgrammer_member struct {
   Strategy *plainClassifyProgrammer_strategy
 }
 
-// plainClassifyProgrammer_union_members detects, per CLASS member of a union
-// target, its construction strategy (from/new) or field-copy, plus the seed /
-// instance-shape metadata used to discriminate the input. Non-class members
-// (e.g. `number` in `typeof A | number`) are omitted — they fall through to the
-// ordinary union-decode tail. Each member's seed/shape is analyzed into the
-// shared collection so its decode helpers are emitted. Members keep declaration
-// order; the runtime ladder is first-match-wins, matching how typia's is/validate
-// resolve a structurally ambiguous union.
+// plainClassifyProgrammer_union_members analyzes each union member into the
+// shared collection in checker order. Class members select from/new or
+// field-copy; non-class members use their own shapes. A pure non-class union
+// returns nil for ordinary decoding. The construction ladder uses first match.
 func plainClassifyProgrammer_union_members(
   ctx nativecontext.ITypiaContext,
   static *shimchecker.Type,
@@ -1989,12 +1988,10 @@ func plainClassifyProgrammer_union_members(
   return members
 }
 
-// plainClassifyProgrammer_construct_union emits the root construction for a union
-// of class types: a first-match ladder over the ordered members —
-// `if (is<seedA>(input)) return A.from/new(...); if (is<seedB>(input)) return ...`
-// — then a TAIL that runs the ordinary union decode, so a mixed `typeof A |
-// number` lets the non-class members (42) pass through unchanged. The whole thing
-// is an IIFE arrow (an EXPRESSION, never a bare Block).
+// plainClassifyProgrammer_construct_union emits a first-match ladder: class
+// members construct from decoded seeds, other members decode their own shapes.
+// The supplied tail handles no match; the root caller passes input unchanged.
+// The ladder is an IIFE expression, so it can be emitted as a return value.
 func plainClassifyProgrammer_construct_union(
   ctx nativecontext.ITypiaContext,
   config nativeinternal.FeatureProgrammer_IConfig,
@@ -2005,7 +2002,7 @@ func plainClassifyProgrammer_construct_union(
   tail *shimast.Node,
   isPrefix string,
 ) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, ctx.Emit)
+  f := nativecontext.NodeFactoryOf(ctx.Emit)
   statements := []*shimast.Node{}
   for _, member := range members {
     // isPrefix is "_i" (unvalidated) or "_yi" (validated). The validated ladder
@@ -2065,7 +2062,7 @@ type plainClassifyProgrammer_throwProps struct {
 }
 
 func plainClassifyProgrammer_create_throw_error(props plainClassifyProgrammer_throwProps) *shimast.Node {
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, props.Context.Emit)
+  f := nativecontext.NodeFactoryOf(props.Context.Emit)
   return f.NewExpressionStatement(
     f.NewCallExpression(
       plainClassifyProgrammer_internal(props.Context, "throwTypeGuardError"),
@@ -2102,7 +2099,7 @@ func plainClassifyProgrammer_internal(context nativecontext.ITypiaContext, name 
   if importer := context.Importer; importer != nil {
     return importer.Internal(name)
   }
-  f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, context.Emit)
+  f := nativecontext.NodeFactoryOf(context.Emit)
   return f.NewIdentifier(name)
 }
 
@@ -2111,7 +2108,7 @@ func plainClassifyProgrammer_import_type(context nativecontext.ITypiaContext, pr
     return importer.Type(props)
   }
   if str, ok := props.Name.(string); ok {
-    f := nativecontext.EmitFactoryOf(plainClassifyProgrammer_factory, context.Emit)
+    f := nativecontext.NodeFactoryOf(context.Emit)
     return f.NewTypeReferenceNode(f.NewIdentifier(str), f.NewNodeList(props.Arguments))
   }
   return props.Name.(*shimast.Node)
@@ -2148,32 +2145,9 @@ func plainClassifyProgrammer_errors(errors []nativefactories.MetadataFactory_IEr
   return output
 }
 
-func plainClassifyProgrammer_feature_explore(input any) nativeinternal.FeatureProgrammer_IExplore {
-  switch v := input.(type) {
-  case nativeinternal.FeatureProgrammer_IExplore:
-    return v
-  case *nativeinternal.FeatureProgrammer_IExplore:
-    return *v
-  default:
-    return nativeinternal.FeatureProgrammer_IExplore{}
-  }
-}
-
-func plainClassifyProgrammer_checker_explore(input any) nativeinternal.CheckerProgrammer_IExplore {
-  v := plainClassifyProgrammer_feature_explore(input)
-  return nativeinternal.CheckerProgrammer_IExplore{
-    Tracable: v.Tracable,
-    Source:   v.Source,
-    From:     v.From,
-    Postfix:  v.Postfix,
-    Start:    v.Start,
-  }
-}
-
-func plainClassifyProgrammer_checker_explore_with_postfix(input any, postfix string) nativeinternal.CheckerProgrammer_IExplore {
-  v := plainClassifyProgrammer_checker_explore(input)
-  v.Postfix = v.Postfix + postfix
-  return v
+func plainClassifyProgrammer_checker_explore_with_postfix(input nativeinternal.CheckerProgrammer_IExplore, postfix string) nativeinternal.CheckerProgrammer_IExplore {
+  input.Postfix = input.Postfix + postfix
+  return input
 }
 
 func plainClassifyProgrammer_explore_with(explore nativeinternal.FeatureProgrammer_IExplore, source string, from string) nativeinternal.FeatureProgrammer_IExplore {
