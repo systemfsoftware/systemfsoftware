@@ -1,5 +1,5 @@
 # Integration Testing
 
-Where an integration test's IO may run (in a container, never on the host), what it may never start (a child process), and the smells that mark a fake integration test. Work that writes or reviews an integration test must honor it.
+Where integration test I/O must run (in KVM microVMs booted per scope via `@systemfsoftware/effect-microsandbox`, never in containers or on the host), what host operations are forbidden, and when a test belongs in `e2e-testing` or must be deleted.
 
-Rules are top-level `.md` files with `title`, `applies_when` and `tags`, cited as `(pack: integration-testing, <file>.md)`. Rule text is evidence that `ce-plan` and `ce-code-review` quote, not an enforcement contract. Subfolders are storage the resolver never reads.
+Rules are top-level `.md` files with `title`, `applies_when` and `tags`, cited as `(pack: integration-testing, <file>.md)`. Rule text is evidence `ce-plan` and `ce-code-review` quote. Subfolders are storage the resolver ignores.
