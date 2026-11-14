@@ -108,11 +108,24 @@ jobs:
           echo "$out/bin" >> "$GITHUB_PATH"
           "$out/bin/stryker" --version
 
+      # One path per package, never a `**` glob: actions/cache walks a `**` pattern through every followed
+      # node_modules symlink, which took over seven minutes on the mutation runner for a run that saved nothing.
+      - id: incremental
+        name: Incremental report paths, one per package
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          {
+            echo 'paths<<PATHS'
+            deno eval 'for (const p of JSON.parse(Deno.env.get("PACKAGES"))) console.log(`${p}/reports/stryker-incremental.json`)'
+            echo PATHS
+          } >> "$GITHUB_OUTPUT"
+
       - name: Incremental cache (diff mode only)
         if: inputs.mode == 'diff'
         uses: actions/cache/restore@v6
         with:
-          path: "**/reports/stryker-incremental.json"
+          path: ${{ steps.incremental.outputs.paths }}
           key: mutation-incremental-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}
           restore-keys: mutation-incremental-
 
@@ -136,7 +149,7 @@ jobs:
       - uses: actions/cache/save@v6
         if: success()
         with:
-          path: "**/reports/stryker-incremental.json"
+          path: ${{ steps.incremental.outputs.paths }}
           key: mutation-incremental-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
