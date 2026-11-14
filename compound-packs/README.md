@@ -37,7 +37,7 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 | `configuration`       | How settings are declared, redacted and reach code                                         |
 | `package-surface`     | What a package exports, and the bump a surface change takes                                |
 | `testing`             | Behaviour tests, fakes, adapters, mutants, and that configuration gets no test             |
-| `integration-testing` | Where an integration test's IO runs                                                        |
+| `integration-testing` | Where an integration test's IO runs: KVM microVMs, never containers or the host            |
 | `e2e-testing`         | Where end-to-end tests live                                                                |
 | `property-testing`    | What makes a property a real property                                                      |
 | `ui-state`            | Atoms, commands and derivations in React code                                              |

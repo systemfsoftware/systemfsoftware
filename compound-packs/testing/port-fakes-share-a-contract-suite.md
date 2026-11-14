@@ -1,44 +1,22 @@
 ---
-title: A port's fake lives in the test tree, is built through the port's constructor and runs in one contract suite beside the real adapter; the one src/ exception is the Storybook preview's stand-ins and their fixture controls
+title: Port fakes live in tests/__fixtures__ and run in a pairwise contract suite beside the real adapter
 applies_when:
-  - writing a fake, stub or in-memory stand-in for a port or service, or adding an operation to a port that has one
-  - a module in src/ is imported only by tests
-  - a package wants to ship a test double to its consumers
-  - writing a Storybook stand-in for the I/O layer or the router, or its fixture controls
-  - deciding whether a stand-in or fake needs a contract suite, or whether a contract test can be removed
-tags: [testing, fake, contract-test, port, store, fixtures, test-double, storybook]
+  - writing or updating a fake, stub or stand-in for a port or service, or adding a port operation
+  - a module in src/ is imported only by tests, or a package exports a test double
+  - writing a Storybook I/O stand-in, router stand-in or fixture controls
+  - deciding whether a fake or stand-in needs a contract suite
+tags: [testing, fake, contract-test, port, store, test-double, storybook]
 ---
 
-Applies to: whoever writes, changes or reviews a test double of a port or service, a Storybook stand-in, or a contract suite, in any package or app.
+Build every port fake through the port's constructor (`Tag.of` inside `Layer.effect(Tag)` or `Layer.succeed(Tag)`), implementing every operation—never `Layer.mock`, partial objects, or type casts. Keep all test doubles in `tests/__fixtures__/`, never in `src/` and never published by a package.
 
-Build a port fake through the port's own service constructor (`Tag.of` inside `Layer.effect(Tag)` or `Layer.succeed(Tag)`), never `Layer.mock`, a partial object, a never-typed stub or a type assertion, and implement every operation of the port.
+Every port fake runs in a `pairwiseFor` contract suite in `tests/` against both the fake and the real adapter, covering every port operation (including declared tagged failures) and expecting identical results on both sides. Store suites verify read-after-write and non-mutating reads (plus further laws only where documented). Never delete a contract suite or compare a seeded fake against an empty real store. Outbound-port fakes expose read operations so Features can assert outbound effects in port terms.
 
-Every test double a package's tests use for its own ports or services lives under that package's `tests/__fixtures__`, never in src/. No package publishes a test double; a consumer builds its own.
-
-The one exception is the Storybook preview's stand-ins, each in a `__mocks__` folder beside the module it replaces, where `sb.mock` resolves it: the I/O layer stand-in `src/io/__mocks__/layer.ts`, the app's fixture-controls module `src/io/__mocks__/fixture-controls.ts`, which names the controls that steer the stand-in's timing and failures and holds no data, and the router stand-in `src/__mocks__/router.tsx` (ui-testing pack: stories-get-io-from-stand-ins-beside-the-io-module.md). Tests never import them. A contract suite reaches a stand-in only through its I/O module's own specifier: `vi.mock('<io module>')` with no factory loads the stand-in beside it, and `vi.importActual` of the same specifier loads the real module. That `vi.mock` only picks our own stand-in for the stand-in side; nothing on the real side is mocked. Stories never import `tests/__fixtures__`. Every service the I/O layer stand-in provides is a port fake, and the contract-suite paragraph below applies to it as to any other. The I/O layer stand-in owns the stand-in data. The fixture controls are built from primitives beside the stand-in, in `src/io/__mocks__/control-primitives.ts`; they move to a shared package only once a second app consumes them and only if that package has a non-test importer. The primitives are mechanism, not a test double, and are not modelled as an I/O service. The router stand-in is the real router on memory history, not a fake. Neither the primitives nor the router stand-in has a contract suite.
-
-Every port fake runs in one contract suite whose pairwise scenarios (`pairwiseFor`) run against the fake and the real adapter and expect the same result, the same tagged failure for a refused operation included. Every operation of the port appears in at least one scenario, and no test or story uses a fake that suite does not run. The suite lives in the `tests/` of the package or app whose tests or stories use the fake. A Storybook I/O layer stand-in's suite is `tests/<port>.contract.integration.test.ts` in the app's Node integration project; it is its own unit and lands before the first story that uses the stand-in (the ui-testing pack's worked-example-preview-stand-ins-story-and-contract-suite.md shows one whole). Each scenario reads only what it created through the port on both sides; never compare a stand-in's seed with an empty real store. A package that doubles another package's port writes its own contract suite through that package's published entry. The suite's Feature follows features-specify-our-systems-observable-behaviour.md.
-
-A store port's suite asserts read-after-write and that a read changes nothing; it asserts a further law (independent keys, last-write-wins) only where the port's documentation promises it.
-
-Prove a fake's fidelity by running the same suite on the real adapter, never by re-deriving a third party's documentation into the fake. A contract suite is required and is never removed as a low-value test: its Then reads what the port's caller gets back from each side, which is our behaviour, unlike a scenario that reads a third party's stand-in's received requests or an inline stub's record no contract suite runs (failing-tests-are-fixed-not-weakened.md). A fake's read operations (what an outbound port was sent) are how a Feature's Then reads that outbound effect (testing pack: scenarios-drive-the-consumer-entry-and-read-what-it-observes.md).
+**Storybook exception:** An app's Storybook preview stand-ins live beside their modules in `src/io/__mocks__/layer.ts` (owning stand-in data), `src/io/__mocks__/fixture-controls.ts` (named timing/failure controls built from `src/io/__mocks__/control-primitives.ts`, not an I/O service), and `src/__mocks__/router.tsx` (real router on memory history). Tests never import `__mocks__` directly; `tests/<port>.contract.integration.test.ts` uses factory-less `vi.mock('<io module>')` and `vi.importActual('<io module>')` to compare the stand-in against the real I/O module before any story uses it.
 
 ```typescript
-// WRONG: src/messages.fake.ts, imported only by tests
+// WRONG: src/messages.fake.ts with partial cast
 const fakeMessages = Layer.succeed(Messages)({ post: () => Effect.void } as unknown as MessagesShape)
-// WRONG: a story pushes data into a fixture module
-export const Shown = { beforeEach: () => setMessages([{ id: 'm-1', text: 'Hello' }]) }
-// WRONG: fixture controls modelled as an I/O service
-export class FixtureControls
-  extends Context.Service<FixtureControls, { readonly messages: Ref.Ref<ReadonlyArray<Message>> }>()(
-    'app/FixtureControls',
-  )
-{}
-// WRONG: the control primitives written into the app's named-controls module
-// src/io/__mocks__/fixture-controls.ts
-export const makeFault = (name: string) => {/* ... */}
-// WRONG: a shared package for the primitives, with one consuming app and only test importers
-import { makeFault } from '@app/fixture-controls'
-// RIGHT: tests/__fixtures__/messages.fake.ts, built through the port and run by the port's contract suite
+// RIGHT: tests/__fixtures__/messages.fake.ts via port constructor, run by contract suite
 export const MessagesFake = Layer.succeed(Messages)(Messages.of({ post: () => Effect.void }))
 ```

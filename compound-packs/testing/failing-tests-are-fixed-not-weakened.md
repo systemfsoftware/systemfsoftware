@@ -1,23 +1,20 @@
 ---
-title: A failing test is fixed in the code under test, never by weakening, emptying or deleting the test; a package that cannot be specified is removed or redesigned
+title: Fix failing tests in the code under test, never by weakening or deleting tests; remove or redesign unspecifiable packages
 applies_when:
-  - a test fails after a change
-  - a diff edits an assertion, an expected value or a test file's scenarios, or deletes a test
-  - deleting a package's behaviour tests, test configuration or test target
-  - deleting or replacing a Feature scenario that pins a third party, a decoder or the implementation
+  - a test fails after a code change
+  - a diff loosens an assertion, widens a tolerance, narrows property inputs or deletes a test
+  - removing a package's tests or replacing a Feature scenario
 tags: [testing, assertions, weakened-tests, deletion, package]
 ---
 
-Never turn a red test green by loosening what it asserts (exact value to partial or containment match, a named error to a broader one), widening a tolerance or time bound, narrowing the inputs a property draws, rewriting it so it cannot fail, or deleting a test, scenario or test file.
+Fix a red test in the code under test—never by loosening exact assertions to partial/containment matches, broadening expected error tags, widening tolerances or timeouts, narrowing property generators, or deleting tests.
 
-A change that removes a test proving a behaviour of our system either removes that behaviour or adds, in the same change, a test CI runs that proves it through the consumer's entry. Where that test is an effect-e2e test effect-e2e cannot yet express, the change deletes the fake and names the behaviour left uncovered and the effect-e2e work it waits for (e2e-testing pack: e2e-is-its-own-package-on-real-processes.md); it never keeps the fake as a placeholder.
+Removing a test that proves our system's behaviour is valid only if the behaviour itself is removed or the same change adds a CI-run test proving it through the consumer entry, running the shipped system when it needs real IO (sql-tests-are-not-behaviour-tests.md).
 
-A scenario whose Then reads only a third party's wire format, a configuration decoder's output or literals copied from the implementation proves no behaviour of ours: delete it with no replacement, while it passes. A Then over what a stand-in received (a third party's stand-in's wire-level record, or an inline stub's record that no contract suite runs) is deleted with question 4 (features-specify-our-systems-observable-behaviour.md); when its When drove the consumer entry, what our system sent is a behaviour of ours, and the same change replaces it with the same Then over the port's contract-suite fake's read operation, which is a consumer outcome: what our system sent through one of its own outbound ports, read in the port's terms. Judge each scenario on its own: one whose Then reads a consumer outcome is our behaviour and is rewritten in the consumer's terms, not deleted with its neighbours.
-
-When a package's tests are deleted because they break this pack, either remove the package and every caller's use of it, or redesign it so Features can specify its behaviour through its published surface, with the first slice in the same change. A package left with no tests, no test configuration or no test target and no Feature in their place is not done, except when its only replacement is an effect-e2e test that cannot yet be expressed: the change then names each behaviour left uncovered and the effect-e2e work it waits for, as the second paragraph requires.
+Scenarios whose `Then` checks only a third party's wire format, a config decoder, or copied implementation literals prove no behaviour of ours and are deleted without replacement. If a `When` drove the consumer entry and `Then` inspected an unverified stub's request log, replace the assertion with the port's contract-suite fake read operation in the same change. If a package's tests are deleted for breaking this pack, either delete the package and all callers or redesign it around a published consumer surface with its first passing Feature in the same diff.
 
 ```diff
-// WRONG: the failure is hidden, not fixed
+// WRONG: hiding a regression instead of fixing the calculation
 - expect(s.total).toBe(1_250)
 + expect(s.total).toBeGreaterThan(0)
 ```

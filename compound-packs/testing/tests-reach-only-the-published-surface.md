@@ -6,9 +6,9 @@ applies_when:
 tags: [testing, exports, imports-map, public-api]
 ---
 
-A test under tests/ imports its own package only by the package name and the entries its exports field declares for consumers, never by an imports-map (`#...`) specifier or a relative path into src/. The one exception is an app's Storybook stand-in contract suite, `tests/<port>.contract.integration.test.ts`, which imports the app's I/O module `src/io/layer.ts` under `vi.mock` and `vi.importActual` to reach the stand-in and the real module (port-fakes-share-a-contract-suite.md). It imports helpers only from `tests/__fixtures__`.
+Tests under `tests/` import their own package only through the public entries in `package.json` `exports`—never via `#...` imports maps, relative paths into `src/`, or test-only subpaths (`./testing`, `./test-utils`). Helpers come only from `tests/__fixtures__/`.
 
-Never add an imports map, a `./testing` or `./test-utils` subpath, or an export so a test can reach a module. A law about a pure module's own code is a unit or property test in src/, in-source or under src/**tests**, never under tests/, and builds no Feature.
+The sole exception is an app's Storybook stand-in contract suite (`tests/<port>.contract.integration.test.ts`), which reaches `src/io/layer.ts` via factory-less `vi.mock` and `vi.importActual` (`port-fakes-share-a-contract-suite.md`). Never add an imports map or export solely for tests; A law about a pure module stays in `src/`: an in-source `if (import.meta.vitest)` property block, or a workflow law as `src/**/__tests__/<stem>.workflow.property.test.ts` beside its `<stem>.workflow.ts` (lint: `no-test-file-in-src`). It builds no Feature.
 
 ```typescript
 // WRONG
