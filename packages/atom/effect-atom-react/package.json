@@ -83,7 +83,7 @@
     "@vitest/coverage-istanbul": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
-    "playwright": "1.64.1",
+    "playwright": "1.65.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-error-boundary": "catalog:",
