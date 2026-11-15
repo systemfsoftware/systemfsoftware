@@ -5,6 +5,7 @@ import {
   type BoundaryFunction,
   dispatchCalleeName,
   functionValueOf,
+  initializerOf,
   isEffectModuleBinding,
   isTestOrFixturePath,
   originMemberIs,
@@ -52,28 +53,42 @@ interface SandwichCell {
 
 const objectOf = (node: ESTree.Node): ESTree.Node | null => node.type === 'MemberExpression' ? node.object : null
 
+/** A link of the chain, read through the `const` bindings it was split across. */
+const throughConst = (
+  node: ESTree.Node | null,
+  getScope: (node: ESTree.Node) => unknown,
+  depth = 0,
+): ESTree.Node | null => {
+  if (node === null || node.type !== 'Identifier' || depth > 8) return node
+  const init = initializerOf(node, getScope)
+  return init === null ? node : throughConst(init, getScope, depth + 1)
+}
+
 /**
  * The Sandwich cells of the file, read off the chain `Sandwich.named(op)(read)
  * .decide(workflow).write(handlers)`: the read is the argument the named
  * builder is invoked with, the handlers are the record passed to `write`. The
  * chain is keyed on the import origin of `Sandwich.named`, so an aliased
  * import is the same gate and a same-named builder from another module is not
- * this gate's boundary.
+ * this gate's boundary. Each link is read through the `const` bindings a chain
+ * is split across, and the builder through its options-first form.
  */
 const collectSandwichCells = (context: Context): readonly SandwichCell[] => {
   const cells: SandwichCell[] = []
   const getScope = context.sourceCode.getScope
   walkSubtree(context.sourceCode.ast, context.sourceCode.visitorKeys, [], (node) => {
     if (node.type !== 'CallExpression' || !propertyNameIs(node.callee, 'write')) return true
-    const middleCall = objectOf(node.callee)
+    const middleCall = throughConst(objectOf(node.callee), getScope)
     if (middleCall === null || middleCall.type !== 'CallExpression') return true
     const builder = SANDWICH_CHAINS.find((chain) => propertyNameIs(middleCall.callee, chain.middle))
     if (builder === undefined) return true
-    const invocation = objectOf(middleCall.callee)
+    const invocation = throughConst(objectOf(middleCall.callee), getScope)
     if (invocation === null || invocation.type !== 'CallExpression') return true
-    const builderCall = invocation.callee
-    if (builderCall.type !== 'CallExpression') return true
-    const builderRef = builderCall.callee.type === 'CallExpression' ? builderCall.callee.callee : builderCall.callee
+    const builderCall = throughConst(invocation.callee, getScope)
+    if (builderCall === null || builderCall.type !== 'CallExpression') return true
+    const builderHead = throughConst(builderCall.callee, getScope)
+    if (builderHead === null) return true
+    const builderRef = builderHead.type === 'CallExpression' ? builderHead.callee : builderHead
     const origin = originOf(builderRef, getScope)
     if (origin === null || origin.source !== SANDWICH_SOURCE) return true
     if (!originMemberIs(origin, SANDWICH_OWNER, builder.builder)) return true

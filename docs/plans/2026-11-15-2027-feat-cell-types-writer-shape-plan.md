@@ -140,7 +140,7 @@ Measured on `stryker-js-effect` `main` on 2026-11-15:
   - It does not follow values through other bindings: a workflow passed through a variable is reported at that variable's source reference.
   - Before it merges, it gets an adversarial review for brittleness.
 - KTD6. **`monitoredRun` is shared, and a writer passes no decide stacktrace.** `annotateCellIdentity` writes `cell.decide_stacktrace` only when one is given. Both shapes keep one code path for span, histogram and `result_class`, so R4 cannot drift between them.
-- KTD7. **The straight-line shell rule covers the writer chain.** The rule keys a cell on its builder and middle call: `named` with `.decide`, and `writer` with `.decode`. It reads the builder whether options come first, `writer(options)(name)(read)`, or last. It reads only a chain written as one expression: a chain split across `const` bindings is not checked, for `named` as for `writer`. That limit predates this plan, and closing it is its own follow-up. Without this, a writer would be a place to put domain branching with no decision, no decision telemetry and no lint (R9).
+- KTD7. **The straight-line shell rule covers the writer chain.** The rule keys a cell on its builder and middle call: `named` with `.decide`, and `writer` with `.decode`. It reads the builder whether options come first, `writer(options)(name)(read)`, or last. It reads each link of the chain through the `const` bindings the chain is split across, for `named` as for `writer`. Without this, a writer would be a place to put domain branching with no decision, no decision telemetry and no lint (R9).
 
 ### Sequencing
 
@@ -171,7 +171,7 @@ U1 ships first, because the consumer migrations and U2's examples need it. U2 an
   - A failing read and a failing write each fail the run and are filed `infrastructure`.
   - A writer run stopped at every step is still filed under how it ended (conformance).
   - Types: the cell joins the channels of `read` and both handlers; a `read` that does not yield the encoded command is refused at `.decode`; a handler record missing a handler is refused.
-  - The shell rule passes a straight-line writer, and reports a branching writer `read` and a branching writer handler.
+  - The shell rule passes a straight-line writer, and reports a branching writer `read` and a branching writer handler. It also reports a branching `read` in the options-first form and in a chain split across `const` bindings, for both builders.
   - The existing `named` tests and the interruption conformance test pass unchanged (R5).
 - **Verification:** the package's typecheck, lint, test and api check are green.
 
@@ -257,10 +257,10 @@ On 2026-11-15, the U1 diff and this plan were given to a model from a different 
 
 A second round on the revised diff found these:
 
-| Finding                                                                                                                      | Outcome                                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| The shell rule misses the options-first form `writer(options)(name)(read)`                                                   | Accepted. It read only the name-first form, for `named` as well. It now reads both, with tests for each builder. |
-| The shell rule misses a chain split across `const` bindings                                                                  | Recorded as a known limit in KTD7. It predates this plan and applies to `named` the same way.                    |
-| `<name>.read`, `cell.stacktrace`, `cell.member_tags`, `cell.declared` and the absence of `app.<name>.failure` are unasserted | Accepted. All are now asserted.                                                                                  |
-| No writer test reports a branching `CommandRejected` or a `Match` pipeline                                                   | Accepted. Both are now tested.                                                                                   |
-| R8 misses workflows held in exported containers or default exports, and aliased imports                                      | Accepted into R8 and U3.                                                                                         |
+| Finding                                                                                                                      | Outcome                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The shell rule misses the options-first form `writer(options)(name)(read)`                                                   | Accepted. It read only the name-first form, for `named` as well. It now reads both, with tests for each builder.                                                                                                 |
+| The shell rule misses a chain split across `const` bindings                                                                  | Accepted. The gap predated this plan and applied to `named` too. The rule now resolves each link through `const` bindings, and three tests (split writer, split named, aliased builder) fail without the change. |
+| `<name>.read`, `cell.stacktrace`, `cell.member_tags`, `cell.declared` and the absence of `app.<name>.failure` are unasserted | Accepted. All are now asserted.                                                                                                                                                                                  |
+| No writer test reports a branching `CommandRejected` or a `Match` pipeline                                                   | Accepted. Both are now tested.                                                                                                                                                                                   |
+| R8 misses workflows held in exported containers or default exports, and aliased imports                                      | Accepted into R8 and U3.                                                                                                                                                                                         |

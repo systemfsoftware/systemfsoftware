@@ -383,6 +383,46 @@ export const stepCell = Sandwich.named({ boundaries: [1] })('supervisor.step')(
       errors: [controlError('ConditionalExpression', 'read')],
     },
     {
+      name: 'Should_ReportViolation_When_AWriterChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const reading = Sandwich.writer('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+const decoded = reading.decode(PrintReport)
+export const printCell = decoded.write({
+  Decoded: (command: { readonly failed: boolean }) => (command.failed ? Effect.fail(1) : Effect.succeed(0)),
+  CommandRejected: () => Effect.succeed(0),
+})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read'), controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ANamedChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const build = Sandwich.named('supervisor.step')
+const reading = build(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ at: 1 }) : Effect.succeed({ at: 0 })),
+)
+const decided = reading.decide((command) => command)
+export const stepCell = decided.write(${straightWrite})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AnAliasedWriterChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const writer = Sandwich.writer
+const reading = writer('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+export const printCell = reading.decode(PrintReport).write(${straightWriterHandlers})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
       name: 'Should_ReportViolation_When_AWriterReadBranches',
       code: writerOf(
         `(envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 }))`,
