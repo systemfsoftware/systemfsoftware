@@ -4,6 +4,7 @@ applies_when:
   - a test needs a module the package's public entries do not expose
   - adding an imports map, a subpath or an export so a test can reach a module
   - deciding where a third-party adapter or pure-module property test lives
+  - adding an in-source import.meta.vitest block to a module another package imports, or configuring a Worker bundle
 tags: [testing, exports, imports-map, public-api]
 ---
 
@@ -11,7 +12,7 @@ Tests under `tests/` import their own package only through the public entries in
 
 Never add an imports map, subpath, or export solely so a test can reach an internal module. When an app needs a third-party boundary adapter that must be driven by a contract suite (`port-fakes-share-a-contract-suite.md`), house that adapter in a library package imported by the app (its real consumer) and export it in that package's `exports` (`package-surface` pack: `subpaths-serve-consumers.md`).
 
-A law about a pure module stays in `src/`: an in-source `if (import.meta.vitest)` property block, or a workflow law at `src/**/__tests__/<stem>.workflow.property.test.ts` beside its `<stem>.workflow.ts`. It builds no Feature. (For Storybook stand-in contract suites, see `ui-testing` pack: `stories-get-io-from-stand-ins-beside-the-io-module.md`.)
+A law about a pure module stays in `src/`: an in-source `if (import.meta.vitest)` property block, or a workflow law at `src/**/__tests__/<stem>.workflow.property.test.ts` beside its `<stem>.workflow.ts`. It builds no Feature. Never put an in-source block in a module that another workspace package imports as source, such as one exported under a `source` condition; test it through the package's published entry under `tests/` (or as a workflow law at `src/**/__tests__/<stem>.workflow.property.test.ts` when the module is a workflow) instead. Every Worker build that bundles a module with an in-source block defines `import.meta.vitest` as `undefined`, so the block is dropped from the shipped bundle. (For Storybook stand-in contract suites, see `ui-testing` pack: `stories-get-io-from-stand-ins-beside-the-io-module.md`.)
 
 ```typescript
 // WRONG
