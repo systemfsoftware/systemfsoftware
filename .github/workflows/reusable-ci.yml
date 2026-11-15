@@ -96,6 +96,17 @@ jobs:
           extra_nix_config: |
             extra-substituters = https://nix.systemfsoftware.com
             extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      # Turbo's local cache (.turbo/cache), kept in GitHub's Actions cache. Every run restores the newest cache main
+      # saved, so a task whose inputs did not change replays instead of running; only main saves, so pull requests and
+      # queue drafts add no entries. GitHub lets a pull request read its base branch's caches.
+      - if: steps.scope.outputs.docs != 'true'
+        name: Restore the Turbo cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
       - if: steps.scope.outputs.docs != 'true'
         name: Install, lint the squash message, check the change intent, then run the checks
         env:
@@ -112,9 +123,17 @@ jobs:
             if [ "$LINT_COMMITS" = true ]; then
               pnpm exec commitlint --from "$BASE" --to "$HEAD" --verbose
             fi
-            # One pinned release of the change-intent tool for every repository, not whatever each dev shell carries.
+            # The change-intent tool from main of its own repository, the same for every caller, not whatever each dev shell
+            # carries.
             if [ "$CHECK_INTENT" = true ]; then
-              nix run "github:systemfsoftware/pnpm-release-management/ae663466c157a8e5b612c78091e17ddd32a030e0#changeset-management" -- check "$BASE"
+              nix run "github:systemfsoftware/pnpm-release-management#changeset-management" -- check "$BASE"
             fi
             eval "$COMMAND"
           '
+      # Turbo caches only tasks that passed, so a failed run still saves what it proved.
+      - if: "!cancelled() && steps.scope.outputs.docs != 'true' && github.event_name != 'pull_request'"
+        name: Save the Turbo cache
+        uses: actions/cache/save@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
