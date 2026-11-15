@@ -1,7 +1,4 @@
----
-"@systemfsoftware/oxlint-plugin-test-discipline": major
-"@systemfsoftware/oxlint-config-recommended": major
----
+# @systemfsoftware/oxlint-plugin-test-discipline@7.0.0
 
 A test is end-to-end by what it imports, not by a role its package declares. The `e2e` role is removed, and a leftover `role: 'e2e'` setting is ignored. An `effect-e2e/runner` import no longer selects the e2e lane.
 
@@ -24,3 +21,5 @@ Re-exports, `import()`, `require()`, an import of the `module` builtin's `create
 In the repository that builds the Gherkin harness, the harness is the repository's own code, so no Feature there is end-to-end.
 
 To migrate, delete `role: 'e2e'` from the package's lint settings. Write each end-to-end test as a `makeFeature` Feature in `tests/<subject>.e2e.ts` of a package that ships nothing.
+
+The oxlint configs and plugins now require oxlint ~1.93.0 and oxlint-tsgolint 7.0.2006 (and @effect/tsgo ^0.69.0 where they depend on it). The other packages only build and lint with the new tools; what they publish is unchanged.
