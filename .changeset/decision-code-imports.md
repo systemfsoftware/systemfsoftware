@@ -12,9 +12,10 @@ Add `decision-code-imports` to the recommended config at `error`. Decision code 
 - a relative import whose real path, after symlinks, is a `*.schema.ts` or `*.workflow.ts` file under the same package's real `src/`;
 - a binding imported from a package of the enclosing pnpm workspace, used only as a schema:
   - in a type;
-  - as a schema argument of an `S.*` or `Schema.*` call. Annotation, filter, transformation and `pipe` arguments are not schema arguments, and `decodeTo`/`encodeTo` take a schema only as their first argument;
-  - as a field value of the fields object of `Struct`, `TaggedStruct`, `Class`, `ErrorClass`, `TaggedClass` or `TaggedError`;
-  - as an element of the members of `Union`, `Tuple` or `Literals`;
+  - as an argument that an `S.*` or `Schema.*` combinator takes as a schema. The rule names each such combinator and argument, taken from the signatures of the pinned `effect` 4.1 `Schema` module, for example both arguments of `Record`, the argument of `Array`, `Option`, `optional` or `NullOr`, and the first argument of `decodeTo`. Any other argument, such as an options, annotations, filter or transformation argument, or an argument of a helper not on the list, is not a schema position;
+  - as the body of a zero-argument, non-async arrow passed to `suspend`;
+  - as a field value of the fields object of `Struct`, `TaggedStruct`, `Class`, `Error`, `TaggedClass` or `TaggedError`, or of a `TaggedUnion` case;
+  - as an element of the members of `Union`, `Tuple`, `Literals` or `TemplateLiteral`, or of the rest array of `TupleWithRest` or `StructWithRest`;
   - through either branch of a conditional, or through a `const` record used in one of those positions;
   - as the receiver of `.make`, `.is`, `.fields`, `.ast` or `.annotations`;
 - a package listed under `kernels` in `decision-code.json` at the workspace root, whose `proof` names an existing file whose real path is inside the repo.

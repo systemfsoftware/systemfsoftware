@@ -190,34 +190,166 @@ interface SchemaPositions {
 
 const MAX_RECORD_DEPTH = 4
 
-const FIELDS_ARGUMENT: Readonly<Record<string, { readonly curried: boolean; readonly index: number }>> = {
-  Struct: { curried: false, index: 0 },
-  TaggedStruct: { curried: false, index: 1 },
-  Class: { curried: true, index: 0 },
-  ErrorClass: { curried: true, index: 0 },
-  TaggedClass: { curried: true, index: 1 },
-  TaggedError: { curried: true, index: 1 },
+type ArgumentRole = 'schema' | 'fields' | 'members' | 'cases' | 'thunk' | null
+
+interface CombinatorArguments {
+  readonly direct: readonly ArgumentRole[]
+  readonly curried: readonly ArgumentRole[]
 }
 
-const MEMBER_LIST_COMBINATORS: ReadonlySet<string> = new Set(['Union', 'Tuple', 'Literals'])
+const SCHEMA: readonly ArgumentRole[] = ['schema']
+const NONE: readonly ArgumentRole[] = []
 
-const NON_SCHEMA_ARGUMENT_COMBINATORS: ReadonlySet<string> = new Set([
-  'annotations',
+const takes = (direct: readonly ArgumentRole[], curried: readonly ArgumentRole[] = NONE): CombinatorArguments => ({
+  direct,
+  curried,
+})
+
+const SCHEMA_TAKING = [
+  'Array',
+  'NonEmptyArray',
+  'UniqueArray',
+  'ArrayEnsure',
+  'mutable',
+  'optional',
+  'optionalKey',
+  'required',
+  'requiredKey',
+  'mutableKey',
+  'readonlyKey',
+  'toType',
+  'toEncoded',
+  'flip',
+  'NullOr',
+  'UndefinedOr',
+  'NullishOr',
+  'Option',
+  'OptionFromNullOr',
+  'OptionFromUndefinedOr',
+  'OptionFromNullishOr',
+  'OptionFromOptional',
+  'OptionFromOptionalKey',
+  'OptionFromOptionalNullOr',
+  'Redacted',
+  'RedactedFromValue',
+  'Chunk',
+  'HashSet',
+  'ReadonlySet',
+  'Tree',
+  'Literal',
+  'Enum',
+  'fromJsonString',
+  'fromFormData',
+  'fromURLSearchParams',
+  'is',
+  'asserts',
+  'decodeEffect',
+  'decodeExit',
+  'decodeOption',
+  'decodePromise',
+  'decodeResult',
+  'decodeSync',
+  'decodeUnknownEffect',
+  'decodeUnknownExit',
+  'decodeUnknownOption',
+  'decodeUnknownPromise',
+  'decodeUnknownResult',
+  'decodeUnknownSync',
+  'encodeEffect',
+  'encodeExit',
+  'encodeOption',
+  'encodePromise',
+  'encodeResult',
+  'encodeSync',
+  'encodeUnknownEffect',
+  'encodeUnknownExit',
+  'encodeUnknownOption',
+  'encodeUnknownPromise',
+  'encodeUnknownResult',
+  'encodeUnknownSync',
+  'isPropertyNames',
+  'overrideToCodecIso',
+  'resolveAnnotations',
+  'resolveAnnotationsKey',
+  'revealBottom',
+  'toCodecArrayFromSingle',
+  'toCodecGoJson',
+  'toCodecIso',
+  'toCodecJson',
+  'toCodecStringTree',
+  'toDifferJsonPatch',
+  'toEncoderXml',
+  'toEquivalence',
+  'toFormatter',
+  'toIso',
+  'toIsoFocus',
+  'toIsoSource',
+  'toJsonSchemaDocument',
+  'toRepresentation',
+  'toStandardJSONSchemaV1',
+  'toStandardSchemaV1',
+] as const
+
+const SELF_TAKING = [
   'annotate',
+  'annotateEncoded',
   'annotateKey',
+  'brand',
+  'catchDecoding',
+  'catchDecodingWithContext',
+  'catchEncoding',
+  'catchEncodingWithContext',
   'check',
-  'filter',
-  'makeFilter',
+  'decode',
+  'encode',
+  'encodeKeys',
+  'extendTo',
+  'link',
+  'middlewareDecoding',
+  'middlewareEncoding',
+  'Opaque',
+  'overrideToEquivalence',
+  'overrideToFormatter',
   'refine',
-  'transform',
-  'transformOrFail',
+  'toTaggedUnion',
   'withConstructorDefault',
   'withDecodingDefault',
   'withDecodingDefaultKey',
-  'pipe',
-])
+  'withDecodingDefaultType',
+  'withDecodingDefaultTypeKey',
+] as const
 
-const FIRST_ARGUMENT_ONLY_COMBINATORS: ReadonlySet<string> = new Set(['decodeTo', 'encodeTo'])
+const SCHEMA_ARGUMENTS: ReadonlyMap<string, CombinatorArguments> = new Map([
+  ...SCHEMA_TAKING.map((name) => [name, takes(SCHEMA)] as const),
+  ...SELF_TAKING.map((name) => [name, takes(NONE, SCHEMA)] as const),
+  ['decodeTo', takes(SCHEMA, SCHEMA)],
+  ['encodeTo', takes(SCHEMA, SCHEMA)],
+  ['Record', takes(['schema', 'schema'])],
+  ['ReadonlyMap', takes(['schema', 'schema'])],
+  ['HashMap', takes(['schema', 'schema'])],
+  ['Result', takes(['schema', 'schema'])],
+  ['Cause', takes(['schema', 'schema'])],
+  ['CauseReason', takes(['schema', 'schema'])],
+  ['Exit', takes(['schema', 'schema', 'schema'])],
+  ['Graph', takes([null, 'schema', 'schema'])],
+  ['suspend', takes(['thunk'])],
+  ['TaggedUnion', takes(['cases'])],
+  ['Struct', takes(['fields'])],
+  ['TaggedStruct', takes([null, 'fields'])],
+  ['fieldsAssign', takes(['fields'], SCHEMA)],
+  ['Class', takes(NONE, ['fields'])],
+  ['Error', takes(NONE, ['fields'])],
+  ['TaggedClass', takes(NONE, [null, 'fields'])],
+  ['TaggedError', takes(NONE, [null, 'fields'])],
+  ['Union', takes(['members'])],
+  ['Tuple', takes(['members'])],
+  ['Literals', takes(['members'])],
+  ['TemplateLiteral', takes(['members'])],
+  ['TemplateLiteralParser', takes(['members'])],
+  ['TupleWithRest', takes(['schema', 'members'])],
+  ['StructWithRest', takes(['schema', 'members'])],
+  ['declareConstructor', takes(NONE, ['members'])],
+])
 
 const stripInstantiation = (node: ESTree.Node): ESTree.Node =>
   node.type === 'TSInstantiationExpression' ? node.expression : node
@@ -225,9 +357,11 @@ const stripInstantiation = (node: ESTree.Node): ESTree.Node =>
 const isCurriedCall = (call: ESTree.CallExpression): boolean =>
   stripInstantiation(call.callee).type === 'CallExpression'
 
-const fieldsIndexOf = (call: ESTree.CallExpression, combinator: string): number | null => {
-  const entry = FIELDS_ARGUMENT[combinator]
-  return entry !== undefined && entry.curried === isCurriedCall(call) ? entry.index : null
+const argumentRoleOf = (call: ESTree.CallExpression, index: number, positions: SchemaPositions): ArgumentRole => {
+  const combinator = positions.combinatorOf(call)
+  const entry = combinator === null ? undefined : SCHEMA_ARGUMENTS.get(combinator)
+  if (entry === undefined || index < 0) return null
+  return (isCurriedCall(call) ? entry.curried : entry.direct)[index] ?? null
 }
 
 const climbValueWrappers = (expression: ESTree.Node): ESTree.Node => {
@@ -255,8 +389,8 @@ const isTaggedUnionCases = (cases: ESTree.Node | null, positions: SchemaPosition
   if (cases === null || cases.type !== 'ObjectExpression') return false
   const node = climbValueWrappers(cases)
   const call = node.parent
-  return call !== null && call.type === 'CallExpression' && argumentIndexOf(call, node) === 0 &&
-    positions.combinatorOf(call) === 'TaggedUnion'
+  return call !== null && call.type === 'CallExpression' &&
+    argumentRoleOf(call, argumentIndexOf(call, node), positions) === 'cases'
 }
 
 type ContainerKind = 'fields' | 'members'
@@ -272,10 +406,7 @@ const isContainerValue = (
   const parent = node.parent
   if (parent === null) return false
   if (parent.type === 'CallExpression') {
-    const index = argumentIndexOf(parent, node)
-    const combinator = index === -1 ? null : positions.combinatorOf(parent)
-    if (combinator === null) return false
-    return kind === 'fields' ? fieldsIndexOf(parent, combinator) === index : MEMBER_LIST_COMBINATORS.has(combinator)
+    return argumentRoleOf(parent, argumentIndexOf(parent, node), positions) === kind
   }
   if (
     kind === 'fields' && parent.type === 'Property' && parent.value === node &&
@@ -295,12 +426,11 @@ const isContainerValue = (
   return false
 }
 
-const isDirectSchemaArgument = (call: ESTree.CallExpression, index: number, positions: SchemaPositions): boolean => {
-  const combinator = positions.combinatorOf(call)
-  if (combinator === null) return false
-  if (FIELDS_ARGUMENT[combinator] !== undefined) return fieldsIndexOf(call, combinator) === index
-  if (NON_SCHEMA_ARGUMENT_COMBINATORS.has(combinator)) return false
-  return !FIRST_ARGUMENT_ONLY_COMBINATORS.has(combinator) || index === 0
+const isSuspendedSchema = (arrow: ESTree.Node, positions: SchemaPositions): boolean => {
+  if (arrow.type !== 'ArrowFunctionExpression' || arrow.async || arrow.params.length > 0) return false
+  const call = arrow.parent
+  return call !== null && call.type === 'CallExpression' &&
+    argumentRoleOf(call, argumentIndexOf(call, arrow), positions) === 'thunk'
 }
 
 const isSchemaPosition = (expression: ESTree.Node, positions: SchemaPositions): boolean => {
@@ -308,9 +438,10 @@ const isSchemaPosition = (expression: ESTree.Node, positions: SchemaPositions): 
   const parent = node.parent
   if (parent === null) return false
   if (parent.type === 'CallExpression') {
-    const index = argumentIndexOf(parent, node)
-    return index !== -1 && isDirectSchemaArgument(parent, index, positions)
+    const role = argumentRoleOf(parent, argumentIndexOf(parent, node), positions)
+    return role !== null && role !== 'thunk'
   }
+  if (parent.type === 'ArrowFunctionExpression' && parent.body === node) return isSuspendedSchema(parent, positions)
   if (parent.type === 'Property' && parent.value === node && parent.parent !== null) {
     return parent.parent.type === 'ObjectExpression' && isContainerValue(parent.parent, 'fields', positions, 0)
   }

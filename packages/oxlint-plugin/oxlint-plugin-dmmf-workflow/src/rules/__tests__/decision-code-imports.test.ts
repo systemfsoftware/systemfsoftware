@@ -281,6 +281,37 @@ export const Leg = S.TaggedUnion({ Measured: { wallMs: PI.Millis }, Skipped: {} 
       filename: SCHEMA,
     },
     {
+      name: 'Should_Pass_When_WorkspaceSchemasFillTheSchemaArgumentsOfEffectSchemaCombinators',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Orders = S.NonEmptyArray(PI.Order)
+export const Maybe = S.Option(PI.Order)
+export const Nullable = S.NullishOr(S.UndefinedOr(S.NullOr(PI.Order)))
+export const Line = S.Struct({ a: S.optional(PI.Order), b: S.optionalKey(PI.Order) })
+export const ByKey = S.Record(PI.Key, PI.Order)
+export const Lookup = S.ReadonlyMap(PI.Key, PI.Order)
+export const Rows = S.mutable(S.Array(PI.Order))
+export const Branded = S.brand('Id')(PI.Order)
+export const parse = S.decodeUnknownSync(PI.Order)`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_ASuspendThunkReturnsAWorkspaceSchema',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Lazy = S.suspend(() => PI.Order)
+export const Typed = S.suspend((): S.Codec<PI.Order> => PI.Order)`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_TupleWithRestTakesWorkspaceSchemas',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Rest = S.TupleWithRest(PI.Pair, [PI.Order, PI.Line])
+export const Inline = S.TupleWithRest(S.Tuple([PI.Order]), [PI.Line])`,
+      filename: SCHEMA,
+    },
+    {
       name: 'Should_Pass_When_SchemaIsImportedFromTheEffectSchemaSubpath',
       code: `import * as Schema from 'effect/Schema'
 ${NAMESPACE_IMPORT}
@@ -518,6 +549,32 @@ export class Titled extends S.Class<Titled>('Titled')({ a: S.String }, { title: 
 export const Leg = S.TaggedUnion({ Measured: { wallMs: { nested: PI.Millis } } })`,
       filename: SCHEMA,
       errors: [
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+      ],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceBindingIsAnArgumentNoEffectSchemaCombinatorTakesAsASchema',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Group = S.makeFilterGroup(PI.checks)
+export const Payment = S.Union([PI.Card, PI.Cash], PI.unionOptions)
+export const Line = S.Struct({ sku: PI.Sku }, PI.structOptions)
+export const Titled = S.Struct({ sku: PI.Sku }, { title: PI.title })
+export const Widget = S.instanceOf(PI.Widget)
+export const Extra = S.TupleWithRest(PI.Pair, [PI.Order], PI.extra)
+export const Lazy = S.suspend(PI.thunk)
+export const Late = S.suspend(async () => PI.Order)
+export const Called = S.suspend((input) => PI.Order)`,
+      filename: SCHEMA,
+      errors: [
+        workspaceUse('PI'),
+        workspaceUse('PI'),
         workspaceUse('PI'),
         workspaceUse('PI'),
         workspaceUse('PI'),
