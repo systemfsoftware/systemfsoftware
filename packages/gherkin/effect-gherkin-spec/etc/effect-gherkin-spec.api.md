@@ -152,6 +152,15 @@ export { it }
 
 export { layer }
 
+// @public
+export type LiveDeclaration<RRerun> = {
+    readonly live?: string;
+    readonly rerun?: never;
+} | {
+    readonly live: string;
+    readonly rerun?: Effect$1.Effect<Top, StepError, RRerun>;
+};
+
 // @public (undocumented)
 export const makeFeature: (deps: EffectVitestBindings) => FeatureFn;
 
@@ -216,13 +225,13 @@ export const renderTitle: {
 
 // @public (undocumented)
 export const resolveScenarioArgs: {
-    <R = never>(third: Effect$1.Effect<Top, StepError, R> | undefined): (second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined) => {
+    <R = never>(third: Effect$1.Effect<Top, StepError, R> | undefined): (second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined) => {
         pipeline: Effect$1.Effect<Top, StepError, R>;
-        opts: ScenarioOptions<never, never> | null;
+        opts: ScenarioOptions<never, never, R> | null;
     };
-    <R = never>(second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined, third: Effect$1.Effect<Top, StepError, R> | undefined): {
+    <R = never>(second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined, third: Effect$1.Effect<Top, StepError, R> | undefined): {
         pipeline: Effect$1.Effect<Top, StepError, R>;
-        opts: ScenarioOptions<never, never> | null;
+        opts: ScenarioOptions<never, never, R> | null;
     };
 };
 
@@ -238,11 +247,10 @@ export type ScenarioFn<RShared = never, RFresh = never, RFreshReq = never> = Sce
 };
 
 // @public (undocumented)
-export type ScenarioOptions<RScenario = never, RExtra = never> = {
+export type ScenarioOptions<RScenario = never, RExtra = never, RRerun = never> = {
     readonly scenarioLayer?: Layer$1.Layer<RScenario>;
     readonly layer?: Layer$1.Layer<RExtra>;
-    readonly live?: string;
-};
+} & LiveDeclaration<RRerun>;
 
 // @public
 export type ScenarioRun<R = never> = (expect: Expect) => Effect$1.Effect<void, StepError, R | Scope.Scope | Asserted>;
@@ -349,9 +357,9 @@ export type WhenStage = {
 // dist/index.d.ts:114:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:122:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:155:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:210:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:216:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:318:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:170:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:228:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:336:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

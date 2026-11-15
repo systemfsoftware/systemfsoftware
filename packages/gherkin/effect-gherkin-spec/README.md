@@ -37,6 +37,8 @@ Feature('Borrowing a library book')
 
 A whole feature stays on the live clock with `Feature('Name').live('the reason it waits on real I/O')`, and a scenario outline takes the same reason through `opts.live`. A live declaration without a reason fails type-checking; there is no boolean form.
 
+Every passing scenario runs a second time on fresh services, to find state kept outside its layer. A live scenario whose first run waits on something that happens once, such as a person approving a sign-in in a browser, names what that second run executes instead with `{ live: reason, rerun: pipeline }`. The rerun pipeline runs over the same layers, so the second run still finds leaked state without asking for the act again. Like the first pipeline, it must end in a `Then`. Outlines do not take `rerun`.
+
 Scenario outlines parameterise the same behaviour across example rows, each row running through the same kernel exploration:
 
 ```ts

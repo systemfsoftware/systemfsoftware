@@ -44,6 +44,7 @@ export {
 export { resolveScenarioArgs } from './FeatureRuntime.js'
 export type {
   HeadlessPipelineRejected,
+  LiveDeclaration,
   OutlineFn,
   ScenarioBody,
   ScenarioFn,
