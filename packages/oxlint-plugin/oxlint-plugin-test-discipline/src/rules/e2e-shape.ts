@@ -30,7 +30,8 @@ const attempt = <A>(read: () => A): Option.Option<A> => {
 const mtimeOf = (path: string): number | undefined => Option.getOrUndefined(attempt(() => statSync(path).mtimeMs))
 
 const exportsSomething = (exports: unknown): boolean =>
-  exports !== undefined && !(typeof exports === 'object' && exports !== null && Object.keys(exports).length === 0)
+  exports !== undefined && exports !== null && exports !== '' &&
+  !(typeof exports === 'object' && Object.keys(exports).length === 0)
 
 const shapes = new Map<string, { readonly mtime: number | undefined; readonly shape: PackageShape }>()
 
@@ -109,12 +110,17 @@ const nameOf = (node: ESTree.Node): string | undefined =>
     ? node.property.name
     : literalOf(node.property)
 
+const importedNameOf = (specifier: ESTree.ImportSpecifier): string | undefined =>
+  specifier.imported.type === 'Identifier' ? specifier.imported.name : literalOf(specifier.imported)
+
+const TYPE_POSITIONS =
+  /^TS(?!AsExpression$|SatisfiesExpression$|NonNullExpression$|TypeAssertion$|InstantiationExpression$|ExportAssignment$|EnumDeclaration$|ModuleDeclaration$|ImportEqualsDeclaration$|ExternalModuleReference$|ParameterProperty$)/
+
 const importsALoader = (node: ESTree.ImportDeclaration): boolean =>
   !isTypeOnly(node) && MODULE_LOADERS.has(node.source.value) &&
   node.specifiers.some((specifier) =>
     specifier.type !== 'ImportSpecifier' ||
-    (specifier.importKind !== 'type' && specifier.imported.type === 'Identifier' &&
-      specifier.imported.name === 'createRequire')
+    (specifier.importKind !== 'type' && importedNameOf(specifier) === 'createRequire')
   )
 
 const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
@@ -128,6 +134,7 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
     }
     if (!isNode(node)) continue
     if (node.type === 'ImportSpecifier' && node.importKind === 'type') continue
+    if (TYPE_POSITIONS.test(node.type)) continue
     if (node.type === 'Identifier' && LOADER_NAMES.has(node.name)) edges.push({ specifier: undefined, typeOnly: false })
     if (node.type === 'ImportDeclaration') {
       edges.push(
@@ -240,7 +247,7 @@ const staysInTests = (shape: PackageShape, file: string): boolean => {
 }
 
 export const reachOf = (shape: PackageShape, filename: string, program: ESTree.Program): Reach | undefined => {
-  const seen = new Set<string>([filename])
+  const seen = new Map<string, boolean>([[filename, false]])
   const pending = [{ file: filename, edges: edgesOf(program), typeOnly: false }]
   let typeReach: Reach | undefined
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
@@ -251,8 +258,9 @@ export const reachOf = (shape: PackageShape, filename: string, program: ESTree.P
         const local = edge.specifier === undefined
           ? undefined
           : sourceFileOf(resolve(dirname(next.file), edge.specifier))
-        if (local !== undefined && !seen.has(local)) {
-          seen.add(local)
+        const walkedAsType = local === undefined ? undefined : seen.get(local)
+        if (local !== undefined && (walkedAsType === undefined || (walkedAsType && !edge.typeOnly))) {
+          seen.set(local, edge.typeOnly)
           if (!staysInTests(shape, local)) {
             return { kind: edge.typeOnly ? 'type' : 'value', specifier: edge.specifier ?? local, file: next.file }
           }

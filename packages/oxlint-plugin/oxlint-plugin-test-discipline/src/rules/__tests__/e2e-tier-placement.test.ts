@@ -58,6 +58,7 @@ write(
   JSON.stringify({ name: '@example/quiet', exports: { '.': './index.js' } }),
 )
 write('apps/sealed-e2e/package.json', JSON.stringify({ name: '@example/sealed-e2e', private: true, exports: {} }))
+write('apps/nulled-e2e/package.json', JSON.stringify({ name: '@example/nulled-e2e', private: true, exports: null }))
 
 const runsAsRoot = process.getuid?.() === 0
 installed('example-driver')
@@ -111,6 +112,11 @@ ruleTester.run('e2e-tier-placement', plugin.rules['e2e-tier-placement'], {
       name: 'Should_Pass_When_AnE2eFeaturesPackageHasAnEmptyExportsMap',
       code: `${GHERKIN}${DRIVER}`,
       filename: at('apps/sealed-e2e/tests/buying.e2e.ts'),
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeaturesPackageHasANullExportsMap',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/nulled-e2e/tests/buying.e2e.ts'),
     },
     {
       name: 'Should_Pass_When_AnE2eFeatureImportsAnUnprefixedNodeBuiltin',
@@ -219,6 +225,18 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       filename: JOURNEY,
     },
     {
+      name: 'Should_NameItE2e_When_ALoaderIsNamedOnlyInATypePosition',
+      code:
+        `${GHERKIN}${DRIVER}type BuiltinGetter = typeof process.getBuiltinModule\ninterface Loader { createRequire: () => void }\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_NameItIntegration_When_AFixtureIsImportedAsATypeAndThenAsAValue',
+      code:
+        `${GHERKIN}import type { total as Total } from './__fixtures__/reaching.ts'\nimport { total } from './__fixtures__/reaching.ts'\n`,
+      filename: INTEGRATION,
+    },
+    {
       name: 'Should_IgnoreALeftoverE2eRole_When_TheFeatureReachesNothingOfOurs',
       code: `${GHERKIN}${DRIVER}`,
       filename: JOURNEY,
@@ -264,6 +282,14 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       ...suffix(
         JOURNEY,
         `${GHERKIN}const { createRequire: load } = await import('node:module')\nconst core = load(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsCreateRequireByAStringName',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}import { 'createRequire' as load } from 'node:module'\nconst core = load(import.meta.url)('@example/core')\n`,
         '.integration.test.ts',
       ),
     },
