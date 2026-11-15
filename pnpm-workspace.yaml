@@ -87,7 +87,6 @@ overrides:
   esbuild: ^0.28.2
 packages:
   - packages/*
-  - packages/atom/*
   - packages/gherkin/*
   - packages/oxlint-plugin/*
   - packages/oxlint-presets/*
