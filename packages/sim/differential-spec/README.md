@@ -54,7 +54,7 @@ Both builders take `.on(arbitrary, options)` with:
 | `runBudget` | Number of generated inputs to run (default `100`)                                                |
 | `hostBound` | `{ timeout, reason }` for a target that touches the host, which the kernel cannot bound in steps |
 
-A check has no wall-clock limit. Each generated input runs on the simulation kernel, which bounds every run in steps. A target that touches the host — a real file, socket, or timer — does work the kernel cannot bound that way, so such a check declares `hostBound` instead: the wall-clock bound it needs, and the host work that bound exists for.
+A check has no wall-clock limit. Each generated input runs on the simulation kernel, which bounds every run in steps. A target that touches the host — a real file, socket, or timer — does work the kernel cannot bound that way, so such a check declares `hostBound` instead: the wall-clock bound it needs, and the host work that bound exists for. A host-bound check runs each generated input once on Effect's own runtime rather than the kernel, so it explores no schedules: fast-check still shrinks a failing input, and the report names the host-bound reason in place of a schedule.
 
 ## Outside the builders
 
@@ -74,7 +74,7 @@ A run answers a `DifferentialReport`: `holds` is whether the relation held, and 
 
 ## Notes
 
-- Every comparison runs both sides on the simulation kernel under explored schedules, and a failure report names the schedule that produced it. `name` becomes the test's name.
-- Targets are plain `Effect` values and may be asynchronous: `Effect.sleep` advances virtual time, and a promise that settles without host I/O resolves inside the run. A target that waits on a real timer, file, or socket fails the comparison with a report naming the wait.
+- Every comparison without `hostBound` runs both sides on the simulation kernel under explored schedules, and a failure report names the schedule that produced it. `name` becomes the test's name.
+- Targets are plain `Effect` values and may be asynchronous: `Effect.sleep` advances virtual time, and a promise that settles without host I/O resolves inside the run. A target that waits on a real timer, file, or socket fails the comparison with a report naming the wait, unless the check declares `hostBound`.
 - Checks register through `@systemfsoftware/vitest`, so run them under Vitest; each `.assert` / `.relation` call adds one test to the suite.
 - One side crashing is a discrepancy, not an abort: agreeing refusals (same failure fingerprint) still pass.

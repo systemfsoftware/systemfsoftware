@@ -408,7 +408,7 @@ const failureReportOf = <Input, Described, OutputA, OutputB, E>(
 
 const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => details.failed || details.interrupted
 
-const checked = <Input, Described, OutputA, OutputB, E>(
+const exploredChecked = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
 ): Promise<DifferentialReport> => {
   const property = fc.asyncProperty(
@@ -420,6 +420,98 @@ const checked = <Input, Described, OutputA, OutputB, E>(
     isReported(details) ? failureReportOf(comparison, details) : held
   )
 }
+
+const liveExitsOf = <OutputA, OutputB, E>(
+  program: DualProgram<OutputA, OutputB, E>,
+): Promise<Exits<OutputA, OutputB, E>> => Effect.runPromise(program)
+
+const liveAgreed = <OutputA, OutputB, E>(
+  exits: Exits<OutputA, OutputB, E>,
+  oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+): boolean => Schema.is(Agreed)(judgementOf(exits, oracle))
+
+interface LastDisagreement<OutputA, OutputB, E> {
+  exits: Option.Option<Exits<OutputA, OutputB, E>>
+}
+
+const liveCaseHolds = <Input, Described, OutputA, OutputB, E>(
+  comparison: Comparison<Input, Described, OutputA, OutputB, E>,
+  last: LastDisagreement<OutputA, OutputB, E>,
+) =>
+(input: Input): Promise<boolean> => {
+  const program = programOf(comparison, input)
+  if (program === undefined) return Promise.resolve(false)
+  return liveExitsOf(program).then((exits) => {
+    const agreed = liveAgreed(exits, comparison.oracle)
+    if (!agreed) last.exits = Option.some(exits)
+    return agreed
+  })
+}
+
+const liveDisparityOf = <Input, Described, OutputA, OutputB, E>(
+  details: FailedCase<Input>,
+  described: Described,
+  bound: HostBound,
+  exits: Exits<OutputA, OutputB, E>,
+): DifferentialReport =>
+  disparate(formatDisparity({
+    input: described,
+    outputA: renderExit(exits[0]),
+    outputB: renderExit(exits[1]),
+    trace:
+      `fc seed ${details.seed}, path "${details.counterexamplePath}"; ran once on Effect's runtime, host-bound: ${bound.reason}`,
+    reproSnippet: reproOf(details.seed, details.counterexamplePath),
+  }))
+
+const liveCounterexampleReport = <Input, Described, OutputA, OutputB, E>(
+  comparison: Comparison<Input, Described, OutputA, OutputB, E>,
+  details: FailedCase<Input>,
+  bound: HostBound,
+  last: LastDisagreement<OutputA, OutputB, E>,
+): DifferentialReport => {
+  const [input] = details.counterexample
+  const followUp = followUpOf(comparison.secondInput, input)
+  if (!followUp.ok) return transformThrewReport(details, input, followUp.error)
+  const described = comparison.describeInput(input, followUp.value)
+  return Option.match(last.exits, {
+    onNone: () => inconclusiveReport(details),
+    onSome: (exits) => liveDisparityOf(details, described, bound, exits),
+  })
+}
+
+const liveFailureReportOf = <Input, Described, OutputA, OutputB, E>(
+  comparison: Comparison<Input, Described, OutputA, OutputB, E>,
+  details: fc.RunDetails<[Input, number]>,
+  bound: HostBound,
+  last: LastDisagreement<OutputA, OutputB, E>,
+): DifferentialReport =>
+  isFailedWithCounterexample(details)
+    ? liveCounterexampleReport(comparison, details, bound, last)
+    : inconclusiveReport(details)
+
+const liveChecked = <Input, Described, OutputA, OutputB, E>(
+  comparison: Comparison<Input, Described, OutputA, OutputB, E>,
+  bound: HostBound,
+): Promise<DifferentialReport> => {
+  const last: LastDisagreement<OutputA, OutputB, E> = { exits: Option.none() }
+  const holds = liveCaseHolds(comparison, last)
+  const property = fc.asyncProperty(
+    comparison.arb,
+    fc.constant(0),
+    (...[input]: [Input, number]) => holds(input),
+  )
+  return fc.check(property, toFcParameters<Input>(comparison.options)).then((details) =>
+    isReported(details) ? liveFailureReportOf(comparison, details, bound, last) : held
+  )
+}
+
+const checked = <Input, Described, OutputA, OutputB, E>(
+  comparison: Comparison<Input, Described, OutputA, OutputB, E>,
+): Promise<DifferentialReport> =>
+  Option.match(Option.fromNullishOr(comparison.options?.hostBound), {
+    onNone: () => exploredChecked(comparison),
+    onSome: (bound) => liveChecked(comparison, bound),
+  })
 
 const supervised = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
