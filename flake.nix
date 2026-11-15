@@ -19,9 +19,20 @@
       url = "github:systemfsoftware/pnpm-release-management/43f24b21b3c475acd03eb576bba6cf48d7ca8e2f";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Stryker ships only as this flake package (bin/stryker and its plugins in one
+    # lib/node_modules tree); its npm release has no bin. The mutation scripts run
+    # the CLI from it, and the packages that type their configs, and scripts/,
+    # read the library from the same tree, so the CLI and its contract never differ.
+    stryker-js-effect = {
+      url = "github:systemfsoftware/stryker-js-effect";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.comment-checker.follows = "comment-checker";
+      inputs.gritlint.follows = "gritlint";
+      inputs.pnpm-release-management.follows = "pnpm-release-management";
+    };
   };
 
-  outputs = { self, nixpkgs, comment-checker, gritlint, pnpm-release-management }:
+  outputs = { self, nixpkgs, comment-checker, gritlint, pnpm-release-management, stryker-js-effect }:
     let
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
@@ -48,9 +59,10 @@
             comment-checker = unwrapped;
           };
           workspace = workspaceOf pkgs;
+          stryker = stryker-js-effect.packages.${pkgs.stdenv.hostPlatform.system}.stryker;
           denoTool = import ./nix/deno-tool.nix { inherit (pkgs) lib writeShellApplication deno; };
           own = {
-            inherit dprint;
+            inherit dprint stryker;
             inherit (gritlint.packages.${pkgs.stdenv.hostPlatform.system}) gritlint gritlint-unwrapped;
             # scripts/tools/test-timings.ts for any pnpm workspace: `plan` asks
             # pnpm for the workspace's packages; `part` and `merge` read it.
@@ -82,6 +94,7 @@
         default = pkgs.mkShell {
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
+            self.packages.${pkgs.stdenv.hostPlatform.system}.stryker
             self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
             pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox
             pkgs.nodejs_24
@@ -90,6 +103,11 @@
             self.packages.${pkgs.stdenv.hostPlatform.system}.bun
           ];
           SANDBOX_PNPM_STORE = self.packages.${pkgs.stdenv.hostPlatform.system}.pnpm-store;
+          # `.stryker` is the Stryker tree's lib/node_modules: the `link:` the packages
+          # that type their configs install, and the paths scripts/deno.jsonc maps.
+          shellHook = ''
+            ln -sfn ${self.packages.${pkgs.stdenv.hostPlatform.system}.stryker}/lib/node_modules "$(git rev-parse --show-toplevel)/.stryker"
+          '';
         };
       });
     };

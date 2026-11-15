@@ -1,0 +1,15 @@
+name: Stryker from the flake
+description: >-
+  Put this flake's Stryker package on PATH and link its lib/node_modules at .stryker, as the dev shell's shellHook
+  does: the packages that type their Stryker configs install `link:` to it, and scripts/tools/mutation-probe.contract.test.ts
+  checks scripts/deno.jsonc against it. Needs Nix.
+
+runs:
+  using: composite
+  steps:
+    - name: Stryker from the flake
+      shell: bash -e {0}
+      run: |
+        out="$(nix build --no-link --print-out-paths .#stryker)"
+        echo "$out/bin" >> "$GITHUB_PATH"
+        ln -sfn "$out/lib/node_modules" .stryker

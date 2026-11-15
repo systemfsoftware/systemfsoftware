@@ -20,6 +20,14 @@ runs:
     - if: inputs.lane == 'plan'
       shell: bash -e {0}
       run: corepack enable
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          extra-substituters = https://nix.systemfsoftware.com
+          extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      if: inputs.lane == 'plan'
+    - uses: ./.github/actions/stryker-from-flake
+      if: inputs.lane == 'plan'
     - name: The scripts/tools suite, including the planner on a foreign workspace
       if: inputs.lane == 'plan'
       shell: bash -e {0}
@@ -36,6 +44,8 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      if: inputs.lane == 'static'
+    - uses: ./.github/actions/stryker-from-flake
       if: inputs.lane == 'static'
     - name: dprint from the flake
       if: inputs.lane == 'static'
@@ -232,6 +242,8 @@ runs:
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
       if: inputs.lane == 'affected'
+    - uses: ./.github/actions/stryker-from-flake
+      if: inputs.lane == 'affected'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'affected'
     - name: Turbo cache
@@ -287,6 +299,8 @@ runs:
         extra_nix_config: |
           extra-substituters = https://nix.systemfsoftware.com
           extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      if: inputs.lane == 'test'
+    - uses: ./.github/actions/stryker-from-flake
       if: inputs.lane == 'test'
     - uses: denoland/setup-deno@v2
       if: inputs.lane == 'test'

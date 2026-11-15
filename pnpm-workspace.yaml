@@ -67,11 +67,6 @@ catalogs:
     "@oxlint/plugins": ~1.93.0
     oxlint-tsgolint: 7.0.2006
   stryker:
-    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": latest
-    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": latest
-    "@systemfsoftware/stryker-js": latest
-    "@systemfsoftware/stryker-js-typescript-checker": latest
-    "@systemfsoftware/stryker-js-vitest-runner": latest
     "mutation-testing-elements": 3.9.0
 minimumReleaseAge: 4320
 minimumReleaseAgeExclude:
