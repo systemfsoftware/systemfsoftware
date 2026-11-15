@@ -9,11 +9,11 @@ applies_when:
 tags: [testing, behaviour-test, bdd, gherkin, feature, given-when-then, scenario-outline]
 ---
 
-A Feature specifies one capability of our system in the consumer's terms (the user, calling code, or operator) and names that capability in its file and title (`placing-an-order.integration.test.ts`, "Placing an order"). Never make a third party, protocol, library, configuration layer, schema, decoder, or internal unit the subject.
+A Feature specifies one capability of our system in the consumer's terms (the user, calling code, or operator) and names that capability in its file and title (`placing-an-order.integration.test.ts`, "Placing an order"). Never make a third party, its wire format, a protocol, library, configuration layer, schema, decoder, or internal unit the subject.
 
 Given prepares starting state via fixtures, fake parameters, or the system's own operations; it never runs the When action, returns nothing asserted, and produces every fact its text claims. A scenario has one When that drives the exact entry production consumers use (published operation, route, command, page)—never a rebuilt fixture or internal helper. Scenario outline rows vary inputs and outcomes of one When, never which unit is called.
 
-Then reads only what the consumer observes: the entry's return value or tagged failure, state read back through our system's own operations, or what our system sent through an outbound port read in that port's terms via its contract-suite fake's read operation. Never query a store directly in Then, never assert a third-party stand-in's wire-level request log, and never name internal units, files, layers, or unexposed settings in step text.
+Then reads only what the consumer observes: the entry's return value or tagged failure, state read back through our system's own operations, or what our system sent through an outbound port read in that port's terms via its contract-suite fake's read operation. Never query a store directly in Then, never assert raw vendor responses or a stand-in's wire-level request log, and never name internal units, files, layers, or unexposed settings in step text.
 
 ## Rubric
 
@@ -26,7 +26,7 @@ Judge each scenario by its step bodies and layers, never by retitled text:
 5. **Backed world:** Does `.withScenarioLayer(...)` provide the world the Givens claim (not `Layer.empty` under stateful Givens)?
 6. **Declarative text:** Does step wording describe _what_ happens in consumer terms without naming internal functions, layers, wire formats, or unexposed settings?
 
-**Verdict:** If a scenario fails 1, 2, 4, 5, or 6, delete it; if its Then checked a real consumer outcome (or queried our store for one, failing 3), replace it in the same change with a valid scenario, running the shipped system when it needs real IO (sql-tests-are-not-behaviour-tests.md). If a scenario fails 3 alone by querying our store directly, rewrite only the Then to read through our system's operations.
+**Verdict:** If a scenario fails 1, 2, 4, 5, or 6, delete it; if its Then checked a real consumer outcome (or queried our store for one, failing 3), replace it in the same change with a valid scenario, running the shipped system when it needs real IO (`sql-tests-are-not-behaviour-tests.md`). If a scenario fails 3 alone by querying our store directly, rewrite only the Then to read through our system's operations.
 
 ```typescript
 // WRONG: internal layer/stubs, no-op Given, wire-level stand-in assertion

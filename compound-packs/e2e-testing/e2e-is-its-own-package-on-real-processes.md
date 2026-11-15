@@ -7,7 +7,7 @@ applies_when:
 tags: [e2e, effect-e2e, real-processes, tiers]
 ---
 
-Put end-to-end tests in a package of their own (such as `apps/<service>-e2e`) and nowhere else: never in a package's `tests/` beside its integration tests, and never named or shaped as an integration test.
+Put end-to-end tests in a package of their own (such as `apps/<service>-e2e`) as `<subject>.e2e.ts` (never `.e2e.test.ts`, which fails `laneMismatch`) and nowhere else: never in a package's `tests/` beside its integration tests, and never named or shaped as an integration test.
 
 An E2E run drives the system as it ships (the real binary or server) with its services running alongside, and asserts what a person or calling system observes: an HTTP response, a page, a CLI's output and exit, state read back through the system's own API. It never imports the code under test's internals.
 
