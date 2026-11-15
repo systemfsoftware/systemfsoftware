@@ -44,9 +44,9 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   whose class is imported is out of reach.
  * - `decision-code-imports` - every `*.workflow.ts` and `*.schema.ts` file
  *   under `src/` reaches only decision code: effect, effect-cell-types,
- *   relative `.schema`/`.workflow` modules, workspace bindings used as
- *   schemas, and kernels the repo's `decision-code.json` names. Existing
- *   offenders are carried by exact path in that file's `legacy` list.
+ *   relative `.schema`/`.workflow` files of the same package's `src/`,
+ *   workspace bindings used as schemas, and kernels the repo's
+ *   `decision-code.json` names with an existing proof file.
  */
 const recommendedRules = {
   [rule('make-file-location')]: 'error',

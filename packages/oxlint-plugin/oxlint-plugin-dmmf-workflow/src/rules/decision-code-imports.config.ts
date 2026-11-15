@@ -51,23 +51,24 @@ export const RE_EXPORT_FIX =
 export const DISABLE_DIRECTIVE_ACTUAL = 'the inline directive "{{directive}}", which silences this rule' as const
 
 export const DISABLE_DIRECTIVE_FIX =
-  'delete the directive and fix what it silenced; an existing offender is carried only by its exact path in the legacy list of decision-code.json' as const
+  'delete the directive and fix what it silenced; no comment or setting inside the file exempts decision code' as const
 
-export const STALE_LEGACY_ACTUAL =
-  'a legacy entry for {{path}} in decision-code.json, though the file now has no finding to carry' as const
+export const SIDE_EFFECT_IMPORT_ACTUAL =
+  "a side-effect import of the workspace package {{source}}, which runs that package's module code in decision code and imports no schema" as const
 
-export const STALE_LEGACY_FIX = 'delete "{{path}}" from the legacy list in decision-code.json' as const
+export const SIDE_EFFECT_IMPORT_FIX =
+  'delete the import, and import by name the schemas the decision uses from {{source}}' as const
 
 export const MANIFEST_UNREADABLE_ACTUAL = '{{path}} cannot be read as a decision-code manifest: {{reason}}' as const
 
 export const MANIFEST_UNREADABLE_FIX =
-  'make the file a JSON object {"legacy": [<repo-relative path>...], "kernels": [{"package": <name>, "proof": <proof target>}...]}' as const
+  'make the file a JSON object {"kernels": [{"package": <name>, "proof": <repo-relative path of an existing file that proves the package pure>}...]}' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Decision code - every *.workflow.ts and *.schema.ts file under a package src/ - reaches only other decision code. Across the whole file, a runtime reference resolves only to effect, @systemfsoftware/effect-cell-types, a relative *.schema / *.workflow module, a workspace package binding used as a schema, or a proved kernel named in the repo-level decision-code.json. A plain relative module, any other package, a call or alias of a workspace binding, import(), require() and export ... from are reported. Type-only imports are ignored, and so is an in-source test block guarded by import.meta.vitest. An inline disable directive that would silence the rule is reported itself; existing offenders are carried only by exact path in the legacy list of decision-code.json, and an entry whose file is clear is reported.',
+      'Decision code - every *.workflow.ts and *.schema.ts file under a package src/ - reaches only other decision code. Across the whole file, a runtime reference resolves only to effect, @systemfsoftware/effect-cell-types, a relative module that resolves to a *.schema.ts or *.workflow.ts file under the same package src/, a workspace package binding used as a schema, or a proved kernel named in the repo-level decision-code.json with an existing proof file. A plain or out-of-package relative module, any other package, a side-effect import of a workspace package, a call or alias of a workspace binding, import(), any reference to require, import = require() and export ... from are reported. Type-only imports are ignored, and so is an in-source test block guarded by import.meta.vitest. An inline disable directive that would silence the rule is reported itself, and no list of existing offenders exempts a file.',
   },
   schema: [],
   messages: {
@@ -77,7 +78,7 @@ export const meta = {
     dynamicImport: MESSAGE,
     reExport: MESSAGE,
     disableDirective: MESSAGE,
-    staleLegacyEntry: MESSAGE,
+    sideEffectImport: MESSAGE,
     manifestUnreadable: MESSAGE,
   },
 } as const

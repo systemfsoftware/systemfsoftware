@@ -3,7 +3,8 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { findWorkspaceDirSync } from '@pnpm/workspace.root-finder'
 import { isImportMetaVitestTest, isInsideConsequent } from '@systemfsoftware/oxlint-import-origin'
 import { isPackageOfEnclosingWorkspace, packageNameOf } from '@systemfsoftware/oxlint-import-origin/workspace'
-import { dirname, relative, sep } from 'node:path'
+import { statSync } from 'node:fs'
+import { dirname, resolve, sep } from 'node:path'
 import {
   DECISION_FILE_SUFFIXES,
   DECISION_MODULE_SUFFIXES,
@@ -24,8 +25,8 @@ import {
   RE_EXPORT_FIX,
   RULE_NAME,
   SCHEMA_MEMBERS,
-  STALE_LEGACY_ACTUAL,
-  STALE_LEGACY_FIX,
+  SIDE_EFFECT_IMPORT_ACTUAL,
+  SIDE_EFFECT_IMPORT_FIX,
   WORKSPACE_BINDING_ACTUAL,
   WORKSPACE_BINDING_FIX,
 } from './decision-code-imports.config.js'
@@ -39,7 +40,7 @@ export type MessageIds =
   | 'dynamicImport'
   | 'reExport'
   | 'disableDirective'
-  | 'staleLegacyEntry'
+  | 'sideEffectImport'
   | 'manifestUnreadable'
 
 interface Finding {
@@ -93,6 +94,35 @@ const isDecisionFile = (filename: string): boolean =>
 
 const isRelative = (source: string): boolean => source.startsWith('./') || source.startsWith('../')
 
+const isFile = (path: string): boolean => {
+  try {
+    return statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
+
+const packageRootOf = (filename: string): string | null => {
+  let directory = dirname(filename)
+  for (;;) {
+    if (isFile(resolve(directory, 'package.json'))) return directory
+    const parent = dirname(directory)
+    if (parent === directory) return null
+    directory = parent
+  }
+}
+
+const sourceFileCandidatesOf = (specifierPath: string): readonly string[] =>
+  specifierPath.endsWith('.js') ? [`${specifierPath.slice(0, -'.js'.length)}.ts`, specifierPath] : [specifierPath]
+
+const resolvesToDecisionFileOfSamePackage = (source: string, filename: string): boolean => {
+  const packageRoot = packageRootOf(filename)
+  if (packageRoot === null) return false
+  const sourceRoot = `${resolve(packageRoot, 'src')}${sep}`
+  const resolved = sourceFileCandidatesOf(resolve(dirname(filename), source)).find(isFile)
+  return resolved !== undefined && resolved.startsWith(sourceRoot) && isDecisionFile(resolved)
+}
+
 const isOpenPackage = (source: string): boolean =>
   OPEN_PACKAGES.some((name) => source === name || source.startsWith(`${name}/`))
 
@@ -100,7 +130,8 @@ const classifySource = (source: string, filename: string, manifest: DecisionCode
   if (isOpenPackage(source)) return 'open'
   if (isRelative(source)) {
     const basename = basenameOf(source)
-    return DECISION_MODULE_SUFFIXES.some((suffix) => basename.endsWith(suffix)) ? 'decisionModule' : 'plainModule'
+    const hasDecisionSuffix = DECISION_MODULE_SUFFIXES.some((suffix) => basename.endsWith(suffix))
+    return hasDecisionSuffix && resolvesToDecisionFileOfSamePackage(source, filename) ? 'decisionModule' : 'plainModule'
   }
   const packageName = packageNameOf(source)
   if (packageName !== null && manifest.kernels.has(packageName)) return 'open'
@@ -141,9 +172,6 @@ const directiveSilencingRule = (comment: { readonly value: string }): string | n
   const silences = rules.length === 0 || rules.some((rule) => rule === RULE_NAME || rule.endsWith(`/${RULE_NAME}`))
   return silences ? comment.value.trim() : null
 }
-
-const repoRelativePath = (root: string | undefined, filename: string): string | null =>
-  root === undefined ? null : relative(root, filename).split(sep).join('/')
 
 interface SchemaPositions {
   readonly isSchemaCallee: (callee: ESTree.Node) => boolean
@@ -187,6 +215,11 @@ const isSchemaArgument = (expression: ESTree.Node, positions: SchemaPositions, r
       current = parent
       continue
     }
+    if (parent.type === 'ConditionalExpression') {
+      if (parent.test === current) return false
+      current = parent
+      continue
+    }
     if (parent.type === 'Property') {
       if (parent.value !== current) return false
       current = parent
@@ -205,6 +238,19 @@ const isSchemaArgument = (expression: ESTree.Node, positions: SchemaPositions, r
     return false
   }
 }
+
+const isRequireIdentifier = (node: ESTree.Node): boolean => {
+  if (node.type !== 'Identifier' || node.name !== 'require') return false
+  const parent = node.parent
+  if (parent === null) return true
+  if (parent.type === 'Property' && parent.key === node && !parent.computed && !parent.shorthand) return false
+  return !TYPE_CONTEXT_TYPES.has(parent.type)
+}
+
+const isRequireReference = (node: ESTree.Node): boolean =>
+  isRequireIdentifier(node) ||
+  (node.type === 'MemberExpression' && node.computed && node.property.type === 'Literal' &&
+    node.property.value === 'require')
 
 const calleeRootOf = (callee: ESTree.Node): ESTree.Node => {
   let current = callee
@@ -231,7 +277,6 @@ export const decisionCodeImports = defineRule({
 
     const root = findWorkspaceDirSync(dirname(filename))
     const read = readDecisionCodeManifest(root)
-    const relativePath = repoRelativePath(root, filename)
 
     const report = (finding: Finding): void => {
       context.report({
@@ -313,10 +358,10 @@ export const decisionCodeImports = defineRule({
               if (specifiers.length === 0) {
                 findings.push({
                   node: statement,
-                  messageId: 'foreignSourceImport',
+                  messageId: 'sideEffectImport',
                   name: `a side-effect import of ${source}`,
-                  actual: FOREIGN_SOURCE_ACTUAL.replace('{{source}}', source),
-                  fix: FOREIGN_SOURCE_FIX,
+                  actual: SIDE_EFFECT_IMPORT_ACTUAL.replace('{{source}}', source),
+                  fix: SIDE_EFFECT_IMPORT_FIX.replace('{{source}}', source),
                 })
               }
               for (const specifier of specifiers) {
@@ -341,15 +386,6 @@ export const decisionCodeImports = defineRule({
               actual: RE_EXPORT_ACTUAL.replace('{{source}}', source),
               fix: RE_EXPORT_FIX.replace('{{source}}', source),
             })
-          } else if (statement.type === 'TSImportEqualsDeclaration' && statement.importKind !== 'type') {
-            if (statement.moduleReference.type !== 'TSExternalModuleReference') continue
-            findings.push({
-              node: statement,
-              messageId: 'dynamicImport',
-              name: 'an import = require(...) declaration',
-              actual: DYNAMIC_IMPORT_ACTUAL.replace('{{form}}', 'import = require(...)'),
-              fix: DYNAMIC_IMPORT_FIX,
-            })
           }
         }
 
@@ -371,16 +407,26 @@ export const decisionCodeImports = defineRule({
               actual: DYNAMIC_IMPORT_ACTUAL.replace('{{form}}', 'import()'),
               fix: DYNAMIC_IMPORT_FIX,
             })
+          } else if (isRequireReference(node)) {
+            findings.push({
+              node,
+              messageId: 'dynamicImport',
+              name: 'a reference to require',
+              actual: DYNAMIC_IMPORT_ACTUAL.replace('{{form}}', 'require'),
+              fix: DYNAMIC_IMPORT_FIX,
+            })
           } else if (
-            node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require'
+            node.type === 'TSImportEqualsDeclaration' && node.importKind !== 'type' &&
+            node.moduleReference.type === 'TSExternalModuleReference'
           ) {
             findings.push({
               node,
               messageId: 'dynamicImport',
-              name: 'a require() call',
-              actual: DYNAMIC_IMPORT_ACTUAL.replace('{{form}}', 'require()'),
+              name: 'an import = require(...) declaration',
+              actual: DYNAMIC_IMPORT_ACTUAL.replace('{{form}}', 'import = require(...)'),
               fix: DYNAMIC_IMPORT_FIX,
             })
+            return
           }
           for (const key of visitorKeys[node.type] ?? []) {
             const child = value[key]
@@ -415,16 +461,6 @@ export const decisionCodeImports = defineRule({
           }
         }
 
-        if (relativePath !== null && manifest.legacy.has(relativePath)) {
-          if (findings.length > 0) return
-          reportAtFileStart(
-            'staleLegacyEntry',
-            'a stale legacy entry',
-            STALE_LEGACY_ACTUAL.replace('{{path}}', relativePath),
-            STALE_LEGACY_FIX.replace('{{path}}', relativePath),
-          )
-          return
-        }
         for (const finding of findings) report(finding)
       },
     }

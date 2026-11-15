@@ -19,8 +19,8 @@ import {
   PLAIN_MODULE_FIX,
   RE_EXPORT_ACTUAL,
   RE_EXPORT_FIX,
-  STALE_LEGACY_ACTUAL,
-  STALE_LEGACY_FIX,
+  SIDE_EFFECT_IMPORT_ACTUAL,
+  SIDE_EFFECT_IMPORT_FIX,
   WORKSPACE_BINDING_ACTUAL,
   WORKSPACE_BINDING_FIX,
 } from '../decision-code-imports.config.js'
@@ -48,10 +48,14 @@ const plant = async (root: string, files: Readonly<Record<string, string>>): Pro
 const WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-workspace-'))
 const BROKEN_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-broken-'))
 const PROOFLESS_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-proofless-'))
+const MISSING_PROOF_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-missing-proof-'))
+const LEGACY_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-legacy-'))
 
 vitest.afterAll(async () => {
   await Promise.all(
-    [WORKSPACE, BROKEN_WORKSPACE, PROOFLESS_WORKSPACE].map((root) => rm(root, { recursive: true, force: true })),
+    [WORKSPACE, BROKEN_WORKSPACE, PROOFLESS_WORKSPACE, MISSING_PROOF_WORKSPACE, LEGACY_WORKSPACE].map((root) =>
+      rm(root, { recursive: true, force: true })
+    ),
   )
 })
 
@@ -64,12 +68,27 @@ const workspaceFiles = (manifest: string): Readonly<Record<string, string>> => (
   'decision-code.json': manifest,
 })
 
+const KERNEL_PROOF = 'packages/kernel/src/__tests__/kernel.property.test.ts'
+
+await plant(WORKSPACE, {
+  ...workspaceFiles(JSON.stringify({ kernels: [{ package: '@acme/kernel', proof: KERNEL_PROOF }] })),
+  [KERNEL_PROOF]: '',
+  'packages/app/src/order.schema.ts': '',
+  'packages/app/src/place-order.workflow.ts': '',
+  'packages/app/src/next.workflow.ts': '',
+  'packages/app/src/money/money.schema.ts': '',
+  'packages/app/scripts/seed.schema.ts': '',
+  'packages/app/src/dir.schema/index.ts': '',
+  'packages/domain/src/price.schema.ts': '',
+  'test-utils/fixture.schema.ts': '',
+})
 await plant(
-  WORKSPACE,
-  workspaceFiles(JSON.stringify({
-    legacy: ['packages/app/src/carried.workflow.ts', 'packages/app/src/cleared.workflow.ts'],
-    kernels: [{ package: '@acme/kernel', proof: 'packages/kernel/src/__tests__/kernel.property.test.ts' }],
-  })),
+  LEGACY_WORKSPACE,
+  workspaceFiles(JSON.stringify({ legacy: ['packages/app/src/order.schema.ts'], kernels: [] })),
+)
+await plant(
+  MISSING_PROOF_WORKSPACE,
+  workspaceFiles(JSON.stringify({ kernels: [{ package: '@acme/kernel', proof: KERNEL_PROOF }] })),
 )
 await plant(BROKEN_WORKSPACE, workspaceFiles('{ "legacy": '))
 await plant(PROOFLESS_WORKSPACE, workspaceFiles(JSON.stringify({ kernels: [{ package: '@acme/kernel' }] })))
@@ -115,6 +134,24 @@ const reExport = (source: string) =>
     RE_EXPORT_FIX.replace('{{source}}', source),
   )
 
+const sideEffectImport = (source: string) =>
+  finding(
+    'sideEffectImport',
+    `a side-effect import of ${source}`,
+    SIDE_EFFECT_IMPORT_ACTUAL.replace('{{source}}', source),
+    SIDE_EFFECT_IMPORT_FIX.replace('{{source}}', source),
+  )
+
+const requireReference = dynamicImport('a reference to require', 'require')
+
+const unreadable = (root: string, reason: string) =>
+  finding(
+    'manifestUnreadable',
+    'an unreadable decision-code.json',
+    MANIFEST_UNREADABLE_ACTUAL.replace('{{path}}', join(root, 'decision-code.json')).replace('{{reason}}', reason),
+    MANIFEST_UNREADABLE_FIX,
+  )
+
 const disableDirective = (directive: string) =>
   finding(
     'disableDirective',
@@ -134,7 +171,7 @@ const helper = (order: Order) => Order.is(order)`,
     },
     {
       name: 'Should_Pass_When_ASchemaImportsRelativeSchemaAndWorkflowModules',
-      code: `import { Money } from '../money/money.schema.ts'
+      code: `import { Money } from './money/money.schema.ts'
 import { placeOrder } from './place-order.workflow.js'
 export const Order = Money
 export const decide = placeOrder`,
@@ -193,6 +230,22 @@ export type RowFields = typeof rowFields`,
       filename: SCHEMA,
     },
     {
+      name: 'Should_Pass_When_ANamedSchemaMemberOfEffectSchemaIsTheCallee',
+      code: `import { Array as SArray, Struct } from 'effect/Schema'
+${NAMESPACE_IMPORT}
+export const Line = Struct({ items: SArray(PI.Item) })`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_BothBranchesOfAConditionalAreSchemaUses',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+import { Money } from '@acme/domain'
+const strict = true
+export const Line = S.Struct({ price: strict ? PI.Price : Money, items: S.Array(strict ? PI.Item : PI.LooseItem) })`,
+      filename: SCHEMA,
+    },
+    {
       name: 'Should_Pass_When_SchemaIsImportedFromTheEffectSchemaSubpath',
       code: `import * as Schema from 'effect/Schema'
 ${NAMESPACE_IMPORT}
@@ -233,12 +286,6 @@ export const view = format`,
       code: `// oxlint-disable-next-line no-console
 export const x = 1`,
       filename: WORKFLOW,
-    },
-    {
-      name: 'Should_Pass_When_ALegacyListedFileStillHasFindingsToCarry',
-      code: `import { format } from './format.js'
-export const view = format`,
-      filename: join(WORKSPACE, 'packages/app/src/carried.workflow.ts'),
     },
   ],
   invalid: [
@@ -318,7 +365,7 @@ export const read = () => [readFileSync, Ledger]`,
       errors: [
         foreignSource('node:fs'),
         foreignSource('@acme/unlisted'),
-        foreignSource('@acme/domain', 'a side-effect import of @acme/domain'),
+        sideEffectImport('@acme/domain'),
       ],
     },
     {
@@ -326,7 +373,7 @@ export const read = () => [readFileSync, Ledger]`,
       code: `export const load = () => import('./order.schema.js')
 export const legacy = () => require('./order.schema.js')`,
       filename: WORKFLOW,
-      errors: [dynamicImport('an import() expression', 'import()'), dynamicImport('a require() call', 'require()')],
+      errors: [dynamicImport('an import() expression', 'import()'), requireReference],
     },
     {
       name: 'Should_Report_When_DecisionCodeReExports',
@@ -350,16 +397,59 @@ export const describe = formatTotal`,
       ],
     },
     {
-      name: 'Should_Report_When_ALegacyEntryHasNothingLeftToCarry',
-      code: `import { Order } from './order.schema.js'
-export const decide = Order`,
-      filename: join(WORKSPACE, 'packages/app/src/cleared.workflow.ts'),
+      name: 'Should_Report_When_ASchemaSuffixedImportResolvesOutsideThePackageSrc',
+      code: `import { Seed } from '../scripts/seed.schema.js'
+import { Fixture } from '../../../test-utils/fixture.schema.js'
+import { Price } from '../../domain/src/price.schema.js'
+export const all = [Seed, Fixture, Price]`,
+      filename: WORKFLOW,
       errors: [
-        finding(
-          'staleLegacyEntry',
-          'a stale legacy entry',
-          STALE_LEGACY_ACTUAL.replace('{{path}}', 'packages/app/src/cleared.workflow.ts'),
-          STALE_LEGACY_FIX.replace('{{path}}', 'packages/app/src/cleared.workflow.ts'),
+        plainModule('../scripts/seed.schema.js'),
+        plainModule('../../../test-utils/fixture.schema.js'),
+        plainModule('../../domain/src/price.schema.js'),
+      ],
+    },
+    {
+      name: 'Should_Report_When_ASchemaSuffixedImportResolvesToADirectoryOrNothing',
+      code: `import { Dir } from './dir.schema.js'
+import { Gone } from './missing.workflow.js'
+export const all = [Dir, Gone]`,
+      filename: WORKFLOW,
+      errors: [plainModule('./dir.schema.js'), plainModule('./missing.workflow.js')],
+    },
+    {
+      name: 'Should_Report_When_RequireIsReferencedWithoutADirectCall',
+      code: `export const a = (0, require)('./order.schema.js')
+export const b = globalThis.require
+export const c = Reflect.apply(require, undefined, ['x'])
+export const d = globalThis['require']`,
+      filename: WORKFLOW,
+      errors: [requireReference, requireReference, requireReference, requireReference],
+    },
+    {
+      name: 'Should_Report_When_AnImportEqualsRequireSitsInsideAModuleDeclaration',
+      code: `declare module 'loader' {
+  import fs = require('node:fs')
+  export const read: typeof fs
+}
+export const x = 1`,
+      filename: WORKFLOW,
+      errors: [dynamicImport('an import = require(...) declaration', 'import = require(...)')],
+    },
+    {
+      name: 'Should_Report_When_TheManifestStillCarriesALegacyList',
+      code: 'export const x = 1',
+      filename: join(LEGACY_WORKSPACE, 'packages/app/src/order.schema.ts'),
+      errors: [unreadable(LEGACY_WORKSPACE, 'the top level has the unknown key "legacy"')],
+    },
+    {
+      name: 'Should_Report_When_AKernelProofNamesAFileThatDoesNotExist',
+      code: 'export const x = 1',
+      filename: join(MISSING_PROOF_WORKSPACE, 'packages/app/src/order.schema.ts'),
+      errors: [
+        unreadable(
+          MISSING_PROOF_WORKSPACE,
+          `the "kernels" entry "@acme/kernel" names the proof target "${KERNEL_PROOF}", which is not a file in the repo`,
         ),
       ],
     },

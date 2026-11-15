@@ -54,4 +54,4 @@ export type {
 } from './FeatureRuntime.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'
 export type { OutlineRow, TemplateToken } from './OutlineExpand.js'
-export { StepError } from './StepError.schema.js'
+export { StepError } from './StepError.js'
