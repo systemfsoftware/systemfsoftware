@@ -103,8 +103,25 @@ export const stepCell = Sandwich.named('supervisor.step')(${read})
   .write(${handlers})
 `
 
+const writerOf = (read: string, handlers: string): string =>
+  `${PRELUDE}
+export const printCell = Sandwich.writer('report.printed')(${read})
+  .decode(PrintReport)
+  .write(${handlers})
+`
+
+const straightWriterHandlers = `{
+    Decoded: (command: { readonly lines: number }) => Effect.succeed(command.lines),
+    CommandRejected: () => Effect.succeed(0),
+  }`
+
 ruleTester.run('sandwich-shell-is-straight-line', sandwichShellIsStraightLine, {
   valid: [
+    {
+      name: 'Should_Pass_When_AWriterReadsAndWritesInAStraightLine',
+      code: writerOf(straightRead, straightWriterHandlers),
+      filename: PROD,
+    },
     {
       name: 'Should_Pass_When_WriteHandlerIsStraightLine',
       code: cellOf(straightRead, straightWrite),
@@ -297,6 +314,27 @@ export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
     },
   ],
   invalid: [
+    {
+      name: 'Should_ReportViolation_When_AWriterHandlerBranchesOnTheCommand',
+      code: writerOf(
+        straightRead,
+        `{
+    Decoded: (command: { readonly failed: boolean }) => (command.failed ? Effect.fail(1) : Effect.succeed(0)),
+    CommandRejected: () => Effect.succeed(0),
+  }`,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterReadBranches',
+      code: writerOf(
+        `(envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 }))`,
+        straightWriterHandlers,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
     {
       // AE9: the restart-intensity decision branches inside the write phase.
       name: 'Should_ReportViolation_When_WriteHandlerBranchesOnARestartCount',

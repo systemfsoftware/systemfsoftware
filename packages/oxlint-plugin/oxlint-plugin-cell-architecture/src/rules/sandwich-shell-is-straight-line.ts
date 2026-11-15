@@ -25,6 +25,7 @@ import {
   MATCH_FIX,
   MATCH_NAME,
   meta,
+  SANDWICH_CHAINS,
   SANDWICH_OWNER,
   SANDWICH_SOURCE,
   SHELL_CONTROL_FIX,
@@ -64,16 +65,17 @@ const collectSandwichCells = (context: Context): readonly SandwichCell[] => {
   const getScope = context.sourceCode.getScope
   walkSubtree(context.sourceCode.ast, context.sourceCode.visitorKeys, [], (node) => {
     if (node.type !== 'CallExpression' || !propertyNameIs(node.callee, 'write')) return true
-    const decideCall = objectOf(node.callee)
-    if (decideCall === null || decideCall.type !== 'CallExpression') return true
-    if (!propertyNameIs(decideCall.callee, 'decide')) return true
-    const invocation = objectOf(decideCall.callee)
+    const middleCall = objectOf(node.callee)
+    if (middleCall === null || middleCall.type !== 'CallExpression') return true
+    const builder = SANDWICH_CHAINS.find((chain) => propertyNameIs(middleCall.callee, chain.middle))
+    if (builder === undefined) return true
+    const invocation = objectOf(middleCall.callee)
     if (invocation === null || invocation.type !== 'CallExpression') return true
-    const namedCall = invocation.callee
-    if (namedCall.type !== 'CallExpression') return true
-    const origin = originOf(namedCall.callee, getScope)
+    const builderCall = invocation.callee
+    if (builderCall.type !== 'CallExpression') return true
+    const origin = originOf(builderCall.callee, getScope)
     if (origin === null || origin.source !== SANDWICH_SOURCE) return true
-    if (!originMemberIs(origin, SANDWICH_OWNER, 'named')) return true
+    if (!originMemberIs(origin, SANDWICH_OWNER, builder.builder)) return true
     cells.push({
       readNode: invocation.arguments[0] ?? null,
       handlersNode: node.arguments[0] ?? null,
