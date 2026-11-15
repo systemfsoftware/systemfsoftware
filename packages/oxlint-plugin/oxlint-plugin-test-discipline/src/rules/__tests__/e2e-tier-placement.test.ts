@@ -53,7 +53,11 @@ chmodSync(join(root, 'apps/shop-e2e/tests/__fixtures__/locked.ts'), 0)
 write('apps/shop-e2e/tests/__fixtures__/sneak.mjs', "export { total } from '@example/core'\n")
 link('apps/shop-e2e/tests/__fixtures__/escape.ts', 'packages/core/src/index.ts')
 write('tests/nested/package.json', JSON.stringify({ private: true }))
-write('tests/nested/apps/quiet/package.json', JSON.stringify({ name: '@example/quiet', exports: {} }))
+write(
+  'tests/nested/apps/quiet/package.json',
+  JSON.stringify({ name: '@example/quiet', exports: { '.': './index.js' } }),
+)
+write('apps/sealed-e2e/package.json', JSON.stringify({ name: '@example/sealed-e2e', private: true, exports: {} }))
 
 const runsAsRoot = process.getuid?.() === 0
 installed('example-driver')
@@ -104,6 +108,11 @@ ruleTester.run('e2e-tier-placement', plugin.rules['e2e-tier-placement'], {
       filename: JOURNEY,
     },
     {
+      name: 'Should_Pass_When_AnE2eFeaturesPackageHasAnEmptyExportsMap',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/sealed-e2e/tests/buying.e2e.ts'),
+    },
+    {
       name: 'Should_Pass_When_AnE2eFeatureImportsAnUnprefixedNodeBuiltin',
       code: `${GHERKIN}import { readFileSync } from 'fs'\n`,
       filename: JOURNEY,
@@ -142,6 +151,12 @@ ruleTester.run('e2e-tier-placement', plugin.rules['e2e-tier-placement'], {
       code: `${GHERKIN}${DRIVER}`,
       filename: at('packages/core/tests/sneak/buying.e2e.ts'),
       errors: [error('e2eOutsideE2ePackage')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItTypeImportsAFixtureThatValueImportsAWorkspacePackage',
+      code: `${GHERKIN}import type { total } from './__fixtures__/leaky.ts'\n`,
+      filename: JOURNEY,
+      errors: [error('e2eReachesSource')],
     },
     {
       name: 'Should_RefuseAnE2eFeature_When_ItReExportsATypeOfAWorkspacePackage',
@@ -199,6 +214,11 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       filename: JOURNEY,
     },
     {
+      name: 'Should_NameItE2e_When_ItTypeImportsCreateRequireBesideAValueOfTheModuleBuiltin',
+      code: `${GHERKIN}import { builtinModules, type createRequire } from 'node:module'\n`,
+      filename: JOURNEY,
+    },
+    {
       name: 'Should_IgnoreALeftoverE2eRole_When_TheFeatureReachesNothingOfOurs',
       code: `${GHERKIN}${DRIVER}`,
       filename: JOURNEY,
@@ -244,6 +264,14 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       ...suffix(
         JOURNEY,
         `${GHERKIN}const { createRequire: load } = await import('node:module')\nconst core = load(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureReadsTheBuiltinLoaderIntoAVariable',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const fetchBuiltin = process.getBuiltinModule\nconst loader = fetchBuiltin('node:module')\n`,
         '.integration.test.ts',
       ),
     },

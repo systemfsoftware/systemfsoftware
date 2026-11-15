@@ -29,6 +29,9 @@ const attempt = <A>(read: () => A): Option.Option<A> => {
 
 const mtimeOf = (path: string): number | undefined => Option.getOrUndefined(attempt(() => statSync(path).mtimeMs))
 
+const exportsSomething = (exports: unknown): boolean =>
+  exports !== undefined && !(typeof exports === 'object' && exports !== null && Object.keys(exports).length === 0)
+
 const shapes = new Map<string, { readonly mtime: number | undefined; readonly shape: PackageShape }>()
 
 const shapeAt = (root: string): PackageShape => {
@@ -43,7 +46,7 @@ const shapeAt = (root: string): PackageShape => {
     ),
     () => ({}),
   )
-  const shipsCode = manifest.exports !== undefined || manifest.main !== undefined ||
+  const shipsCode = exportsSomething(manifest.exports) || manifest.main !== undefined ||
     manifest.module !== undefined || manifest.bin !== undefined || existsSync(join(root, 'src'))
   const shape = { root, name: manifest.name, shipsNothing: !shipsCode }
   shapes.set(root, { mtime, shape })
@@ -110,7 +113,8 @@ const importsALoader = (node: ESTree.ImportDeclaration): boolean =>
   !isTypeOnly(node) && MODULE_LOADERS.has(node.source.value) &&
   node.specifiers.some((specifier) =>
     specifier.type !== 'ImportSpecifier' ||
-    (specifier.imported.type === 'Identifier' && specifier.imported.name === 'createRequire')
+    (specifier.importKind !== 'type' && specifier.imported.type === 'Identifier' &&
+      specifier.imported.name === 'createRequire')
   )
 
 const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
@@ -123,12 +127,15 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
       continue
     }
     if (!isNode(node)) continue
+    if (node.type === 'ImportSpecifier' && node.importKind === 'type') continue
+    if (node.type === 'Identifier' && LOADER_NAMES.has(node.name)) edges.push({ specifier: undefined, typeOnly: false })
     if (node.type === 'ImportDeclaration') {
       edges.push(
         importsALoader(node)
           ? { specifier: undefined, typeOnly: false }
           : { specifier: literalOf(node.source), typeOnly: isTypeOnly(node) },
       )
+      if (isTypeOnly(node)) continue
     } else if (node.type === 'ExportAllDeclaration' || (node.type === 'ExportNamedDeclaration' && node.source)) {
       edges.push({ specifier: literalOf(node.source), typeOnly: node.exportKind === 'type' })
     } else if (node.type === 'ImportExpression') {
@@ -138,9 +145,10 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
         typeOnly: false,
       })
     } else if (node.type === 'CallExpression') {
-      const callee = nameOf(node.callee)
-      if (callee === 'require') edges.push({ specifier: literalOf(node.arguments[0]), typeOnly: false })
-      else if (callee !== undefined && LOADER_NAMES.has(callee)) edges.push({ specifier: undefined, typeOnly: false })
+      if (nameOf(node.callee) === 'require') edges.push({ specifier: literalOf(node.arguments[0]), typeOnly: false })
+    } else if (node.type === 'MemberExpression') {
+      const name = nameOf(node)
+      if (name !== undefined && LOADER_NAMES.has(name)) edges.push({ specifier: undefined, typeOnly: false })
     }
     for (const [key, child] of Object.entries(node)) {
       if (key !== 'parent' && typeof child === 'object' && child !== null) pending.push(child)
@@ -233,10 +241,11 @@ const staysInTests = (shape: PackageShape, file: string): boolean => {
 
 export const reachOf = (shape: PackageShape, filename: string, program: ESTree.Program): Reach | undefined => {
   const seen = new Set<string>([filename])
-  const pending = [{ file: filename, edges: edgesOf(program) }]
+  const pending = [{ file: filename, edges: edgesOf(program), typeOnly: false }]
   let typeReach: Reach | undefined
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    for (const edge of next.edges) {
+    for (const raw of next.edges) {
+      const edge = next.typeOnly ? { ...raw, typeOnly: true } : raw
       const found = reachOfEdge(shape, next.file, edge)
       if (found === 'local') {
         const local = edge.specifier === undefined
@@ -247,7 +256,7 @@ export const reachOf = (shape: PackageShape, filename: string, program: ESTree.P
           if (!staysInTests(shape, local)) {
             return { kind: edge.typeOnly ? 'type' : 'value', specifier: edge.specifier ?? local, file: next.file }
           }
-          pending.push({ file: local, edges: edgesOfFile(local) })
+          pending.push({ file: local, edges: edgesOfFile(local), typeOnly: edge.typeOnly })
         }
       } else if (found?.kind === 'value') {
         return found
