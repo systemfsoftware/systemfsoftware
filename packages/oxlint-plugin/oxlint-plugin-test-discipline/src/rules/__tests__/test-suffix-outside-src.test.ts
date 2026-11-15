@@ -22,8 +22,6 @@ const FAST_CHECK = `import * as fc from 'fast-check'\n`
 const FORK_ONLY = `import { describe, it } from '@systemfsoftware/vitest'\n`
 const RAW_VITEST = `import { expect, it } from 'vitest'\n`
 const RUNNER_ROLE = { [SETTINGS_KEY]: { role: 'vitest-runner' } } as const
-const E2E_TEST = `import { test } from '@systemfsoftware/effect-e2e/runner'\n`
-const E2E_COMPOSING = `import { makeRunner } from '@systemfsoftware/effect-e2e/runner'\n`
 
 const laneMismatch = (name: string, expected: string) => ({
   messageId: 'laneMismatch' as const,
@@ -111,34 +109,14 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       settings: RUNNER_ROLE,
     },
     {
-      name: 'Should_Allow_E2eName_When_TheTestImportsTheRunnerTest',
-      code: E2E_TEST,
+      name: 'Should_LeaveTheE2eNameToPlacement_When_AnE2eNamedFileIsAFeature',
+      code: GHERKIN,
       filename: '/repo/pkg/tests/x.e2e.ts',
     },
     {
-      name: 'Should_Allow_E2eName_When_TheE2eTestAlsoImportsTheGherkinHarness',
-      code: `${E2E_TEST}${GHERKIN}`,
+      name: 'Should_LeaveTheE2eNameToPlacement_When_AnE2eNamedFileImportsNoHarness',
+      code: FORK_ONLY,
       filename: '/repo/pkg/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_Allow_E2eName_When_TheE2eTestAlsoImportsTheConformanceHarness',
-      code: `${E2E_TEST}${CONFORMANCE}`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_Allow_E2eName_When_TheE2eTestAlsoImportsTheDifferentialHarness',
-      code: `${E2E_TEST}${DIFFERENTIAL}`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_Allow_E2eName_When_TheE2eTestAlsoImportsTheTraceHarness',
-      code: `${E2E_TEST}${TRACE}`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_KeepTheIntegrationName_When_AGherkinTestOnlyImportsTheRunnerComposingApi',
-      code: `${GHERKIN}${E2E_COMPOSING}`,
-      filename: '/repo/pkg/tests/x.integration.test.ts',
     },
   ],
   invalid: [
@@ -261,34 +239,16 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       errors: [laneMismatch('x.test.ts', '.runner.test.ts')],
     },
     {
-      name: 'Should_NameTheE2eSuffix_When_AnE2eLaneTestIsNamedPlainly',
-      code: E2E_TEST,
-      filename: '/repo/pkg/tests/x.test.ts',
-      errors: [laneMismatch('x.test.ts', '.e2e.ts')],
-    },
-    {
-      name: 'Should_NameTheE2eSuffix_When_AnE2eLaneTestIsNamedE2eTest',
-      code: E2E_TEST,
+      name: 'Should_RefuseTheE2eTestSuffix_When_AFeatureIsNamedE2eTest',
+      code: GHERKIN,
       filename: '/repo/pkg/tests/x.e2e.test.ts',
-      errors: [laneMismatch('x.e2e.test.ts', '.e2e.ts')],
+      errors: [laneMismatch('x.e2e.test.ts', '.integration.test.ts')],
     },
     {
-      name: 'Should_NameTheE2eSuffix_When_AnE2eAndGherkinTestIsNamedIntegration',
-      code: `${GHERKIN}${E2E_TEST}`,
-      filename: '/repo/pkg/tests/x.integration.test.ts',
-      errors: [laneMismatch('x.integration.test.ts', '.e2e.ts')],
-    },
-    {
-      name: 'Should_NameTheE2eSuffix_When_AnE2eAndTraceTestIsNamedTrace',
-      code: `${TRACE}${E2E_TEST}`,
-      filename: '/repo/pkg/tests/x.trace.test.ts',
-      errors: [laneMismatch('x.trace.test.ts', '.e2e.ts')],
-    },
-    {
-      name: 'Should_ReportNoLane_When_AnE2eNamedFileImportsNoHarness',
-      code: FORK_ONLY,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-      errors: [noLane('x.e2e.ts')],
+      name: 'Should_RefuseTheE2eSpecSuffix_When_AFeatureIsNamedE2eSpec',
+      code: GHERKIN,
+      filename: '/repo/pkg/tests/x.e2e.spec.ts',
+      errors: [laneMismatch('x.e2e.spec.ts', '.integration.test.ts')],
     },
   ],
 })
