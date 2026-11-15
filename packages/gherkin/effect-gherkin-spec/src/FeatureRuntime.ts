@@ -14,7 +14,26 @@ import { StepExpect } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
 import { StepError } from './StepError.schema.js'
 
-export type ScenarioOptions<RScenario = never, RExtra = never> = {
+/**
+ * A live scenario whose run hangs on an act that happens once, such as a person approving in a
+ * browser, names the pipeline the second run on fresh services executes in `rerun`, so that run
+ * still finds state kept outside the layer without asking for the act again.
+ */
+export type LiveDeclaration<RRerun> =
+  | { readonly live?: string; readonly rerun?: never }
+  | { readonly live: string; readonly rerun?: Effect.Effect<Top, StepError, RRerun> }
+
+export type ScenarioOptions<RScenario = never, RExtra = never, RRerun = never> =
+  & {
+    readonly scenarioLayer?: Layer.Layer<RScenario>
+    readonly layer?: Layer.Layer<RExtra>
+  }
+  & LiveDeclaration<RRerun>
+
+/** Options read only for their layers and live reason, whatever a rerun pipeline requires. */
+type LayersAndLive<RRerun = unknown> = ScenarioOptions<never, never, RRerun>
+
+type OutlineOptions<RScenario, RExtra> = {
   readonly scenarioLayer?: Layer.Layer<RScenario>
   readonly layer?: Layer.Layer<RExtra>
   readonly live?: string
@@ -40,16 +59,30 @@ export type ScenarioRun<R = never> = (
 export type Register<R = never> = Suite.RegisterFn<void, StepError, R>
 
 export type RegisterMode = Suite.RegisterMode
-const caseLayersFrom = (opts: ScenarioOptions<never, never> | null): CaseLayers.Layers => {
+const caseLayersFrom = (opts: LayersAndLive | null): CaseLayers.Layers => {
   if (opts === null) return CaseLayers.empty
   return { scenarioLayer: opts.scenarioLayer, extra: opts.layer }
 }
 
-const liveOf = (opts: ScenarioOptions<never, never> | null): Suite.LiveCase | undefined =>
+const liveOf = (opts: LayersAndLive | null): Suite.LiveCase | undefined =>
   Option.fromNullishOr(opts?.live).pipe(
     Option.map((reason) => ({ reason })),
     Option.getOrUndefined,
   )
+const caseLiveOf = <R>(
+  resolved: { readonly opts: ScenarioOptions<never, never, R | Asserted> | null },
+  background: BackgroundEffect<R> | null,
+): Suite.CaseLive<void, StepError, R> | undefined =>
+  Option.fromNullishOr(liveOf(resolved.opts)).pipe(
+    Option.map((live) =>
+      Option.match(Option.fromNullishOr(resolved.opts?.rerun), {
+        onNone: () => live,
+        onSome: (rerun) => ({ ...live, rerun: buildScenario<R>(rerun, resolved.opts, background) }),
+      })
+    ),
+    Option.getOrUndefined,
+  )
+
 const composeWithBackground = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,
   background: Effect.Effect<Top, StepError, R> | null,
@@ -61,7 +94,7 @@ const composeWithBackground = <R>(
 
 const buildScenario = <R>(
   pipeline: BackgroundEffect<R>,
-  opts: ScenarioOptions<never, never> | null,
+  opts: LayersAndLive | null,
   background: BackgroundEffect<R> | null,
 ): ScenarioRun<R> =>
 (expect) =>
@@ -108,7 +141,7 @@ type OutlineCallable<RShared = never, RFresh = never, RFreshReq = never> = {
     name: ScenarioTitle<TName>,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<Top, StepError, RPipe>,
-    opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
+    opts: OutlineOptions<RShared | RFresh | RFreshReq, RExtra>,
   ): void
 }
 
@@ -120,8 +153,8 @@ export type OutlineFn<RShared = never, RFresh = never, RFreshReq = never> =
   }
 
 const optsOrNull = (
-  opts: ScenarioOptions<never, never> | undefined,
-): ScenarioOptions<never, never> | null => {
+  opts: LayersAndLive | undefined,
+): LayersAndLive | null => {
   if (opts === void 0) return null
   return opts
 }
@@ -148,7 +181,7 @@ const registerOutlineResult = <R, Row extends Record<string, Top>>(
   name: string,
   expanded: Result.Result<readonly OutlineRowRef<Row>[], string>,
   mode: RegisterMode,
-  opts: ScenarioOptions<never, never> | null,
+  opts: LayersAndLive | null,
   build: (row: Row) => ScenarioRun<R>,
 ): void => {
   if (Result.isFailure(expanded)) {
@@ -180,7 +213,7 @@ const makeOutlineCallableNoFresh = <R = never>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<Top, StepError, RPipe>,
-    opts: ScenarioOptions<R, RExtra>,
+    opts: OutlineOptions<R, RExtra>,
   ): void
   function outlineFn<const Rows extends readonly Record<string, Top>[]>(
     name: string,
@@ -243,7 +276,7 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<Top, StepError, RPipe>,
-    opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
+    opts: OutlineOptions<RShared | RFresh | RFreshReq, RExtra>,
   ): void
   function outlineFn<const Rows extends readonly Record<string, Top>[]>(
     name: string,
@@ -306,7 +339,11 @@ type ScenarioCallable<RShared, RFresh, RFreshReq> = {
     P extends Effect.Effect<Top, StepError, RPipe>,
   >(
     name: ScenarioTitle<TName>,
-    opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
+    opts: ScenarioOptions<
+      RShared | RFresh | RFreshReq,
+      RExtra,
+      RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra
+    >,
     pipeline: P & ValidScenarioPipeline<P>,
   ): void
 }
@@ -338,11 +375,13 @@ const isObjectValue = (v: unknown): v is object => {
   return v !== null
 }
 
-const SCENARIO_OPT_KEYS: ReadonlyArray<string> = ['scenarioLayer', 'layer', 'live']
+const SCENARIO_OPT_KEYS: ReadonlyArray<string> = ['scenarioLayer', 'layer', 'live', 'rerun']
 
 const hasScenarioOptKey = (v: object): boolean => SCENARIO_OPT_KEYS.some((key) => key in v)
 
-const isScenarioOpts = (v: unknown): v is ScenarioOptions => {
+const isScenarioOpts = <R>(
+  v: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R>,
+): v is ScenarioOptions<never, never, R> => {
   if (!isObjectValue(v)) return false
   return hasScenarioOptKey(v)
 }
@@ -368,25 +407,25 @@ const missingPipelineWithOpts = <R>(): {
 })
 
 const resolveOptsAndPipeline = <R>(
-  opts: ScenarioOptions<never, never>,
+  opts: ScenarioOptions<never, never, R>,
   third: Effect.Effect<Top, StepError, R> | undefined,
-): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
+): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never, R> | null } => {
   if (third === void 0) return missingPipelineWithOpts<R>()
   return { pipeline: third, opts }
 }
 
 const resolvePresentSecond = <R>(
-  second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never>,
+  second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R>,
   third: Effect.Effect<Top, StepError, R> | undefined,
-): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
+): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never, R> | null } => {
   if (!isScenarioOpts(second)) return { pipeline: second, opts: null }
   return resolveOptsAndPipeline(second, third)
 }
 
 const resolveScenarioArgsImpl = <R>(
-  second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
+  second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined,
   third: Effect.Effect<Top, StepError, R> | undefined,
-): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
+): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never, R> | null } => {
   if (second === void 0) return missingPipelineArgs<R>()
   return resolvePresentSecond(second, third)
 }
@@ -395,12 +434,12 @@ export const resolveScenarioArgs: {
   <R = never>(
     third: Effect.Effect<Top, StepError, R> | undefined,
   ): (
-    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
-  ) => { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null }
+    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined,
+  ) => { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never, R> | null }
   <R = never>(
-    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
+    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined,
     third: Effect.Effect<Top, StepError, R> | undefined,
-  ): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null }
+  ): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never, R> | null }
 } = dual(2, resolveScenarioArgsImpl)
 
 const registerResolved = <R>(
@@ -408,9 +447,9 @@ const registerResolved = <R>(
   name: string,
   mode: RegisterMode,
   background: BackgroundEffect<R> | null,
-  resolved: { pipeline: BackgroundEffect<R>; opts: ScenarioOptions<never, never> | null },
+  resolved: { pipeline: BackgroundEffect<R>; opts: ScenarioOptions<never, never, R> | null },
 ): void => {
-  register(name, buildScenario<R>(resolved.pipeline, resolved.opts, background), mode, liveOf(resolved.opts))
+  register(name, buildScenario<R>(resolved.pipeline, resolved.opts, background), mode, caseLiveOf(resolved, background))
 }
 
 const makeScenarioCallableNoFresh = <R>(
@@ -424,12 +463,12 @@ const makeScenarioCallableNoFresh = <R>(
   ): void
   function scenarioFn<RExtra, RPipe extends R | Scope.Scope | Asserted | RExtra>(
     name: string,
-    opts: ScenarioOptions<R, RExtra>,
+    opts: ScenarioOptions<R, RExtra, R | Scope.Scope | Asserted | RExtra>,
     pipeline: Effect.Effect<Top, StepError, RPipe>,
   ): void
   function scenarioFn(
     name: string,
-    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never>,
+    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never, R>,
     third?: Effect.Effect<Top, StepError, R>,
   ): void {
     return registerResolved(register, name, mode, getBackground(), resolveScenarioArgs(second, third))
@@ -448,14 +487,18 @@ const makeScenarioCallableWithFresh = <RShared, RFresh, RFreshReq>(
   ): void
   function scenarioFn<RExtra, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra>(
     name: string,
-    opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
+    opts: ScenarioOptions<
+      RShared | RFresh | RFreshReq,
+      RExtra,
+      RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra
+    >,
     pipeline: Effect.Effect<Top, StepError, RPipe>,
   ): void
   function scenarioFn(
     name: string,
     second:
       | Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq>
-      | ScenarioOptions<never, never>,
+      | ScenarioOptions<never, never, RShared | RFresh | RFreshReq>,
     third?: Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq>,
   ): void {
     return registerResolved(register, name, mode, getBackground(), resolveScenarioArgs(second, third))

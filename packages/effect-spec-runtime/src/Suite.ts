@@ -36,8 +36,17 @@ export interface Shared<R> {
  */
 export type Scenario<B, E, R> = (expect: Expect) => Effect.Effect<B, E, R | Scope.Scope | Asserted>
 
+/**
+ * A case's own live declaration. A live case's first run may hang on an act that happens once, such
+ * as a person approving in a browser; `rerun` is then the scenario the second run on fresh services
+ * executes instead, so the check for state kept outside the layer still runs without that act.
+ */
+export interface CaseLive<B, E, R> extends LiveCase {
+  readonly rerun?: Scenario<B, E, R>
+}
+
 export interface RegisterFn<B, E, R> {
-  (name: string, scenario: Scenario<B, E, R>, mode: Register.RegisterMode, live?: LiveCase): void
+  (name: string, scenario: Scenario<B, E, R>, mode: Register.RegisterMode, live?: CaseLive<B, E, R>): void
 }
 
 const caseEffectOf = <B, E, R, RIn extends Scope.Scope>(
@@ -89,12 +98,27 @@ const caseBody = <B, E, R, RIn extends Scope.Scope>(
     yield* program
   }
 
+const registerLiveCase = <B, E, R, RIn extends Scope.Scope>(
+  register: Vitest.Test<Scope.Scope>,
+  name: string,
+  scenario: Scenario<B, E, R | RIn | Scope.Scope>,
+  env: Layer.Layer<R, never, RIn>,
+  live: CaseLive<B, E, R | RIn | Scope.Scope>,
+): void => {
+  const first = caseBody(scenario, env, live, Register.exploredProgram)
+  if (live.rerun === undefined) {
+    register(name, first)
+    return
+  }
+  register(name, first, { rerun: caseBody(live.rerun, env, live, Register.exploredProgram) })
+}
+
 const registerCase = <B, E, R, RIn extends Scope.Scope>(
   register: Vitest.Test<Scope.Scope>,
   name: string,
   scenario: Scenario<B, E, R | RIn | Scope.Scope>,
   env: Layer.Layer<R, never, RIn>,
-  live: LiveCase | undefined,
+  live: CaseLive<B, E, R | RIn | Scope.Scope> | undefined,
 ): void => {
   if (live === undefined) {
     register(name, caseBody(scenario, env, live, Register.exploredProgram), {
@@ -103,7 +127,7 @@ const registerCase = <B, E, R, RIn extends Scope.Scope>(
     })
     return
   }
-  register(name, caseBody(scenario, env, live, Register.exploredProgram))
+  registerLiveCase(register, name, scenario, env, live)
 }
 
 const registrarFor = <B, E, R, RIn extends Scope.Scope>(
