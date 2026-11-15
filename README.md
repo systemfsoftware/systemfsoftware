@@ -244,11 +244,9 @@ pnpm add 'effect@^4'
 
 ### Core architecture
 
-| Package                                                                 | What it is                                                                                                |
-| :---------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------- |
-| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types)      | Type contracts for the cell taxonomy: branded `Workflow` types, the `Sandwich` stage builder, and `Cell`. |
-| [`@systemfsoftware/effect-atom`](packages/atom/effect-atom)             | Reactive toolkit for Effect, forked from `tim-smart/effect-atom`.                                         |
-| [`@systemfsoftware/effect-atom-react`](packages/atom/effect-atom-react) | React bindings for `effect-atom`.                                                                         |
+| Package                                                            | What it is                                                                                                |
+| :----------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------- |
+| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types) | Type contracts for the cell taxonomy: branded `Workflow` types, the `Sandwich` stage builder, and `Cell`. |
 
 ### Schema and property laws
 
@@ -264,7 +262,6 @@ pnpm add 'effect@^4'
 | Package                                                                        | What it is                                                                          |
 | :----------------------------------------------------------------------------- | :---------------------------------------------------------------------------------- |
 | [`@systemfsoftware/effect-gherkin-spec`](packages/gherkin/effect-gherkin-spec) | Gherkin Given/When/Then steps that run as Effects under Vitest.                     |
-| [`@systemfsoftware/storybook-gherkin`](packages/gherkin/storybook-gherkin)     | Gherkin scenarios that run as Storybook play functions.                             |
 | [`@systemfsoftware/effect-spec-runtime`](packages/effect-spec-runtime)         | Registrar core behind the Effect spec harnesses.                                    |
 | [`@systemfsoftware/trace-spec`](packages/trace/trace-spec)                     | Trace contracts as executable specs, checked against an in-memory exporter.         |
 | [`@systemfsoftware/trace-taxonomy`](packages/trace/trace-taxonomy)             | Declared spans with typed required attributes.                                      |
