@@ -30,19 +30,20 @@ A pack's `README.md` describes the pack. The resolver ignores it.
 
 ## Packs
 
-| Pack                 | Holds                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| `cell-architecture`  | File kinds, adapters, layers, handles, scopes and cell composition for `effect-cell-types`    |
-| `schema-modelling`   | Effect Schema invariants, states, foreign wire shapes and generated laws                      |
-| `configuration`      | How settings are declared, redacted and reach code                                            |
-| `package-surface`    | What a package exports, and the bump a surface change takes                                   |
-| `testing`            | Behaviour tests, microVM integration I/O, fakes, adapters, mutants, and no-test configuration |
-| `e2e-testing`        | Where end-to-end tests live                                                                   |
-| `property-testing`   | What makes a property a real property                                                         |
-| `ui-state`           | Atoms, commands and derivations in React code                                                 |
-| `ui-testing`         | Storybook journeys, the preview's two stand-ins (I/O layer, router) and queries               |
-| `page-accessibility` | Accessibility tests of a static or island site's built pages                                  |
-| `design-system`      | Building and styling UI with Astryx                                                           |
-| `screen-content`     | What screens show and say                                                                     |
-| `check-hygiene`      | What a CI check is for, and when a lint rule may be proposed and the shape it ships in        |
-| `public-repository`  | What a public repository never publishes                                                      |
+| Pack                  | Holds                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `cell-architecture`   | File kinds, handles, scopes and cell composition for `@systemfsoftware/effect-cell-types`     |
+| `effect-architecture` | Adapter names, driver loading, instance state, layer naming and service wiring for Effect 4   |
+| `schema-modelling`    | Effect Schema invariants, states, foreign wire shapes and generated laws                      |
+| `configuration`       | How settings are declared, redacted and reach code                                            |
+| `package-surface`     | What a package exports, and the bump a surface change takes                                   |
+| `testing`             | Behaviour tests, microVM integration I/O, fakes, adapters, mutants, and no-test configuration |
+| `e2e-testing`         | Where end-to-end tests live                                                                   |
+| `property-testing`    | What makes a property a real property                                                         |
+| `ui-state`            | Atoms, commands and derivations in React code                                                 |
+| `ui-testing`          | Storybook journeys, the preview's two stand-ins (I/O layer, router) and queries               |
+| `page-accessibility`  | Accessibility tests of a static or island site's built pages                                  |
+| `design-system`       | Building and styling UI with Astryx                                                           |
+| `screen-content`      | What screens show and say                                                                     |
+| `check-hygiene`       | What a CI check is for, and when a lint rule may be proposed and the shape it ships in        |
+| `public-repository`   | What a public repository never publishes                                                      |

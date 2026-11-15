@@ -1,6 +1,6 @@
 # Cell Architecture
 
-File kinds, adapter names, layer naming and wiring, instance state, handles and scopes, and cell composition across all Effect 4 code, with `@systemfsoftware/effect-cell-types` as the library its cell rules are built on. Work that adds or changes a service, adapter, cell, workflow, blueprint or handle must honor it.
+File kinds, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types. Work that adds or changes a cell, workflow, blueprint, handle or file kind must honor it.
 
 The library is public: source and docs at https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-cell-types (npm: `@systemfsoftware/effect-cell-types`).
 
