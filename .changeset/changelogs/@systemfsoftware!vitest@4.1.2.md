@@ -1,7 +1,4 @@
----
-"@systemfsoftware/oxlint-config-recommended": minor
-"@systemfsoftware/vitest": patch
----
+# @systemfsoftware/vitest@4.1.2
 
 The recommended config now turns on every @effect/tsgo preset (correctness, recommended, strict, style, effect-native, antipattern and maintainers) at error, on @effect/tsgo 0.69.0 with oxlint 1.93.0 and oxlint-tsgolint 7.0.2006. The rules that still have findings in this repo are listed by name, each with its finding count, and stay off until the PR that fixes its findings removes it from the list. A consumer that upgrades may see findings from rules it has never run. The rules run on the consumer's own Effect-patched tsgolint, so @effect/tsgo is now a peer dependency: a consumer must move @effect/tsgo to ^0.69.0, oxlint to ~1.93.0 and oxlint-tsgolint to 7.0.2006 in the same change, and rerun `effect-tsgo patch --oxlint`. An older patched binary refuses the config with `Rule '<name>' not found in plugin 'effecttsgo'`.
 
