@@ -296,6 +296,16 @@ export const parse = S.decodeUnknownSync(PI.Order)`,
       filename: SCHEMA,
     },
     {
+      name: 'Should_Pass_When_ExtendToTakesWorkspaceFields',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const Base = S.Struct({ a: S.Number })
+export const Extended = Base.pipe(S.extendTo(PI.Other, { total: (s) => s.a }))
+export const Inline = Base.pipe(S.extendTo({ total: PI.Money }, { total: (s) => s.a }))
+export const Revealed = S.revealCodec(PI.Order)`,
+      filename: SCHEMA,
+    },
+    {
       name: 'Should_Pass_When_ASuspendThunkReturnsAWorkspaceSchema',
       code: `${SCHEMA_IMPORT}
 ${NAMESPACE_IMPORT}
@@ -576,6 +586,26 @@ export const Called = S.suspend((input) => PI.Order)`,
         workspaceUse('PI'),
         workspaceUse('PI'),
         workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+      ],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceValueIsALiteralATransformationOrAnUnknownCombinatorArgument',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Target = S.String.pipe(S.decodeTo(PI.From, PI.To))
+export const Source = S.String.pipe(S.encodeTo(PI.From, PI.To))
+export const Constant = S.Literal(PI.someConstant)
+export const Constants = S.Literals([PI.someConstant])
+export const Colors = S.Enum(PI.Colors)
+export const Cast = S.asSchema(PI.Order)`,
+      filename: SCHEMA,
+      errors: [
         workspaceUse('PI'),
         workspaceUse('PI'),
         workspaceUse('PI'),
