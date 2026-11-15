@@ -103,8 +103,25 @@ export const stepCell = Sandwich.named('supervisor.step')(${read})
   .write(${handlers})
 `
 
+const writerOf = (read: string, handlers: string): string =>
+  `${PRELUDE}
+export const printCell = Sandwich.writer('report.printed')(${read})
+  .decode(PrintReport)
+  .write(${handlers})
+`
+
+const straightWriterHandlers = `{
+    Decoded: (command: { readonly lines: number }) => Effect.succeed(command.lines),
+    CommandRejected: () => Effect.succeed(0),
+  }`
+
 ruleTester.run('sandwich-shell-is-straight-line', sandwichShellIsStraightLine, {
   valid: [
+    {
+      name: 'Should_Pass_When_AWriterReadsAndWritesInAStraightLine',
+      code: writerOf(straightRead, straightWriterHandlers),
+      filename: PROD,
+    },
     {
       name: 'Should_Pass_When_WriteHandlerIsStraightLine',
       code: cellOf(straightRead, straightWrite),
@@ -297,6 +314,123 @@ export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
     },
   ],
   invalid: [
+    {
+      name: 'Should_ReportViolation_When_AWriterHandlerBranchesOnTheCommand',
+      code: writerOf(
+        straightRead,
+        `{
+    Decoded: (command: { readonly failed: boolean }) => (command.failed ? Effect.fail(1) : Effect.succeed(0)),
+    CommandRejected: () => Effect.succeed(0),
+  }`,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterRejectionHandlerBranches',
+      code: writerOf(
+        straightRead,
+        `{
+    Decoded: (command: { readonly lines: number }) => Effect.succeed(command.lines),
+    CommandRejected: (rejected: { readonly issue: string }) => (rejected.issue === '' ? Effect.succeed(0) : Effect.succeed(1)),
+  }`,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterHandlerRunsAMatchPipeline',
+      code: `import { Effect } from 'effect'
+import * as Match from 'effect/Match'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+export const printCell = Sandwich.writer('report.printed')(${straightRead})
+  .decode(PrintReport)
+  .write({
+    Decoded: (command: { readonly tag: 'a' | 'b' }) =>
+      Match.value(command).pipe(
+        Match.when({ tag: 'a' }, () => Effect.succeed('a')),
+        Match.orElse(() => Effect.succeed('b')),
+      ),
+    CommandRejected: () => Effect.succeed('c'),
+  })
+`,
+      filename: PROD,
+      errors: [matchError],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterTakesItsOptionsFirstAndItsReadBranches',
+      code: `${PRELUDE}
+export const printCell = Sandwich.writer({ boundaries: [1] })('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+  .decode(PrintReport)
+  .write(${straightWriterHandlers})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ANamedCellTakesItsOptionsFirstAndItsReadBranches',
+      code: `${PRELUDE}
+export const stepCell = Sandwich.named({ boundaries: [1] })('supervisor.step')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ at: 1 }) : Effect.succeed({ at: 0 })),
+)
+  .decide((command) => command)
+  .write(${straightWrite})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const reading = Sandwich.writer('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+const decoded = reading.decode(PrintReport)
+export const printCell = decoded.write({
+  Decoded: (command: { readonly failed: boolean }) => (command.failed ? Effect.fail(1) : Effect.succeed(0)),
+  CommandRejected: () => Effect.succeed(0),
+})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read'), controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ANamedChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const build = Sandwich.named('supervisor.step')
+const reading = build(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ at: 1 }) : Effect.succeed({ at: 0 })),
+)
+const decided = reading.decide((command) => command)
+export const stepCell = decided.write(${straightWrite})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AnAliasedWriterChainIsSplitAcrossConstBindings',
+      code: `${PRELUDE}
+const writer = Sandwich.writer
+const reading = writer('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+export const printCell = reading.decode(PrintReport).write(${straightWriterHandlers})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterReadBranches',
+      code: writerOf(
+        `(envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 }))`,
+        straightWriterHandlers,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
     {
       // AE9: the restart-intensity decision branches inside the write phase.
       name: 'Should_ReportViolation_When_WriteHandlerBranchesOnARestartCount',

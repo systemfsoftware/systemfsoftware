@@ -181,6 +181,21 @@ The compiler refuses a decision that breaks these rules. Each refusal names the 
 | a `write` missing a handler, or a handler typed on the class     | a missing property or parameter mismatch      |
 | a `write` with a handler for a tag no outcome carries            | `HandlerForNoVariant` on that key             |
 
+## Cells with nothing to decide
+
+A decision is an outcome that changes what the program does: an exit code or verdict, persisting or skipping, running, retrying or dropping work, or a state transition. Writing different text, or writing nothing, is presentation, not a decision. An operation that only lays out what it read, such as a reporter, is a writer: it has no workflow, and its handler calls a plain formatter.
+
+```ts
+const printReport = Sandwich.writer('report.printed')((run: RunResult) =>
+  Effect.succeed({ _tag: 'PrintReport' as const, lines: run.lines })
+).decode(PrintReport).write({
+  Decoded: (command) => Console.log(formatReport(command)),
+  CommandRejected: (rejected) => Console.error(rejected.issue),
+})
+```
+
+`read` returns the command's `Encoded` form and the library decodes it with the schema passed to `decode`. A writer has the same span, `<name>.read` and `<name>.write` child spans, declared attributes and `app.<name>.duration` histogram as a decided cell. It has no `<name>.decision` attribute, and its `phases` are `['read', 'decode', 'write']`. A decoded run is filed as `success`, a rejected command as `failure`, and a failed read or write as `infrastructure`.
+
 ## Services
 
 Build the services once, where your program starts, and hand the result to the cell with `Cell.provideContext`. The context is not rebuilt on each run, so a scoped resource (a connection pool, a file handle) opens once and closes when the scope that built it closes.

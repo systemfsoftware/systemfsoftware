@@ -6,6 +6,11 @@ export const SANDWICH_SOURCE = '@systemfsoftware/effect-cell-types' as const
 
 export const SANDWICH_OWNER = 'Sandwich' as const
 
+export const SANDWICH_CHAINS: ReadonlyArray<{ readonly builder: string; readonly middle: string }> = [
+  { builder: 'named', middle: 'decide' },
+  { builder: 'writer', middle: 'decode' },
+]
+
 export const SHELL_CONTROL_NAME: Readonly<Record<string, string>> = {
   IfStatement: 'an if statement in a Sandwich shell phase',
   SwitchStatement: 'a switch statement in a Sandwich shell phase',
