@@ -28,14 +28,14 @@ export const shellControlActual = (phase: string): string =>
   `a control-flow construct inside the ${phase} phase of a Sandwich cell`
 
 export const SHELL_CONTROL_FIX =
-  'move the branch into the cell\u2019s decide workflow as a decision variant dispatched with Match.exhaustive, and keep the phase straight-line' as const
+  'a branch that chooses a domain outcome moves into the cell\u2019s decide workflow as a decision variant dispatched with Match.exhaustive; a branch that only formats a decided outcome for display moves into a pure formatter in a plain module that returns text only and that the phase calls with the encoded decision; keep the phase straight-line' as const
 
 export const MATCH_NAME = 'a Match pipeline in a Sandwich shell phase' as const
 
 export const MATCH_ACTUAL = 'a Match.value or Match.type pipeline inside a read or write phase' as const
 
 export const MATCH_FIX =
-  'route the dispatch through the cell\u2019s decide workflow \u2014 the phases run one path' as const
+  'route a domain dispatch through the cell\u2019s decide workflow, and move display formatting into a pure formatter in a plain module that returns text only and that the phase calls \u2014 the phases run one path' as const
 
 export const CLOCK_NAME = 'a Clock read in a Sandwich write phase' as const
 
@@ -47,7 +47,7 @@ export const CLOCK_FIX =
   'read the clock in the cell\u2019s read phase and pass the timestamp to decide and write as data' as const
 
 export const SHELL_DISPATCH_FIX =
-  'hand each branch to the cell\u2019s decide workflow as a decision variant and dispatch there with Match.exhaustive; the phase runs one path' as const
+  'hand each domain branch to the cell\u2019s decide workflow as a decision variant and dispatch there with Match.exhaustive, and move display formatting into a pure formatter in a plain module that returns text only and that the phase calls; the phase runs one path' as const
 
 export const dispatchName = (callee: string): string => `${callee} in a Sandwich shell phase`
 
