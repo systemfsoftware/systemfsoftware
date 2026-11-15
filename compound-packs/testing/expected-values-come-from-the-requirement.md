@@ -7,9 +7,9 @@ applies_when:
 tags: [testing, assertions, change-detector, expected-values, literals]
 ---
 
-Derive expected values from the requirement, published system contract (API reference, operator docs, published types, documented CLI exit codes), or consumer-recognisable examples—never from implementation defaults, internal constants, third-party docs/recordings, or tables mirroring source code.
+Derive expected values from the requirement, published system contract (API reference, operator docs, published types, documented CLI exit codes), or consumer-recognisable examples—never from implementation defaults, internal constants, third-party docs or recordings, or tables mirroring source code.
 
-Write expected values as requirement literals (optionally wrapped in a published consumer type), never computed via the implementation's decoders, normalisers, formatters, or calculations. Assert CLI output and errors by actionable outcomes (processed items, refusal tag/reason) rather than prose message text, asserting exact messages or exit codes only where published as a contract. Test documented numeric bounds at the boundary and one step on each side; state unexposed internal thresholds qualitatively ("a short answer is shown large").
+Write expected values as requirement literals (optionally wrapped in a published consumer type), never computed via the implementation's decoders, normalisers, formatters, or calculations. Assert CLI output and errors by actionable outcomes (processed items, refusal tag or reason) rather than prose message text, asserting exact messages or exit codes only where published as a contract. Test documented numeric bounds at the boundary and one step on each side; state unexposed internal thresholds qualitatively.
 
 ```typescript
 // WRONG: copied implementation defaults
