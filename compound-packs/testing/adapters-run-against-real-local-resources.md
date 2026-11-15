@@ -7,7 +7,7 @@ applies_when:
 tags: [testing, adapter, boundary, mocks, microvm, local-runtime]
 ---
 
-Test a boundary adapter against a real resource booted in a microVM (`integration-testing` pack: `io-runs-in-microvms-never-on-the-host.md`) or in the service's local runtime—never in a container, on the host, or as an ad-hoc child process. A database adapter's contract cases create and read state strictly through the port's own operations, never via raw SQL; a query populated only by another system is proven through the shipped system (`features-specify-our-systems-observable-behaviour.md`).
+Test a boundary adapter against a real resource booted in a microVM (pack: testing, io-runs-in-microvms-never-on-the-host.md) or in the service's local runtime—never in a container, on the host, or as an ad-hoc child process. A database adapter's contract cases create and read state strictly through the port's own operations, never via raw SQL; a query populated only by another system is proven through the shipped system (`features-specify-our-systems-observable-behaviour.md`).
 
 Never pass `vi.fn`, `vi.mock`, `vi.spyOn`, or a hand-built object (including a type-guarded fake) where code expects a platform driver, binding, or runtime object (for the Storybook preview stand-in exception, see `ui-testing` pack: `stories-get-io-from-stand-ins-beside-the-io-module.md`).
 
