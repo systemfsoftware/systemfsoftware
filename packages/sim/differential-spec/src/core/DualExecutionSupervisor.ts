@@ -430,13 +430,22 @@ const liveAgreed = <OutputA, OutputB, E>(
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
 ): boolean => Schema.is(Agreed)(judgementOf(exits, oracle))
 
+interface LastDisagreement<OutputA, OutputB, E> {
+  exits: Option.Option<Exits<OutputA, OutputB, E>>
+}
+
 const liveCaseHolds = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
-  input: Input,
-): Promise<boolean> => {
+  last: LastDisagreement<OutputA, OutputB, E>,
+) =>
+(input: Input): Promise<boolean> => {
   const program = programOf(comparison, input)
   if (program === undefined) return Promise.resolve(false)
-  return liveExitsOf(program).then((exits) => liveAgreed(exits, comparison.oracle))
+  return liveExitsOf(program).then((exits) => {
+    const agreed = liveAgreed(exits, comparison.oracle)
+    if (!agreed) last.exits = Option.some(exits)
+    return agreed
+  })
 }
 
 const liveDisparityOf = <Input, Described, OutputA, OutputB, E>(
@@ -458,35 +467,41 @@ const liveCounterexampleReport = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
   details: FailedCase<Input>,
   bound: HostBound,
-): Promise<DifferentialReport> => {
+  last: LastDisagreement<OutputA, OutputB, E>,
+): DifferentialReport => {
   const [input] = details.counterexample
   const followUp = followUpOf(comparison.secondInput, input)
-  if (!followUp.ok) return Promise.resolve(transformThrewReport(details, input, followUp.error))
-  const program = runDualImpl(comparison.targetA, comparison.targetB, input, followUp.value)
+  if (!followUp.ok) return transformThrewReport(details, input, followUp.error)
   const described = comparison.describeInput(input, followUp.value)
-  return liveExitsOf(program).then((exits) => liveDisparityOf(details, described, bound, exits))
+  return Option.match(last.exits, {
+    onNone: () => inconclusiveReport(details),
+    onSome: (exits) => liveDisparityOf(details, described, bound, exits),
+  })
 }
 
 const liveFailureReportOf = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
   details: fc.RunDetails<[Input, number]>,
   bound: HostBound,
-): Promise<DifferentialReport> =>
+  last: LastDisagreement<OutputA, OutputB, E>,
+): DifferentialReport =>
   isFailedWithCounterexample(details)
-    ? liveCounterexampleReport(comparison, details, bound)
-    : Promise.resolve(inconclusiveReport(details))
+    ? liveCounterexampleReport(comparison, details, bound, last)
+    : inconclusiveReport(details)
 
 const liveChecked = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
   bound: HostBound,
 ): Promise<DifferentialReport> => {
+  const last: LastDisagreement<OutputA, OutputB, E> = { exits: Option.none() }
+  const holds = liveCaseHolds(comparison, last)
   const property = fc.asyncProperty(
     comparison.arb,
-    fc.nat(),
-    (...[input]: [Input, number]) => liveCaseHolds(comparison, input),
+    fc.constant(0),
+    (...[input]: [Input, number]) => holds(input),
   )
   return fc.check(property, toFcParameters<Input>(comparison.options)).then((details) =>
-    isReported(details) ? liveFailureReportOf(comparison, details, bound) : held
+    isReported(details) ? liveFailureReportOf(comparison, details, bound, last) : held
   )
 }
 

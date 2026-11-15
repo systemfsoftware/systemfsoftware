@@ -60,4 +60,33 @@ Feature('Comparing a target that answers over the host network', { timeout: 60_0
         ),
       ),
     )
+
+    scenario(
+      'A host-bound disagreement that does not recur is reported with the answers that disagreed',
+      Gherkin.Do.pipe(
+        Given('a reference that answers wrongly on its first call only, as a host glitch would')(
+          'reference',
+          () =>
+            Effect.sync(() => {
+              const calls = { made: 0 }
+              return (x: number) =>
+                Effect.sync(() => {
+                  calls.made += 1
+                  return calls.made === 1 ? x * 2 + 1 : x * 2
+                })
+            }),
+        ),
+        When('a candidate that always doubles is compared with it, declared host-bound')(
+          'report',
+          (s) =>
+            differentialReport(s.reference, (x: number) => Effect.succeed(x * 2), integers, sameOutcome, hostBound),
+        ),
+        Then('the report shows the two answers that differed, not two that agree on a replay')((s, expect) =>
+          expect(s.report).toEqual({
+            holds: false,
+            report: expect.stringMatching(/Output A: (-?\d+)\s[\s\S]*Output B: (?!\1\s)-?\d+/),
+          })
+        ),
+      ),
+    )
   })
