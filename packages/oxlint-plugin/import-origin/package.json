@@ -18,7 +18,11 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "@pnpm/logger": "catalog:",
+    "@pnpm/workspace.projects-reader": "catalog:",
+    "@pnpm/workspace.root-finder": "catalog:",
+    "@pnpm/workspace.workspace-manifest-reader": "catalog:"
   },
   "devDependencies": {
     "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
@@ -36,6 +40,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./workspace": {
+      "@systemfsoftware/source": "./src/WorkspacePackages.ts",
+      "types": "./dist/workspace.d.ts",
+      "default": "./dist/workspace.mjs"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -43,6 +52,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./workspace": {
+        "types": "./dist/workspace.d.ts",
+        "default": "./dist/workspace.mjs"
       },
       "./package.json": "./package.json"
     }

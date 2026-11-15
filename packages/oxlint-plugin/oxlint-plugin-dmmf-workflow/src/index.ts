@@ -1,5 +1,6 @@
 import type { OxlintOverride } from 'oxlint'
 import { dampWorkflowStem } from './rules/damp-workflow-stem.js'
+import { decisionCodeImports } from './rules/decision-code-imports.js'
 import { makeBodyPurity } from './rules/make-body-purity.js'
 import { makeCommandSchema } from './rules/make-command-schema.js'
 import { makeFileLocation } from './rules/make-file-location.js'
@@ -41,6 +42,11 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   annotation declares in its decision or error channel has no
  *   construction site in this file. Reads this file's AST alone: a variant
  *   whose class is imported is out of reach.
+ * - `decision-code-imports` - every `*.workflow.ts` and `*.schema.ts` file
+ *   under `src/` reaches only decision code: effect, effect-cell-types,
+ *   relative `.schema`/`.workflow` files of the same package's `src/`,
+ *   workspace bindings used as schemas, and kernels the repo's
+ *   `decision-code.json` names with an existing proof file.
  */
 const recommendedRules = {
   [rule('make-file-location')]: 'error',
@@ -51,6 +57,7 @@ const recommendedRules = {
   [rule('damp-workflow-stem')]: 'error',
   [rule('workflow-file-make-presence')]: 'error',
   [rule('workflow-variant-constructed')]: 'error',
+  [rule('decision-code-imports')]: 'error',
 } as const
 
 const workflowComplexity: readonly OxlintOverride[] = [
@@ -73,6 +80,7 @@ export default {
     'workflow-file-export-topology': workflowFileExportTopology,
     'workflow-file-make-presence': workflowFileMakePresence,
     'workflow-variant-constructed': workflowVariantConstructed,
+    'decision-code-imports': decisionCodeImports,
   },
   configs: {
     recommended: {

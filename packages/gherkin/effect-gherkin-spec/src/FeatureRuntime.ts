@@ -12,7 +12,7 @@ import * as CaseLayers from './CaseLayers.js'
 import type { GherkinEffect, GivenStage, ScopeIdentifiers, ScopeMap, ScopeServices, ThenStage } from './DoNotation.js'
 import { StepExpect } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
-import { StepError } from './StepError.schema.js'
+import { StepError } from './StepError.js'
 
 /**
  * A live scenario whose run hangs on an act that happens once, such as a person approving in a

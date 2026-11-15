@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import { isImportMetaVitestTest, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
   ACTUAL,
   EXPECTED,
@@ -13,7 +13,6 @@ import {
   WORKFLOW_FILE_BASENAME,
 } from './schema-declaration-location.config.js'
 import { isSchemaVocabularyOrigin } from './SchemaVocabulary.js'
-import { isImportMetaVitestTest } from './vitest-guard.js'
 
 export type MessageIds = 'schemaOutsideSchemaFile' | 'unresolvedSchemaChain'
 

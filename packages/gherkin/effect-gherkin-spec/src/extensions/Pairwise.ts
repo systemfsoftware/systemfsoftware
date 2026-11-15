@@ -7,7 +7,7 @@ import { dual } from 'effect/Function'
 
 import type { GherkinEffect, GherkinScope, GivenStage, InitialStage, StepText, WhenStage } from '../DoNotation.js'
 import { resolveText, StageTypeId, stageWhen, stepWrapAt } from '../DoNotation.js'
-import type { StepError } from '../StepError.schema.js'
+import type { StepError } from '../StepError.js'
 
 type NoInfer<A> = [A][A extends A ? 0 : never]
 
