@@ -467,6 +467,18 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.93.0
+      '@pnpm/logger':
+        specifier: 'catalog:'
+        version: 1100.0.0
+      '@pnpm/workspace.projects-reader':
+        specifier: 'catalog:'
+        version: 1101.1.6(@pnpm/logger@1100.0.0)
+      '@pnpm/workspace.root-finder':
+        specifier: 'catalog:'
+        version: 1100.1.5
+      '@pnpm/workspace.workspace-manifest-reader':
+        specifier: 'catalog:'
+        version: 1100.3.1
     devDependencies:
       '@systemfsoftware/oxlint-config-rule-authoring':
         specifier: workspace:^
@@ -590,6 +602,18 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.93.0
+      '@pnpm/logger':
+        specifier: 'catalog:'
+        version: 1100.0.0
+      '@pnpm/workspace.projects-reader':
+        specifier: 'catalog:'
+        version: 1101.1.6(@pnpm/logger@1100.0.0)
+      '@pnpm/workspace.root-finder':
+        specifier: 'catalog:'
+        version: 1100.1.5
+      '@pnpm/workspace.workspace-manifest-reader':
+        specifier: 'catalog:'
+        version: 1100.3.1
       oxlint:
         specifier: catalog:oxlint
         version: 1.93.0(oxlint-tsgolint@7.0.2006)

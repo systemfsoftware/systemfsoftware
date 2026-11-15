@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isEffectBarrel } from '@systemfsoftware/oxlint-import-origin'
+import { isEffectBarrel, isImportMetaVitestTest, isInsideConsequent } from '@systemfsoftware/oxlint-import-origin'
+import { isPackageOfEnclosingWorkspace } from '@systemfsoftware/oxlint-import-origin/workspace'
 import { SCHEMA_FILE_SUFFIX } from './schema-declaration-location.config.js'
 import { basenameOf } from './schema-declaration-location.js'
 import {
@@ -12,8 +13,6 @@ import {
   PURE_IMPORT_EXPECTED,
   PURE_IMPORT_FIX,
 } from './schema-file-imports-pure-modules-only.config.js'
-import { isImportMetaVitestTest, isInsideConsequent } from './vitest-guard.js'
-import { isPackageOfEnclosingWorkspace } from './workspace-packages.js'
 
 export type MessageIds = 'nonPureImport'
 

@@ -1,0 +1,6 @@
+{
+  "legacy": [
+    "packages/gherkin/effect-gherkin-spec/src/StepError.schema.ts"
+  ],
+  "kernels": []
+}
