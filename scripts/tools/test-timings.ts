@@ -810,7 +810,7 @@ const mutantsOf = async (root: string, pkg: TestPackage, target: number): Promis
     if (!out.success) throw new Error(`${pkg.name}: stryker plan exited ${out.code}: ${lastLines(out.stderr)}`)
     return Result.getOrThrowWith(
       mutantCountOf(await Deno.readTextFile(join(dir, 'plan.json'))),
-      (reason) => new Error(`${pkg.name}: stryker plan wrote no version 1 shard plan: ${reason}`),
+      (reason) => new Error(`${pkg.name}: stryker plan wrote no shard plan its contract decodes: ${reason}`),
     )
   } finally {
     await Deno.remove(dir, { recursive: true })

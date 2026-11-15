@@ -2,7 +2,7 @@
   "name": "systemfsoftware",
   "version": "0.0.0",
   "private": true,
-  "description": "System F Software — Effect-TS libraries and the oxlint plugin that enforces the constitution.",
+  "description": "System F Software \u2014 Effect-TS libraries and the oxlint plugin that enforces the constitution.",
   "type": "module",
   "scripts": {
     "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
@@ -35,7 +35,7 @@
     "@commitlint/config-conventional": "^21",
     "@commitlint/types": "^21",
     "@effect/tsgo": "catalog:",
-    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "link:./.stryker/@systemfsoftware/stryker-js",
     "concurrently": "^10",
     "husky": "^9.1.7",
     "lint-staged": "^17",

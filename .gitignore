@@ -10,6 +10,8 @@ reports/
 # Modules integration tests write to disk so the module loader can resolve them
 __tmp__/
 .stryker-tmp/
+# the Stryker tree the dev shell links (flake.nix shellHook)
+/.stryker
 temp/
 *.tsbuildinfo
 .DS_Store

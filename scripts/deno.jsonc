@@ -6,7 +6,8 @@
   // node_modules untouched and stops Deno from migrating pnpm-workspace.yaml
   // into package.json.
   "imports": {
-    "effect": "npm:effect@4.0.1",
+    // The Stryker tree's effect, so the scripts and the Stryker modules they import share one effect instance.
+    "effect": "npm:effect@4.1.2",
     "@std/assert": "jsr:@std/assert@^1",
     "@std/async/pool": "jsr:@std/async@1.5.0/pool",
     "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
@@ -18,12 +19,16 @@
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
     "arktype": "npm:arktype@2.2.3",
-    // The Stryker the workspace lockfile resolves, its published plan contract, and the platform its config reader
-    // runs on: the mutation planner decodes `stryker plan --out` with `ShardPlan`, and its tests read configs with
-    // Stryker's own reader. mutation-probe.contract.test.ts fails when pnpm-lock.yaml resolves another version.
-    "@effect/platform-node": "npm:@effect/platform-node@4.0.1",
-    "@systemfsoftware/stryker-js": "npm:@systemfsoftware/stryker-js@17.0.2",
-    "@systemfsoftware/stryker-js-cli-contract": "npm:@systemfsoftware/stryker-js-cli-contract@0.3.1",
+    // The Stryker the scripts run is the flake package the dev shell links at ../.stryker (flake.nix). The mutation
+    // planner decodes `stryker plan --out` with its contract's `ShardPlan`, and stryker-reads.ts reads configs with
+    // Stryker's own reader, so both pin the versions that tree holds; mutation-probe.contract.test.ts fails when one
+    // differs from the tree.
+    "@effect/platform-node": "npm:@effect/platform-node@4.1.2",
+    "@systemfsoftware/stryker-js": "npm:@systemfsoftware/stryker-js@22.0.0",
+    "@systemfsoftware/stryker-js-cli-contract": "npm:@systemfsoftware/stryker-js-cli-contract@2.0.0",
   },
+  // The tree resolves every Stryker module's effect to the one version (stryker-js-effect pins it with a pnpm override);
+  // the contract's own `^4.1.0` would take the newest, a second effect instance the plan's schema cannot decode with.
+  "overrides": { "effect": "4.1.2" },
   "nodeModulesDir": "none",
 }
