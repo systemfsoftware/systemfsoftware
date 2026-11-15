@@ -1,8 +1,8 @@
 ---
 title: A control that takes the person to a route is an Astryx component with an href, never an onClick that navigates
 applies_when:
-  - adding a button, link, menu item or side-navigation item that goes to another route
-  - adding a control whose handler calls the router's navigate
+  - adding a button, link, menu item or side-navigation item that goes to another route in an app that renders @astryxdesign/core
+  - adding a control whose handler calls the router's navigate in an app that renders @astryxdesign/core
 tags: [design-system, astryx, navigation, accessibility]
 ---
 
