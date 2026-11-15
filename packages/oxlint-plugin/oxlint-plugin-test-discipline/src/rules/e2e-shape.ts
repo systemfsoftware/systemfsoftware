@@ -1,6 +1,7 @@
 import type { ESTree } from '@oxlint/plugins'
 import { Option, Schema as S } from 'effect'
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { isBuiltin } from 'node:module'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { parseSync } from 'oxc-parser'
 
@@ -18,17 +19,28 @@ export interface PackageShape {
   readonly shipsNothing: boolean
 }
 
-const mtimeOf = (path: string): number => statSync(path).mtimeMs
+const attempt = <A>(read: () => A): Option.Option<A> => {
+  try {
+    return Option.some(read())
+  } catch {
+    return Option.none()
+  }
+}
 
-const shapes = new Map<string, { readonly mtime: number; readonly shape: PackageShape }>()
+const mtimeOf = (path: string): number | undefined => Option.getOrUndefined(attempt(() => statSync(path).mtimeMs))
+
+const shapes = new Map<string, { readonly mtime: number | undefined; readonly shape: PackageShape }>()
 
 const shapeAt = (root: string): PackageShape => {
   const manifestPath = join(root, 'package.json')
   const mtime = mtimeOf(manifestPath)
   const cached = shapes.get(root)
-  if (cached !== undefined && cached.mtime === mtime) return cached.shape
+  if (cached !== undefined && mtime !== undefined && cached.mtime === mtime) return cached.shape
   const manifest: typeof Manifest.Type = Option.getOrElse(
-    S.decodeUnknownOption(S.fromJsonString(Manifest))(readFileSync(manifestPath, 'utf8')),
+    Option.flatMap(
+      attempt(() => readFileSync(manifestPath, 'utf8')),
+      S.decodeUnknownOption(S.fromJsonString(Manifest)),
+    ),
     () => ({}),
   )
   const shipsCode = manifest.exports !== undefined || manifest.main !== undefined ||
@@ -38,9 +50,11 @@ const shapeAt = (root: string): PackageShape => {
   return shape
 }
 
+const segmentsOf = (dir: string): ReadonlyArray<string> => dir.split(sep)
+
 export const packageOf = (filename: string): PackageShape | undefined => {
   for (let dir = dirname(filename);; dir = dirname(dir)) {
-    if (existsSync(join(dir, 'package.json'))) return shapeAt(dir)
+    if (!segmentsOf(dir).includes('tests') && existsSync(join(dir, 'package.json'))) return shapeAt(dir)
     if (dirname(dir) === dir) return undefined
   }
 }
@@ -58,21 +72,34 @@ interface Edge {
   readonly typeOnly: boolean
 }
 
-const isNode = (value: unknown): value is ESTree.Node =>
+export const isNode = (value: unknown): value is ESTree.Node =>
   typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
 
 const literalOf = (node: unknown): string | undefined =>
   isNode(node) && node.type === 'Literal' && typeof node.value === 'string' ? node.value : undefined
 
-const isTypeOnlyImport = (node: ESTree.ImportDeclaration): boolean =>
+export const isTypeOnly = (node: ESTree.ImportDeclaration): boolean =>
   node.importKind === 'type' || (node.specifiers.length > 0 && node.specifiers.every(
     (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
   ))
 
-const isRequireCall = (callee: ESTree.Node): boolean =>
-  (callee.type === 'Identifier' && callee.name === 'require') ||
-  (callee.type === 'CallExpression' && callee.callee.type === 'Identifier' &&
-    callee.callee.name === 'createRequire')
+const MODULE_LOADERS = new Set(['module', 'node:module'])
+
+const LOADER_NAMES = new Set(['createRequire', 'getBuiltinModule'])
+
+const nameOf = (node: ESTree.Node): string | undefined =>
+  node.type === 'Identifier'
+    ? node.name
+    : node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
+    ? node.property.name
+    : undefined
+
+const importsALoader = (node: ESTree.ImportDeclaration): boolean =>
+  !isTypeOnly(node) && MODULE_LOADERS.has(node.source.value) &&
+  node.specifiers.some((specifier) =>
+    specifier.type !== 'ImportSpecifier' ||
+    (specifier.imported.type === 'Identifier' && specifier.imported.name === 'createRequire')
+  )
 
 const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
   const edges: Edge[] = []
@@ -85,13 +112,19 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
     }
     if (!isNode(node)) continue
     if (node.type === 'ImportDeclaration') {
-      edges.push({ specifier: literalOf(node.source), typeOnly: isTypeOnlyImport(node) })
+      edges.push(
+        importsALoader(node)
+          ? { specifier: undefined, typeOnly: false }
+          : { specifier: literalOf(node.source), typeOnly: isTypeOnly(node) },
+      )
     } else if (node.type === 'ExportAllDeclaration' || (node.type === 'ExportNamedDeclaration' && node.source)) {
       edges.push({ specifier: literalOf(node.source), typeOnly: node.exportKind === 'type' })
     } else if (node.type === 'ImportExpression') {
       edges.push({ specifier: literalOf(node.source), typeOnly: false })
-    } else if (node.type === 'CallExpression' && isRequireCall(node.callee)) {
-      edges.push({ specifier: literalOf(node.arguments[0]), typeOnly: false })
+    } else if (node.type === 'CallExpression') {
+      const callee = nameOf(node.callee)
+      if (callee === 'require') edges.push({ specifier: literalOf(node.arguments[0]), typeOnly: false })
+      else if (callee !== undefined && LOADER_NAMES.has(callee)) edges.push({ specifier: undefined, typeOnly: false })
     }
     for (const [key, child] of Object.entries(node)) {
       if (key !== 'parent' && typeof child === 'object' && child !== null) pending.push(child)
@@ -100,13 +133,19 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
   return edges
 }
 
+const UNREADABLE: ReadonlyArray<Edge> = [{ specifier: undefined, typeOnly: false }]
+
 const parsed = new Map<string, { readonly mtime: number; readonly edges: ReadonlyArray<Edge> }>()
 
 const edgesOfFile = (file: string): ReadonlyArray<Edge> => {
   const mtime = mtimeOf(file)
+  if (mtime === undefined) return UNREADABLE
   const cached = parsed.get(file)
   if (cached !== undefined && cached.mtime === mtime) return cached.edges
-  const edges = edgesOf(parseSync(file, readFileSync(file, 'utf8')).program)
+  const edges = Option.getOrElse(
+    attempt(() => edgesOf(parseSync(file, readFileSync(file, 'utf8')).program)),
+    () => UNREADABLE,
+  )
   parsed.set(file, { mtime, edges })
   return edges
 }
@@ -115,6 +154,8 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts']
 
 const SOURCE_FILE = /\.[cm]?tsx?$/
 
+const isFile = (path: string): boolean => Option.getOrElse(attempt(() => statSync(path).isFile()), () => false)
+
 const sourceFileOf = (target: string): string | undefined => {
   const stem = target.replace(/\.[cm]?jsx?$/, '')
   const candidates = [
@@ -122,9 +163,7 @@ const sourceFileOf = (target: string): string | undefined => {
     ...SOURCE_EXTENSIONS.map((extension) => `${stem}${extension}`),
     ...SOURCE_EXTENSIONS.map((extension) => join(target, `index${extension}`)),
   ]
-  return candidates.find((candidate) =>
-    SOURCE_FILE.test(candidate) && existsSync(candidate) && statSync(candidate).isFile()
-  )
+  return candidates.find((candidate) => SOURCE_FILE.test(candidate) && isFile(candidate))
 }
 
 const packageNameOf = (specifier: string): string => {
@@ -135,13 +174,18 @@ const packageNameOf = (specifier: string): string => {
 const installedFromARegistry = (shape: PackageShape, name: string): boolean => {
   for (let dir = shape.root;; dir = dirname(dir)) {
     const installed = join(dir, 'node_modules', name)
-    if (existsSync(installed)) return realpathSync(installed).split(sep).includes('node_modules')
+    if (existsSync(installed)) {
+      return Option.exists(
+        attempt(() => realpathSync(installed)),
+        (target) => relative(dir, target).split(sep).includes('node_modules'),
+      )
+    }
     if (dirname(dir) === dir) return false
   }
 }
 
 const isOurs = (shape: PackageShape, specifier: string): boolean => {
-  if (specifier.startsWith('node:')) return false
+  if (isBuiltin(specifier)) return false
   const name = packageNameOf(specifier)
   if (name === shape.name) return true
   return !installedFromARegistry(shape, name)

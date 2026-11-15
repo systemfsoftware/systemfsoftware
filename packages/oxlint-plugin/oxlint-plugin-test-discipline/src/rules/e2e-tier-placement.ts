@@ -14,8 +14,8 @@ import {
   TYPE_REACH_FIX,
 } from './e2e-tier-placement.config.js'
 import { lanesOf } from './lane.js'
-import { E2E_TEST_BASENAME } from './path.config.js'
-import { basenameOf, isE2eTestFile } from './path.js'
+import { E2E_LOOKALIKE_BASENAME, E2E_TEST_BASENAME } from './path.config.js'
+import { basenameOf, isE2eTestFile, isUnderSrc } from './path.js'
 
 export type MessageIds = 'e2eOutsideTests' | 'e2eOutsideE2ePackage' | 'e2eReachesSource'
 
@@ -26,7 +26,10 @@ export const e2eTierPlacement = defineRule({
     const name = basenameOf(filename)
     return {
       Program(node: ESTree.Program) {
-        if (E2E_TEST_BASENAME.test(name) && !isE2eTestFile(filename)) {
+        const misplaced = E2E_TEST_BASENAME.test(name)
+          ? !isE2eTestFile(filename)
+          : E2E_LOOKALIKE_BASENAME.test(name) && isUnderSrc(filename)
+        if (misplaced) {
           context.report({
             node,
             messageId: 'e2eOutsideTests',

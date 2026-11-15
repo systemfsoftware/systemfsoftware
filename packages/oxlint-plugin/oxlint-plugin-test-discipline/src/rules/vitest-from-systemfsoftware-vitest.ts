@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isRunnerPackage, isTypeOnly, lanesOf } from './lane.js'
+import { isTypeOnly } from './e2e-shape.js'
+import { isRunnerPackage, lanesOf } from './lane.js'
 import { FOREIGN_RUNNERS, FOREIGN_VITEST_SOURCES, RUNNER_NAMES } from './path.config.js'
 import {
   CALL_LANES,

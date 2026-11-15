@@ -9,6 +9,8 @@ export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
  */
 export const E2E_TEST_BASENAME = /\.e2e\.ts$/
 
+export const E2E_LOOKALIKE_BASENAME = /\.e2e\.(?:test|spec)\.[cm]?[jt]sx?$/
+
 /**
  * The directory the runner excludes from collection when it sits directly under
  * a `tests` directory (`tests/__fixtures__/**`): files there are suites under

@@ -1,7 +1,9 @@
 import { MESSAGE } from './path.config.js'
 
-export const OUTSIDE_TESTS_EXPECTED = 'an end-to-end test directly under the tests directory of its package' as const
-export const OUTSIDE_TESTS_ACTUAL = 'an .e2e.ts file outside tests, or inside tests/__fixtures__' as const
+export const OUTSIDE_TESTS_EXPECTED =
+  'an end-to-end test under the tests directory of its package, outside tests/__fixtures__' as const
+export const OUTSIDE_TESTS_ACTUAL =
+  'an .e2e.ts file outside tests or inside tests/__fixtures__, or an .e2e.test.ts or .e2e.spec.ts file under src' as const
 export const OUTSIDE_TESTS_FIX = 'tests/<subject>.e2e.ts' as const
 
 export const OUTSIDE_PACKAGE_EXPECTED =
@@ -12,8 +14,7 @@ export const OUTSIDE_PACKAGE_FIX = 'apps/<product>-e2e/tests/<subject>.e2e.ts' a
 export const TYPE_REACH_EXPECTED =
   'an end-to-end Feature that names nothing of the repository’s code, types included' as const
 export const TYPE_REACH_ACTUAL = 'a type import of the repository’s code' as const
-export const TYPE_REACH_FIX =
-  'delete the import type and declare the shape the test reads in tests/__fixtures__/' as const
+export const TYPE_REACH_FIX = 'tests/__fixtures__/<shape>.ts: export interface <Shape> { … }' as const
 
 export const meta = {
   type: 'problem',

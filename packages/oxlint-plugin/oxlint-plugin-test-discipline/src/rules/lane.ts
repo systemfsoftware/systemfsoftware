@@ -1,6 +1,6 @@
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Option, Schema as S } from 'effect'
-import { packageOf, reachOf } from './e2e-shape.js'
+import { isNode, isTypeOnly, packageOf, reachOf } from './e2e-shape.js'
 import {
   CONFORMANCE_PACKAGE,
   DIFFERENTIAL_PACKAGE,
@@ -32,11 +32,6 @@ const isPackageOrSubpath = (source: string, pkg: string): boolean => source === 
 export const harnessLaneOf = (source: string): Lane | undefined =>
   HARNESS_LANES.find(([pkg]) => isPackageOrSubpath(source, pkg))?.[1]
 
-export const isTypeOnly = (node: ESTree.ImportDeclaration): boolean =>
-  node.importKind === 'type' || (node.specifiers.length > 0 && node.specifiers.every(
-    (specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type',
-  ))
-
 /**
  * Where a value import brings FastCheck in: the whole declaration for the
  * `fast-check` module (or a subpath), else each `FastCheck` named value import.
@@ -47,9 +42,6 @@ export const fastCheckImportSites = (node: ESTree.ImportDeclaration): ReadonlyAr
       specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type' &&
       specifier.imported.type === 'Identifier' && specifier.imported.name === 'FastCheck',
   )
-
-const isNode = (value: unknown): value is ESTree.Node =>
-  typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
 
 type VisitorKeys = Readonly<Record<string, readonly string[]>>
 
