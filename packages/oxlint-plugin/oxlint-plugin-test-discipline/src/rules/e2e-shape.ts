@@ -50,13 +50,23 @@ const shapeAt = (root: string): PackageShape => {
   return shape
 }
 
-const segmentsOf = (dir: string): ReadonlyArray<string> => dir.split(sep)
+const manifestDirsAbove = (filename: string): ReadonlyArray<string> => {
+  const dirs: string[] = []
+  for (let dir = dirname(filename);; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'package.json'))) dirs.push(dir)
+    if (dirname(dir) === dir) return dirs
+  }
+}
 
 export const packageOf = (filename: string): PackageShape | undefined => {
-  for (let dir = dirname(filename);; dir = dirname(dir)) {
-    if (!segmentsOf(dir).includes('tests') && existsSync(join(dir, 'package.json'))) return shapeAt(dir)
-    if (dirname(dir) === dir) return undefined
+  const [innermost, ...outer] = manifestDirsAbove(filename)
+  if (innermost === undefined) return undefined
+  let root = innermost
+  for (const dir of outer) {
+    if (relative(dir, root).split(sep)[0] !== 'tests') break
+    root = dir
   }
+  return shapeAt(root)
 }
 
 type ReachKind = 'value' | 'type'
@@ -90,9 +100,11 @@ const LOADER_NAMES = new Set(['createRequire', 'getBuiltinModule'])
 const nameOf = (node: ESTree.Node): string | undefined =>
   node.type === 'Identifier'
     ? node.name
-    : node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier'
+    : node.type !== 'MemberExpression'
+    ? undefined
+    : node.property.type === 'Identifier' && !node.computed
     ? node.property.name
-    : undefined
+    : literalOf(node.property)
 
 const importsALoader = (node: ESTree.ImportDeclaration): boolean =>
   !isTypeOnly(node) && MODULE_LOADERS.has(node.source.value) &&
@@ -120,7 +132,11 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
     } else if (node.type === 'ExportAllDeclaration' || (node.type === 'ExportNamedDeclaration' && node.source)) {
       edges.push({ specifier: literalOf(node.source), typeOnly: node.exportKind === 'type' })
     } else if (node.type === 'ImportExpression') {
-      edges.push({ specifier: literalOf(node.source), typeOnly: false })
+      const specifier = literalOf(node.source)
+      edges.push({
+        specifier: specifier !== undefined && MODULE_LOADERS.has(specifier) ? undefined : specifier,
+        typeOnly: false,
+      })
     } else if (node.type === 'CallExpression') {
       const callee = nameOf(node.callee)
       if (callee === 'require') edges.push({ specifier: literalOf(node.arguments[0]), typeOnly: false })
@@ -150,9 +166,9 @@ const edgesOfFile = (file: string): ReadonlyArray<Edge> => {
   return edges
 }
 
-const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts']
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']
 
-const SOURCE_FILE = /\.[cm]?tsx?$/
+const SOURCE_FILE = /\.[cm]?[jt]sx?$/
 
 const isFile = (path: string): boolean => Option.getOrElse(attempt(() => statSync(path).isFile()), () => false)
 
@@ -207,6 +223,14 @@ const reachOfEdge = (shape: PackageShape, file: string, edge: Edge): Reach | 'lo
   return isOurs(shape, specifier) ? reach(specifier) : undefined
 }
 
+const realOf = (path: string): string | undefined => Option.getOrUndefined(attempt(() => realpathSync(path)))
+
+const staysInTests = (shape: PackageShape, file: string): boolean => {
+  const tests = realOf(join(shape.root, 'tests'))
+  const target = realOf(file)
+  return tests !== undefined && target !== undefined && isInside(tests, target)
+}
+
 export const reachOf = (shape: PackageShape, filename: string, program: ESTree.Program): Reach | undefined => {
   const seen = new Set<string>([filename])
   const pending = [{ file: filename, edges: edgesOf(program) }]
@@ -220,6 +244,9 @@ export const reachOf = (shape: PackageShape, filename: string, program: ESTree.P
           : sourceFileOf(resolve(dirname(next.file), edge.specifier))
         if (local !== undefined && !seen.has(local)) {
           seen.add(local)
+          if (!staysInTests(shape, local)) {
+            return { kind: edge.typeOnly ? 'type' : 'value', specifier: edge.specifier ?? local, file: next.file }
+          }
           pending.push({ file: local, edges: edgesOfFile(local) })
         }
       } else if (found?.kind === 'value') {

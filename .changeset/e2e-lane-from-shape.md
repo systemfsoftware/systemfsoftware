@@ -13,7 +13,7 @@ A Feature is in the e2e lane when no value it imports reaches the repository's o
 - an import that resolves to no package installed from a registry (a workspace link, or a name nothing installs);
 - a dynamic import whose target cannot be read, or a local module that cannot be read or parsed.
 
-Re-exports, `import()`, `require()` and any import of `createRequire` or call of `getBuiltinModule` all count. Node builtins, with or without `node:`, never do. The package is the nearest `package.json` outside any `tests/` directory.
+Re-exports, `import()`, `require()` and any import of `createRequire` or call of `getBuiltinModule` all count. Node builtins, with or without `node:`, never do. A `package.json` inside another package's `tests/` directory does not make a package. A local module is followed when it is TypeScript or JavaScript and its real path stays in `tests/`; a symlink out of `tests/` is a reach.
 
 `test-suffix-outside-src` now asks for `<subject>.e2e.ts` on such a Feature, so a black-box test named `*.integration.test.ts` is refused. An `.e2e.ts` Feature that reaches the repository's code is asked for `.integration.test.ts`. `e2e-tier-placement` reports three cases:
 

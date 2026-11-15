@@ -50,6 +50,12 @@ write('apps/broken/package.json', '{ not json')
 write('packages/core/tests/sneak/package.json', '{}')
 write('apps/shop-e2e/tests/__fixtures__/locked.ts', "export { chromium } from 'example-driver'\n")
 chmodSync(join(root, 'apps/shop-e2e/tests/__fixtures__/locked.ts'), 0)
+write('apps/shop-e2e/tests/__fixtures__/sneak.mjs', "export { total } from '@example/core'\n")
+link('apps/shop-e2e/tests/__fixtures__/escape.ts', 'packages/core/src/index.ts')
+write('tests/nested/package.json', JSON.stringify({ private: true }))
+write('tests/nested/apps/quiet/package.json', JSON.stringify({ name: '@example/quiet', exports: {} }))
+
+const runsAsRoot = process.getuid?.() === 0
 installed('example-driver')
 write(
   'node_modules/.pnpm/example-runner@1.0.0/node_modules/example-runner/package.json',
@@ -124,6 +130,12 @@ ruleTester.run('e2e-tier-placement', plugin.rules['e2e-tier-placement'], {
       code: `${GHERKIN}${DRIVER}`,
       filename: at('packages/core/src/buying.e2e.test.ts'),
       errors: [error('e2eOutsideTests')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItsPackageShipsCodeInACheckoutUnderATestsDirectory',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('tests/nested/apps/quiet/tests/buying.e2e.ts'),
+      errors: [error('e2eOutsideE2ePackage')],
     },
     {
       name: 'Should_RefuseAnE2eFeature_When_ANestedManifestUnderTestsClaimsToShipNothing',
@@ -223,9 +235,33 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureLoadsTheModuleBuiltinAtRuntime',
       ...suffix(JOURNEY, `${GHERKIN}const loader = process.getBuiltinModule('node:module')\n`, '.integration.test.ts'),
     },
-    {
+    ...(runsAsRoot ? [] : [{
       name: 'Should_AskForTheIntegrationName_When_AFixtureAnE2eFeatureImportsCannotBeRead',
       ...suffix(JOURNEY, `${GHERKIN}import { chromium } from './__fixtures__/locked.ts'\n`, '.integration.test.ts'),
+    }]),
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureDynamicallyImportsTheModuleBuiltin',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const { createRequire: load } = await import('node:module')\nconst core = load(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureReachesTheModuleBuiltinByAComputedName',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const loader = process['getBuiltinModule']('node:module')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_ALocalJavaScriptHelperReachesAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from './__fixtures__/sneak.mjs'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_ASymlinkInTestsPointsAtSource',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from './__fixtures__/escape.ts'\n`, '.integration.test.ts'),
     },
     {
       name: 'Should_AskForTheE2eName_When_AnIntegrationFeatureImportsOnlyRegistryPackages',
