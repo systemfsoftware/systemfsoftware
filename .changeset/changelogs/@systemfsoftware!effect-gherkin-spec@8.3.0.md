@@ -1,10 +1,4 @@
----
-"@systemfsoftware/oxlint-plugin-dmmf-workflow": major
-"@systemfsoftware/oxlint-config-dmmf": major
-"@systemfsoftware/oxlint-config-recommended": major
-"@systemfsoftware/oxlint-plugin-effect-schema": patch
-"@systemfsoftware/effect-gherkin-spec": minor
----
+# @systemfsoftware/effect-gherkin-spec@8.3.0
 
 Add `decision-code-imports` to the recommended config at `error`. Decision code is every `*.workflow.ts` and `*.schema.ts` file under a package's `src/`. It may reach only other decision code, across the whole file and not only inside a `Workflow.make` body. A runtime reference may resolve only to:
 
@@ -35,3 +29,5 @@ Type-only imports and an `if (import.meta.vitest)` block are not read. The rule 
 `StepError` in `@systemfsoftware/effect-gherkin-spec` keeps the same fields, encoded shape and `message`. It now extends the newly exported `StepFailure`, the schema class whose `message` is the step headline. `StepError` appends the cause summary to it, outside the schema file.
 
 `@systemfsoftware/oxlint-plugin-effect-schema` behaves the same; its workspace and in-source-test helpers moved into the shared kernel.
+
+Lints with the updated sandwich-shell-is-straight-line fix text; nothing published changes.
