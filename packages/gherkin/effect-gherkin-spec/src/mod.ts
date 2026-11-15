@@ -55,3 +55,4 @@ export type {
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'
 export type { OutlineRow, TemplateToken } from './OutlineExpand.js'
 export { StepError } from './StepError.js'
+export { StepFailure } from './StepError.schema.js'

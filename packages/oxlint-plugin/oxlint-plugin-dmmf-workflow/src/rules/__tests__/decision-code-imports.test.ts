@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -50,12 +50,20 @@ const BROKEN_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-broken-'))
 const PROOFLESS_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-proofless-'))
 const MISSING_PROOF_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-missing-proof-'))
 const LEGACY_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-legacy-'))
+const LINKED_PROOF_WORKSPACE = await mkdtemp(join(tmpdir(), 'decision-code-linked-proof-'))
+const OUTSIDE = await mkdtemp(join(tmpdir(), 'decision-code-outside-'))
 
 vitest.afterAll(async () => {
   await Promise.all(
-    [WORKSPACE, BROKEN_WORKSPACE, PROOFLESS_WORKSPACE, MISSING_PROOF_WORKSPACE, LEGACY_WORKSPACE].map((root) =>
-      rm(root, { recursive: true, force: true })
-    ),
+    [
+      WORKSPACE,
+      BROKEN_WORKSPACE,
+      PROOFLESS_WORKSPACE,
+      MISSING_PROOF_WORKSPACE,
+      LEGACY_WORKSPACE,
+      LINKED_PROOF_WORKSPACE,
+      OUTSIDE,
+    ].map((root) => rm(root, { recursive: true, force: true })),
   )
 })
 
@@ -82,6 +90,15 @@ await plant(WORKSPACE, {
   'packages/domain/src/price.schema.ts': '',
   'test-utils/fixture.schema.ts': '',
 })
+await plant(WORKSPACE, { 'outside-src/impure.ts': 'export const format = (n: number) => String(n)' })
+await symlink(join(WORKSPACE, 'outside-src/impure.ts'), join(WORKSPACE, 'packages/app/src/linked.schema.ts'))
+await plant(OUTSIDE, { 'proof.test.ts': '' })
+await plant(
+  LINKED_PROOF_WORKSPACE,
+  workspaceFiles(JSON.stringify({ kernels: [{ package: '@acme/kernel', proof: 'packages/kernel/proof.test.ts' }] })),
+)
+await mkdir(join(LINKED_PROOF_WORKSPACE, 'packages/kernel'), { recursive: true })
+await symlink(join(OUTSIDE, 'proof.test.ts'), join(LINKED_PROOF_WORKSPACE, 'packages/kernel/proof.test.ts'))
 await plant(
   LEGACY_WORKSPACE,
   workspaceFiles(JSON.stringify({ legacy: ['packages/app/src/order.schema.ts'], kernels: [] })),
@@ -223,7 +240,7 @@ export const fresh = () => Mutant.Location.make({ line: 1 })`,
       name: 'Should_Pass_When_AConstFieldRecordOfWorkspaceSchemasIsSpreadIntoASchemaCall',
       code: `${SCHEMA_IMPORT}
 import { Mutant } from '@acme/domain'
-const rowFields = { id: Mutant.MutantId, tags: [Mutant.Tag] }
+const rowFields = { id: Mutant.MutantId, tags: S.Array(Mutant.Tag) }
 export const Row = S.Struct({ ...rowFields, name: S.String })
 export const Rows = S.Array(S.Struct(rowFields))
 export type RowFields = typeof rowFields`,
@@ -243,6 +260,24 @@ ${NAMESPACE_IMPORT}
 import { Money } from '@acme/domain'
 const strict = true
 export const Line = S.Struct({ price: strict ? PI.Price : Money, items: S.Array(strict ? PI.Item : PI.LooseItem) })`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_WorkspaceSchemasFillTheFieldsAndMembersOfSchemaCombinators',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+import { Money } from '@acme/domain'
+export const Line = S.TaggedStruct('Line', { sku: PI.Sku, price: Money })
+export class Failed extends S.TaggedError<Failed>()('Failed', { cause: PI.Cause }) {}
+export const Pair = S.Tuple([PI.Sku, Money])
+const members = [PI.Card, PI.Cash]
+export const Payment = S.Union(members)
+const base = { sku: PI.Sku }
+const extended = { ...base, price: Money } as const
+export const Priced = S.Struct(extended)
+export const Target = S.String.pipe(S.decodeTo(PI.Sku))
+export const ById = S.Record(S.String, PI.Sku)
+export const Leg = S.TaggedUnion({ Measured: { wallMs: PI.Millis }, Skipped: {} })`,
       filename: SCHEMA,
     },
     {
@@ -452,6 +487,55 @@ export const x = 1`,
           `the "kernels" entry "@acme/kernel" names the proof target "${KERNEL_PROOF}", which is not a file in the repo`,
         ),
       ],
+    },
+    {
+      name: 'Should_Report_When_ASchemaSuffixedImportIsASymlinkOutOfTheSrc',
+      code: `import { format } from './linked.schema.js'
+export const view = format`,
+      filename: WORKFLOW,
+      errors: [plainModule('./linked.schema.js')],
+    },
+    {
+      name: 'Should_Report_When_AKernelProofIsASymlinkOutOfTheRepo',
+      code: 'export const x = 1',
+      filename: join(LINKED_PROOF_WORKSPACE, 'packages/app/src/order.schema.ts'),
+      errors: [
+        unreadable(
+          LINKED_PROOF_WORKSPACE,
+          'the "kernels" entry "@acme/kernel" names the proof target "packages/kernel/proof.test.ts", which is not a file in the repo',
+        ),
+      ],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceBindingRidesInSchemaAnnotationsOrOptions',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Shown = S.String.annotations({ formatter: PI.format })
+export const Defaulted = S.String.annotations({ default: PI.makeDefault })
+export const Checked = S.String.check(S.makeFilter(PI.isValid))
+export const Decoded = S.String.pipe(S.decodeTo(PI.Sku, { decode: PI.parse, encode: PI.print }))
+export class Titled extends S.Class<Titled>('Titled')({ a: S.String }, { title: PI.title }) {}
+export const Leg = S.TaggedUnion({ Measured: { wallMs: { nested: PI.Millis } } })`,
+      filename: SCHEMA,
+      errors: [
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+        workspaceUse('PI'),
+      ],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceBindingSitsInANestedPlainObjectOfAStruct',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Meta = S.Struct({ meta: { fn: PI.format } })
+const helpers = { fn: PI.format }
+export const keys = S.Struct({ ...helpers, other: { more: helpers } })`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI')],
     },
     {
       name: 'Should_Report_When_TheManifestIsNotJson',

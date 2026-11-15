@@ -3,7 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { findWorkspaceDirSync } from '@pnpm/workspace.root-finder'
 import { isImportMetaVitestTest, isInsideConsequent } from '@systemfsoftware/oxlint-import-origin'
 import { isPackageOfEnclosingWorkspace, packageNameOf } from '@systemfsoftware/oxlint-import-origin/workspace'
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import {
   DECISION_FILE_SUFFIXES,
@@ -115,12 +115,22 @@ const packageRootOf = (filename: string): string | null => {
 const sourceFileCandidatesOf = (specifierPath: string): readonly string[] =>
   specifierPath.endsWith('.js') ? [`${specifierPath.slice(0, -'.js'.length)}.ts`, specifierPath] : [specifierPath]
 
+const realPathOf = (path: string): string | null => {
+  try {
+    return realpathSync(path)
+  } catch {
+    return null
+  }
+}
+
 const resolvesToDecisionFileOfSamePackage = (source: string, filename: string): boolean => {
   const packageRoot = packageRootOf(filename)
   if (packageRoot === null) return false
-  const sourceRoot = `${resolve(packageRoot, 'src')}${sep}`
-  const resolved = sourceFileCandidatesOf(resolve(dirname(filename), source)).find(isFile)
-  return resolved !== undefined && resolved.startsWith(sourceRoot) && isDecisionFile(resolved)
+  const realSourceRoot = realPathOf(resolve(packageRoot, 'src'))
+  const candidate = sourceFileCandidatesOf(resolve(dirname(filename), source)).find(isFile)
+  const realCandidate = candidate === undefined ? null : realPathOf(candidate)
+  return realSourceRoot !== null && realCandidate !== null && realCandidate.startsWith(`${realSourceRoot}${sep}`) &&
+    isDecisionFile(realCandidate)
 }
 
 const isOpenPackage = (source: string): boolean =>
@@ -174,11 +184,143 @@ const directiveSilencingRule = (comment: { readonly value: string }): string | n
 }
 
 interface SchemaPositions {
-  readonly isSchemaCallee: (callee: ESTree.Node) => boolean
+  readonly combinatorOf: (call: ESTree.CallExpression) => string | null
   readonly recordReadsOf: (declarator: ESTree.VariableDeclarator) => readonly ESTree.Node[]
 }
 
 const MAX_RECORD_DEPTH = 4
+
+const FIELDS_ARGUMENT: Readonly<Record<string, { readonly curried: boolean; readonly index: number }>> = {
+  Struct: { curried: false, index: 0 },
+  TaggedStruct: { curried: false, index: 1 },
+  Class: { curried: true, index: 0 },
+  ErrorClass: { curried: true, index: 0 },
+  TaggedClass: { curried: true, index: 1 },
+  TaggedError: { curried: true, index: 1 },
+}
+
+const MEMBER_LIST_COMBINATORS: ReadonlySet<string> = new Set(['Union', 'Tuple', 'Literals'])
+
+const NON_SCHEMA_ARGUMENT_COMBINATORS: ReadonlySet<string> = new Set([
+  'annotations',
+  'annotate',
+  'annotateKey',
+  'check',
+  'filter',
+  'makeFilter',
+  'refine',
+  'transform',
+  'transformOrFail',
+  'withConstructorDefault',
+  'withDecodingDefault',
+  'withDecodingDefaultKey',
+  'pipe',
+])
+
+const FIRST_ARGUMENT_ONLY_COMBINATORS: ReadonlySet<string> = new Set(['decodeTo', 'encodeTo'])
+
+const stripInstantiation = (node: ESTree.Node): ESTree.Node =>
+  node.type === 'TSInstantiationExpression' ? node.expression : node
+
+const isCurriedCall = (call: ESTree.CallExpression): boolean =>
+  stripInstantiation(call.callee).type === 'CallExpression'
+
+const fieldsIndexOf = (call: ESTree.CallExpression, combinator: string): number | null => {
+  const entry = FIELDS_ARGUMENT[combinator]
+  return entry !== undefined && entry.curried === isCurriedCall(call) ? entry.index : null
+}
+
+const climbValueWrappers = (expression: ESTree.Node): ESTree.Node => {
+  let current = expression
+  for (;;) {
+    const parent = current.parent
+    if (parent === null) return current
+    const wraps = EXPRESSION_WRAPPER_TYPES.has(parent.type) && 'expression' in parent && parent.expression === current
+    const isBranch = parent.type === 'ConditionalExpression' && parent.test !== current
+    if (!wraps && !isBranch) return current
+    current = parent
+  }
+}
+
+const argumentIndexOf = (call: ESTree.Node, node: ESTree.Node): number =>
+  call.type === 'CallExpression' && call.callee !== node
+    ? call.arguments.findIndex((argument) => argument === node)
+    : -1
+
+const isConstRecordDeclarator = (node: ESTree.Node | null): node is ESTree.VariableDeclarator =>
+  node !== null && node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.parent !== null &&
+  node.parent.type === 'VariableDeclaration' && node.parent.kind === 'const'
+
+const isTaggedUnionCases = (cases: ESTree.Node | null, positions: SchemaPositions): boolean => {
+  if (cases === null || cases.type !== 'ObjectExpression') return false
+  const node = climbValueWrappers(cases)
+  const call = node.parent
+  return call !== null && call.type === 'CallExpression' && argumentIndexOf(call, node) === 0 &&
+    positions.combinatorOf(call) === 'TaggedUnion'
+}
+
+type ContainerKind = 'fields' | 'members'
+
+const isContainerValue = (
+  expression: ESTree.Node,
+  kind: ContainerKind,
+  positions: SchemaPositions,
+  depth: number,
+): boolean => {
+  if (depth > MAX_RECORD_DEPTH) return false
+  const node = climbValueWrappers(expression)
+  const parent = node.parent
+  if (parent === null) return false
+  if (parent.type === 'CallExpression') {
+    const index = argumentIndexOf(parent, node)
+    const combinator = index === -1 ? null : positions.combinatorOf(parent)
+    if (combinator === null) return false
+    return kind === 'fields' ? fieldsIndexOf(parent, combinator) === index : MEMBER_LIST_COMBINATORS.has(combinator)
+  }
+  if (
+    kind === 'fields' && parent.type === 'Property' && parent.value === node &&
+    isTaggedUnionCases(parent.parent, positions)
+  ) {
+    return true
+  }
+  const literalType = kind === 'fields' ? 'ObjectExpression' : 'ArrayExpression'
+  if (parent.type === 'SpreadElement' && parent.parent !== null && parent.parent.type === literalType) {
+    return isContainerValue(parent.parent, kind, positions, depth + 1)
+  }
+  if (expression.type === literalType && isConstRecordDeclarator(parent) && parent.init === node) {
+    return positions.recordReadsOf(parent).every((read) =>
+      isInTypePosition(read) || isContainerValue(read, kind, positions, depth + 1)
+    )
+  }
+  return false
+}
+
+const isDirectSchemaArgument = (call: ESTree.CallExpression, index: number, positions: SchemaPositions): boolean => {
+  const combinator = positions.combinatorOf(call)
+  if (combinator === null) return false
+  if (FIELDS_ARGUMENT[combinator] !== undefined) return fieldsIndexOf(call, combinator) === index
+  if (NON_SCHEMA_ARGUMENT_COMBINATORS.has(combinator)) return false
+  return !FIRST_ARGUMENT_ONLY_COMBINATORS.has(combinator) || index === 0
+}
+
+const isSchemaPosition = (expression: ESTree.Node, positions: SchemaPositions): boolean => {
+  const node = climbValueWrappers(expression)
+  const parent = node.parent
+  if (parent === null) return false
+  if (parent.type === 'CallExpression') {
+    const index = argumentIndexOf(parent, node)
+    return index !== -1 && isDirectSchemaArgument(parent, index, positions)
+  }
+  if (parent.type === 'Property' && parent.value === node && parent.parent !== null) {
+    return parent.parent.type === 'ObjectExpression' && isContainerValue(parent.parent, 'fields', positions, 0)
+  }
+  if (parent.type === 'ArrayExpression') return isContainerValue(parent, 'members', positions, 0)
+  if (parent.type === 'SpreadElement' && parent.parent !== null) {
+    if (parent.parent.type === 'ObjectExpression') return isContainerValue(parent.parent, 'fields', positions, 0)
+    if (parent.parent.type === 'ArrayExpression') return isContainerValue(parent.parent, 'members', positions, 0)
+  }
+  return false
+}
 
 const isSchemaUse = (identifier: ESTree.Node, isNamespace: boolean, positions: SchemaPositions): boolean => {
   const firstSchemaMemberIndex = isNamespace ? 1 : 0
@@ -193,50 +335,7 @@ const isSchemaUse = (identifier: ESTree.Node, isNamespace: boolean, positions: S
     end = parent
     depth += 1
   }
-  return depth >= firstSchemaMemberIndex && isSchemaArgument(end, positions, 0)
-}
-
-const isConstRecordDeclarator = (node: ESTree.Node): node is ESTree.VariableDeclarator =>
-  node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.parent !== null &&
-  node.parent.type === 'VariableDeclaration' && node.parent.kind === 'const'
-
-const isSchemaArgument = (expression: ESTree.Node, positions: SchemaPositions, recordDepth: number): boolean => {
-  let current = expression
-  let insideContainer = false
-  for (;;) {
-    const parent = current.parent
-    if (parent === null) return false
-    if (EXPRESSION_WRAPPER_TYPES.has(parent.type) && 'expression' in parent && parent.expression === current) {
-      current = parent
-      continue
-    }
-    if (parent.type === 'ArrayExpression' || parent.type === 'ObjectExpression' || parent.type === 'SpreadElement') {
-      insideContainer = insideContainer || parent.type !== 'SpreadElement'
-      current = parent
-      continue
-    }
-    if (parent.type === 'ConditionalExpression') {
-      if (parent.test === current) return false
-      current = parent
-      continue
-    }
-    if (parent.type === 'Property') {
-      if (parent.value !== current) return false
-      current = parent
-      continue
-    }
-    if (parent.type === 'CallExpression') {
-      return parent.callee !== current && parent.arguments.some((argument) => argument === current) &&
-        positions.isSchemaCallee(parent.callee)
-    }
-    if (insideContainer && isConstRecordDeclarator(parent) && parent.init === current) {
-      if (recordDepth >= MAX_RECORD_DEPTH) return false
-      return positions.recordReadsOf(parent).every((read) =>
-        isInTypePosition(read) || isSchemaArgument(read, positions, recordDepth + 1)
-      )
-    }
-    return false
-  }
+  return depth >= firstSchemaMemberIndex && isSchemaPosition(end, positions)
 }
 
 const isRequireIdentifier = (node: ESTree.Node): boolean => {
@@ -262,11 +361,23 @@ const calleeRootOf = (callee: ESTree.Node): ESTree.Node => {
   }
 }
 
-const isEffectSchemaImport = (declaration: ESTree.ImportDeclaration, specifier: ESTree.Node): boolean => {
+const importedNameOf = (specifier: ESTree.Node): string | null =>
+  specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier' ? specifier.imported.name : null
+
+type SchemaBinding = { readonly combinator: string | null } | null
+
+const schemaBindingOf = (declaration: ESTree.ImportDeclaration, specifier: ESTree.Node): SchemaBinding => {
   const source = declaration.source.value
-  if (source === 'effect/Schema') return true
-  if (source !== 'effect' || specifier.type !== 'ImportSpecifier') return false
-  return specifier.imported.type === 'Identifier' && specifier.imported.name === 'Schema'
+  const importedName = importedNameOf(specifier)
+  if (source === 'effect/Schema') return { combinator: importedName }
+  return source === 'effect' && importedName === 'Schema' ? { combinator: null } : null
+}
+
+const combinatorNameOf = (callee: ESTree.Node, schemaRoots: ReadonlyMap<ESTree.Node, string | null>): string | null => {
+  const node = stripInstantiation(callee)
+  if (node.type === 'CallExpression') return combinatorNameOf(node.callee, schemaRoots)
+  if (node.type === 'MemberExpression') return memberNameOf(node)
+  return schemaRoots.get(node) ?? null
 }
 
 export const decisionCodeImports = defineRule({
@@ -319,7 +430,7 @@ export const decisionCodeImports = defineRule({
         const insideVitestGuard = (node: ESTree.Node): boolean =>
           guardConsequents.some((consequent) => isInsideConsequent(node, consequent))
 
-        const schemaCalleeRoots = new Set<ESTree.Node>()
+        const schemaRoots = new Map<ESTree.Node, string | null>()
         const workspaceBindings: Array<{
           readonly variable: ScopeVariable
           readonly isNamespace: boolean
@@ -331,9 +442,10 @@ export const decisionCodeImports = defineRule({
             if (isTypeOnlyImport(statement)) continue
             const source = statement.source.value
             for (const specifier of valueSpecifiersOf(statement)) {
-              if (!isEffectSchemaImport(statement, specifier)) continue
+              const binding = schemaBindingOf(statement, specifier)
+              if (binding === null) continue
               for (const variable of context.sourceCode.getDeclaredVariables(specifier)) {
-                for (const reference of variable.references) schemaCalleeRoots.add(reference.identifier)
+                for (const reference of variable.references) schemaRoots.set(reference.identifier, binding.combinator)
               }
             }
             const kind = classifySource(source, filename, manifest)
@@ -440,7 +552,8 @@ export const decisionCodeImports = defineRule({
         walk(program)
 
         const positions: SchemaPositions = {
-          isSchemaCallee: (callee) => schemaCalleeRoots.has(calleeRootOf(callee)),
+          combinatorOf: (call) =>
+            schemaRoots.has(calleeRootOf(call.callee)) ? combinatorNameOf(call.callee, schemaRoots) : null,
           recordReadsOf: (declarator) =>
             context.sourceCode.getDeclaredVariables(declarator).flatMap((variable) =>
               variable.references.filter((reference) => !reference.isWrite()).map((reference) => reference.identifier)

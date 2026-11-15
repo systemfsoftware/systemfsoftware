@@ -1,5 +1,5 @@
-import { readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { MANIFEST_FILE } from './decision-code-imports.config.js'
 
 export interface DecisionCodeManifest {
@@ -28,7 +28,8 @@ const isRepoRelativePath = (path: string): boolean =>
 
 const isFileIn = (root: string, path: string): boolean => {
   try {
-    return statSync(join(root, path)).isFile()
+    const realTarget = realpathSync(join(root, path))
+    return realTarget.startsWith(`${realpathSync(root)}${sep}`) && statSync(realTarget).isFile()
   } catch {
     return false
   }

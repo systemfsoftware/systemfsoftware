@@ -291,8 +291,6 @@ export const stageWhen: WhenStage;
 // @public
 export type StepCheck<E = never, R = never> = Check | Effect.Effect<Check, E, R>;
 
-// Warning: (ae-forgotten-export) The symbol "StepFailure" needs to be exported by the entry point index.d.ts
-//
 // @public
 export class StepError extends StepFailure {
     // (undocumented)
@@ -301,6 +299,14 @@ export class StepError extends StepFailure {
 
 // @public
 export const StepExpect: Context.Reference<Expect | null>;
+
+// Warning: (ae-forgotten-export) The symbol "StepFailure_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class StepFailure extends StepFailure_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export type StepText<A extends object = object> = string | ((scope: A) => string);
