@@ -10,9 +10,9 @@ tags: [config, context, service, layer, config-provider]
 
 A feature's settings are one `Context.Service` named `<Feature>Config`, declared in src/config.ts beside the Configs its layer reads; no `<feature>.config.ts` exists under src/ (cell-architecture pack, file-kinds.md).
 
-Application code reads settings with `yield* <Feature>Config` and never takes a setting as a function or constructor parameter. A library adapter's layer options follow the cell-architecture pack, layers-are-named-layer-and-layerConfig.md.
+Application code reads settings with `yield* <Feature>Config` and never takes a setting as a function or constructor parameter. A library adapter's layer options follow the effect-architecture pack, layers-are-named-layer-and-layerConfig.md.
 
-`<Feature>Config.layer` is the only code that evaluates a Config. The ConfigProvider decides where values come from (the process environment by default, a Worker's bindings through `ConfigProvider.fromUnknown(env)`); no other code reads `process.env` or a binding object. Provide the layer at the composition root (cell-architecture pack, services-are-provided-once-at-the-composition-root.md).
+`<Feature>Config.layer` is the only code that evaluates a Config. The ConfigProvider decides where values come from (the process environment by default, a Worker's bindings through `ConfigProvider.fromUnknown(env)`); no other code reads `process.env` or a binding object. Provide the layer at the composition root (effect-architecture pack, services-are-provided-once-at-the-composition-root.md).
 
 ```typescript
 // WRONG

@@ -193,7 +193,8 @@ const program = Effect.gen(function*() {
 
 The principles and design laws governing code in this repository live in standalone Compound Engineering packs:
 
-- [Cell Architecture](compound-packs/cell-architecture): File kinds, services and layers, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
+- [Cell Architecture](compound-packs/cell-architecture): File kinds, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
+- [Effect Architecture](compound-packs/effect-architecture): Adapter names, driver loading, instance state, layer naming and service wiring across Effect 4 code.
 - [Schema Modelling](compound-packs/schema-modelling): How Effect Schema declares invariants, states and foreign wire shapes, how refined values generate, and how failing generated laws and refusal properties are handled.
 - [Configuration](compound-packs/configuration): How an application's settings reach its code through a `<Feature>Config` in context, and how each environment variable is declared as one described Config in src/config.ts.
 - [Package Surface](compound-packs/package-surface): What a workspace package exposes through its exports map, under how many names, and how a change to that surface is versioned.
@@ -350,7 +351,8 @@ The cell architecture's worked example is the [Effect Endgame Starter Kit](https
 
 ## Documentation
 
-- [Cell Architecture](compound-packs/cell-architecture): file kinds, services and layers, and how cells compose.
+- [Cell Architecture](compound-packs/cell-architecture): file kinds, handles, scopes, and how cells compose.
+- [Effect Architecture](compound-packs/effect-architecture): adapter names, driver loading, instance state, layers, and service wiring.
 - [Schema Modelling](compound-packs/schema-modelling): how Effect Schema declares invariants and wire shapes.
 - [Testing](compound-packs/testing) and [Property Testing](compound-packs/property-testing): what a behaviour test proves, and what makes a property real.
 - [Package Surface](compound-packs/package-surface): what a workspace package exposes through its `exports` map.

@@ -1,5 +1,6 @@
 packs:
   - source: compound-packs/cell-architecture
+  - source: compound-packs/effect-architecture
   - source: compound-packs/schema-modelling
   - source: compound-packs/configuration
   - source: compound-packs/package-surface
