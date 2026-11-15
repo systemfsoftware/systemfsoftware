@@ -111,7 +111,7 @@ Measured on `stryker-js-effect` `main` on 2026-11-15:
   - inside another `*.workflow.ts`;
   - in a test file, or inside an in-source `if (import.meta.vitest)` block.
 
-  A `*.workflow.ts` export that calls a workflow is itself a reference outside a cell, and so is a namespace, computed or re-exported access. Any other reference is a lint error. A repository adopting the rule lists its current offenders by file and reference, and the list may only shrink.
+  A `*.workflow.ts` export that calls a workflow, or that holds one in an object, array or default export, is itself a reference outside a cell, and so is a namespace, computed, aliased or re-exported access. Any other reference is a lint error. A repository adopting the rule lists its current offenders by file and reference, and the list may only shrink.
 
 ### Scope Boundaries
 
@@ -140,7 +140,7 @@ Measured on `stryker-js-effect` `main` on 2026-11-15:
   - It does not follow values through other bindings: a workflow passed through a variable is reported at that variable's source reference.
   - Before it merges, it gets an adversarial review for brittleness.
 - KTD6. **`monitoredRun` is shared, and a writer passes no decide stacktrace.** `annotateCellIdentity` writes `cell.decide_stacktrace` only when one is given. Both shapes keep one code path for span, histogram and `result_class`, so R4 cannot drift between them.
-- KTD7. **The straight-line shell rule covers the writer chain.** The rule keys a cell on its builder and middle call: `named` with `.decide`, and `writer` with `.decode`. Without this, a writer would be a place to put domain branching with no decision, no decision telemetry and no lint (R9).
+- KTD7. **The straight-line shell rule covers the writer chain.** The rule keys a cell on its builder and middle call: `named` with `.decide`, and `writer` with `.decode`. It reads the builder whether options come first, `writer(options)(name)(read)`, or last. It reads only a chain written as one expression: a chain split across `const` bindings is not checked, for `named` as for `writer`. That limit predates this plan, and closing it is its own follow-up. Without this, a writer would be a place to put domain branching with no decision, no decision telemetry and no lint (R9).
 
 ### Sequencing
 
@@ -210,7 +210,8 @@ U1 ships first, because the consumer migrations and U2's examples need it. U2 an
     - a reference from a plain module;
     - a reference from a cell's read or write handler.
     - a call from a non-workflow export of a `*.workflow.ts`;
-    - a namespace, computed or re-exported reference;
+    - a namespace, computed, aliased or re-exported reference;
+    - an object, array or default export of a `*.workflow.ts` that holds a workflow;
   - None of the following is reported:
     - a reference as `.decide(x)`;
     - a reference from another `*.workflow.ts`;
@@ -253,3 +254,13 @@ On 2026-11-15, the U1 diff and this plan were given to a model from a different 
 | The decision definition misreads verdicts, machine-readable output and "skipping"                                               | Accepted as wording in R6.                                                                                                                                                                       |
 | The workflow-reference lint can be bypassed through wrapper exports, namespaces and re-exports, and it misreads in-source tests | Accepted into R8 and U3's scenarios.                                                                                                                                                             |
 | Tests miss phases, the raw argument, read failure, interruption and the type gates                                              | Accepted. All are now covered.                                                                                                                                                                   |
+
+A second round on the revised diff found these:
+
+| Finding                                                                                                                      | Outcome                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| The shell rule misses the options-first form `writer(options)(name)(read)`                                                   | Accepted. It read only the name-first form, for `named` as well. It now reads both, with tests for each builder. |
+| The shell rule misses a chain split across `const` bindings                                                                  | Recorded as a known limit in KTD7. It predates this plan and applies to `named` the same way.                    |
+| `<name>.read`, `cell.stacktrace`, `cell.member_tags`, `cell.declared` and the absence of `app.<name>.failure` are unasserted | Accepted. All are now asserted.                                                                                  |
+| No writer test reports a branching `CommandRejected` or a `Match` pipeline                                                   | Accepted. Both are now tested.                                                                                   |
+| R8 misses workflows held in exported containers or default exports, and aliased imports                                      | Accepted into R8 and U3.                                                                                         |

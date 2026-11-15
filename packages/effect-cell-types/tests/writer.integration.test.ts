@@ -23,23 +23,30 @@ interface Printed {
   readonly handler: string
   readonly lines: number
   readonly rawLines: number
+  readonly readSpan: string
   readonly writeSpan: string
   readonly operation: Option.Option<Span>
 }
 
-const printed = (handler: string, lines: number, raw: { readonly lines: number }) =>
+const printed = (handler: string, lines: number, raw: { readonly lines: number; readonly readSpan: string }) =>
   Effect.map(Effect.currentSpan, (span): Printed => ({
     handler,
     lines,
     rawLines: raw.lines,
+    readSpan: raw.readSpan,
     writeSpan: span.name,
     operation: Option.filter(span.parent, isLocalSpan),
   }))
 
-const readOrder = (fault: Fault) => (order: { readonly lines: number }) =>
+type ReadOrder = (typeof PrintReport)['Encoded'] & { readonly readSpan: string }
+
+const readOrder = (fault: Fault) => (order: { readonly lines: number }): Effect.Effect<ReadOrder, string> =>
   fault === 'read'
     ? Effect.fail('the store is offline')
-    : Effect.succeed({ _tag: 'PrintReport' as const, lines: order.lines })
+    : Effect.map(
+      Effect.orDie(Effect.currentSpan),
+      (span) => ({ _tag: 'PrintReport' as const, lines: order.lines, readSpan: span.name }),
+    )
 
 const printer = (fault: Fault) =>
   Sandwich.writer(NAME)(readOrder(fault)).decode(PrintReport).write({
@@ -76,10 +83,15 @@ Feature('Writing what a cell read when there is nothing to decide')
               handler: written.handler,
               lines: written.lines,
               rawLines: written.rawLines,
+              readSpan: written.readSpan,
               writeSpan: written.writeSpan,
               span: Option.getOrThrow(written.operation).name,
               cellName: attributes.get('cell.name'),
+              stacktrace: typeof attributes.get('cell.stacktrace'),
               commandTag: attributes.get('cell.command_tag'),
+              memberTags: attributes.get('cell.member_tags'),
+              cellDeclared: attributes.get('cell.declared'),
+              failure: attributes.has(`app.${NAME}.failure`),
               declared: attributes.get('tests.report.lines'),
               decision: attributes.has(`app.${NAME}.decision`),
               decideStacktrace: attributes.has('cell.decide_stacktrace'),
@@ -89,10 +101,15 @@ Feature('Writing what a cell read when there is nothing to decide')
               handler: 'Decoded',
               lines: 3,
               rawLines: 3,
+              readSpan: `${NAME}.read`,
               writeSpan: `${NAME}.write`,
               span: NAME,
               cellName: NAME,
+              stacktrace: 'string',
               commandTag: 'PrintReport',
+              memberTags: {},
+              cellDeclared: { lines: 3 },
+              failure: false,
               declared: 3,
               decision: false,
               decideStacktrace: false,

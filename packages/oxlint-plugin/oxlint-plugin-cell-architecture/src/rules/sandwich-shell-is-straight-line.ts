@@ -73,7 +73,8 @@ const collectSandwichCells = (context: Context): readonly SandwichCell[] => {
     if (invocation === null || invocation.type !== 'CallExpression') return true
     const builderCall = invocation.callee
     if (builderCall.type !== 'CallExpression') return true
-    const origin = originOf(builderCall.callee, getScope)
+    const builderRef = builderCall.callee.type === 'CallExpression' ? builderCall.callee.callee : builderCall.callee
+    const origin = originOf(builderRef, getScope)
     if (origin === null || origin.source !== SANDWICH_SOURCE) return true
     if (!originMemberIs(origin, SANDWICH_OWNER, builder.builder)) return true
     cells.push({

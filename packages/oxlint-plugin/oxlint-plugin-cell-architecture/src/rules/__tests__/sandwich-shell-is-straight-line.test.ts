@@ -327,6 +327,62 @@ export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
       errors: [controlError('ConditionalExpression', 'write')],
     },
     {
+      name: 'Should_ReportViolation_When_AWriterRejectionHandlerBranches',
+      code: writerOf(
+        straightRead,
+        `{
+    Decoded: (command: { readonly lines: number }) => Effect.succeed(command.lines),
+    CommandRejected: (rejected: { readonly issue: string }) => (rejected.issue === '' ? Effect.succeed(0) : Effect.succeed(1)),
+  }`,
+      ),
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterHandlerRunsAMatchPipeline',
+      code: `import { Effect } from 'effect'
+import * as Match from 'effect/Match'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+export const printCell = Sandwich.writer('report.printed')(${straightRead})
+  .decode(PrintReport)
+  .write({
+    Decoded: (command: { readonly tag: 'a' | 'b' }) =>
+      Match.value(command).pipe(
+        Match.when({ tag: 'a' }, () => Effect.succeed('a')),
+        Match.orElse(() => Effect.succeed('b')),
+      ),
+    CommandRejected: () => Effect.succeed('c'),
+  })
+`,
+      filename: PROD,
+      errors: [matchError],
+    },
+    {
+      name: 'Should_ReportViolation_When_AWriterTakesItsOptionsFirstAndItsReadBranches',
+      code: `${PRELUDE}
+export const printCell = Sandwich.writer({ boundaries: [1] })('report.printed')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 })),
+)
+  .decode(PrintReport)
+  .write(${straightWriterHandlers})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ANamedCellTakesItsOptionsFirstAndItsReadBranches',
+      code: `${PRELUDE}
+export const stepCell = Sandwich.named({ boundaries: [1] })('supervisor.step')(
+  (envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ at: 1 }) : Effect.succeed({ at: 0 })),
+)
+  .decide((command) => command)
+  .write(${straightWrite})
+`,
+      filename: PROD,
+      errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
       name: 'Should_ReportViolation_When_AWriterReadBranches',
       code: writerOf(
         `(envelope: { readonly ready: boolean }) => (envelope.ready ? Effect.succeed({ lines: 1 }) : Effect.succeed({ lines: 0 }))`,
