@@ -337,13 +337,16 @@ type ScenarioCallable<RShared, RFresh, RFreshReq> = {
     RExtra,
     RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra,
     P extends Effect.Effect<Top, StepError, RPipe>,
+    Q = never,
   >(
     name: ScenarioTitle<TName>,
-    opts: ScenarioOptions<
-      RShared | RFresh | RFreshReq,
-      RExtra,
-      RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra
-    >,
+    opts:
+      & ScenarioOptions<
+        RShared | RFresh | RFreshReq,
+        RExtra,
+        RShared | RFresh | RFreshReq | Scope.Scope | Asserted | RExtra
+      >
+      & { readonly rerun?: Q & ValidScenarioPipeline<Q> },
     pipeline: P & ValidScenarioPipeline<P>,
   ): void
 }

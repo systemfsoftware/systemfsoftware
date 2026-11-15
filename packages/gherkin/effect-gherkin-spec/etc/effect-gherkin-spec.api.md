@@ -358,8 +358,8 @@ export type WhenStage = {
 // dist/index.d.ts:122:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:155:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:170:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:226:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:334:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:228:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:336:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
