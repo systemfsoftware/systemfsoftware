@@ -134,6 +134,11 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
     }
     if (!isNode(node)) continue
     if (node.type === 'ImportSpecifier' && node.importKind === 'type') continue
+    if (node.type === 'ExportSpecifier' && node.exportKind === 'type') continue
+    if (node.type === 'TSImportEqualsDeclaration' && node.moduleReference.type === 'TSExternalModuleReference') {
+      edges.push({ specifier: literalOf(node.moduleReference.expression), typeOnly: node.importKind === 'type' })
+      continue
+    }
     if (TYPE_POSITIONS.test(node.type)) continue
     if (node.type === 'Identifier' && LOADER_NAMES.has(node.name)) edges.push({ specifier: undefined, typeOnly: false })
     if (node.type === 'ImportDeclaration') {
@@ -145,6 +150,7 @@ const edgesOf = (program: unknown): ReadonlyArray<Edge> => {
       if (isTypeOnly(node)) continue
     } else if (node.type === 'ExportAllDeclaration' || (node.type === 'ExportNamedDeclaration' && node.source)) {
       edges.push({ specifier: literalOf(node.source), typeOnly: node.exportKind === 'type' })
+      if (node.exportKind === 'type') continue
     } else if (node.type === 'ImportExpression') {
       const specifier = literalOf(node.source)
       edges.push({

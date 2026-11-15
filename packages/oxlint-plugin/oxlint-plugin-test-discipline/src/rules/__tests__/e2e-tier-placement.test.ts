@@ -225,6 +225,11 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
       filename: JOURNEY,
     },
     {
+      name: 'Should_NameItE2e_When_ItReExportsALoaderAsAType',
+      code: `${GHERKIN}${DRIVER}export type { createRequire } from 'node:module'\n`,
+      filename: JOURNEY,
+    },
+    {
       name: 'Should_NameItE2e_When_ALoaderIsNamedOnlyInATypePosition',
       code:
         `${GHERKIN}${DRIVER}type BuiltinGetter = typeof process.getBuiltinModule\ninterface Loader { createRequire: () => void }\n`,
@@ -284,6 +289,10 @@ ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suf
         `${GHERKIN}const { createRequire: load } = await import('node:module')\nconst core = load(import.meta.url)('@example/core')\n`,
         '.integration.test.ts',
       ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportEqualsRequiresAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import core = require('@example/core')\n`, '.integration.test.ts'),
     },
     {
       name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsCreateRequireByAStringName',
