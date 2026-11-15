@@ -108,16 +108,6 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/tests/x.integration.test.ts',
       settings: RUNNER_ROLE,
     },
-    {
-      name: 'Should_LeaveTheE2eNameToPlacement_When_AnE2eNamedFileIsAFeature',
-      code: GHERKIN,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_LeaveTheE2eNameToPlacement_When_AnE2eNamedFileImportsNoHarness',
-      code: FORK_ONLY,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-    },
   ],
   invalid: [
     {

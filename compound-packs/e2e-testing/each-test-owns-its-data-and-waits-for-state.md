@@ -1,45 +1,53 @@
 ---
-title: Each e2e test starts from a fresh context, creates and removes its own run-unique data, and waits for a state, never a duration
+title: Each e2e scenario starts from a fresh context, creates and removes its own run-unique data, and waits for a state, never a duration
 applies_when:
-  - an e2e test needs data to exist before it acts
-  - an e2e test sleeps, polls in a loop, or waits a fixed time
-  - an e2e test passes only on retry, or depends on another test having run first
-  - configuring retries, workers or the replay cache for CI
-tags: [e2e, isolation, test-data, waiting, flakiness, retries, replay-cache]
+  - an e2e scenario needs data to exist before it acts
+  - an e2e step sleeps, polls in a loop, or waits a fixed time
+  - writing a Playwright locator or reaching for a CSS selector
+  - an e2e test passes only on retry, or configuring retries for CI
+tags: [e2e, isolation, test-data, waiting, flakiness, retries, locators]
 ---
 
-Every test starts from a fresh browser context with no page open and calls `app.open()` first. It never relies on what an earlier test left behind. A flow whose order is the point goes in one `describe` marked serial, and nowhere else.
+Every scenario starts from a fresh browser context with no page open and opens the entry URL first. It never relies on what an earlier scenario left behind.
 
-A test creates the data it needs through the system's own API, under a run-unique name (`Guest ${Date.now()}`), and removes it in `afterEach`, which also runs after a failure. A run-unique name keeps replays and parallel workers from colliding and keeps the replay cache valid. Calls to the API live in the same suite, in helpers that `beforeEach` and `afterEach` call.
+A scenario creates the data it needs through the system's own API, under a run-unique name (`Guest ${Date.now()}`), and removes it via scoped resource cleanup (`Effect.acquireRelease`), which also runs after a failure. A run-unique name keeps parallel workers from colliding. Calls to the API live in helpers under `tests/__fixtures__/`.
 
-Wait for the state, not a duration: no sleep, no fixed delay, no polling loop. Use a locator matcher with a longer `timeout` when a locator names the state exactly, or `agent.waitFor` with a timeout long enough for the slowest case. `await` every step.
+Take Playwright locators from what a person perceives: role, label, text. When the app has no accessible name for a control, add an `aria-label` or a heading to the app rather than fall back to a CSS class.
 
-CI runs one retry, one worker and a read-only replay cache. A test that passes only on its retry is a flake. Find and fix its cause (shared data, a missing wait, a race in the app); never raise its retries or mark it skipped to make the run green. While debugging, run with retries off.
+Wait for the state, not a duration: no sleep, no fixed delay, no polling loop. Use Playwright's locator assertions (`expect(locator).toHaveText(...)`, `toBeVisible()`) with a `timeout` long enough for the slowest case, and `yield*` every step.
 
-The bar is the [`e2e`](https://www.npmjs.com/package/e2e) runner's own skill (`skills/e2e/SKILL.md`, `references/writing-tests.md`), which effect-e2e is held to; what it does not export yet waits for effect-e2e's own work (e2e-is-its-own-package-on-real-processes.md).
+CI runs one retry. A test that passes only on its retry is a flake. Find and fix its cause (shared data, a missing wait, a race in the app); never raise its retries or mark it skipped to make the run green. While debugging, run with retries off.
 
 ```typescript
-import { afterEach, beforeEach, describe, expect, test } from '@systemfsoftware/effect-e2e/runner'
+import { expect } from '@playwright/test'
+import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect } from 'effect'
+import { createBooking, deleteBooking } from './__fixtures__/bookings.js'
 
-// WRONG: shared fixed data, a fixed sleep, and a test that needs the one before it
-test('cancels the booking made above', async ({ app, agent }) => {
-  await app.open('/bookings/grace-smith')
-  await new Promise((resolve) => setTimeout(resolve, 3000))
-  await agent.act('cancel the booking')
-})
-// RIGHT: the test makes its own booking, waits for the state, and cleans up
-describe('cancelling a booking', () => {
-  let booking: Booking
-  beforeEach(async () => {
-    booking = await createBooking({ guest: `Guest ${Date.now()}` })
+// WRONG: shared fixed data, a fixed sleep, and a CSS selector
+Given('the existing booking')(() => Effect.void)
+When('the guest cancels it')((s) =>
+  Effect.promise(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await s.page.locator('.cancel-btn').click()
   })
-  afterEach(async () => {
-    await deleteBooking(booking.id)
+)
+
+// RIGHT: run-unique data cleaned up on release, role locator, and state wait
+Given('a booking for a guest')('booking', () =>
+  Effect.acquireRelease(
+    createBooking({ guest: `Guest ${Date.now()}` }),
+    (booking) => deleteBooking(booking.id),
+  ))
+When('the guest cancels the booking')((s) =>
+  Effect.promise(async () => {
+    await s.page.goto(`https://example.com/bookings/${s.booking.id}`)
+    await s.page.getByRole('button', { name: 'Cancel booking' }).click()
   })
-  test('a guest cancels a booking', async ({ app, agent, screen }) => {
-    await app.open(`/bookings/${booking.id}`)
-    await agent.act('cancel the booking')
-    await expect(screen.getByRole('status', 'Booking')).toHaveText('Cancelled', { timeout: 15_000 })
-  })
-})
+)
+Then('the booking shows as cancelled')((s) =>
+  Effect.promise(() =>
+    expect(s.page.getByRole('status', { name: 'Booking' })).toHaveText('Cancelled', { timeout: 15_000 })
+  )
+)
 ```

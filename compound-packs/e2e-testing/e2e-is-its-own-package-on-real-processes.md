@@ -1,18 +1,35 @@
 ---
-title: An end-to-end test lives in the project's own E2E package and drives the real processes the system ships as
+title: An end-to-end test is a makeFeature Feature in a package of its own that ships nothing, driving the real system through Playwright or HTTP
 applies_when:
   - a behaviour needs the real CLI binary, a real server process, or several services running together
-  - deciding where a test that starts processes belongs
-  - adding services an E2E run needs
-tags: [e2e, effect-e2e, real-processes, tiers]
+  - deciding where a test that starts processes belongs, or how it is named
+  - a lint check reports test-suffix-outside-src or e2e-tier-placement
+tags: [e2e, gherkin, real-processes, tiers, playwright]
 ---
 
-Put end-to-end tests in a package of their own (such as `apps/<service>-e2e`) as `<subject>.e2e.ts` (never `.e2e.test.ts`, which fails `laneMismatch`) and nowhere else: never in a package's `tests/` beside its integration tests, and never named or shaped as an integration test.
+Put end-to-end tests in a package of their own (such as `apps/example-shop-e2e`) that ships nothing: no `src/` directory, and no `exports`, `main`, `module` or `bin` in `package.json`. Place each suite directly under `tests/` as `<subject>.e2e.ts` (never in `tests/__fixtures__/` or outside `tests/`, which `e2e-tier-placement` refuses, and never as `*.e2e.test.ts`, which `test-suffix-outside-src` refuses). No package declares itself end-to-end.
 
-An E2E run drives the system as it ships (the real binary or server) with its services running alongside, and asserts what a person or calling system observes: an HTTP response, a page, a CLI's output and exit, state read back through the system's own API. It never imports the code under test's internals.
+Write every end-to-end test as a `makeFeature` Feature from `@systemfsoftware/effect-gherkin-spec`. It drives the system as it ships through what a person or calling system observes: a real browser driven by Playwright, or its HTTP surface. Its stack and browser are scoped Effect layers supplied through `Feature(...).withLayer(...)`.
 
-A behaviour that needs real IO is preferably specified here, through effect-e2e, rather than as a Feature that stubs the IO or does none. Such a Feature is deleted (testing pack: features-specify-our-systems-observable-behaviour.md).
+The lint rule `test-suffix-outside-src` asks for `<subject>.e2e.ts` on any Feature none of whose value imports reaches the repository's own code (followed through the modules it imports from its own `tests/`), and for `.integration.test.ts` on a Feature that does reach it. `e2e-tier-placement` refuses an e2e Feature in a package that ships code, one that names the repository's code even as a type, and an `.e2e.ts` file outside `tests/` or inside `tests/__fixtures__/`.
 
-Write every e2e test with effect-e2e (`@systemfsoftware/effect-e2e`, `@systemfsoftware/effect-e2e/runner`). Its bar is the [`e2e`](https://www.npmjs.com/package/e2e) runner ([tester-army/e2e](https://github.com/tester-army/e2e)): the same test API, locator actions and matchers, fixtures, replay cache and CI run shape. The examples in this pack use what effect-e2e exports; a line that needs more is marked as waiting on effect-e2e.
+A behaviour that needs real IO is specified here rather than as an integration Feature that stubs the IO or does none; such a Feature is deleted (testing pack: `features-specify-our-systems-observable-behaviour.md`).
 
-Bringing effect-e2e to that bar is effect-e2e's own work. Whatever a test needs that effect-e2e does not export yet waits for that work: the test is never written around the gap and never moved to another runner. The pack lists no missing features, because such a list is stale as soon as effect-e2e ships; read effect-e2e's own exports. When the waiting test is the replacement for a fake Feature the testing pack deletes, the deletion still lands, and the change names the behaviour left uncovered and the effect-e2e work it waits for.
+```typescript
+// WRONG: apps/example-hotel-e2e/tests/booking.e2e.ts imports the repository's own code
+import { reserveRoom } from 'example-hotel'
+
+// RIGHT: apps/example-hotel-e2e/tests/booking.e2e.ts drives the shipped app through scoped layers
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Layer } from 'effect'
+import { BrowserLayer, StackLayer } from './__fixtures__/stack.ts'
+
+const Feature = makeFeature({ it })
+
+Feature('Booking a room')
+  .live('runs the shipped server and a real browser')
+  .withLayer(Layer.provideMerge(BrowserLayer, StackLayer))
+  .body(({ scenario }) => {
+    scenario('A guest books a double room', Gherkin.Do.pipe(/* Given, When, Then */))
+  })
+```

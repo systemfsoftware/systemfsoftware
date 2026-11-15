@@ -29,9 +29,8 @@ export const isInConfiguredTestDir = (filename: string, dirs: readonly string[])
 export const isTestFile = (basename: string): boolean => TEST_BASENAME.test(basename)
 
 /**
- * A file the `effect-e2e` runner collects: an `.e2e.ts` basename under a `tests`
- * directory with no `__fixtures__` directory directly beneath a `tests`
- * directory, which is the runner's `tests/__fixtures__/**` exclusion.
+ * An end-to-end test file: an `.e2e.ts` basename under a `tests` directory
+ * with no `__fixtures__` directory directly beneath a `tests` directory.
  */
 export const isE2eTestFile = (filename: string): boolean => {
   const directories = directoriesOf(filename)

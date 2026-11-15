@@ -1,5 +1,6 @@
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Option, Schema as S } from 'effect'
+import { packageOf, reachOf } from './e2e-shape.js'
 import {
   CONFORMANCE_PACKAGE,
   DIFFERENTIAL_PACKAGE,
@@ -68,9 +69,19 @@ const callsProperty = (program: ESTree.Program, keys: VisitorKeys): boolean => {
   return false
 }
 
-const derive = (filename: string, program: ESTree.Program, keys: VisitorKeys): Lanes => {
+/**
+ * A Feature reaches nothing of ours when no value it imports, itself or through the modules it imports
+ * from its own `tests/`, is the repository's code: it can only drive the system from outside, so it is
+ * end-to-end. A file whose package cannot be found is not judged.
+ */
+const reachesNothingOfOurs = (context: Context, program: ESTree.Program): boolean => {
+  const shape = packageOf(context.filename)
+  return shape !== undefined &&
+    reachOf(shape, context.filename, program)?.kind !== 'value'
+}
+
+const derive = (context: Context, program: ESTree.Program, keys: VisitorKeys): Lanes => {
   const lanes = new Set<Lane>()
-  if (isE2eTestFile(filename)) lanes.add('e2e')
   for (const statement of program.body) {
     if (statement.type !== 'ImportDeclaration' || isTypeOnly(statement)) continue
     const lane = harnessLaneOf(statement.source.value)
@@ -78,6 +89,7 @@ const derive = (filename: string, program: ESTree.Program, keys: VisitorKeys): L
     if (fastCheckImportSites(statement).length > 0) lanes.add('property')
   }
   if (!lanes.has('property') && callsProperty(program, keys)) lanes.add('property')
+  if (lanes.has('behaviour') && reachesNothingOfOurs(context, program)) lanes.add('e2e')
   return lanes
 }
 
@@ -97,7 +109,7 @@ export const lanesOf = (context: Context): Lanes => {
   const program = context.sourceCode.ast
   const cached = cache.get(program)
   if (cached !== undefined) return cached
-  const lanes = derive(context.filename, program, context.sourceCode.visitorKeys)
+  const lanes = derive(context, program, context.sourceCode.visitorKeys)
   cache.set(program, lanes)
   return lanes
 }
