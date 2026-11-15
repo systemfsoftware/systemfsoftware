@@ -1,15 +1,4 @@
 packs:
-  - source: compound-packs/cell-architecture
-  - source: compound-packs/schema-modelling
-  - source: compound-packs/configuration
-  - source: compound-packs/package-surface
-  - source: compound-packs/testing
-  - source: compound-packs/property-testing
-  - source: compound-packs/ui-state
-  - source: compound-packs/ui-testing
-  - source: compound-packs/page-accessibility
-  - source: compound-packs/design-system
-  - source: compound-packs/screen-content
-  - source: compound-packs/ci-workflows
-  - source: compound-packs/lint-hygiene
-  - source: compound-packs/public-repository
+  - source: https://github.com/systemfsoftware/systemfsoftware
+    ref: main
+    path: compound-packs
