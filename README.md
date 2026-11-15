@@ -204,7 +204,7 @@ The principles and design laws governing code in this repository live in standal
 - [Page Accessibility](compound-packs/page-accessibility): How a static or island site's built pages are accessibility-tested in a real browser: axe at WCAG 2.2 AA plus best-practice in every colour scheme and at narrow and wide widths, needs-review contrast and non-text contrast, keyboard, focus, pointer targets, 200% zoom, reflow and text spacing, reduced motion and pausable motion, forced colours, structure, text alternatives, forms, and ARIA snapshots of key regions.
 - [Design System](compound-packs/design-system): How an app builds and styles UI with the Astryx design system through Tailwind: components, token utilities, where styles may be written, roots, themes and navigation.
 - [Screen Content](compound-packs/screen-content): What a user-facing screen shows and says: real data, claims the deployed product delivers, failure states that say what happened and what to do next, and copy without stock AI patterns.
-- [CI Workflows](compound-packs/ci-workflows): What a CI check is for, and that CI never grades the repository itself.
+- [Check Hygiene](compound-packs/check-hygiene): What a CI check is for, and when a lint rule may be proposed and the shape it ships in.
 - [Public Repository](compound-packs/public-repository): What a public repository never contains: private repository, package and product names, private tracker ids or local filesystem paths.
 
 Concepts, definitions, and verification gates are indexed in [CONCEPTS.md](CONCEPTS.md).

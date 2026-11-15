@@ -22,8 +22,8 @@ _form_ of a justification is a ritual. This doc answers the three questions that
 what severity a rule should land at, whether a rule population can be too large, and what
 actually stops an agent from adding another worthless script.
 
-The shipping form is now stated prescriptively by the lint-hygiene pack rule
-(pack: lint-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md): on at error over a
+The shipping form is now stated prescriptively by the check-hygiene pack rule
+(pack: check-hygiene, a-lint-rule-enforces-a-decision-it-never-makes-one.md): on at error over a
 clean tree, or off; no warn; no baseline. This document keeps the measurements, the false-positive
 arithmetic and the accretion mechanisms.
 
@@ -79,7 +79,7 @@ Here warn is the worst option:
 | `warn`                | **no**                | no                     |
 
 If the fallout cannot be fixed now, the rule stays off with the reason named until the tree is
-clean, then enrolls at error — never a baseline, never warn (pack: lint-hygiene,
+clean, then enrolls at error — never a baseline, never warn (pack: check-hygiene,
 a-lint-rule-enforces-a-decision-it-never-makes-one.md). Warn blocks nothing, so the population
 grows while you are "migrating."
 
@@ -96,7 +96,7 @@ committed config CI reads.
 
 - **To measure:** run the rule at deny on the CLI. Do not commit the severity.
 - **To migrate:** fix the tree; until then the rule is off with the reason named — never a
-  baseline, never warn (pack: lint-hygiene,
+  baseline, never warn (pack: check-hygiene,
   a-lint-rule-enforces-a-decision-it-never-makes-one.md).
 - **Declined on purpose:** use `off` with the rule named. That records the decision, which is worth something. `warn` records nothing and implies a promotion that never comes.
 
