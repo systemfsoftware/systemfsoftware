@@ -22,7 +22,7 @@ catalog:
   "@effect/opentelemetry": ^4.1.2
   "@opentelemetry/sdk-trace-base": ^2.12.0
   "@opentelemetry/api": ^1.9.0
-  "@opentelemetry/resources": ^2.12.0
+  "@opentelemetry/resources": ^3.1.1
   "@opentelemetry/semantic-conventions": ^1.43.0
   fast-check: ^4.10.2
   "@noble/hashes": ^2.4.0
@@ -46,10 +46,10 @@ catalog:
   react-dom: ^19.3.1
   react-error-boundary: ^6.1.6
   scheduler: ^0.28.0
-  storybook: ^10.6.3
+  storybook: ^10.6.7
   type-fest: ^5.10.0
-  "@storybook/addon-vitest": ^10.6.3
-  "@storybook/react-vite": ^10.6.3
+  "@storybook/addon-vitest": ^10.6.7
+  "@storybook/react-vite": ^10.6.7
   "@vitest/browser": ^5.1.0
   "@vitest/browser-playwright": ^5.1.0
   playwright: ^1.64.1
