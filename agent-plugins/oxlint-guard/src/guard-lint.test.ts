@@ -19,6 +19,8 @@ interface SpawnRecord {
 interface Environment {
   readonly tree: Record<string, string | null>
   readonly cwd: string
+  readonly env?: Record<string, string | undefined>
+  readonly owners?: Record<string, number>
 }
 
 type ShimResult = ProcessResult | 'hang' | 'spawn-failure' | undefined
@@ -121,13 +123,25 @@ const shim = (program: string, args: readonly string[]): ShimResult => {
   return undefined
 }
 
-const memFs = (tree: Record<string, string | null>): LintFs => {
+// Every entry belongs to the agent's user unless the scenario names another
+// owner for it.
+const AGENT_UID = 1000
+
+const memFs = (tree: Record<string, string | null>, owners: Record<string, number> = {}): LintFs => {
   // Directory markers carry a trailing slash (e.g. '/project/dir/': null);
   // lookups check both forms so the guard's slashless candidates match.
   const keyOf = (target: string): string => target.replace(/\/+$/, '')
   const directoryOf = (target: string): string => `${keyOf(target)}/`
   return {
     exists: (target) => Promise.resolve(keyOf(target) in tree || directoryOf(target) in tree),
+    // A directory exists implicitly when any entry lies beneath it.
+    ownerOf: (target, _follow) =>
+      Promise.resolve(
+        owners[keyOf(target)] ??
+          (Object.keys(tree).some((key) => key === keyOf(target) || key.startsWith(directoryOf(target)))
+            ? AGENT_UID
+            : null),
+      ),
     isDirectory: (target) => Promise.resolve(tree[directoryOf(target)] === null || tree[keyOf(target)] === null),
     readFirstLine: (target) => {
       const content = tree[directoryOf(target)] ?? tree[keyOf(target)]
@@ -195,9 +209,9 @@ const execute = (
   const { runner, records } = makeRunner()
   const options: LintGuardOptions = {
     commandTimeoutMs,
-    fs: memFs(env.tree),
+    fs: memFs(env.tree, env.owners),
     runner,
-    env: testEnv(),
+    env: testEnv(env.env),
   }
   return runLintGuard(raw, env.cwd, options).then((result) => ({ result, records }))
 }
@@ -255,6 +269,27 @@ const directoryBinaryTree: Record<string, string | null> = {
   '/project/node_modules/.bin/oxlint/': null,
   '/project/src/clean.ts': 'export const ok = 1\nexport default ok\n',
 }
+
+// The session runs in one checkout (/session) while the edited file lives in a
+// separate worktree (/project) that is not nested under it.
+const siblingWorktreeTree: Record<string, string | null> = {
+  ...fullTree,
+  '/project/.git': 'gitdir: /elsewhere/real-git-dir/worktrees/project',
+  '/session/.git/': null,
+}
+
+// The edited file sits in no git repository, outside the session's checkout,
+// with a config beside it and a binary planted in a shared ancestor. A .git
+// planted beside that binary by another user must not make it eligible.
+const strayFileTree: Record<string, string | null> = {
+  '/session/.git/': null,
+  '/tmp/stray/oxlint.config.mjs': 'export default {}',
+  '/tmp/stray/clean.ts': 'export const ok = 1\nexport default ok\n',
+  '/tmp/node_modules/.bin/oxlint': 'planted-oxlint',
+}
+
+const OTHER_UID = 2000
+const ROOT_UID = 0
 
 // No local binary, but one planted in an ancestor directory outside the root.
 const ancestorBinaryTree: Record<string, string | null> = {
@@ -472,4 +507,59 @@ Deno.test('an oxlint binary planted outside the project root is never selected',
   assertEquals(result.exitCode, 2)
   assertStringIncludes(result.stderr, 'node_modules/.bin/oxlint')
   assertEquals(records.length, 0)
+})
+
+Deno.test('an edit in a worktree outside the session checkout is linted with that worktree', async () => {
+  const { result, records } = await execute(payload('/project/src/clean.ts'), {
+    tree: siblingWorktreeTree,
+    cwd: '/session',
+  })
+  assertEquals(result, { exitCode: 0, stderr: '' })
+  assertEquals(records.map((record) => record.program), [OXLINT_BIN])
+})
+
+Deno.test('a project dir that does not contain the edited file does not hide its worktree', async () => {
+  const { result, records } = await execute(payload('/project/src/clean.ts'), {
+    tree: siblingWorktreeTree,
+    cwd: '/session',
+    env: { CLAUDE_PROJECT_DIR: '/session' },
+  })
+  assertEquals(result, { exitCode: 0, stderr: '' })
+  assertEquals(records.map((record) => record.program), [OXLINT_BIN])
+})
+
+Deno.test('a file in no repository outside the session checkout never reaches a planted binary', async () => {
+  const { result, records } = await execute(payload('/tmp/stray/clean.ts'), { tree: strayFileTree, cwd: '/session' })
+  assertEquals(result.exitCode, 2)
+  assertEquals(records.length, 0)
+})
+
+Deno.test('a .git planted by another user never makes a shared directory a lint root', async () => {
+  const { result, records } = await execute(payload('/tmp/stray/clean.ts'), {
+    tree: { ...strayFileTree, '/tmp/.git/': null },
+    cwd: '/session',
+    owners: { '/tmp/.git': OTHER_UID },
+  })
+  assertEquals(result.exitCode, 2)
+  assertEquals(records.length, 0)
+})
+
+Deno.test('a session started in a root-owned directory vouches for no root-owned repository', async () => {
+  const { result, records } = await execute(payload('/project/src/clean.ts'), {
+    tree: { ...fullTree, '/project/.git/': null, '/shared/scratch.txt': '' },
+    cwd: '/shared',
+    owners: { '/shared': ROOT_UID, '/project/.git': ROOT_UID },
+  })
+  assertEquals(result.exitCode, 2)
+  assertEquals(records.length, 0)
+})
+
+Deno.test('a session checkout in a root-owned mount is matched by its own .git owner', async () => {
+  const { result, records } = await execute(payload('/project/src/clean.ts'), {
+    tree: siblingWorktreeTree,
+    cwd: '/session',
+    owners: { '/session': ROOT_UID },
+  })
+  assertEquals(result, { exitCode: 0, stderr: '' })
+  assertEquals(records.map((record) => record.program), [OXLINT_BIN])
 })
