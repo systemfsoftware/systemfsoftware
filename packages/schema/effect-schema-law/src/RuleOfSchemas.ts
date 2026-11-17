@@ -1,4 +1,5 @@
 import { Equivalence, Match, Option, Predicate, Schema, Schema as S, SchemaAST, SchemaGetter } from 'effect'
+import { TestRunner } from 'vitest'
 import { deterministic, prop } from './property.js'
 
 type CodecPair<A, I> = {
@@ -228,6 +229,7 @@ if (import.meta.vitest !== void 0) {
   const DECLARED_INHABITANCE: ReadonlyArray<{ readonly ast: SchemaAST.AST; readonly single: boolean }> = [
     { ast: VariableBox.ast, single: false },
     { ast: ArbitraryVariableBox.ast, single: false },
+    { ast: S.instanceOf(URL).ast, single: false },
     { ast: S.Option(Lit).ast, single: false },
     { ast: S.Chunk(Lit).ast, single: false },
     { ast: S.ReadonlySet(Lit).ast, single: false },
@@ -265,8 +267,6 @@ if (import.meta.vitest !== void 0) {
     },
     (codec, [value, twin]) => boxEq(value, twin) || !roundTripsOf(constantCodecAt(codec, value), boxEq)(value, twin),
   )
-
-  const { TestRunner } = await import('vitest')
 
   const registeredTaskCount = (): number => TestRunner.getCurrentSuite().tasks.length
 
