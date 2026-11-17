@@ -40,7 +40,7 @@ A semantic pass now decides the exports the syntactic pass rejects (`src/interna
 
 - opens the modules through TypeScript 7's `typescript/unstable/sync` API with `updateSnapshot({ openFiles })`, so each module gets the project its own tsconfig (or an inferred project) gives it, solution-style tsconfigs included;
 - serves each module through the API's virtual `fs.readFile` with `export type <alias> = import('effect/Schema').Top` appended, so `Schema.Top` resolves with exactly the module resolution the module's own imports use, in the same checker;
-- accepts an export when `checker.isTypeAssignableTo(type, top)`.
+- accepts an export when `checker.isTypeAssignableTo(type, top)`, unless the schema decodes to an `Error` (below).
 
 Regression coverage is the scenario "A schema whose type is only inferred earns a law pair, however its initializer is spelled" in `packages/schema/effect-schema-vite/tests/inline-schema-tests.integration.test.ts`; it fails on the syntactic-only code.
 
@@ -48,7 +48,8 @@ Regression coverage is the scenario "A schema whose type is only inferred earns 
 
 - An `import('effect/Schema')` that does not resolve gives `Top` the `any` type, and every type is assignable to `any`: in a temp package without `effect`, a plain function export was accepted as a schema. The pass therefore uses `Top` only when it is an object type. Removing that guard fails the existing "package that exports no schemas" scenario.
 - An export typed `any` or `never` is assignable to `Top` vacuously; the pass rejects both. Removing that check fails the inference scenario on its `Untyped: any` export.
-- `Schema.TaggedErrorClass` classes are not assignable to `Schema.Top`, so the semantic pass agrees with the syntactic pass's deliberate exclusion of tagged errors.
+- The syntactic pass excludes tagged errors on purpose: an error is a failure value, not a codec. `Schema.TaggedErrorClass` classes are not assignable to `Schema.Top`, but `Schema.TaggedError` classes are, so a first version of the semantic pass generated laws for one in a package whose suite had been empty, and that suite then failed to import the law package it never needed. The pass now also appends `import('effect/Schema').Codec<Error, unknown, unknown, unknown>` and drops any export assignable to it. Removing that check fails the inference scenario on its `Rejected` export.
+- Run before and after over every package `src` in this repository (25 packages, 122 exports found before): nothing lost and nothing added, so in-repo law suites are unchanged.
 - Opening a one- or two-module project and checking its exports took 30 to 150 ms across five local runs.
 
 ## Alternatives rejected

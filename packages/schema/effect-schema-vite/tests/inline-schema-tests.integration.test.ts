@@ -209,6 +209,8 @@ export const isStructConst = Schema.is(StructConst)
 
 export class Boom extends Schema.TaggedErrorClass<Boom>()('Boom', { message: Schema.String }) {}
 
+export class Rejected extends Schema.TaggedError<Rejected>()('Rejected', { issue: Schema.String }) {}
+
 export const Untyped: any = StructConst
 
 export const count = 3
@@ -275,11 +277,11 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     'A schema whose type is only inferred earns a law pair, however its initializer is spelled',
     Gherkin.Do.pipe(
       Given(
-        'a package exporting an unannotated curried declaration, a schema built by a local helper, a struct, a type guard, a tagged error, an any-typed value and a number',
+        'a package exporting an unannotated curried declaration, a schema built by a local helper, a struct, a type guard, two tagged errors, an any-typed value and a number',
       )('pkg', () => Effect.succeed(INFERRED)),
       When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then(
-        'the three schemas each carry a law pair, and the guard, the error, the any-typed value and the number none',
+        'the three schemas each carry a law pair, and the guard, the errors, the any-typed value and the number none',
       )(
         (s, expect) =>
           expect(Object.fromEntries(lawsIn(s.code))).toEqual({

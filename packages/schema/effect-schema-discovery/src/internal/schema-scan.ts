@@ -3,7 +3,7 @@ import type { Stats } from 'node:fs'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
-import { exportsAssignableToSchemaTop, type ExportsOutsideSyntacticPass } from './schema-assignability.js'
+import { dataSchemaExportsByType, type ExportsOutsideSyntacticPass } from './schema-assignability.js'
 
 /**
  * A schema found by {@link findExportedSchemas}: the module that declares it and the name it
@@ -220,19 +220,19 @@ const exportsOutsideSyntacticPass = (module: ScannedModule): ExportsOutsideSynta
 /**
  * Walk a directory and return every exported const or class that is a schema: one whose type
  * annotation or initializer names `Schema` the way a schema declaration does, or whose type the
- * TypeScript checker finds assignable to `Schema.Top` as resolved from that module. Order is
- * the walk's, then declaration order within a module.
+ * TypeScript checker finds assignable to `Schema.Top` as resolved from that module, unless the
+ * values it decodes are errors. Order is the walk's, then declaration order within a module.
  *
  * @since 0.1.0
  */
 export function findExportedSchemas(dir: string): FoundSchema[] {
   const modules = scanModules(dir)
-  const assignable = exportsAssignableToSchemaTop(
+  const byType = dataSchemaExportsByType(
     modules.map(exportsOutsideSyntacticPass).filter((m) => m.names.length > 0),
   )
   return modules.flatMap((module) =>
     module.exports
-      .filter((e) => e.syntacticallySchema || assignable.get(module.filePath)?.has(e.name) === true)
+      .filter((e) => e.syntacticallySchema || byType.get(module.filePath)?.has(e.name) === true)
       .map((e) => ({ name: e.name, filePath: module.filePath }))
   )
 }
