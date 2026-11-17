@@ -1,4 +1,5 @@
-import { Equivalence, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
+import { Equivalence, Match, Option, Predicate, Schema, Schema as S, SchemaAST, SchemaGetter } from 'effect'
+import { TestRunner } from 'vitest'
 import { deterministic, prop } from './property.js'
 
 type CodecPair<A, I> = {
@@ -130,7 +131,13 @@ const everyParameterSingle = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AS
 
 const encodingLinkOf = (ast: SchemaAST.Declaration): SchemaAST.Link | undefined => ast.encoding?.[0]
 
-const wrapsItsParameter = (ast: SchemaAST.Declaration): boolean => encodingLinkOf(ast)?.to === ast.typeParameters[0]
+const encodesTo = (ast: SchemaAST.Declaration, parameter: SchemaAST.AST): boolean =>
+  encodingLinkOf(ast)?.to === parameter
+
+const wrapsItsParameter = (ast: SchemaAST.Declaration): boolean => {
+  const [parameter] = ast.typeParameters
+  return parameter !== undefined && encodesTo(ast, parameter)
+}
 
 const singleDeclaration = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AST>): boolean =>
   wrapsItsParameter(ast) && everyParameterSingle(ast, path)
@@ -202,7 +209,27 @@ if (import.meta.vitest !== void 0) {
   class WrappedEmpty extends S.TaggedClass<WrappedEmpty>()('WrappedEmpty', {}) {}
   class WrappedWide extends S.Class<WrappedWide>('WrappedWide')({ n: S.Int }) {}
 
+  interface VariableBox {
+    readonly contents: number
+  }
+
+  const isVariableBox = (input: unknown): input is VariableBox =>
+    Predicate.hasProperty(input, 'contents') && Predicate.isNumber(input.contents)
+
+  const VariableBox = S.declare(isVariableBox)
+
+  const ArbitraryVariableBox = S.declare(isVariableBox, {
+    toCodecArbitrary: () =>
+      S.link<VariableBox>()(S.Int, {
+        decode: SchemaGetter.transform((contents: number): VariableBox => ({ contents })),
+        encode: SchemaGetter.transform((box: VariableBox): number => box.contents),
+      }),
+  })
+
   const DECLARED_INHABITANCE: ReadonlyArray<{ readonly ast: SchemaAST.AST; readonly single: boolean }> = [
+    { ast: VariableBox.ast, single: false },
+    { ast: ArbitraryVariableBox.ast, single: false },
+    { ast: S.instanceOf(URL).ast, single: false },
     { ast: S.Option(Lit).ast, single: false },
     { ast: S.Chunk(Lit).ast, single: false },
     { ast: S.ReadonlySet(Lit).ast, single: false },
@@ -222,6 +249,54 @@ if (import.meta.vitest !== void 0) {
       const declared = DECLARED_INHABITANCE[index]
       if (declared === undefined) return false
       return subject.isSingleInhabitant(declared.ast) === declared.single
+    },
+  )
+
+  const constantCodecAt = <A, I>(codec: CodecPair<A, I>, frozen: A): CodecPair<A, I> => ({
+    decode: () => roundTripOf(codec)(frozen),
+    encode: () => codec.encode(frozen),
+  })
+
+  const boxEq = S.toEquivalence(ArbitraryVariableBox)
+
+  prop(
+    '∀b_VariableBoxConstantCodec_→Refuted',
+    {
+      of: [ArbitraryVariableBox, ArbitraryVariableBox],
+      subject: { decode: S.decodeOption(ArbitraryVariableBox), encode: S.encodeOption(ArbitraryVariableBox) },
+    },
+    (codec, [value, twin]) => boxEq(value, twin) || !roundTripsOf(constantCodecAt(codec, value), boxEq)(value, twin),
+  )
+
+  const registeredTaskCount = (): number => TestRunner.getCurrentSuite().tasks.length
+
+  const lawsRegisteredBy = (register: () => void): number => {
+    const before = registeredTaskCount()
+    register()
+    return registeredTaskCount() - before
+  }
+
+  const VARYING_LAWS = 2
+  const SINGLE_INHABITANT_LAWS = 1
+
+  const REGISTERED_LAWS: ReadonlyArray<{ readonly registered: number; readonly expected: number }> = [
+    { registered: lawsRegisteredBy(() => ruleOfSchemas('VariableBox', ArbitraryVariableBox)), expected: VARYING_LAWS },
+    {
+      registered: lawsRegisteredBy(() => ruleOfSchemas('WrappedLiteral', WrappedLiteral)),
+      expected: SINGLE_INHABITANT_LAWS,
+    },
+    { registered: lawsRegisteredBy(() => ruleOfSchemas('WrappedWide', WrappedWide)), expected: VARYING_LAWS },
+  ]
+
+  const RegistrationIndex = S.Int.pipe(S.check(S.isBetween({ minimum: 0, maximum: REGISTERED_LAWS.length - 1 })))
+
+  prop(
+    '∀s_RuleOfSchemasLawCount_=Declared',
+    { of: [RegistrationIndex], subject: REGISTERED_LAWS },
+    (registrations, [index]) => {
+      const registration = registrations[index]
+      if (registration === undefined) return false
+      return registration.registered === registration.expected
     },
   )
 }
