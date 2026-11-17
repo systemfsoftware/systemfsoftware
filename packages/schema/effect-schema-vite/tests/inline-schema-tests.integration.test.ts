@@ -188,6 +188,40 @@ const makeRuntimePackage = (files: Record<string, string>): string => {
 
 const RECURSIVE_RUNTIME = makeRuntimePackage({ 'recursive.schema.ts': RECURSIVE_SCHEMA })
 
+const TYPED_BY_INFERENCE = `
+import { Effect, Schema, SchemaIssue } from 'effect'
+
+const isFiniteNumber = (u: unknown): u is number => typeof u === 'number' && Number.isFinite(u)
+
+const boxOf = <A extends Schema.Top>(item: A) => Schema.Struct({ item })
+
+export const CurriedDeclaration = Schema.declareConstructor<number>()(
+  [],
+  () => (u, ast, options) =>
+    isFiniteNumber(u) ? Effect.succeed(u) : Effect.fail(new SchemaIssue.InvalidType(ast, u, options)),
+)
+
+export const HelperBuilt = boxOf(Schema.String)
+
+const anything = () => Schema.Any
+
+export const AnyPayload = anything()
+
+export const StructConst = Schema.Struct({ x: Schema.String })
+
+export const isStructConst = Schema.is(StructConst)
+
+export class Boom extends Schema.TaggedErrorClass<Boom>()('Boom', { message: Schema.String }) {}
+
+export class Rejected extends Schema.TaggedError<Rejected>()('Rejected', { issue: Schema.String }) {}
+
+export const Untyped: any = StructConst
+
+export const count = 3
+`
+
+const INFERRED = makeRuntimePackage({ 'inferred.schema.ts': TYPED_BY_INFERENCE })
+
 const NAMESAKES = makePackage('schema-laws-namesake-', {
   'first/money.schema.ts': MONEY,
   'second/money.schema.ts': MONEY,
@@ -209,7 +243,7 @@ const SINGLE = makePackage('schema-laws-single-', {
 })
 
 afterAll(() => {
-  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE, RECURSIVE_RUNTIME]) {
+  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE, RECURSIVE_RUNTIME, INFERRED]) {
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -239,6 +273,27 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
             TaggedData: 'imports resolve',
           })
         },
+      ),
+    ),
+  )
+
+  scenario(
+    'A schema whose type is only inferred earns a law pair, however its initializer is spelled',
+    Gherkin.Do.pipe(
+      Given(
+        'a package exporting an unannotated curried declaration, a schema built by a local helper, a helper-built schema of any value, a struct, a type guard, two tagged errors, an any-typed value and a number',
+      )('pkg', () => Effect.succeed(INFERRED)),
+      When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
+      Then(
+        'the four schemas each carry a law pair, and the guard, the errors, the any-typed value and the number none',
+      )(
+        (s, expect) =>
+          expect(Object.fromEntries(lawsIn(s.code))).toEqual({
+            CurriedDeclaration: './inferred.schema',
+            HelperBuilt: './inferred.schema',
+            AnyPayload: './inferred.schema',
+            StructConst: './inferred.schema',
+          }),
       ),
     ),
   )

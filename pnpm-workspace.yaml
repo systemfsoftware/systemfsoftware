@@ -68,6 +68,8 @@ catalogs:
     oxlint-tsgolint: 7.0.2006
   stryker:
     "mutation-testing-elements": 3.9.0
+  typescript-api:
+    typescript: ~7.0.2
 minimumReleaseAge: 4320
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"

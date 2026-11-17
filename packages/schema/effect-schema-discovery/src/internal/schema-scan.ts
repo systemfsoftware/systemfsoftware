@@ -3,6 +3,7 @@ import type { Stats } from 'node:fs'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
+import { dataSchemaExportsByType, type ExportsOutsideSyntacticPass } from './schema-assignability.js'
 
 /**
  * A schema found by {@link findExportedSchemas}: the module that declares it and the name it
@@ -15,11 +16,16 @@ export interface FoundSchema {
   readonly filePath: string
 }
 
-function findExportedSchemaNames(source: string): string[] {
+interface DeclaredExport {
+  readonly name: string
+  readonly syntacticallySchema: boolean
+}
+
+function findDeclaredExports(source: string): DeclaredExport[] {
   try {
     const result = parseSync('temp.ts', source)
 
-    const names: string[] = []
+    const exports: DeclaredExport[] = []
 
     for (const node of result.program.body) {
       if (node.type !== 'ExportNamedDeclaration') continue
@@ -28,11 +34,8 @@ function findExportedSchemaNames(source: string): string[] {
 
       if (decl.type === 'ClassDeclaration') {
         const className = decl.id?.name
-        if (
-          typeof className === 'string' && !className.startsWith('_') &&
-          extendsSchemaClass(decl.superClass)
-        ) {
-          names.push(className)
+        if (typeof className === 'string' && !className.startsWith('_')) {
+          exports.push({ name: className, syntacticallySchema: extendsSchemaClass(decl.superClass) })
         }
         continue
       }
@@ -52,11 +55,11 @@ function findExportedSchemaNames(source: string): string[] {
         if (!isSchema && declarator.init) {
           isSchema = initRefersToSchema(declarator.init)
         }
-        if (isSchema) names.push(name)
+        exports.push({ name, syntacticallySchema: isSchema })
       }
     }
 
-    return names
+    return exports
   } catch {
     return []
   }
@@ -202,14 +205,40 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
   return memberChainStartsWithS(callee)
 }
 
+interface ScannedModule {
+  readonly filePath: string
+  readonly source: string
+  readonly exports: readonly DeclaredExport[]
+}
+
+const exportsOutsideSyntacticPass = (module: ScannedModule): ExportsOutsideSyntacticPass => ({
+  filePath: module.filePath,
+  source: module.source,
+  names: module.exports.filter((e) => !e.syntacticallySchema).map((e) => e.name),
+})
+
 /**
- * Walk a directory and return every exported const whose type annotation
- * or initializer mentions `Schema`.
+ * Walk a directory and return every `export const` or `export class` declaration that is a schema: one whose type
+ * annotation or initializer names `Schema` the way a schema declaration does, or whose type the
+ * TypeScript checker finds assignable to `Schema.Top` as resolved from that module, unless the
+ * values it decodes are errors. Order is the walk's, then declaration order within a module.
  *
  * @since 0.1.0
  */
 export function findExportedSchemas(dir: string): FoundSchema[] {
-  const schemas: FoundSchema[] = []
+  const modules = scanModules(dir)
+  const byType = dataSchemaExportsByType(
+    modules.map(exportsOutsideSyntacticPass).filter((m) => m.names.length > 0),
+  )
+  return modules.flatMap((module) =>
+    module.exports
+      .filter((e) => e.syntacticallySchema || byType.get(module.filePath)?.has(e.name) === true)
+      .map((e) => ({ name: e.name, filePath: module.filePath }))
+  )
+}
+
+function scanModules(dir: string): ScannedModule[] {
+  const modules: ScannedModule[] = []
   const walk = (current: string): void => {
     let entries: string[]
     try {
@@ -235,12 +264,10 @@ export function findExportedSchemas(dir: string): FoundSchema[] {
         } catch {
           continue
         }
-        for (const name of findExportedSchemaNames(source)) {
-          schemas.push({ name, filePath: full })
-        }
+        modules.push({ filePath: full, source, exports: findDeclaredExports(source) })
       }
     }
   }
   walk(resolve(dir))
-  return schemas
+  return modules
 }
