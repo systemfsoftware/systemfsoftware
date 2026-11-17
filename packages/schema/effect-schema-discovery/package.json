@@ -42,7 +42,8 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
-    "oxc-parser": "catalog:"
+    "oxc-parser": "catalog:",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",

@@ -1097,6 +1097,9 @@ importers:
       oxc-parser:
         specifier: 'catalog:'
         version: 0.155.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'

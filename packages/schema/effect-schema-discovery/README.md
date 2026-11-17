@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-schema-discovery
 
-Extracts exported Effect `Schema` declarations from TypeScript source files, providing AST-based schema discovery for `@systemfsoftware/effect-schema-vite`.
+Extracts exported Effect `Schema` declarations from TypeScript source files for `@systemfsoftware/effect-schema-vite`. An export is found when its source declares it the way a schema is declared, or when the TypeScript checker finds its type assignable to `Schema.Top` as resolved from its own module.
 
 ## Quick Start
 
