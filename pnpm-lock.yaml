@@ -249,6 +249,10 @@ catalogs:
     oxlint-tsgolint:
       specifier: 7.0.2006
       version: 7.0.2006
+  typescript-api:
+    typescript:
+      specifier: ~7.0.2
+      version: 7.0.2
 
 overrides:
   fast-check: ^4.10.2
@@ -1098,7 +1102,7 @@ importers:
         specifier: 'catalog:'
         version: 0.155.0
       typescript:
-        specifier: 'catalog:'
+        specifier: catalog:typescript-api
         version: 7.0.2
     devDependencies:
       '@microsoft/api-extractor':
