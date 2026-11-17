@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { API, type Checker, type Symbol, type Type, TypeFlags } from 'typescript/unstable/sync'
 
 export interface ExportsOutsideSyntacticPass {
@@ -9,25 +8,30 @@ export interface ExportsOutsideSyntacticPass {
 
 interface ProbeAliases {
   readonly schemaTop: string
-  readonly errorSchema: string
+  readonly error: string
 }
 
 interface ProbeTypes {
   readonly schemaTop: Type
-  readonly errorSchema: Type
+  readonly error: Type
+}
+
+interface ModuleWithAliases {
+  readonly source: string
+  readonly aliases: ProbeAliases
 }
 
 const probeAliasesAbsentFrom = (source: string): ProbeAliases => {
   let base = '__schemaDiscovery'
   while (source.includes(base)) base = `_${base}`
-  return { schemaTop: `${base}Top`, errorSchema: `${base}Error` }
+  return { schemaTop: `${base}Top`, error: `${base}Error` }
 }
 
-const withProbeAliases = (fileName: string, aliases: ProbeAliases): string =>
+const withProbeAliases = ({ aliases, source }: ModuleWithAliases): string =>
   [
-    readFileSync(fileName, 'utf-8'),
+    source,
     `export type ${aliases.schemaTop} = import('effect/Schema').Top`,
-    `export type ${aliases.errorSchema} = import('effect/Schema').Codec<Error, unknown, unknown, unknown>`,
+    `export type ${aliases.error} = Error`,
     '',
   ].join('\n')
 
@@ -35,18 +39,21 @@ const isAssignableToEveryType = (type: Type): boolean => (type.flags & (TypeFlag
 
 const isResolvedObjectType = (type: Type): boolean => (type.flags & TypeFlags.Object) !== 0
 
+const decodesToErrors = (checker: Checker, schema: Type, error: Type): boolean => {
+  const decodedProperty = checker.getPropertyOfType(schema, 'Type')
+  const decoded = decodedProperty && checker.getTypeOfSymbol(decodedProperty)
+  return decoded !== undefined && !isAssignableToEveryType(decoded) && checker.isTypeAssignableTo(decoded, error)
+}
+
 const isDataSchemaType = (checker: Checker, type: Type | undefined, probes: ProbeTypes): boolean =>
   type !== undefined && !isAssignableToEveryType(type) && checker.isTypeAssignableTo(type, probes.schemaTop) &&
-  !checker.isTypeAssignableTo(type, probes.errorSchema)
+  !decodesToErrors(checker, type, probes.error)
 
 const probeTypesIn = (checker: Checker, moduleSymbol: Symbol, aliases: ProbeAliases): ProbeTypes | undefined => {
   const schemaTop = checker.getMemberInModuleExports(moduleSymbol, aliases.schemaTop)
-  const errorSchema = checker.getMemberInModuleExports(moduleSymbol, aliases.errorSchema)
-  if (schemaTop === undefined || errorSchema === undefined) return undefined
-  return {
-    schemaTop: checker.getDeclaredTypeOfSymbol(schemaTop),
-    errorSchema: checker.getDeclaredTypeOfSymbol(errorSchema),
-  }
+  const error = checker.getMemberInModuleExports(moduleSymbol, aliases.error)
+  if (schemaTop === undefined || error === undefined) return undefined
+  return { schemaTop: checker.getDeclaredTypeOfSymbol(schemaTop), error: checker.getDeclaredTypeOfSymbol(error) }
 }
 
 export const dataSchemaExportsByType = (
@@ -55,12 +62,14 @@ export const dataSchemaExportsByType = (
   const found = new Map<string, ReadonlySet<string>>()
   if (modules.length === 0) return found
 
-  const aliasesByFile = new Map(modules.map((m) => [m.filePath, probeAliasesAbsentFrom(m.source)]))
+  const byFile = new Map<string, ModuleWithAliases>(
+    modules.map((m) => [m.filePath, { source: m.source, aliases: probeAliasesAbsentFrom(m.source) }]),
+  )
   const api = new API({
     fs: {
       readFile: (fileName) => {
-        const aliases = aliasesByFile.get(fileName)
-        return aliases === undefined ? undefined : withProbeAliases(fileName, aliases)
+        const module = byFile.get(fileName)
+        return module === undefined ? undefined : withProbeAliases(module)
       },
     },
   })
@@ -74,7 +83,7 @@ export const dataSchemaExportsByType = (
       }
       const { checker } = project
       const moduleSymbol = checker.getSymbolAtLocation(sourceFile)
-      const aliases = aliasesByFile.get(m.filePath)
+      const aliases = byFile.get(m.filePath)?.aliases
       const probes = moduleSymbol && aliases && probeTypesIn(checker, moduleSymbol, aliases)
       if (moduleSymbol === undefined || probes === undefined) {
         throw new Error(`TypeScript did not read the Schema aliases appended to ${m.filePath}`)

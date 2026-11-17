@@ -218,7 +218,7 @@ const exportsOutsideSyntacticPass = (module: ScannedModule): ExportsOutsideSynta
 })
 
 /**
- * Walk a directory and return every exported const or class that is a schema: one whose type
+ * Walk a directory and return every `export const` or `export class` declaration that is a schema: one whose type
  * annotation or initializer names `Schema` the way a schema declaration does, or whose type the
  * TypeScript checker finds assignable to `Schema.Top` as resolved from that module, unless the
  * values it decodes are errors. Order is the walk's, then declaration order within a module.
