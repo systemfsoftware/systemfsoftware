@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { basenameOf } from './path.js'
+import { type ExportOrigin, moduleFileOf, originOfExport } from './export-origin.js'
+import { basenameOf, isTestFile } from './path.js'
 import { isPropCallee } from './prop-call.js'
 import {
   FOREIGN_SUBJECT_EXPECTED,
@@ -15,69 +16,191 @@ import {
 
 export type MessageIds = 'localSubject' | 'foreignSubject'
 
-const WORKFLOW_MODULE = /\.workflow(\.[cm]?[jt]sx?)?$/
+const WORKFLOW_MODULE = /\.workflow\.[cm]?[jt]sx?$/
 
-const isWorkflowSpecifier = (source: string): boolean => WORKFLOW_MODULE.test(source.slice(source.lastIndexOf('/') + 1))
+type Verdict =
+  | { readonly _tag: 'Workflow' }
+  | { readonly _tag: 'Local'; readonly actual: string }
+  | { readonly _tag: 'Foreign'; readonly actual: string }
 
-const rootNameOf = (node: ESTree.Node): string | undefined => {
-  if (node.type === 'Identifier') return node.name
-  if (node.type === 'MemberExpression' && !node.computed) return rootNameOf(node.object)
-  return undefined
+type GetScope = (node: ESTree.Node) => unknown
+
+interface DefinitionLike {
+  readonly type: string
+  readonly node: ESTree.Node
+  readonly parent?: ESTree.Node | null
 }
 
-const subjectOf = (call: ESTree.CallExpression): ESTree.Node | undefined => {
-  for (const arg of call.arguments) {
-    if (arg.type !== 'ObjectExpression') continue
-    for (const property of arg.properties) {
-      if (
-        property.type === 'Property' && !property.computed && property.key.type === 'Identifier' &&
-        property.key.name === 'subject'
-      ) return property.value
+interface VariableLike {
+  readonly defs: readonly DefinitionLike[]
+}
+
+interface ReferenceLike {
+  readonly identifier: ESTree.Node
+  readonly resolved: VariableLike | null
+}
+
+const isScopeLike = (value: unknown): value is { readonly references: readonly ReferenceLike[] } =>
+  typeof value === 'object' && value !== null && 'references' in value
+
+const definitionOf = (identifier: ESTree.Node, getScope: GetScope): DefinitionLike | undefined => {
+  const scope = getScope(identifier)
+  if (!isScopeLike(scope)) return undefined
+  const reference = scope.references.find((candidate) => candidate.identifier === identifier)
+  return reference?.resolved?.defs[0]
+}
+
+const SUBJECT_KEY = 'subject'
+
+type OptionsRead =
+  | { readonly _tag: 'Subject'; readonly node: ESTree.Node }
+  | { readonly _tag: 'Unreadable' }
+  | { readonly _tag: 'None' }
+
+const subjectInObject = (object: ESTree.ObjectExpression): OptionsRead => {
+  let opaque = false
+  for (const property of object.properties) {
+    if (property.type !== 'Property') {
+      opaque = true
+      continue
     }
+    if (property.computed) {
+      if (property.key.type === 'Literal' && property.key.value === SUBJECT_KEY) {
+        return { _tag: 'Subject', node: property.value }
+      }
+      opaque = true
+      continue
+    }
+    const key = property.key.type === 'Identifier'
+      ? property.key.name
+      : property.key.type === 'Literal'
+      ? property.key.value
+      : undefined
+    if (key === SUBJECT_KEY) return { _tag: 'Subject', node: property.value }
   }
-  return undefined
+  return opaque ? { _tag: 'Unreadable' } : { _tag: 'None' }
+}
+
+const optionsObjectOf = (argument: ESTree.Node, getScope: GetScope): ESTree.ObjectExpression | 'opaque' | undefined => {
+  if (argument.type === 'ObjectExpression') return argument
+  if (argument.type !== 'Identifier') return undefined
+  const definition = definitionOf(argument, getScope)
+  if (definition?.type !== 'Variable' || definition.node.type !== 'VariableDeclarator') return undefined
+  const init = definition.node.init
+  return init?.type === 'ObjectExpression' ? init : 'opaque'
+}
+
+const subjectOf = (call: ESTree.CallExpression, getScope: GetScope): OptionsRead => {
+  let read: OptionsRead = { _tag: 'None' }
+  for (const argument of call.arguments) {
+    const object = optionsObjectOf(argument, getScope)
+    if (object === undefined) continue
+    if (object === 'opaque') {
+      read = { _tag: 'Unreadable' }
+      continue
+    }
+    const found = subjectInObject(object)
+    if (found._tag === 'Subject') return found
+    if (found._tag === 'Unreadable') read = found
+  }
+  return read
+}
+
+const verdictOfOrigin = (origin: ExportOrigin, label: string, source: string): Verdict => {
+  if (origin._tag === 'Unresolved') {
+    return { _tag: 'Foreign', actual: `${label}, imported from ${source}, which the rule could not resolve` }
+  }
+  if (origin._tag === 'Namespace') {
+    return { _tag: 'Foreign', actual: `${label}, a namespace re-exported through ${source}` }
+  }
+  return WORKFLOW_MODULE.test(basenameOf(origin.file))
+    ? { _tag: 'Workflow' }
+    : { _tag: 'Foreign', actual: `${label}, imported from ${source} and declared in ${basenameOf(origin.file)}` }
+}
+
+const importVerdict = (
+  definition: DefinitionLike,
+  member: string | undefined,
+  label: string,
+  filename: string,
+): Verdict => {
+  const declaration = definition.parent
+  const specifier = definition.node
+  if (declaration?.type !== 'ImportDeclaration') return { _tag: 'Local', actual: `${label}, declared in the test file` }
+  const source = declaration.source.value
+  const file = moduleFileOf(source, filename)
+  if (file === undefined) return verdictOfOrigin({ _tag: 'Unresolved', specifier: source }, label, source)
+  if (specifier.type === 'ImportNamespaceSpecifier') {
+    if (member === undefined) return { _tag: 'Local', actual: `${label}, a whole module namespace` }
+    return verdictOfOrigin(originOfExport(file, member), label, source)
+  }
+  const imported = specifier.type === 'ImportSpecifier'
+    ? (specifier.imported.type === 'Literal' ? String(specifier.imported.value) : specifier.imported.name)
+    : 'default'
+  const origin = originOfExport(file, imported)
+  if (member === undefined) return verdictOfOrigin(origin, label, source)
+  return origin._tag === 'Namespace'
+    ? verdictOfOrigin(originOfExport(origin.file, member), label, source)
+    : { _tag: 'Local', actual: `${label}, a member of an imported value` }
+}
+
+const verdictOf = (subject: ESTree.Node, getScope: GetScope, filename: string): Verdict => {
+  const expression = subject.type === 'MemberExpression' && !subject.computed && subject.property.type === 'Identifier'
+    ? { root: subject.object, member: subject.property.name }
+    : { root: subject, member: undefined }
+  if (expression.root.type !== 'Identifier') {
+    return { _tag: 'Local', actual: 'a subject built in the test file as an expression' }
+  }
+  const label = expression.member === undefined
+    ? `the subject ${expression.root.name}`
+    : `the subject ${expression.root.name}.${expression.member}`
+  const definition = definitionOf(expression.root, getScope)
+  if (definition === undefined) return { _tag: 'Local', actual: `${label}, which resolves to no declaration` }
+  if (definition.type !== 'ImportBinding') return { _tag: 'Local', actual: `${label}, declared in the test file` }
+  return importVerdict(definition, expression.member, label, filename)
 }
 
 export const workflowPropertySubject = defineRule({
   meta,
   create(context: Context) {
-    if (!basenameOf(context.filename).endsWith(WORKFLOW_PROPERTY_SUFFIX)) return {}
-    const imported = new Map<string, string>()
-
-    const report = (node: ESTree.Node, messageId: MessageIds, actual: string): void => {
-      context.report({
-        node,
-        messageId,
-        data: messageId === 'localSubject'
-          ? { name: LOCAL_SUBJECT_NAME, expected: LOCAL_SUBJECT_EXPECTED, actual, fix: LOCAL_SUBJECT_FIX }
-          : { name: FOREIGN_SUBJECT_NAME, expected: FOREIGN_SUBJECT_EXPECTED, actual, fix: FOREIGN_SUBJECT_FIX },
-      })
-    }
+    const basename = basenameOf(context.filename)
+    if (!isTestFile(basename)) return {}
+    const namedWorkflowProperty = basename.endsWith(WORKFLOW_PROPERTY_SUFFIX)
+    const getScope: GetScope = (node) => context.sourceCode.getScope(node)
+    const findings: Array<{ readonly node: ESTree.Node; readonly verdict: Verdict }> = []
 
     return {
-      ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (node.importKind === 'type') return
-        for (const specifier of node.specifiers) {
-          if ('importKind' in specifier && specifier.importKind === 'type') continue
-          imported.set(specifier.local.name, node.source.value)
-        }
-      },
       'CallExpression:exit'(node: ESTree.CallExpression) {
         if (!isPropCallee(node.callee)) return
-        const subject = subjectOf(node)
-        if (subject === undefined) return
-        const root = rootNameOf(subject)
-        if (root === undefined) {
-          report(subject, 'localSubject', 'a subject built in the test file as an expression')
-          return
-        }
-        const source = imported.get(root)
-        if (source === undefined) {
-          report(subject, 'localSubject', `the subject ${root}, declared in the test file`)
-          return
-        }
-        if (!isWorkflowSpecifier(source)) {
-          report(subject, 'foreignSubject', `the subject ${root}, imported from ${source}`)
+        const read = subjectOf(node, getScope)
+        if (read._tag === 'None') return
+        const verdict: Verdict = read._tag === 'Unreadable'
+          ? { _tag: 'Local', actual: 'a subject hidden behind a spread, a computed key or a non-literal options value' }
+          : verdictOf(read.node, getScope, context.filename)
+        findings.push({ node: read._tag === 'Subject' ? read.node : node, verdict })
+      },
+      'Program:exit'() {
+        const testsAWorkflow = namedWorkflowProperty || findings.some(({ verdict }) => verdict._tag === 'Workflow')
+        if (!testsAWorkflow) return
+        for (const { node, verdict } of findings) {
+          if (verdict._tag === 'Workflow') continue
+          context.report({
+            node,
+            messageId: verdict._tag === 'Local' ? 'localSubject' : 'foreignSubject',
+            data: verdict._tag === 'Local'
+              ? {
+                name: LOCAL_SUBJECT_NAME,
+                expected: LOCAL_SUBJECT_EXPECTED,
+                actual: verdict.actual,
+                fix: LOCAL_SUBJECT_FIX,
+              }
+              : {
+                name: FOREIGN_SUBJECT_NAME,
+                expected: FOREIGN_SUBJECT_EXPECTED,
+                actual: verdict.actual,
+                fix: FOREIGN_SUBJECT_FIX,
+              },
+          })
         }
       },
     }

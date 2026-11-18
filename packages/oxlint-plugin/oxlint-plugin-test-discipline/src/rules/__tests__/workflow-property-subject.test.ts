@@ -1,9 +1,32 @@
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { workflowPropertySubject } from '../workflow-property-subject.js'
 import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
-const FILE = '/repo/packages/ledger/src/__tests__/settle.workflow.property.test.ts'
+const ROOT = realpathSync(mkdtempSync(join(tmpdir(), 'workflow-property-subject-')))
+
+const files: Readonly<Record<string, string>> = {
+  'packages/ledger/package.json': JSON.stringify({ name: '@acme/ledger', exports: { '.': './src/mod.ts' } }),
+  'packages/ledger/src/settle.workflow.ts':
+    'export const settle = (ledger) => ledger\nexport const closePeriod = (p) => p\n',
+  'packages/ledger/src/entry.schema.ts': 'export const balanceOf = (e) => e\nexport const debit = (e) => e\n',
+  'packages/ledger/src/digest.ts': 'export const digestOf = (e) => e\n',
+  'packages/ledger/src/mod.ts':
+    "export { settle } from './settle.workflow.js'\nexport * from './digest.js'\nexport * as Entries from './entry.schema.js'\nexport * as Settle from './settle.workflow.js'\n",
+  'packages/ledger/src/laundered.workflow.ts': "export { balanceOf } from './entry.schema.js'\n",
+  'packages/ledger/src/workflow/runner.ts': 'export const run = (r) => r\n',
+}
+
+for (const [path, text] of Object.entries(files)) {
+  mkdirSync(dirname(join(ROOT, path)), { recursive: true })
+  writeFileSync(join(ROOT, path), text)
+}
+
+const FILE = join(ROOT, 'packages/ledger/src/__tests__/settle.workflow.property.test.ts')
+const PLAIN_PROPERTY = join(ROOT, 'packages/ledger/src/__tests__/settle.property.test.ts')
 
 const localError = (actual: string) => ({
   messageId: 'localSubject' as const,
@@ -19,11 +42,10 @@ const localError = (actual: string) => ({
 const foreignError = (actual: string) => ({
   messageId: 'foreignSubject' as const,
   data: {
-    name: 'a workflow property whose subject is imported from a non-workflow file',
-    expected: 'a subject imported from a *.workflow.ts (or *.workflow.js) module, by its relative path',
+    name: 'a workflow property whose subject is declared outside a workflow module',
+    expected: 'a subject declared in a *.workflow.ts module, imported directly or through any re-export',
     actual,
-    fix:
-      'import the subject from the *.workflow.ts file that defines it, or move the property next to the module that owns the function',
+    fix: 'test the workflow that owns the function, or move the property next to the module that declares it',
   },
 })
 
@@ -38,28 +60,53 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
       filename: FILE,
     },
     {
-      name: 'Should_Allow_NamespaceMember_When_NamespaceIsAWorkflowModule',
+      name: 'Should_Allow_Subject_When_PackageEntryReExportsAWorkflowFunction',
       code: `
-        import * as Settle from './settle.workflow.js'
+        import { settle } from '@acme/ledger'
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle }, (subject) => true)
+      `,
+      filename: FILE,
+    },
+    {
+      name: 'Should_Allow_NamespaceMember_When_MemberIsDeclaredInAWorkflowModule',
+      code: `
+        import * as Settle from '../settle.workflow.js'
         it.effect.prop('∀l_Ledger_≡Balanced', { of: [], subject: Settle.settle }, (subject) => true)
+      `,
+      filename: FILE,
+    },
+    {
+      name: 'Should_Allow_MemberOfANamespaceReExport_When_MemberIsDeclaredInAWorkflowModule',
+      code: `
+        import { Settle } from '@acme/ledger'
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: Settle.settle }, (subject) => true)
       `,
       filename: FILE,
     },
     {
       name: 'Should_Allow_ExtensionlessSpecifier_When_ItNamesAWorkflowModule',
       code: `
-        import { closePeriod } from '../close-period.workflow'
+        import { closePeriod } from '../settle.workflow'
         it.prop('∀p_Period_≡Closed', { of: [], subject: closePeriod }, (subject) => true)
       `,
       filename: FILE,
     },
     {
-      name: 'Should_Allow_AnySubject_When_FileIsNotAWorkflowProperty',
+      name: 'Should_Allow_OptionsVariable_When_ItsSubjectIsAWorkflowFunction',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const options = { of: [], subject: settle }
+        it.prop('∀l_Ledger_≡Balanced', options, (subject) => true)
+      `,
+      filename: FILE,
+    },
+    {
+      name: 'Should_Allow_AnySubject_When_NoPropertyInTheFileTestsAWorkflow',
       code: `
         const helper = (a) => a
         it.prop('∀a_A_≡A', { of: [], subject: helper }, (subject) => true)
       `,
-      filename: '/repo/packages/ledger/src/__tests__/entry.schema.property.test.ts',
+      filename: join(ROOT, 'packages/ledger/src/__tests__/entry.schema.property.test.ts'),
     },
   ],
   invalid: [
@@ -74,6 +121,18 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
       errors: [localError('the subject everyEntryOf, declared in the test file')],
     },
     {
+      name: 'Should_Report_LocalSubject_When_ALocalBindingShadowsAWorkflowImport',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        describe('ledger', () => {
+          const settle = (ledger) => ledger
+          it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle }, (subject) => true)
+        })
+      `,
+      filename: FILE,
+      errors: [localError('the subject settle, declared in the test file')],
+    },
+    {
       name: 'Should_Report_LocalSubject_When_SubjectIsAnInlineFunction',
       code: `
         import { settle } from '../settle.workflow.ts'
@@ -83,13 +142,43 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
       errors: [localError('a subject built in the test file as an expression')],
     },
     {
-      name: 'Should_Report_ForeignSubject_When_SubjectComesFromThePackageEntry',
+      name: 'Should_Report_LocalSubject_When_OptionsHideTheSubjectBehindASpread',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const base = { subject: (l) => l }
+        it.prop('∀l_Ledger_≡Balanced', { of: [], ...base }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [localError('a subject hidden behind a spread, a computed key or a non-literal options value')],
+    },
+    {
+      name: 'Should_Report_LocalSubject_When_SubjectIsAMemberOfANamedImport',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle.withRetries }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [localError('the subject settle.withRetries, a member of an imported value')],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_PackageEntryReExportsANonWorkflowFunction',
       code: `
         import { digestOf } from '@acme/ledger'
         it.prop('∀e_Entries_≡DigestUnchangedByOrder', { of: [], subject: digestOf }, (subject) => true)
       `,
       filename: FILE,
-      errors: [foreignError('the subject digestOf, imported from @acme/ledger')],
+      errors: [foreignError('the subject digestOf, imported from @acme/ledger and declared in digest.ts')],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_NamespaceReExportMemberIsASchemaFunction',
+      code: `
+        import { Entries } from '@acme/ledger'
+        it.prop('∀e_Entries_≡Balanced', { of: [], subject: Entries.balanceOf }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError('the subject Entries.balanceOf, imported from @acme/ledger and declared in entry.schema.ts'),
+      ],
     },
     {
       name: 'Should_Report_ForeignSubject_When_SubjectComesFromASchemaModule',
@@ -98,7 +187,18 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
         it.prop('∀e_Entries_≡Balanced', { of: [], subject: balanceOf }, (subject) => true)
       `,
       filename: FILE,
-      errors: [foreignError('the subject balanceOf, imported from ../entry.schema.ts')],
+      errors: [foreignError('the subject balanceOf, imported from ../entry.schema.ts and declared in entry.schema.ts')],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_AWorkflowFileOnlyReExportsASchemaFunction',
+      code: `
+        import { balanceOf } from '../laundered.workflow.ts'
+        it.prop('∀e_Entries_≡Balanced', { of: [], subject: balanceOf }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError('the subject balanceOf, imported from ../laundered.workflow.ts and declared in entry.schema.ts'),
+      ],
     },
     {
       name: 'Should_Report_ForeignSubject_When_WorkflowAppearsOnlyInADirectoryName',
@@ -107,7 +207,29 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
         it.prop('∀r_Run_≡Done', { of: [], subject: run }, (subject) => true)
       `,
       filename: FILE,
-      errors: [foreignError('the subject run, imported from ../workflow/runner.ts')],
+      errors: [foreignError('the subject run, imported from ../workflow/runner.ts and declared in runner.ts')],
+    },
+    {
+      name: 'Should_Report_LocalSubject_When_ARenamedFileStillTestsAWorkflow',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const everyLedgerOf = (l) => [l]
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle }, (subject) => true)
+        it.prop('∀l_Ledgers_≡Listed', { of: [], subject: everyLedgerOf }, (subject) => true)
+      `,
+      filename: PLAIN_PROPERTY,
+      errors: [localError('the subject everyLedgerOf, declared in the test file')],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_TheSpecifierResolvesToNoFile',
+      code: `
+        import { settle } from '../missing.workflow.ts'
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError('the subject settle, imported from ../missing.workflow.ts, which the rule could not resolve'),
+      ],
     },
   ],
 })
