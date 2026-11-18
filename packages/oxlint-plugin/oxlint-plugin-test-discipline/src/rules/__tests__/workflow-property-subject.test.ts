@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { workflowPropertySubject } from '../workflow-property-subject.js'
@@ -17,6 +17,13 @@ const files: Readonly<Record<string, string>> = {
   'packages/ledger/src/mod.ts':
     "export { settle } from './settle.workflow.js'\nexport * from './digest.js'\nexport * as Entries from './entry.schema.js'\nexport * as Settle from './settle.workflow.js'\n",
   'packages/ledger/src/laundered.workflow.ts': "export { balanceOf } from './entry.schema.js'\n",
+  'packages/periods/package.json': JSON.stringify({
+    name: '@acme/periods',
+    exports: { './*': './src/*.ts', './flows/*': './src/flows/*.workflow.ts', './internal/*': null },
+  }),
+  'packages/periods/src/flows/close.workflow.ts': 'export const close = (p) => p\n',
+  'packages/periods/src/flows/close.ts': 'export const close = (p) => p\n',
+  'packages/periods/src/internal/open.workflow.ts': 'export const open = (p) => p\n',
   'packages/ledger/src/workflow/runner.ts': 'export const run = (r) => r\n',
   'packages/ledger/src/default.workflow.ts':
     "import { balanceOf } from './entry.schema.js'\nexport default balanceOf\n",
@@ -30,6 +37,9 @@ for (const [path, text] of Object.entries(files)) {
   mkdirSync(dirname(join(ROOT, path)), { recursive: true })
   writeFileSync(join(ROOT, path), text)
 }
+
+mkdirSync(join(ROOT, 'node_modules/@acme'), { recursive: true })
+symlinkSync(join(ROOT, 'packages/periods'), join(ROOT, 'node_modules/@acme/periods'))
 
 const FILE = join(ROOT, 'packages/ledger/src/__tests__/settle.workflow.property.test.ts')
 const PLAIN_PROPERTY = join(ROOT, 'packages/ledger/src/__tests__/settle.property.test.ts')
@@ -115,6 +125,14 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
       filename: join(ROOT, 'packages/ledger/src/__tests__/entry.schema.property.test.ts'),
     },
     {
+      name: 'Should_Allow_Subject_When_TheLongestExportsPatternNamesAWorkflow',
+      code: `
+        import { close } from '@acme/periods/flows/close'
+        it.prop('∀p_Period_≡Closed', { of: [], subject: close }, (subject) => true)
+      `,
+      filename: FILE,
+    },
+    {
       name: 'Should_Allow_Subject_When_OptionsAreAsConst',
       code: `
         import { settle } from '../settle.workflow.ts'
@@ -135,6 +153,19 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
     },
   ],
   invalid: [
+    {
+      name: 'Should_Report_ForeignSubject_When_ExportsBlockTheSubpath',
+      code: `
+        import { open } from '@acme/periods/internal/open.workflow'
+        it.prop('∀p_Period_≡Opened', { of: [], subject: open }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError(
+          'the subject open, imported from @acme/periods/internal/open.workflow, which the rule could not resolve',
+        ),
+      ],
+    },
     {
       name: 'Should_Report_ForeignSubject_When_AWorkflowDefaultExportsASchemaFunction',
       code: `

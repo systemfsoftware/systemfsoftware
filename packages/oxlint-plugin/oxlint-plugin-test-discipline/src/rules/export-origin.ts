@@ -74,6 +74,13 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 
 const targetOf = (target: unknown): string | undefined => {
   if (typeof target === 'string') return target
+  if (Array.isArray(target)) {
+    for (const item of target) {
+      const found = targetOf(item)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
   if (!isRecord(target)) return undefined
   for (const condition of CONDITIONS) {
     const found = targetOf(target[condition])
@@ -99,29 +106,49 @@ const manifestAt = memo((directory: string): Manifest | undefined => {
   return Option.getOrUndefined(S.decodeUnknownOption(S.fromJsonString(Manifest))(readFileSync(path, 'utf8')))
 })
 
-const patternTargetOf = (exports: Readonly<Record<string, unknown>>, subpath: string): string | undefined => {
+type PatternMatch = {
+  readonly target: unknown
+  readonly stem: string
+  readonly prefix: number
+  readonly suffix: number
+}
+
+const patternMatchOf = (exports: Readonly<Record<string, unknown>>, subpath: string): PatternMatch | undefined => {
+  const matches: PatternMatch[] = []
   for (const [key, value] of Object.entries(exports)) {
     const star = key.indexOf('*')
     if (star < 0) continue
     const prefix = key.slice(0, star)
     const suffix = key.slice(star + 1)
     if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix) || subpath.length < key.length - 1) continue
-    const target = targetOf(value)
-    if (target !== undefined) return target.replace('*', subpath.slice(prefix.length, subpath.length - suffix.length))
+    matches.push({
+      target: value,
+      stem: subpath.slice(prefix.length, subpath.length - suffix.length),
+      prefix: prefix.length,
+      suffix: suffix.length,
+    })
   }
-  return undefined
+  matches.sort((left, right) => right.prefix - left.prefix || right.suffix - left.suffix)
+  return matches[0]
 }
 
 const entryOf = (root: string, manifest: Manifest, subpath: string): string | undefined => {
   const { exports } = manifest
   const keyed = isRecord(exports) && Object.keys(exports).some((key) => key.startsWith('.'))
+  if (keyed && subpath in exports && exports[subpath] === null) return undefined
+  const pattern = keyed && !(subpath in exports) ? patternMatchOf(exports, subpath) : undefined
+  if (pattern !== undefined && pattern.target === null) return undefined
   const exported = keyed
-    ? targetOf(exports[subpath]) ?? patternTargetOf(exports, subpath)
+    ? (pattern === undefined
+      ? targetOf(exports[subpath])
+      : targetOf(pattern.target)?.replaceAll('*', pattern.stem))
     : subpath === '.'
     ? targetOf(exports)
     : undefined
   const fallbacks = subpath === '.'
     ? [manifest.module, manifest.main, manifest.types, manifest.typings, 'index.js']
+    : keyed
+    ? []
     : [subpath]
   for (const relative of [exported, ...fallbacks]) {
     if (relative === undefined) continue
