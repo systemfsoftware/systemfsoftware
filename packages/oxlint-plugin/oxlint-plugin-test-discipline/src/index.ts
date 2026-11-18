@@ -28,6 +28,7 @@ import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures
 import { testsImportPublicApi } from './rules/tests-import-public-api.js'
 import { traceTestRequiresTaxonomy } from './rules/trace-test-requires-taxonomy.js'
 import { vitestFromSystemfsoftwareVitest } from './rules/vitest-from-systemfsoftware-vitest.js'
+import { workflowPropertySubject } from './rules/workflow-property-subject.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-discipline'
 
@@ -64,6 +65,7 @@ const recommendedRules = {
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
   [rule('ban-raw-span-name-emit')]: 'error',
   [rule('trace-test-requires-taxonomy')]: 'error',
+  [rule('workflow-property-subject')]: 'error',
 } as const
 
 export default {
@@ -99,6 +101,7 @@ export default {
     'differential-test-requires-harness': differentialTestRequiresHarness,
     'conformance-test-requires-harness': conformanceTestRequiresHarness,
     'model-fixture-imports-subject': modelFixtureImportsSubject,
+    'workflow-property-subject': workflowPropertySubject,
     'ban-raw-span-name-emit': banRawSpanNameEmit,
     'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
   },

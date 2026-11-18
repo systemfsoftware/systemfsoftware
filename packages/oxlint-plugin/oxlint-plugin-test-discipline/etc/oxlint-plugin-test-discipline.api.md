@@ -40,6 +40,7 @@ const _default: {
         'differential-test-requires-harness': Rule;
         'conformance-test-requires-harness': Rule;
         'model-fixture-imports-subject': Rule;
+        'workflow-property-subject': Rule;
         'ban-raw-span-name-emit': Rule;
         'trace-test-requires-taxonomy': Rule;
     };
