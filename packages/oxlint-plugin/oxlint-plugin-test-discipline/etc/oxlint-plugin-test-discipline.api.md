@@ -36,6 +36,7 @@ const _default: {
         'tests-dir-helpers-in-fixtures': Rule;
         'vitest-from-systemfsoftware-vitest': Rule;
         'no-io-module-in-source-test': Rule;
+        'tracing-test-requires-trace-suite': Rule;
         'tests-import-public-api': Rule;
         'differential-test-requires-harness': Rule;
         'conformance-test-requires-harness': Rule;

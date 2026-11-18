@@ -27,6 +27,7 @@ import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
 import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
 import { testsImportPublicApi } from './rules/tests-import-public-api.js'
 import { traceTestRequiresTaxonomy } from './rules/trace-test-requires-taxonomy.js'
+import { tracingTestRequiresTraceSuite } from './rules/tracing-test-requires-trace-suite.js'
 import { vitestFromSystemfsoftwareVitest } from './rules/vitest-from-systemfsoftware-vitest.js'
 import { workflowPropertySubject } from './rules/workflow-property-subject.js'
 
@@ -58,6 +59,7 @@ const recommendedRules = {
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('vitest-from-systemfsoftware-vitest')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
+  [rule('tracing-test-requires-trace-suite')]: 'error',
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
   [rule('conformance-test-requires-harness')]: 'error',
@@ -97,6 +99,7 @@ export default {
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'vitest-from-systemfsoftware-vitest': vitestFromSystemfsoftwareVitest,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
+    'tracing-test-requires-trace-suite': tracingTestRequiresTraceSuite,
     'tests-import-public-api': testsImportPublicApi,
     'differential-test-requires-harness': differentialTestRequiresHarness,
     'conformance-test-requires-harness': conformanceTestRequiresHarness,
