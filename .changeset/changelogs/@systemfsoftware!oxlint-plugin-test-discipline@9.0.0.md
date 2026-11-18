@@ -1,6 +1,4 @@
----
-'@systemfsoftware/oxlint-plugin-test-discipline': major
----
+# @systemfsoftware/oxlint-plugin-test-discipline@9.0.0
 
 `workflow-property-subject` follows each subject to the file that declares it, instead of matching the import's file name. It traces the subject through scope, a const options variable, imports, package entries (including `exports` patterns) and re-exports.
 
