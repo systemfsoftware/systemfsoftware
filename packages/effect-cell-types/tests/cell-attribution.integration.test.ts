@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Tracer } from 'effect'
+import { SpanRecorder } from '@systemfsoftware/effect-spec-runtime'
+import { Effect, Layer, type Tracer } from 'effect'
 
 import {
   AttributedCommand,
@@ -17,16 +18,9 @@ const fixtureFile = new URL('./__fixtures__/cell-attribution.fixture.ts', import
 type SpanAttributes = Tracer.NativeSpan['attributes']
 
 const attributesOf = <A, E, R>(name: string, program: Effect.Effect<A, E, R>): Effect.Effect<SpanAttributes, E, R> => {
-  const spans: Array<Tracer.NativeSpan> = []
-  const tracer = Tracer.make({
-    span(options) {
-      const span = new Tracer.NativeSpan(options)
-      spans.push(span)
-      return span
-    },
-  })
-  return Effect.map(Effect.withTracer(program, tracer), () => {
-    const span = spans.find((candidate) => candidate.name === name)
+  const recorder = SpanRecorder.make()
+  return Effect.map(Effect.withTracer(program, recorder.tracer), () => {
+    const span = recorder.spans.find((candidate) => candidate.name === name)
     if (span === undefined) throw new Error(`the run opened no span named ${name}`)
     return span.attributes
   })

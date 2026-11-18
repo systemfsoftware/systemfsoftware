@@ -1,5 +1,6 @@
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { And, But, Gherkin, Given, pairwiseFor, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { SpanRecorder } from '@systemfsoftware/effect-spec-runtime'
 import { step } from '@systemfsoftware/vitest/integration'
 import { Cause, Context, Effect, Exit, Fiber, Layer, Match, Option, Result, Tracer } from 'effect'
 import { AccessDenied, TestDomainError } from './__fixtures__/test-domain-error.fixture.js'
@@ -45,10 +46,7 @@ const marked = <Text>(marks: SpecLines, probe: Error, text: Text): Text => {
 
 const isText = (value: unknown): value is string => typeof value === 'string'
 
-interface SpanLog {
-  readonly spans: Array<Tracer.NativeSpan>
-  readonly tracer: Tracer.Tracer
-}
+type SpanLog = SpanRecorder.SpanRecorder
 
 interface StepFact {
   readonly keyword: string
@@ -59,17 +57,7 @@ interface StepFact {
   readonly failed: boolean
 }
 
-const recordingTracer = (): SpanLog => {
-  const spans: Array<Tracer.NativeSpan> = []
-  const tracer = Tracer.make({
-    span: (options) => {
-      const span = new Tracer.NativeSpan(options)
-      spans.push(span)
-      return span
-    },
-  })
-  return { spans, tracer }
-}
+const recordingTracer = (): SpanLog => SpanRecorder.make()
 
 const attributeText = (span: Tracer.NativeSpan, name: string): string => {
   const value = span.attributes.get(name)
