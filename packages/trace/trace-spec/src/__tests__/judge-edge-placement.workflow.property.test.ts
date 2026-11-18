@@ -10,16 +10,18 @@ import {
   type JudgeEdgePlacementDecision,
 } from '../judge-edge-placement.workflow.js'
 
-const deciding = (placed: ReadonlyArray<string>, reached: ReadonlyArray<string>): JudgeEdgePlacementDecision =>
-  Result.match(
-    judgeEdgePlacement(
-      new JudgeEdgePlacement({ conjunct: 'placement(x)', placed, reached, detail: 'a span is not placed' }),
-    ),
-    {
-      onFailure: (unreachable: never): JudgeEdgePlacementDecision => absurd(unreachable),
-      onSuccess: (decision): JudgeEdgePlacementDecision => decision,
-    },
-  )
+const decidingOf =
+  (workflow: typeof judgeEdgePlacement) =>
+  (placed: ReadonlyArray<string>, reached: ReadonlyArray<string>): JudgeEdgePlacementDecision =>
+    Result.match(
+      workflow(
+        new JudgeEdgePlacement({ conjunct: 'placement(x)', placed, reached, detail: 'a span is not placed' }),
+      ),
+      {
+        onFailure: (unreachable: never): JudgeEdgePlacementDecision => absurd(unreachable),
+        onSuccess: (decision): JudgeEdgePlacementDecision => decision,
+      },
+    )
 
 const joinedIds = (ids: ReadonlyArray<string>): string => Arr.join(ids, '|')
 
@@ -28,10 +30,10 @@ const everyPlaced = (placed: ReadonlyArray<string>, reached: ReadonlyArray<strin
 
 it.prop(
   '∀p_EdgePlacement_=EveryReached',
-  { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: deciding },
+  { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: judgeEdgePlacement },
   (subject, [placed, reached]) => {
     if (!everyPlaced(placed, reached)) return true
-    const decision = subject(placed, reached)
+    const decision = decidingOf(subject)(placed, reached)
     return Schema.is(EdgePlacementHeld)(decision) &&
       decision.conjunct === 'placement(x)' &&
       joinedIds(decision.inspected) === joinedIds(placed)
@@ -40,10 +42,10 @@ it.prop(
 
 it.prop(
   '∀p_EdgePlacement_=UnplacedBreaks',
-  { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: deciding },
+  { of: [Schema.Array(Schema.String), Schema.Array(Schema.String)], subject: judgeEdgePlacement },
   (subject, [placed, reached]) => {
     if (everyPlaced(placed, reached)) return true
-    const decision = subject(placed, reached)
+    const decision = decidingOf(subject)(placed, reached)
     return Schema.is(EdgePlacementBroken)(decision) &&
       decision.detail === 'a span is not placed' &&
       joinedIds(decision.inspected) === joinedIds(placed)
