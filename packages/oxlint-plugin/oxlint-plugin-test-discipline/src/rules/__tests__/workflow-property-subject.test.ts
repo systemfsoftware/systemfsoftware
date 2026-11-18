@@ -18,6 +18,12 @@ const files: Readonly<Record<string, string>> = {
     "export { settle } from './settle.workflow.js'\nexport * from './digest.js'\nexport * as Entries from './entry.schema.js'\nexport * as Settle from './settle.workflow.js'\n",
   'packages/ledger/src/laundered.workflow.ts': "export { balanceOf } from './entry.schema.js'\n",
   'packages/ledger/src/workflow/runner.ts': 'export const run = (r) => r\n',
+  'packages/ledger/src/default.workflow.ts':
+    "import { balanceOf } from './entry.schema.js'\nexport default balanceOf\n",
+  'packages/ledger/src/aliased.workflow.ts':
+    "import { balanceOf } from './entry.schema.js'\nconst alias = balanceOf\nexport { alias }\n",
+  'packages/ledger/src/destructured.workflow.ts':
+    'const helpers = { balanceOf: (e) => e }\nexport const { balanceOf } = helpers\n',
 }
 
 for (const [path, text] of Object.entries(files)) {
@@ -108,8 +114,94 @@ ruleTester.run('workflow-property-subject', workflowPropertySubject, {
       `,
       filename: join(ROOT, 'packages/ledger/src/__tests__/entry.schema.property.test.ts'),
     },
+    {
+      name: 'Should_Allow_Subject_When_OptionsAreAsConst',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const options = { of: [], subject: settle } as const
+        it.prop('∀l_Ledger_≡Balanced', options, (subject) => true)
+        it.prop('∀l_Ledger_≡Settled', { of: [], subject: settle } satisfies object, (subject) => true)
+      `,
+      filename: FILE,
+    },
+    {
+      name: 'Should_Allow_ConstPredicate_When_ItIsNotAnOptionsObject',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const check = (subject) => true
+        it.prop('∀l_Ledger_≡Balanced', { of: [], subject: settle }, check)
+      `,
+      filename: FILE,
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_ForeignSubject_When_AWorkflowDefaultExportsASchemaFunction',
+      code: `
+        import balanceOf from '../default.workflow.ts'
+        it.prop('∀e_E_≡E', { of: [], subject: balanceOf }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError('the subject balanceOf, imported from ../default.workflow.ts and declared in entry.schema.ts'),
+      ],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_AWorkflowExportsAnAliasOfASchemaFunction',
+      code: `
+        import { alias } from '../aliased.workflow.ts'
+        it.prop('∀e_E_≡E', { of: [], subject: alias }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [foreignError('the subject alias, imported from ../aliased.workflow.ts and declared in entry.schema.ts')],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_AWorkflowExportsADestructuredBinding',
+      code: `
+        import { balanceOf } from '../destructured.workflow.ts'
+        it.prop('∀e_E_≡E', { of: [], subject: balanceOf }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError(
+          'the subject balanceOf, imported from ../destructured.workflow.ts, whose declaration the rule could not trace past destructured.workflow.ts',
+        ),
+      ],
+    },
+    {
+      name: 'Should_Report_ForeignSubject_When_TheWorkflowDoesNotExportTheName',
+      code: `
+        import { missing } from '../settle.workflow.ts'
+        it.prop('∀e_E_≡E', { of: [], subject: missing }, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [
+        foreignError(
+          'the subject missing, imported from ../settle.workflow.ts, whose declaration the rule could not trace past settle.workflow.ts',
+        ),
+      ],
+    },
+    {
+      name: 'Should_Report_LocalSubject_When_OptionsAreAReassignableLet',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        let options = { of: [], subject: settle }
+        options = { of: [], subject: (l) => l }
+        it.prop('∀e_E_≡E', options, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [localError('a subject hidden behind a spread, a computed key or a non-literal options value')],
+    },
+    {
+      name: 'Should_Report_LocalSubject_When_AsConstOptionsHoldALocalHelper',
+      code: `
+        import { settle } from '../settle.workflow.ts'
+        const helper = (l) => l
+        it.prop('∀e_E_≡E', { of: [], subject: helper } as const, (subject) => true)
+      `,
+      filename: FILE,
+      errors: [localError('the subject helper, declared in the test file')],
+    },
     {
       name: 'Should_Report_LocalSubject_When_SubjectIsAHelperDeclaredInTheTest',
       code: `

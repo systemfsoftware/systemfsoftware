@@ -7,17 +7,29 @@ import { parseSync } from 'oxc-parser'
 export type ExportOrigin =
   | { readonly _tag: 'Declared'; readonly file: string }
   | { readonly _tag: 'Namespace'; readonly file: string }
+  | { readonly _tag: 'Untraceable'; readonly file: string }
   | { readonly _tag: 'Unresolved'; readonly specifier: string }
 
 const MAX_HOPS = 16
 
-const isFile = (path: string): boolean => {
+const memo = <A>(compute: (key: string) => A): (key: string) => A => {
+  const cache = new Map<string, { readonly value: A }>()
+  return (key) => {
+    const hit = cache.get(key)
+    if (hit !== undefined) return hit.value
+    const value = compute(key)
+    cache.set(key, { value })
+    return value
+  }
+}
+
+const isFile = memo((path: string): boolean => {
   try {
     return statSync(path).isFile()
   } catch {
     return false
   }
-}
+})
 
 const realPathOf = (path: string): string => {
   try {
@@ -27,24 +39,26 @@ const realPathOf = (path: string): string => {
   }
 }
 
-const SCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'] as const
+const SCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.d.mts', '.d.cts', '.js', '.mjs', '.cjs'] as const
 
-const candidatesOf = (path: string): readonly string[] => {
-  const swapped = /\.[cm]?js$/.test(path)
-    ? [path.replace(/\.([cm]?)js$/, '.$1ts'), `${path.slice(0, path.lastIndexOf('.'))}.tsx`]
-    : []
-  return [
-    ...swapped,
-    path,
-    ...SCRIPT_EXTENSIONS.map((extension) => `${path}${extension}`),
-    ...SCRIPT_EXTENSIONS.map((extension) => join(path, `index${extension}`)),
-  ]
+const swapsOf = (path: string): readonly string[] => {
+  const match = /^(.*)\.([cm]?)js$/.exec(path)
+  if (match === null) return []
+  const [, stem, flavour] = match
+  return [`${stem}.${flavour}ts`, `${stem}.tsx`, `${stem}.d.${flavour}ts`]
 }
 
-const fileAt = (path: string): string | undefined => {
+const candidatesOf = (path: string): readonly string[] => [
+  ...swapsOf(path),
+  path,
+  ...SCRIPT_EXTENSIONS.map((extension) => `${path}${extension}`),
+  ...SCRIPT_EXTENSIONS.map((extension) => join(path, `index${extension}`)),
+]
+
+const fileAt = memo((path: string): string | undefined => {
   const found = candidatesOf(path).find(isFile)
   return found === undefined ? undefined : realPathOf(found)
-}
+})
 
 const packageNameOf = (specifier: string): { readonly name: string; readonly subpath: string } => {
   const parts = specifier.split('/')
@@ -73,22 +87,48 @@ const Manifest = S.Struct({
   exports: S.optional(S.Unknown),
   module: S.optional(S.String),
   main: S.optional(S.String),
+  types: S.optional(S.String),
+  typings: S.optional(S.String),
 })
 
 type Manifest = typeof Manifest.Type
 
-const manifestAt = (directory: string): Manifest | undefined => {
+const manifestAt = memo((directory: string): Manifest | undefined => {
   const path = join(directory, 'package.json')
   if (!isFile(path)) return undefined
   return Option.getOrUndefined(S.decodeUnknownOption(S.fromJsonString(Manifest))(readFileSync(path, 'utf8')))
+})
+
+const patternTargetOf = (exports: Readonly<Record<string, unknown>>, subpath: string): string | undefined => {
+  for (const [key, value] of Object.entries(exports)) {
+    const star = key.indexOf('*')
+    if (star < 0) continue
+    const prefix = key.slice(0, star)
+    const suffix = key.slice(star + 1)
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix) || subpath.length < key.length - 1) continue
+    const target = targetOf(value)
+    if (target !== undefined) return target.replace('*', subpath.slice(prefix.length, subpath.length - suffix.length))
+  }
+  return undefined
 }
 
 const entryOf = (root: string, manifest: Manifest, subpath: string): string | undefined => {
   const { exports } = manifest
   const keyed = isRecord(exports) && Object.keys(exports).some((key) => key.startsWith('.'))
-  const exported = keyed ? targetOf(exports[subpath]) : subpath === '.' ? targetOf(exports) : undefined
-  const relative = exported ?? (subpath === '.' ? manifest.module ?? manifest.main ?? 'index.js' : subpath)
-  return fileAt(resolve(root, relative))
+  const exported = keyed
+    ? targetOf(exports[subpath]) ?? patternTargetOf(exports, subpath)
+    : subpath === '.'
+    ? targetOf(exports)
+    : undefined
+  const fallbacks = subpath === '.'
+    ? [manifest.module, manifest.main, manifest.types, manifest.typings, 'index.js']
+    : [subpath]
+  for (const relative of [exported, ...fallbacks]) {
+    if (relative === undefined) continue
+    const file = fileAt(resolve(root, relative))
+    if (file !== undefined) return file
+  }
+  return undefined
 }
 
 const packageEntryOf = (specifier: string, fromFile: string): string | undefined => {
@@ -100,62 +140,86 @@ const packageEntryOf = (specifier: string, fromFile: string): string | undefined
     const installed = join(directory, 'node_modules', name)
     const manifest = manifestAt(installed)
     if (manifest !== undefined) return entryOf(realPathOf(installed), manifest, subpath)
+    const linked = fileAt(join(installed, subpath))
+    if (linked !== undefined) return linked
     const parent = dirname(directory)
     if (parent === directory) return undefined
     directory = parent
   }
 }
 
-export const moduleFileOf = (specifier: string, fromFile: string): string | undefined =>
-  specifier.startsWith('.') || specifier.startsWith('/')
-    ? fileAt(resolve(dirname(fromFile), specifier))
-    : packageEntryOf(specifier, fromFile)
+export const moduleFileOf = (specifier: string, fromFile: string): string | undefined => {
+  const from = realPathOf(fromFile)
+  return specifier.startsWith('.') || specifier.startsWith('/')
+    ? fileAt(resolve(dirname(from), specifier))
+    : packageEntryOf(specifier, from)
+}
 
 type Statement = Program['body'][number]
 
 const nameOf = (node: ModuleExportName): string => node.type === 'Literal' ? String(node.value) : node.name
 
-const declaresName = (declaration: Declaration, name: string): boolean => {
-  if (declaration.type === 'VariableDeclaration') {
-    return declaration.declarations.some((declarator) =>
-      declarator.id.type === 'Identifier' && declarator.id.name === name
-    )
-  }
-  return 'id' in declaration && declaration.id?.type === 'Identifier' && declaration.id.name === name
-}
-
-const programOf = (file: string): readonly Statement[] | undefined => {
+const programOf = memo((file: string): readonly Statement[] | undefined => {
   try {
-    const body: readonly Statement[] = parseSync(file, readFileSync(file, 'utf8')).program.body
+    const parsed = parseSync(file, readFileSync(file, 'utf8'))
+    if (parsed.errors.length > 0) return undefined
+    const body: readonly Statement[] = parsed.program.body
     return body
   } catch {
     return undefined
   }
+})
+
+type LocalBinding =
+  | { readonly _tag: 'Import'; readonly source: string; readonly imported: string | undefined }
+  | { readonly _tag: 'Alias'; readonly name: string }
+  | { readonly _tag: 'Own' }
+  | { readonly _tag: 'None' }
+
+const bindingInDeclaration = (declaration: Declaration, local: string): LocalBinding => {
+  if (declaration.type === 'VariableDeclaration') {
+    for (const declarator of declaration.declarations) {
+      if (declarator.id.type !== 'Identifier' || declarator.id.name !== local) continue
+      if (declaration.kind !== 'const') return { _tag: 'None' }
+      return declarator.init?.type === 'Identifier' ? { _tag: 'Alias', name: declarator.init.name } : { _tag: 'Own' }
+    }
+    return { _tag: 'None' }
+  }
+  return 'id' in declaration && declaration.id?.type === 'Identifier' && declaration.id.name === local
+    ? { _tag: 'Own' }
+    : { _tag: 'None' }
 }
 
-const importedBindingOf = (
-  body: readonly Statement[],
-  local: string,
-): { readonly source: string; readonly imported: string | undefined } | undefined => {
+const localBindingOf = (body: readonly Statement[], local: string): LocalBinding => {
   for (const statement of body) {
-    if (statement.type !== 'ImportDeclaration') continue
-    for (const specifier of statement.specifiers) {
-      if (specifier.local.name !== local) continue
-      const imported = specifier.type === 'ImportSpecifier'
-        ? nameOf(specifier.imported)
-        : specifier.type === 'ImportDefaultSpecifier'
-        ? 'default'
-        : undefined
-      return { source: statement.source.value, imported }
+    if (statement.type === 'ImportDeclaration') {
+      for (const specifier of statement.specifiers) {
+        if (specifier.local.name !== local) continue
+        const imported = specifier.type === 'ImportSpecifier'
+          ? nameOf(specifier.imported)
+          : specifier.type === 'ImportDefaultSpecifier'
+          ? 'default'
+          : undefined
+        return { _tag: 'Import', source: statement.source.value, imported }
+      }
+      continue
     }
+    const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
+    if (declaration === null || declaration === undefined) continue
+    if (
+      declaration.type !== 'VariableDeclaration' && declaration.type !== 'FunctionDeclaration' &&
+      declaration.type !== 'ClassDeclaration'
+    ) continue
+    const binding = bindingInDeclaration(declaration, local)
+    if (binding._tag !== 'None') return binding
   }
-  return undefined
+  return { _tag: 'None' }
 }
 
 /**
- * Follows `name` exported from `file` through every re-export and import alias to the
- * file that declares it. A binding the walk cannot follow is reported as declared in the
- * last file it reached, so an unreadable chain never passes as a workflow.
+ * Follows `name` exported from `file` through re-exports, imports and const aliases to
+ * the file that declares it. Anything the walk cannot follow is Untraceable, never Declared,
+ * so an unreadable chain cannot pass as declared in a workflow file.
  */
 export const originOfExport = (
   file: string,
@@ -164,10 +228,11 @@ export const originOfExport = (
   seen: ReadonlySet<string> = new Set(),
 ): ExportOrigin => {
   const key = `${file}#${name}`
-  if (hops > MAX_HOPS || seen.has(key)) return { _tag: 'Declared', file }
+  if (hops > MAX_HOPS || seen.has(key)) return { _tag: 'Untraceable', file }
   const next = new Set(seen).add(key)
   const body = programOf(file)
-  if (body === undefined) return { _tag: 'Declared', file }
+  if (body === undefined) return { _tag: 'Untraceable', file }
+
   const follow = (specifier: string, imported: string | undefined): ExportOrigin => {
     const target = moduleFileOf(specifier, file)
     if (target === undefined) return { _tag: 'Unresolved', specifier }
@@ -175,35 +240,44 @@ export const originOfExport = (
       ? { _tag: 'Namespace', file: target }
       : originOfExport(target, imported, hops + 1, next)
   }
+
+  const originOfLocal = (local: string, depth = 0): ExportOrigin => {
+    const binding = depth > MAX_HOPS ? { _tag: 'None' as const } : localBindingOf(body, local)
+    if (binding._tag === 'Import') return follow(binding.source, binding.imported)
+    if (binding._tag === 'Alias') return originOfLocal(binding.name, depth + 1)
+    if (binding._tag === 'Own') return { _tag: 'Declared', file }
+    return { _tag: 'Untraceable', file }
+  }
+
   for (const statement of body) {
     if (statement.type === 'ExportNamedDeclaration') {
-      if (statement.declaration != null && declaresName(statement.declaration, name)) return { _tag: 'Declared', file }
-      for (const specifier of statement.specifiers ?? []) {
+      const declaration = statement.declaration
+      if (
+        declaration !== null && declaration !== undefined &&
+        bindingInDeclaration(declaration, name)._tag !== 'None'
+      ) return originOfLocal(name)
+      for (const specifier of statement.specifiers) {
         if (nameOf(specifier.exported) !== name) continue
         const local = nameOf(specifier.local)
-        if (statement.source != null) return follow(statement.source.value, local)
-        const binding = importedBindingOf(body, local)
-        return binding === undefined ? { _tag: 'Declared', file } : follow(binding.source, binding.imported)
+        return statement.source !== null && statement.source !== undefined
+          ? follow(statement.source.value, local)
+          : originOfLocal(local)
       }
     }
+    if (statement.type === 'ExportDefaultDeclaration' && name === 'default') {
+      const declaration = statement.declaration
+      return declaration.type === 'Identifier' ? originOfLocal(declaration.name) : { _tag: 'Declared', file }
+    }
     if (
-      statement.type === 'ExportAllDeclaration' && statement.source != null && statement.exported != null &&
-      nameOf(statement.exported) === name
+      statement.type === 'ExportAllDeclaration' && statement.exported !== null && nameOf(statement.exported) === name
     ) return follow(statement.source.value, undefined)
   }
   for (const statement of body) {
-    if (statement.type !== 'ExportAllDeclaration' || statement.source == null || statement.exported != null) continue
+    if (statement.type !== 'ExportAllDeclaration' || statement.exported !== null) continue
     const target = moduleFileOf(statement.source.value, file)
     if (target === undefined) continue
     const origin = originOfExport(target, name, hops + 1, next)
-    if (origin._tag !== 'Declared' || origin.file !== target || exportsName(target, name)) return origin
+    if (origin._tag !== 'Untraceable') return origin
   }
-  return { _tag: 'Declared', file }
+  return { _tag: 'Untraceable', file }
 }
-
-const exportsName = (file: string, name: string): boolean =>
-  (programOf(file) ?? []).some((statement) =>
-    statement.type === 'ExportNamedDeclaration' &&
-    (statement.declaration != null && declaresName(statement.declaration, name) ||
-      (statement.specifiers ?? []).some((specifier) => nameOf(specifier.exported) === name))
-  )

@@ -14,11 +14,13 @@ import {
 } from '../combine-relation-verdicts.workflow.js'
 import { Break } from '../Verdict.schema.js'
 
-const deciding = (evaluated: ReadonlyArray<EvaluatedRelation>): CombineRelationVerdictsDecision =>
-  Result.match(combineRelationVerdicts(new CombineRelationVerdicts({ conjunct: 'all(x)', verdicts: evaluated })), {
-    onFailure: (unreachable: never): CombineRelationVerdictsDecision => absurd(unreachable),
-    onSuccess: (decision): CombineRelationVerdictsDecision => decision,
-  })
+const decidingOf =
+  (workflow: typeof combineRelationVerdicts) =>
+  (evaluated: ReadonlyArray<EvaluatedRelation>): CombineRelationVerdictsDecision =>
+    Result.match(workflow(new CombineRelationVerdicts({ conjunct: 'all(x)', verdicts: evaluated })), {
+      onFailure: (unreachable: never): CombineRelationVerdictsDecision => absurd(unreachable),
+      onSuccess: (decision): CombineRelationVerdictsDecision => decision,
+    })
 
 const breaksAmong = (entries: ReadonlyArray<EvaluatedRelation>): ReadonlyArray<Break> =>
   Arr.getSomes(
@@ -37,12 +39,12 @@ const joinedIds = (ids: ReadonlyArray<string>): string => Arr.join(ids, '|')
 
 it.prop(
   '∀v_RelationVerdicts_=FirstHardBreak',
-  { of: [Schema.Array(EvaluatedRelationSchema)], subject: deciding },
+  { of: [Schema.Array(EvaluatedRelationSchema)], subject: combineRelationVerdicts },
   (subject, [evaluated]) =>
     Option.match(Arr.head(hardBreaksOf(evaluated)), {
       onNone: () => true,
       onSome: (first) => {
-        const decision = subject(evaluated)
+        const decision = decidingOf(subject)(evaluated)
         return Schema.is(FirstHardBreak)(decision) &&
           decision.conjunct === first.conjunct &&
           decision.detail === first.detail &&
@@ -53,12 +55,12 @@ it.prop(
 
 it.prop(
   '∀v_RelationVerdicts_=SoftAggregation',
-  { of: [Schema.Array(EvaluatedRelationSchema)], subject: deciding },
+  { of: [Schema.Array(EvaluatedRelationSchema)], subject: combineRelationVerdicts },
   (subject, [evaluated]) => {
     if (hardBreaksOf(evaluated).length > 0) return true
     const soft = softBreaksOf(evaluated)
     if (soft.length === 0) return true
-    const decision = subject(evaluated)
+    const decision = decidingOf(subject)(evaluated)
     return Schema.is(AggregatedSoftBreak)(decision) &&
       decision.conjunct === 'all(x)' &&
       joinedIds(decision.inspected) === joinedIds(Arr.flatMap(soft, (breach) => breach.inspected)) &&
@@ -68,10 +70,10 @@ it.prop(
 
 it.prop(
   '∀v_RelationVerdicts_=EveryHeld',
-  { of: [Schema.Array(EvaluatedRelationSchema)], subject: deciding },
+  { of: [Schema.Array(EvaluatedRelationSchema)], subject: combineRelationVerdicts },
   (subject, [evaluated]) => {
     if (everyBreaksOf(evaluated).length > 0) return true
-    const decision = subject(evaluated)
+    const decision = decidingOf(subject)(evaluated)
     return Schema.is(EveryRelationHeld)(decision) && decision.conjunct === 'all(x)' && decision.inspected.length === 0
   },
 )

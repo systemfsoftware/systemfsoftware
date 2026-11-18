@@ -40,15 +40,58 @@ interface ReferenceLike {
   readonly resolved: VariableLike | null
 }
 
-const isScopeLike = (value: unknown): value is { readonly references: readonly ReferenceLike[] } =>
-  typeof value === 'object' && value !== null && 'references' in value
+interface ScopeLike {
+  readonly references: readonly ReferenceLike[]
+  readonly upper: unknown
+}
+
+const isScopeLike = (value: unknown): value is ScopeLike =>
+  typeof value === 'object' && value !== null && 'references' in value && 'upper' in value
+
+const VALUE_DEFINITIONS: ReadonlySet<string> = new Set([
+  'ImportBinding',
+  'Variable',
+  'FunctionName',
+  'ClassName',
+  'Parameter',
+])
 
 const definitionOf = (identifier: ESTree.Node, getScope: GetScope): DefinitionLike | undefined => {
-  const scope = getScope(identifier)
-  if (!isScopeLike(scope)) return undefined
-  const reference = scope.references.find((candidate) => candidate.identifier === identifier)
-  return reference?.resolved?.defs[0]
+  for (let scope: unknown = getScope(identifier); isScopeLike(scope); scope = scope.upper) {
+    const reference = scope.references.find((candidate) => candidate.identifier === identifier)
+    if (reference === undefined) continue
+    const defs = reference.resolved?.defs ?? []
+    return defs.find((definition) => VALUE_DEFINITIONS.has(definition.type)) ?? defs[0]
+  }
+  return undefined
 }
+
+const WRAPPERS: ReadonlySet<string> = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+  'ParenthesizedExpression',
+])
+
+const isNode = (value: unknown): value is ESTree.Node =>
+  typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
+
+const unwrap = (node: ESTree.Node): ESTree.Node => {
+  if (!WRAPPERS.has(node.type) || !('expression' in node)) return node
+  const inner: unknown = node.expression
+  return isNode(inner) ? unwrap(inner) : node
+}
+
+const NOT_OPTIONS: ReadonlySet<string> = new Set([
+  'ArrowFunctionExpression',
+  'FunctionExpression',
+  'CallExpression',
+  'ArrayExpression',
+  'MemberExpression',
+  'Literal',
+  'TemplateLiteral',
+])
 
 const SUBJECT_KEY = 'subject'
 
@@ -81,12 +124,18 @@ const subjectInObject = (object: ESTree.ObjectExpression): OptionsRead => {
   return opaque ? { _tag: 'Unreadable' } : { _tag: 'None' }
 }
 
-const optionsObjectOf = (argument: ESTree.Node, getScope: GetScope): ESTree.ObjectExpression | 'opaque' | undefined => {
+const optionsObjectOf = (raw: ESTree.Node, getScope: GetScope): ESTree.ObjectExpression | 'opaque' | undefined => {
+  const argument = unwrap(raw)
   if (argument.type === 'ObjectExpression') return argument
   if (argument.type !== 'Identifier') return undefined
   const definition = definitionOf(argument, getScope)
   if (definition?.type !== 'Variable' || definition.node.type !== 'VariableDeclarator') return undefined
-  const init = definition.node.init
+  const declaration = definition.parent
+  const init = definition.node.init === null || definition.node.init === undefined
+    ? undefined
+    : unwrap(definition.node.init)
+  if (init !== undefined && NOT_OPTIONS.has(init.type)) return undefined
+  if (declaration?.type !== 'VariableDeclaration' || declaration.kind !== 'const') return 'opaque'
   return init?.type === 'ObjectExpression' ? init : 'opaque'
 }
 
@@ -109,6 +158,14 @@ const subjectOf = (call: ESTree.CallExpression, getScope: GetScope): OptionsRead
 const verdictOfOrigin = (origin: ExportOrigin, label: string, source: string): Verdict => {
   if (origin._tag === 'Unresolved') {
     return { _tag: 'Foreign', actual: `${label}, imported from ${source}, which the rule could not resolve` }
+  }
+  if (origin._tag === 'Untraceable') {
+    return {
+      _tag: 'Foreign',
+      actual: `${label}, imported from ${source}, whose declaration the rule could not trace past ${
+        basenameOf(origin.file)
+      }`,
+    }
   }
   if (origin._tag === 'Namespace') {
     return { _tag: 'Foreign', actual: `${label}, a namespace re-exported through ${source}` }
@@ -144,9 +201,10 @@ const importVerdict = (
     : { _tag: 'Local', actual: `${label}, a member of an imported value` }
 }
 
-const verdictOf = (subject: ESTree.Node, getScope: GetScope, filename: string): Verdict => {
+const verdictOf = (raw: ESTree.Node, getScope: GetScope, filename: string): Verdict => {
+  const subject = unwrap(raw)
   const expression = subject.type === 'MemberExpression' && !subject.computed && subject.property.type === 'Identifier'
-    ? { root: subject.object, member: subject.property.name }
+    ? { root: unwrap(subject.object), member: subject.property.name }
     : { root: subject, member: undefined }
   if (expression.root.type !== 'Identifier') {
     return { _tag: 'Local', actual: 'a subject built in the test file as an expression' }
