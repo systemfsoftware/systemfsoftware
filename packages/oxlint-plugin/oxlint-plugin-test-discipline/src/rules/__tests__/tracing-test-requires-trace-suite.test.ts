@@ -71,6 +71,12 @@ ruleTester.run('tracing-test-requires-trace-suite', tracingTestRequiresTraceSuit
       filename: SOURCE,
     },
     {
+      name: 'Should_Pass_When_AFixtureForATraceSuiteDeclaresItsTaxonomyWithTraceSpec',
+      code:
+        `import { Span } from '@systemfsoftware/trace-spec'\nexport const Concluded = Span.declare({ id: 'c', name: 'check.concluded', attrs: {} })\n`,
+      filename: FIXTURE,
+    },
+    {
       name: 'Should_Pass_When_ATransportTestPostsAStringThatHappensToBeOtlp',
       code: `const body = new TextEncoder().encode('{"resourceSpans":[]}')\n`,
       filename: INTEGRATION,

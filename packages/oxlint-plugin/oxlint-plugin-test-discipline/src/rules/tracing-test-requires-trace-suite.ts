@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { basenameOf, isInTestsImportScope, isUnderSrc } from './path.js'
+import { basenameOf, isInTestsImportScope, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
   SPAN_WIRE_NAMES,
@@ -63,7 +63,7 @@ export const tracingTestRequiresTraceSuite = defineRule({
       if (!applies) return
       if (isTelemetrySpecifier(specifier)) {
         report(node, specifier, `this file imports '${specifier}', which builds or exports spans`)
-      } else if (specifier === TRACE_SPEC_SPECIFIER && testScope) {
+      } else if (specifier === TRACE_SPEC_SPECIFIER && isTestFile(basenameOf(filename))) {
         report(node, specifier, 'a trace contract is written under a suffix that is not `.trace.test.ts`')
       }
     }
