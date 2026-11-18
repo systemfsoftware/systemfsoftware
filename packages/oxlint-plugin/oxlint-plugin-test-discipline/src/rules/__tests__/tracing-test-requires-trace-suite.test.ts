@@ -86,8 +86,45 @@ ruleTester.run('tracing-test-requires-trace-suite', tracingTestRequiresTraceSuit
       code: `export const Traces = Schema.Struct({ resourceSpans: Schema.Array(Resource) })\n`,
       filename: SOURCE,
     },
+    {
+      name: 'Should_Pass_When_AnInSourceBlockNamesAnSdkTypeOnly',
+      code:
+        `import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'\nexport const p = new BatchSpanProcessor(e)\nif (import.meta.vitest !== undefined) {\n  const stub: BatchSpanProcessor = p\n  type Held = typeof BatchSpanProcessor\n}\n`,
+      filename: SOURCE,
+    },
+    {
+      name: 'Should_Pass_When_AnEffectNamespaceNeverBuildsATracer',
+      code: `import * as E from 'effect'\nconst run = E.Effect.succeed(1).pipe(E.Effect.withSpan('cycle'))\n`,
+      filename: INTEGRATION,
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_When_APropertyTestUnderSrcImportsTheSdk',
+      code: `import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base'\n`,
+      filename: '/repo/pkg/src/flush.workflow.property.test.ts',
+      errors: [imports('@opentelemetry/sdk-trace-base')],
+    },
+    {
+      name: 'Should_Report_When_AFixtureUnderSrcWiresTheSdk',
+      code: `export { layer } from '@effect/opentelemetry/NodeSdk'\n`,
+      filename: '/repo/pkg/src/__fixtures__/otel.ts',
+      errors: [imports('@effect/opentelemetry/NodeSdk')],
+    },
+    {
+      name: 'Should_Report_When_AnAliasedOrNamespacedTracerIsBuilt',
+      code:
+        `import { Tracer as T } from 'effect'\nimport * as E from 'effect'\nimport * as Tr from 'effect/Tracer'\nconst a = T.make({ span })\nconst b = Layer.succeed(E.Tracer.Tracer, a)\nconst c = Tr.make({ span })\n`,
+      filename: INTEGRATION,
+      errors: [BUILDS_TRACER, BUILDS_TRACER, BUILDS_TRACER],
+    },
+    {
+      name: 'Should_Report_When_ATestMocksATelemetryModule',
+      code:
+        `vi.mock('@opentelemetry/sdk-trace-base', () => ({}))\nvitest.doMock(\`@effect/opentelemetry/NodeSdk\`)\nvi.mock('./db.js')\n`,
+      filename: PLAIN_TEST,
+      errors: [imports('@opentelemetry/sdk-trace-base'), imports('@effect/opentelemetry/NodeSdk')],
+    },
     {
       name: 'Should_Report_When_IntegrationTestReadsTheExportedTracePayloadOnce',
       code: `const spans = request.resourceSpans.flatMap((r) => r.scopeSpans)\nconst again = request.resourceSpans\n`,

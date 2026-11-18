@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { basenameOf, isInTestsImportScope, isTestFile, isUnderSrc } from './path.js'
+import { basenameOf, directoriesOf, isInTestsImportScope, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
   SPAN_WIRE_NAMES,
@@ -24,9 +24,43 @@ const literalSpecifier = (node: ESTree.Node | undefined): string | null => {
   return null
 }
 
-const isTracerMember = (node: ESTree.Node, property: string): boolean =>
-  node.type === 'MemberExpression' && !node.computed && node.object.type === 'Identifier' &&
-  node.object.name === 'Tracer' && node.property.type === 'Identifier' && node.property.name === property
+const propertyName = (node: ESTree.Node): string | null =>
+  node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' ? node.property.name : null
+
+/** Whether `node` is `<tracer>.<property>`, where `<tracer>` is a local name for effect's Tracer module or `<ns>.Tracer`. */
+const isTracerMember = (
+  node: ESTree.Node,
+  property: string,
+  names: { readonly tracers: ReadonlySet<string>; readonly namespaces: ReadonlySet<string> },
+): boolean => {
+  if (node.type !== 'MemberExpression' || propertyName(node) !== property) return false
+  const base = node.object
+  if (base.type === 'Identifier') return names.tracers.has(base.name)
+  return propertyName(base) === 'Tracer' && base.type === 'MemberExpression' && base.object.type === 'Identifier' &&
+    names.namespaces.has(base.object.name)
+}
+
+const MOCK_OBJECTS = new Set(['vi', 'vitest'])
+const MOCK_METHODS = new Set(['mock', 'doMock'])
+
+const isModuleMock = (node: ESTree.CallExpression): boolean =>
+  node.callee.type === 'MemberExpression' && node.callee.object.type === 'Identifier' &&
+  MOCK_OBJECTS.has(node.callee.object.name) && MOCK_METHODS.has(propertyName(node.callee) ?? '')
+
+/** Parents in which an identifier names a type, never a runtime value. */
+const TYPE_POSITIONS = new Set([
+  'TSTypeReference',
+  'TSQualifiedName',
+  'TSTypeQuery',
+  'TSClassImplements',
+  'TSInterfaceHeritage',
+  'TSImportType',
+])
+
+const isTypePosition = (node: { readonly parent: ESTree.Node | null }): boolean =>
+  node.parent !== null && TYPE_POSITIONS.has(node.parent.type)
+
+const TEST_SUPPORT_DIRS = new Set(['__tests__', '__fixtures__'])
 
 const isRequireCall = (node: ESTree.CallExpression): boolean =>
   (node.callee.type === 'Identifier' && node.callee.name === 'require') ||
@@ -38,7 +72,8 @@ export const tracingTestRequiresTraceSuite = defineRule({
   create(context: Context) {
     const filename = context.filename
     if (TRACE_SUITE_BASENAME.test(basenameOf(filename))) return {}
-    const testScope = isInTestsImportScope(filename)
+    const testScope = isInTestsImportScope(filename) || isTestFile(basenameOf(filename)) ||
+      directoriesOf(filename).some((segment) => TEST_SUPPORT_DIRS.has(segment))
     const inSource = !testScope && isUnderSrc(filename)
     if (!testScope && !inSource) return {}
 
@@ -54,6 +89,9 @@ export const tracingTestRequiresTraceSuite = defineRule({
     const telemetryBindings = new Map<string, string>()
     const guards: Array<ESTree.Node> = []
     const reported = new Set<string>()
+    const tracers = new Set<string>(['Tracer'])
+    const namespaces = new Set<string>()
+    const tracerNames = { tracers, namespaces }
     const insideGuard = (node: ESTree.Node & { readonly parent: ESTree.Node | null }) =>
       guards.some((consequent) => isInsideConsequent(node, consequent))
 
@@ -76,6 +114,18 @@ export const tracingTestRequiresTraceSuite = defineRule({
       report(node, name, `this file reads '${name}', which only exported spans carry`)
     }
 
+    const recordTracerNames = (node: ESTree.ImportDeclaration) => {
+      for (const spec of node.specifiers) {
+        if (spec.type === 'ImportSpecifier' && spec.importKind === 'type') continue
+        if (node.source.value === 'effect/Tracer' && spec.type !== 'ImportSpecifier') tracers.add(spec.local.name)
+        if (node.source.value !== 'effect') continue
+        if (spec.type === 'ImportNamespaceSpecifier') namespaces.add(spec.local.name)
+        if (
+          spec.type === 'ImportSpecifier' && spec.imported.type === 'Identifier' && spec.imported.name === 'Tracer'
+        ) tracers.add(spec.local.name)
+      }
+    }
+
     return {
       IfStatement(node: ESTree.IfStatement) {
         if (isVitestGuard(node.test)) guards.push(node.consequent)
@@ -83,6 +133,7 @@ export const tracingTestRequiresTraceSuite = defineRule({
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         if (node.importKind === 'type') return
         const specifier = node.source.value
+        recordTracerNames(node)
         if (testScope) return judgeSpecifier(node, specifier, false)
         if (!isTelemetrySpecifier(specifier)) return
         for (const spec of node.specifiers) {
@@ -103,8 +154,9 @@ export const tracingTestRequiresTraceSuite = defineRule({
       },
       CallExpression(node: ESTree.CallExpression) {
         if (isRequireCall(node)) return judgeSpecifier(node, literalSpecifier(node.arguments[0]), insideGuard(node))
-        const builds = isTracerMember(node.callee, 'make') ||
-          node.arguments.some((argument) => isTracerMember(argument, 'Tracer'))
+        if (isModuleMock(node) && testScope) return judgeSpecifier(node, literalSpecifier(node.arguments[0]), false)
+        const builds = isTracerMember(node.callee, 'make', tracerNames) ||
+          node.arguments.some((argument) => isTracerMember(argument, 'Tracer', tracerNames))
         if (builds && (testScope || insideGuard(node))) {
           report(node, 'effect/Tracer', 'this test builds or provides its own Tracer')
         }
@@ -118,7 +170,7 @@ export const tracingTestRequiresTraceSuite = defineRule({
       Identifier(node: ESTree.IdentifierReference) {
         if (testScope) return
         const specifier = telemetryBindings.get(node.name)
-        if (specifier === undefined || reported.has(node.name) || !insideGuard(node)) return
+        if (specifier === undefined || reported.has(node.name) || isTypePosition(node) || !insideGuard(node)) return
         reported.add(node.name)
         report(node, specifier, `this block uses '${node.name}', imported from '${specifier}'`)
       },
