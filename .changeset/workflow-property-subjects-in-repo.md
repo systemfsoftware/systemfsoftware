@@ -10,6 +10,9 @@
 "@systemfsoftware/trace-spec": none
 "@systemfsoftware/trace-taxonomy": none
 "@systemfsoftware/vitest": none
+"@systemfsoftware/effect-cell-types": none
+"@systemfsoftware/effect-gherkin-spec": none
+"@systemfsoftware/effect-spec-runtime": none
 ---
 
 The workflow properties in differential-spec and trace-spec pass the workflow function itself as their subject; no published code changes.
