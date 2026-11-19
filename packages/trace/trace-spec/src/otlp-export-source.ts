@@ -12,29 +12,31 @@ import { TransportObservationError } from './TransportObservationError.schema.js
  * fails with the transport failure, since waiting cannot make it readable.
  */
 
-const parseBody = Schema.decodeEffect(Schema.fromJsonString(OtlpExportRequest))
+const decodeBody = Schema.decodeEffect(Schema.fromJsonString(OtlpExportRequest))
+
+const parseBody = (body: string, index: number) =>
+  decodeBody(body).pipe(Effect.mapError((error) => `undecodable export body[${index}]: ${error.message}`))
 
 const orEmpty = <A>(values: ReadonlyArray<A> | undefined): ReadonlyArray<A> => values ?? []
 
 const spansOf = (request: OtlpExportRequest): ReadonlyArray<TraceGraph.SpanRecord> =>
-  orEmpty(request.resourceSpans).flatMap((resource) =>
-    orEmpty(resource.scopeSpans).flatMap((scope) => orEmpty(scope.spans))
-  )
+  request.resourceSpans.flatMap((resource) => orEmpty(resource.scopeSpans).flatMap((scope) => orEmpty(scope.spans)))
 
-/** One read of the pushed bodies `bodies` yields, named `name` in a failure. */
-export const source = <R>(options: {
+const readFailure = <E extends { readonly message: string }>(error: E): string =>
+  `the collector could not be read: ${error.message}`
+
+/**
+ * One read of the pushed bodies `bodies` yields, named `name` in a failure. The trace id is matched in lowercase,
+ * the form pushed ids are normalised to.
+ */
+export const source = <E extends { readonly message: string }, R>(options: {
   readonly name: string
-  readonly bodies: Effect.Effect<ReadonlyArray<string>, never, R>
+  readonly bodies: Effect.Effect<ReadonlyArray<string>, E, R>
 }): TraceSource<R> =>
 (traceId) =>
   options.bodies.pipe(
-    Effect.flatMap((bodies) => Effect.forEach(bodies, (body) => parseBody(body))),
-    Effect.mapError((error) =>
-      new TransportObservationError({
-        traceId,
-        source: options.name,
-        detail: `undecodable export body: ${error.message}`,
-      })
-    ),
-    Effect.map((requests) => requests.flatMap(spansOf).filter((span) => span.traceId === traceId)),
+    Effect.mapError(readFailure),
+    Effect.flatMap((bodies) => Effect.forEach(bodies, parseBody)),
+    Effect.mapError((detail) => new TransportObservationError({ traceId, source: options.name, detail })),
+    Effect.map((requests) => requests.flatMap(spansOf).filter((span) => span.traceId === traceId.toLowerCase())),
   )

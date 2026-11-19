@@ -312,14 +312,34 @@ export type TempoV2TraceResponse = typeof TempoV2TraceResponse.Type
  * into the same span records as a Tempo answer.
  */
 
-const NanosText = Schema.Union([Schema.String, Schema.Finite]).pipe(
-  Schema.decodeTo(Schema.String, {
+const IntegerText = Schema.String.check(Schema.isPattern(/^-?\d+$/))
+
+/** An int64 attribute value as an exporter may send it: a decimal string, or a JSON integer within the safe range. */
+const IntValueText = Schema.Union([IntegerText, Schema.Int]).pipe(
+  Schema.decodeTo(IntegerText, {
     decode: SchemaGetter.transform((nanos: string | number) => String(nanos)),
     encode: SchemaGetter.transform((nanos: string) => nanos),
   }),
 )
 
-const PushedMillis = NanosText.pipe(Schema.decodeTo(Schema.Finite, {
+/** A hex id as the OTLP JSON mapping sends it, in the lowercase traces are addressed by. */
+const PushedHexId = (bytes: number) =>
+  Schema.String.check(Schema.isPattern(new RegExp(`^[0-9a-fA-F]{${bytes * 2}}$`))).pipe(
+    Schema.decodeTo(Schema.String, {
+      decode: SchemaGetter.transform((id: string) => id.toLowerCase()),
+      encode: SchemaGetter.transform((id: string) => id),
+    }),
+  )
+
+const PushedTraceId = PushedHexId(16)
+
+const PushedSpanId = PushedHexId(8)
+
+/** An unset parent, which an exporter may send as an empty string, or a span id. */
+const PushedParentId = Schema.Union([Schema.Literal(''), PushedSpanId])
+
+/** A nanosecond time, which protobuf JSON sends as a decimal string: a JSON number cannot hold it exactly. */
+const PushedMillis = IntegerText.pipe(Schema.decodeTo(Schema.Finite, {
   decode: SchemaGetter.transform(millisOf),
   encode: SchemaGetter.transform((millis: number) => String(Math.round(millis * 1_000_000))),
 }))
@@ -355,7 +375,7 @@ interface PushedAnyValueWire {
 const PushedAnyValue = Schema.Struct({
   stringValue: Schema.optional(Schema.String),
   boolValue: Schema.optional(Schema.Boolean),
-  intValue: Schema.optional(NanosText),
+  intValue: Schema.optional(IntValueText),
   doubleValue: Schema.optional(Schema.Finite),
   arrayValue: Schema.optional(
     Schema.Struct({
@@ -369,7 +389,7 @@ const PushedAnyValue = Schema.Struct({
 const PushedAttribute = Schema.Struct({ key: Schema.String, value: Schema.optional(PushedAnyValue) })
 
 interface PushedSpan extends Omit<WireSpan, 'kind'> {
-  readonly kind?: number | undefined
+  readonly kind?: 0 | 1 | 2 | 3 | 4 | 5 | undefined
 }
 
 const wireOfPushed = (span: PushedSpan): WireSpan => ({
@@ -403,11 +423,11 @@ const pushedOfWire = (span: WireSpan): PushedSpan => ({
 const pushedSpanOf = (record: TraceGraph.SpanRecord): PushedSpan => pushedOfWire(wireSpanOf(record))
 
 const PushedSpan = Schema.Struct({
-  traceId: Schema.String,
-  spanId: Schema.String,
-  parentSpanId: Schema.optional(Schema.String),
+  traceId: PushedTraceId,
+  spanId: PushedSpanId,
+  parentSpanId: Schema.optional(PushedParentId),
   name: Schema.String,
-  kind: Schema.optional(Schema.Finite),
+  kind: Schema.optional(Schema.Literals([0, 1, 2, 3, 4, 5])),
   startTimeUnixNano: PushedMillis,
   endTimeUnixNano: PushedMillis,
   attributes: Schema.optional(Schema.Array(PushedAttribute)),
@@ -417,8 +437,8 @@ const PushedSpan = Schema.Struct({
     attributes: Schema.optional(Schema.Array(PushedAttribute)),
   }))),
   links: Schema.optional(Schema.Array(Schema.Struct({
-    traceId: Schema.optional(Schema.String),
-    spanId: Schema.optional(Schema.String),
+    traceId: Schema.optional(PushedTraceId),
+    spanId: Schema.optional(PushedSpanId),
   }))),
   status: Schema.optional(
     Schema.Struct({ message: Schema.optional(Schema.String), code: Schema.optional(PushedCode) }),
@@ -435,10 +455,14 @@ const PushedSpan = Schema.Struct({
   ),
 )
 
-/** One OTLP/HTTP JSON export request, as an exporter pushes it to `POST /v1/traces`. */
+/**
+ * One OTLP/HTTP JSON trace export request, as an exporter pushes it to `POST /v1/traces`. A trace export always
+ * carries `resourceSpans`, so a logs or metrics export, or any other object, is refused rather than read as empty.
+ * The span kind and the resource and scope attributes are not carried onto the span records.
+ */
 export const OtlpExportRequest = Schema.Struct({
-  resourceSpans: Schema.optional(Schema.Array(Schema.Struct({
+  resourceSpans: Schema.Array(Schema.Struct({
     scopeSpans: Schema.optional(Schema.Array(Schema.Struct({ spans: Schema.optional(Schema.Array(PushedSpan)) }))),
-  }))),
+  })),
 })
 export type OtlpExportRequest = typeof OtlpExportRequest.Type

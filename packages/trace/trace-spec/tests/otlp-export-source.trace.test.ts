@@ -3,17 +3,19 @@ import { OtlpExportSource } from '@systemfsoftware/trace-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 const TRACE = '5b8efff798038103d269b633813fc60c'
+const TRACE_UPPER = '5B8EFFF798038103D269B633813FC60C'
 const OTHER = '0af7651916cd43dd8448eb211c80319c'
 const ROOT = 'eee19b7ec3c1b174'
 const CHILD = 'eee19b7ec3c1b175'
 
-// Two exports as an OTLP/HTTP JSON exporter pushes them: hex ids, integer enums, int values as numbers or strings.
+// Two exports as an OTLP/HTTP JSON exporter pushes them: hex ids, integer enums, times as decimal strings, int
+// values as numbers or strings.
 const firstBatch = `{"resourceSpans":[{"resource":{"attributes":[]},"scopeSpans":[{"scope":{"name":"x"},"spans":[
-{"traceId":"${TRACE}","spanId":"${CHILD}","parentSpanId":"${ROOT}","name":"capture","kind":3,"startTimeUnixNano":"1716235200250000000","endTimeUnixNano":1716235200400000000,"attributes":[{"key":"http.response.status_code","value":{"intValue":502}},{"key":"error.type","value":{"stringValue":"Timeout"}}],"events":[{"name":"retry","timeUnixNano":"1716235200300000000","attributes":[{"key":"attempt","value":{"intValue":"2"}}]}],"status":{"code":2}},
+{"traceId":"${TRACE}","spanId":"${CHILD}","parentSpanId":"${ROOT}","name":"capture","kind":3,"startTimeUnixNano":"1716235200250000000","endTimeUnixNano":"1716235200400000000","attributes":[{"key":"http.response.status_code","value":{"intValue":502}},{"key":"error.type","value":{"stringValue":"Timeout"}}],"events":[{"name":"retry","timeUnixNano":"1716235200300000000","attributes":[{"key":"attempt","value":{"intValue":"2"}}]}],"status":{"code":2}},
 {"traceId":"${OTHER}","spanId":"aaaaaaaaaaaaaaaa","name":"elsewhere","kind":1,"startTimeUnixNano":"1716235200000000000","endTimeUnixNano":"1716235200000000001"}]}]}]}`
 
 const secondBatch = `{"resourceSpans":[{"scopeSpans":[{"spans":[
-{"traceId":"${TRACE}","spanId":"${ROOT}","parentSpanId":"","name":"order","kind":2,"startTimeUnixNano":"1716235200000000000","endTimeUnixNano":"1716235200500000000","status":{"code":1}}]}]}]}`
+{"traceId":"${TRACE_UPPER}","spanId":"${ROOT}","parentSpanId":"","name":"order","kind":2,"startTimeUnixNano":"1716235200000000000","endTimeUnixNano":"1716235200500000000","status":{"code":1}}]}]}]}`
 
 /** The bodies a collector the test runs has received, in arrival order. */
 class Received
@@ -33,7 +35,7 @@ Feature('Reading the spans an exporter pushed')
   .withScenarioLayer(collector)
   .body(({ scenario }) => {
     scenario(
-      'Spans pushed in two batches come back as the records of their own trace',
+      'Spans pushed in two batches, one with uppercase ids, come back as the records of their own trace',
       Gherkin.Do.pipe(
         Given('two pushed exports holding two spans of one trace and one span of another')(
           'pushed',
@@ -83,7 +85,7 @@ Feature('Reading the spans an exporter pushed')
     )
 
     scenario(
-      'A body that is not an export request fails the read as a transport failure naming the collector',
+      'A body that is not a trace export request fails the read as a transport failure naming the collector and the body',
       Gherkin.Do.pipe(
         Given('a good export and a body that is not one')('pushed', () => pushed([secondBatch, 'not an export'])),
         When('the trace is read')('failure', () => readOf(TRACE).pipe(Effect.flip)),
