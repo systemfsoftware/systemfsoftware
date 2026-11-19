@@ -20,7 +20,7 @@ const decisionOf = <A>(result: Result.Result<A, never>): A =>
 const decideOf =
   (workflow: typeof selectDisagreementAttempt) =>
   (orderDisagrees: boolean, seededDisagrees: boolean): DisagreementAttempt =>
-    decisionOf(workflow(new SelectDisagreementAttempt({ orderDisagrees, seededDisagrees })))
+    decisionOf(workflow(SelectDisagreementAttempt.make({ orderDisagrees, seededDisagrees })))
 
 it.prop(
   '∀b_Disagreement_≡OnOrder',

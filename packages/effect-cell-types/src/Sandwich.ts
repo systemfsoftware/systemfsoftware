@@ -392,7 +392,7 @@ const rejectedRun = <Raw, A, WE, WR>(
   Effect.gen(function*() {
     yield* settle('failure')
     yield* Effect.annotateCurrentSpan('cell.outcome', 'CommandRejected')
-    return yield* writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, new CommandRejected({ issue }), raw)
+    return yield* writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, CommandRejected.make({ issue }), raw)
   })
 
 const encodeValue = <S extends Schema.Constraint & { readonly EncodingServices: never }>(
@@ -690,11 +690,11 @@ if (import.meta.vitest !== void 0) {
     error: LawMalformed,
     decide: (command): Result.Result<LawAdmitted | LawRefused, LawMalformed> =>
       Match.value(command.length < 0).pipe(
-        Match.when(true, () => Result.fail(new LawMalformed({ length: command.length }))),
+        Match.when(true, () => Result.fail(LawMalformed.make({ length: command.length }))),
         Match.when(false, () =>
           Match.value(command.length > 3).pipe(
-            Match.when(true, () => Result.succeed(new LawAdmitted({ length: command.length }))),
-            Match.when(false, () => Result.succeed(new LawRefused({ why: 'too short' }))),
+            Match.when(true, () => Result.succeed(LawAdmitted.make({ length: command.length }))),
+            Match.when(false, () => Result.succeed(LawRefused.make({ why: 'too short' }))),
             Match.exhaustive,
           )),
         Match.exhaustive,
@@ -723,7 +723,7 @@ if (import.meta.vitest !== void 0) {
     { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         return Option.getOrThrow(observed.operation).name === Operation
       }),
   )
@@ -733,7 +733,7 @@ if (import.meta.vitest !== void 0) {
     { of: [Schema.Int], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('tests.span.length') === length,
@@ -747,7 +747,7 @@ if (import.meta.vitest !== void 0) {
     { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('app.span.command.law.decision') === observed.tag,
@@ -762,7 +762,7 @@ if (import.meta.vitest !== void 0) {
     { of: [RefusedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('app.span.command.law.failure') === 'LawMalformed',

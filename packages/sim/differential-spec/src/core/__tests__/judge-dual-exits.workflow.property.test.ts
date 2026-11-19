@@ -20,7 +20,7 @@ const decisionOf = <A>(result: Result.Result<A, never>): A =>
 const decideOf =
   (workflow: typeof judgeDualExits) =>
   (bothSucceeded: boolean, oracleHeld: boolean, failuresMatch: boolean): DualExitJudgement =>
-    decisionOf(workflow(new JudgeDualExits({ bothSucceeded, oracleHeld, failuresMatch })))
+    decisionOf(workflow(JudgeDualExits.make({ bothSucceeded, oracleHeld, failuresMatch })))
 
 it.prop(
   '∀b_DualExits_≡Agreed',

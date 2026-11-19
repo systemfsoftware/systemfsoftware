@@ -20,7 +20,19 @@ import type { AnyFiber, ResourceCounts, SuspendedFiber, WaitKind } from './deadl
 import { installEscapeRecorder } from './escapeRecorder.js'
 import type { Escape, HostTimer, TimerName } from './escapeRecorder.js'
 import { makeKernel } from './kernel.js'
-import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord, Task } from './kernel.js'
+import type {
+  BoundaryRecord,
+  Choice,
+  ChoiceOption,
+  Decision,
+  FiberTarget,
+  Kernel,
+  StepInput,
+  StepRecord,
+  Task,
+  TraceDivergence,
+  TraceSnapshot,
+} from './kernel.js'
 import { acquireRun } from './runQueue.js'
 import type { ReleaseRun } from './runQueue.js'
 
@@ -36,6 +48,7 @@ export const runOutcomeTags = {
   blocked: { _tag: 'Blocked' },
   deadlock: { _tag: 'Deadlock' },
   runaway: { _tag: 'Runaway' },
+  replayTraceDiverged: { _tag: 'ReplayTraceDiverged' },
 } as const
 
 /** @internal */
@@ -50,6 +63,7 @@ export type RunFailed = RunHistory & typeof runOutcomeTags.failed & { readonly f
 export interface RunHistory {
   /** Which fiber ran at each step, in order (R3). */
   readonly steps: ReadonlyArray<StepRecord>
+  readonly boundaries: ReadonlyArray<BoundaryRecord>
   /** The decisions the schedule explored, in order (R4's replayable path). */
   readonly decisions: ReadonlyArray<Decision>
 }
@@ -82,7 +96,19 @@ export type RunawayFailure = typeof runOutcomeTags.runaway & {
 }
 
 /** @internal */
-export type RunFailure = EscapeFailure | BlockedFailure | DeadlockFailure | RunawayFailure
+export type ReplayTraceDivergedFailure = typeof runOutcomeTags.replayTraceDiverged & {
+  readonly atStep: number
+  readonly expected: TraceSnapshot | undefined
+  readonly actual: TraceSnapshot | undefined
+}
+
+/** @internal */
+export type RunFailure =
+  | EscapeFailure
+  | BlockedFailure
+  | DeadlockFailure
+  | RunawayFailure
+  | ReplayTraceDivergedFailure
 
 /** @internal */
 export interface Interruption {
@@ -99,6 +125,7 @@ export interface RunOptions {
    * or a step past the end of the path, takes Effect's order.
    */
   readonly path?: ReadonlyArray<Decision | undefined>
+  readonly expectTrace?: ReadonlyArray<TraceSnapshot>
   /**
    * Chooses beyond the recorded path (seam for PCT and bounded search).
    * Returning undefined takes the zero-preemption choice.
@@ -293,6 +320,7 @@ const completedOn = <A, E>(kernel: Kernel, exit: Exit.Exit<A, E>): RunResult<A, 
   ...runOutcomeTags.completed,
   exit,
   steps: kernel.steps,
+  boundaries: kernel.boundaries,
   decisions: kernel.decisions,
 })
 
@@ -300,8 +328,15 @@ const failedOn = <A, E>(kernel: Kernel, failure: RunFailure): RunResult<A, E> =>
   ...runOutcomeTags.failed,
   failure,
   steps: kernel.steps,
+  boundaries: kernel.boundaries,
   decisions: kernel.decisions,
 })
+
+const replayDivergedOf = (kernel: Kernel): RunFailure | undefined => {
+  const divergence: TraceDivergence | undefined = kernel.traceDivergence
+  if (divergence === undefined) return undefined
+  return { ...runOutcomeTags.replayTraceDiverged, ...divergence }
+}
 
 const interruptLive = (kernel: Kernel, fiber: AnyFiber | undefined): void => {
   if (fiber !== undefined) kernel.interrupt(fiber)
@@ -320,10 +355,16 @@ const applyInterrupt = (kernel: Kernel, options: RunOptions): void => {
   if (interruption !== undefined) interruptAt(kernel, interruption)
 }
 
-const advance = <A, E>(state: Drive<A, E>): Promise<void> => {
+const advance = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   state.kernel.step(decide(state.kernel, state.options))
   applyInterrupt(state.kernel, state.options)
-  return drain(stepTurnsOf(state.options))
+  return drain(stepTurnsOf(state.options)).then(() => divergedResult<A, E>(state))
+}
+
+const divergedResult = <A, E>(state: Drive<A, E>): RunResult<A, E> | undefined => {
+  const failure = replayDivergedOf(state.kernel)
+  if (failure === undefined) return undefined
+  return failedOn<A, E>(state.kernel, failure)
 }
 
 const seamOffersProgress = (seam: (() => boolean) | undefined): boolean => seam !== undefined && seam()
@@ -337,9 +378,43 @@ const stalled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined>
 
 const quiescent = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   const exit = state.root.pollUnsafe()
-  if (exit !== undefined) return Promise.resolve(completedOn(state.kernel, exit))
+  if (exit !== undefined) return Promise.resolve(completedOrShortTrace(state, exit))
   return stalled(state)
 }
+
+const completedOrShortTrace = <A, E>(state: Drive<A, E>, exit: Exit.Exit<A, E>): RunResult<A, E> => {
+  const short = shortTraceFailure(state.options.expectTrace, state.kernel.steps.length)
+  if (short === undefined) return completedOn(state.kernel, exit)
+  return failedOn(state.kernel, short)
+}
+
+const shortTraceFailure = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): RunFailure | undefined => {
+  if (traceLongEnough(expectTrace, steps)) return undefined
+  return shortDivergence(expectTrace, steps)
+}
+
+const expectAtIndex = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  index: number,
+): TraceSnapshot | undefined => expectTrace?.[index]
+
+const shortDivergence = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): RunFailure => ({
+  ...runOutcomeTags.replayTraceDiverged,
+  atStep: steps + 1,
+  expected: expectAtIndex(expectTrace, steps),
+  actual: undefined,
+})
+
+const traceLongEnough = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): boolean => expectTrace === undefined || steps >= expectTrace.length
 
 const settled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   if (state.kernel.pending.length > 0) return Promise.resolve(undefined)
@@ -348,8 +423,7 @@ const settled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined>
 const progressed = <A, E>(
   state: Drive<A, E>,
   done: RunResult<A, E> | undefined,
-): Promise<RunResult<A, E> | undefined> =>
-  done !== undefined ? Promise.resolve(done) : advance(state).then(() => undefined)
+): Promise<RunResult<A, E> | undefined> => done !== undefined ? Promise.resolve(done) : advance(state)
 
 const escapeOrRunaway = (kernel: Kernel, options: RunOptions, guard: number): RunFailure | undefined => {
   const escaped = kernel.escapes[0]
@@ -391,6 +465,7 @@ type KernelField<A = unknown> = A
 
 const RUN_OPTION_KEYS: ReadonlyArray<string> = [
   'choose',
+  'expectTrace',
   'explore',
   'external',
   'interrupt',
@@ -424,7 +499,10 @@ const lockedRun = <A, E>(
   options: RunOptions,
   release: ReleaseRun,
 ): Promise<RunResult<A, E>> => {
-  const kernel = makeKernel({ exploring: options.explore !== 'body' })
+  const kernel = makeKernel({
+    exploring: options.explore !== 'body',
+    expectTrace: options.expectTrace,
+  })
   const recorder = installEscapeRecorder((escape) => {
     kernel.escapes.push(escape)
   })

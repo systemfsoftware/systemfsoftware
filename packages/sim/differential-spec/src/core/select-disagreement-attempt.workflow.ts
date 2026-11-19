@@ -11,8 +11,8 @@ import {
 
 const judgedSeeded = (seededDisagrees: boolean): DisagreementAttempt =>
   Match.value(seededDisagrees).pipe(
-    Match.when(true, () => new DisagreedOnSeeded({})),
-    Match.when(false, () => new NoDisagreement({})),
+    Match.when(true, () => DisagreedOnSeeded.make({})),
+    Match.when(false, () => NoDisagreement.make({})),
     Match.exhaustive,
   )
 
@@ -23,7 +23,7 @@ export const selectDisagreementAttempt = Workflow.make({
   decide: (command): Result.Result<DisagreementAttempt, never> =>
     Result.succeed(
       Match.value(command.orderDisagrees).pipe(
-        Match.when(true, () => new DisagreedOnOrder({})),
+        Match.when(true, () => DisagreedOnOrder.make({})),
         Match.when(false, () => judgedSeeded(command.seededDisagrees)),
         Match.exhaustive,
       ),

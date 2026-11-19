@@ -235,7 +235,7 @@ Add this repository as a flake input, and give your flake the registry as a subs
 
 Then take the producer's tarballs and a pnpm store built from them with `lib.mkProducerTarballs` and `lib.mkPnpmConsumerStore` from `pnpm-release-management`. The full consumer route, including the `files.".deps"` wiring, is in [Distribution through Nix](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix).
 
-Third-party peers install from npm as usual. For example, `effect` is `^4.1.2`:
+Third-party peers install from npm as usual. For example, `effect` is `^4.1.4`:
 
 ```bash
 pnpm add 'effect@^4'

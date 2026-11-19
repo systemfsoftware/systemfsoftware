@@ -49,8 +49,8 @@ Feature('Proving two implementations agree under generated schedules', { timeout
           'targets',
           () =>
             Effect.succeed({
-              reference: (x: number) => (x < 0 ? Effect.fail(new CandidateDefect()) : Effect.succeed(x * 2)),
-              candidate: (x: number) => (x < 0 ? Effect.fail(new CandidateDefect()) : Effect.succeed(x + x)),
+              reference: (x: number) => (x < 0 ? Effect.fail(CandidateDefect.make()) : Effect.succeed(x * 2)),
+              candidate: (x: number) => (x < 0 ? Effect.fail(CandidateDefect.make()) : Effect.succeed(x + x)),
             }),
         ),
         When('the parity check runs over generated integers')(
