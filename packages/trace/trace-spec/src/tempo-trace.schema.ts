@@ -303,3 +303,142 @@ export const TempoV2TraceResponse = Schema.Struct({
   message: Schema.optional(Schema.String),
 })
 export type TempoV2TraceResponse = typeof TempoV2TraceResponse.Type
+
+/**
+ * The wire an OTLP/HTTP exporter pushes to `POST /v1/traces` in JSON: the
+ * protobuf JSON mapping, except that trace and span ids are lowercase hex
+ * (the OTLP exception), enums such as the span kind and the status code are
+ * integers, and 64-bit integers may arrive as strings or numbers. It decodes
+ * into the same span records as a Tempo answer.
+ */
+
+const NanosText = Schema.Union([Schema.String, Schema.Finite]).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.transform((nanos: string | number) => String(nanos)),
+    encode: SchemaGetter.transform((nanos: string) => nanos),
+  }),
+)
+
+const PushedMillis = NanosText.pipe(Schema.decodeTo(Schema.Finite, {
+  decode: SchemaGetter.transform(millisOf),
+  encode: SchemaGetter.transform((millis: number) => String(Math.round(millis * 1_000_000))),
+}))
+
+const CODE_BY_NUMBER: Record<0 | 1 | 2, StatusCode> = {
+  0: 'STATUS_CODE_UNSET',
+  1: 'STATUS_CODE_OK',
+  2: 'STATUS_CODE_ERROR',
+}
+
+const NUMBER_BY_CODE: Record<StatusCode, 0 | 1 | 2> = {
+  STATUS_CODE_UNSET: 0,
+  STATUS_CODE_OK: 1,
+  STATUS_CODE_ERROR: 2,
+}
+
+const PushedCode = Schema.Literals([0, 1, 2]).pipe(Schema.decodeTo(
+  Schema.Literals(['STATUS_CODE_UNSET', 'STATUS_CODE_OK', 'STATUS_CODE_ERROR']),
+  {
+    decode: SchemaGetter.transform((code: 0 | 1 | 2) => CODE_BY_NUMBER[code]),
+    encode: SchemaGetter.transform((code: StatusCode) => NUMBER_BY_CODE[code]),
+  },
+))
+
+interface PushedAnyValueWire {
+  readonly stringValue?: string | undefined
+  readonly boolValue?: boolean | undefined
+  readonly intValue?: string | number | undefined
+  readonly doubleValue?: number | undefined
+  readonly arrayValue?: { readonly values?: ReadonlyArray<PushedAnyValueWire> | undefined } | undefined
+}
+
+const PushedAnyValue = Schema.Struct({
+  stringValue: Schema.optional(Schema.String),
+  boolValue: Schema.optional(Schema.Boolean),
+  intValue: Schema.optional(NanosText),
+  doubleValue: Schema.optional(Schema.Finite),
+  arrayValue: Schema.optional(
+    Schema.Struct({
+      values: Schema.optional(
+        Schema.Array(Schema.suspend((): Schema.Codec<WireAnyValue, PushedAnyValueWire> => PushedAnyValue)),
+      ),
+    }),
+  ),
+})
+
+const PushedAttribute = Schema.Struct({ key: Schema.String, value: Schema.optional(PushedAnyValue) })
+
+interface PushedSpan extends Omit<WireSpan, 'kind'> {
+  readonly kind?: number | undefined
+}
+
+const wireOfPushed = (span: PushedSpan): WireSpan => ({
+  traceId: span.traceId,
+  spanId: span.spanId,
+  parentSpanId: span.parentSpanId,
+  name: span.name,
+  startTimeUnixNano: span.startTimeUnixNano,
+  endTimeUnixNano: span.endTimeUnixNano,
+  attributes: span.attributes,
+  events: span.events,
+  links: span.links,
+  status: span.status,
+})
+
+const pushedRecordOf = (span: PushedSpan): TraceGraph.SpanRecord => spanRecordOf(wireOfPushed(span))
+
+const pushedOfWire = (span: WireSpan): PushedSpan => ({
+  traceId: span.traceId,
+  spanId: span.spanId,
+  parentSpanId: span.parentSpanId,
+  name: span.name,
+  startTimeUnixNano: span.startTimeUnixNano,
+  endTimeUnixNano: span.endTimeUnixNano,
+  attributes: span.attributes,
+  events: span.events,
+  links: span.links,
+  status: span.status,
+})
+
+const pushedSpanOf = (record: TraceGraph.SpanRecord): PushedSpan => pushedOfWire(wireSpanOf(record))
+
+const PushedSpan = Schema.Struct({
+  traceId: Schema.String,
+  spanId: Schema.String,
+  parentSpanId: Schema.optional(Schema.String),
+  name: Schema.String,
+  kind: Schema.optional(Schema.Finite),
+  startTimeUnixNano: PushedMillis,
+  endTimeUnixNano: PushedMillis,
+  attributes: Schema.optional(Schema.Array(PushedAttribute)),
+  events: Schema.optional(Schema.Array(Schema.Struct({
+    name: Schema.String,
+    timeUnixNano: Schema.optional(PushedMillis),
+    attributes: Schema.optional(Schema.Array(PushedAttribute)),
+  }))),
+  links: Schema.optional(Schema.Array(Schema.Struct({
+    traceId: Schema.optional(Schema.String),
+    spanId: Schema.optional(Schema.String),
+  }))),
+  status: Schema.optional(
+    Schema.Struct({ message: Schema.optional(Schema.String), code: Schema.optional(PushedCode) }),
+  ),
+  traceState: Schema.optional(Schema.String),
+  flags: Schema.optional(Schema.Finite),
+}).pipe(
+  Schema.decodeTo(
+    TraceGraph.SpanRecord,
+    SchemaTransformation.transform({
+      decode: pushedRecordOf,
+      encode: pushedSpanOf,
+    }),
+  ),
+)
+
+/** One OTLP/HTTP JSON export request, as an exporter pushes it to `POST /v1/traces`. */
+export const OtlpExportRequest = Schema.Struct({
+  resourceSpans: Schema.optional(Schema.Array(Schema.Struct({
+    scopeSpans: Schema.optional(Schema.Array(Schema.Struct({ spans: Schema.optional(Schema.Array(PushedSpan)) }))),
+  }))),
+})
+export type OtlpExportRequest = typeof OtlpExportRequest.Type
