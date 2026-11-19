@@ -110,3 +110,13 @@ findings across 22 packages (1,663 `strictBooleanExpressions`, 137
 adoption program of its own — the `tsgoRulesPendingAdoption` mechanism exists
 for exactly this at the oxlint level — and must be ruled on before the `tsc`
 patch runs automatically.
+
+Until then, `scripts/tools/tsgo-clean-gate.mjs` (root `gate:tsgo-clean`, last
+step of `check:static`) holds the line for the packages already adopted: it
+patches `tsc`, runs `tsc -b --force` over the enrolled list — `packages/sim/
+effect-sim-kernel` and `packages/sim/effect-sim-kernel-tests`, the packages
+measured clean under the full patched-compiler typecheck on 2026-11-19 (CONST-T12:
+enrollment is a measured-clean list, never a path convention; a package with
+any existing finding fails the gate, so it enrolls only after its own adoption
+PR) — and restores the previous patch state in a `finally`. `--force` matters:
+`tsgo-clean-gate` must not trust `tsbuildinfo` written by a different compiler.

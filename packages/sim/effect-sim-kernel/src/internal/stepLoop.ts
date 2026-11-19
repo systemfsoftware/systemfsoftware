@@ -99,7 +99,7 @@ export type RunawayFailure = typeof runOutcomeTags.runaway & {
 export type ReplayTraceDivergedFailure = typeof runOutcomeTags.replayTraceDiverged & {
   readonly atStep: number
   readonly expected: TraceSnapshot | undefined
-  readonly actual: TraceSnapshot
+  readonly actual: TraceSnapshot | undefined
 }
 
 /** @internal */
@@ -378,9 +378,43 @@ const stalled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined>
 
 const quiescent = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   const exit = state.root.pollUnsafe()
-  if (exit !== undefined) return Promise.resolve(completedOn(state.kernel, exit))
+  if (exit !== undefined) return Promise.resolve(completedOrShortTrace(state, exit))
   return stalled(state)
 }
+
+const completedOrShortTrace = <A, E>(state: Drive<A, E>, exit: Exit.Exit<A, E>): RunResult<A, E> => {
+  const short = shortTraceFailure(state.options.expectTrace, state.kernel.steps.length)
+  if (short === undefined) return completedOn(state.kernel, exit)
+  return failedOn(state.kernel, short)
+}
+
+const shortTraceFailure = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): RunFailure | undefined => {
+  if (traceLongEnough(expectTrace, steps)) return undefined
+  return shortDivergence(expectTrace, steps)
+}
+
+const expectAtIndex = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  index: number,
+): TraceSnapshot | undefined => expectTrace?.[index]
+
+const shortDivergence = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): RunFailure => ({
+  ...runOutcomeTags.replayTraceDiverged,
+  atStep: steps + 1,
+  expected: expectAtIndex(expectTrace, steps),
+  actual: undefined,
+})
+
+const traceLongEnough = (
+  expectTrace: ReadonlyArray<TraceSnapshot> | undefined,
+  steps: number,
+): boolean => expectTrace === undefined || steps >= expectTrace.length
 
 const settled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   if (state.kernel.pending.length > 0) return Promise.resolve(undefined)

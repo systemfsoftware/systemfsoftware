@@ -65,6 +65,7 @@ export interface StepRecord {
   readonly visible: boolean
   readonly boundary: BoundaryKind | undefined
   readonly activeBlocked: boolean
+  readonly runnableFibers: ReadonlyArray<number | undefined>
 }
 
 /** @internal */
@@ -90,7 +91,7 @@ export interface TraceSnapshot {
 export interface TraceDivergence {
   readonly atStep: number
   readonly expected: TraceSnapshot | undefined
-  readonly actual: TraceSnapshot
+  readonly actual: TraceSnapshot | undefined
 }
 
 /** @internal */
@@ -697,6 +698,8 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   let boundaryActiveForStep: AnyFiber | undefined = undefined
   let runnableAtDecision: ReadonlyArray<number | undefined> = []
   let traceDivergence: TraceDivergence | undefined = undefined
+  const appearanceOrder = new Map<number, number>()
+  let appearances = 0
 
   const taskAt = (index: Decision): Task | undefined => pending[index]
   const stepOn = (task: Task | undefined): number => (task === undefined ? -1 : task.step)
@@ -872,6 +875,23 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
 
   const expectedAt = (step: number): TraceSnapshot | undefined => options.expectTrace?.[step - 1]
 
+  const knownAppearance = (id: number): number | undefined => appearanceOrder.get(id)
+
+  const noteAppearance = (id: number): number => {
+    appearances += 1
+    appearanceOrder.set(id, appearances)
+    return appearances
+  }
+
+  const appearanceOf = (id: number | undefined): number | undefined => {
+    if (id === undefined) return undefined
+    return appearanceFor(id)
+  }
+
+  const appearanceFor = (id: number): number => knownAppearance(id) ?? noteAppearance(id)
+
+  const normalizedRunnable = (): ReadonlyArray<number | undefined> => runnableAtDecision.map(appearanceOf)
+
   const divergedAlready = (): boolean => traceDivergence !== undefined
 
   const runnableMatches = (
@@ -884,7 +904,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
 
   const snapshotOf = (record: StepRecord): TraceSnapshot => ({
     boundary: record.boundary,
-    runnable: runnableAtDecision,
+    runnable: record.runnableFibers,
   })
 
   const traceMismatch =
@@ -893,12 +913,20 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
 
   const mismatchAt = (record: StepRecord): TraceDivergence | undefined => {
     const expected = expectedAt(record.step)
-    if (expected === undefined) return undefined
+    if (expected === undefined) return extraStepDivergence(record)
     return traceMismatch(record)(expected)(snapshotOf(record))
   }
 
+  const extraStepDivergence = (record: StepRecord): TraceDivergence => ({
+    atStep: record.step,
+    expected: undefined,
+    actual: snapshotOf(record),
+  })
+
+  const tracing = (): boolean => options.expectTrace !== undefined
+
   const checkTrace = (record: StepRecord): void => {
-    if (divergedAlready()) return
+    if ([divergedAlready(), !tracing()].some(Boolean)) return
     traceDivergence = mismatchAt(record)
   }
 
@@ -908,6 +936,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     ran: AnyFiber | undefined,
     boundary: BoundaryKind | undefined,
     activeBlocked: boolean,
+    runnable: ReadonlyArray<number | undefined>,
   ): StepRecord => ({
     step: stepCount,
     choice: input.choice,
@@ -920,6 +949,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     visible: isVisible(task, ran),
     boundary,
     activeBlocked,
+    runnableFibers: runnable,
   })
 
   const boundaryPreempted = (chosenId: number | undefined, activeId: number | undefined): boolean =>
@@ -953,7 +983,8 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   }
 
   const recordStep = (input: StepInput, task: Task, ran: AnyFiber | undefined): void => {
-    const record = stepRecord(input, task, ran, boundaryForStep, previousBlocked())
+    const runnable = normalizedRunnable()
+    const record = stepRecord(input, task, ran, boundaryForStep, previousBlocked(), runnable)
     checkTrace(record)
     recordBoundary(ran)
     lastRan = ran

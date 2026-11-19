@@ -19,10 +19,7 @@ const failureOf = (result: Kernel.RunResult<ReadonlyArray<boolean>, never>) =>
   )
 
 const traceOf = (result: Kernel.RunResult<ReadonlyArray<boolean>, never>) =>
-  result.steps.map((step) => ({
-    boundary: step.boundary,
-    runnable: result.boundaries.find((boundary) => boundary.step === step.step)?.runnableFibers ?? [],
-  }))
+  result.steps.map((step) => ({ boundary: step.boundary, runnable: step.runnableFibers }))
 
 Feature('The kernel logs every yield boundary and fails a diverged replay closed')
   .live('drives its own simulation-kernel run')
@@ -135,6 +132,97 @@ Feature('The kernel logs every yield boundary and fails a diverged replay closed
             failedClosed: true,
             atStepPositive: true,
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A replay against the run’s own recorded trace completes without divergence',
+      Gherkin.Do.pipe(
+        Given('the two-worker race program')('program', () => Effect.succeed(checkThenSet)),
+        When('it replays against a faithful recording of its own trace')(
+          'facts',
+          (s) =>
+            Effect.promise(() =>
+              Kernel.run(s.program, {}).then((first) =>
+                Kernel.run(s.program, { expectTrace: traceOf(first) }).then((replay) => ({
+                  completed: Match.value(replay).pipe(
+                    Match.tag('Completed', () => true),
+                    Match.orElse(() => false),
+                  ),
+                }))
+              )
+            ),
+        ),
+        Then('the replay completes instead of diverging')((s, expect) =>
+          expect({ completed: s.facts.completed }).toEqual({ completed: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'A recording that ends before the run does fails closed at the first extra step',
+      Gherkin.Do.pipe(
+        Given('the two-worker race program')('program', () => Effect.succeed(checkThenSet)),
+        When('it replays against a recording truncated to its first two steps')(
+          'facts',
+          (s) =>
+            Effect.promise(() =>
+              Kernel.run(s.program, {}).then((first) => {
+                const truncated = traceOf(first).slice(0, 2)
+                return Kernel.run(s.program, { expectTrace: truncated }).then((replay) => {
+                  const failed = failureOf(replay)
+                  return Match.value(failed.failure).pipe(
+                    Match.tag('ReplayTraceDiverged', (diverged) => ({
+                      failedClosed: true,
+                      atStepThree: diverged.atStep === 3,
+                      expectedAbsent: diverged.expected === undefined,
+                    })),
+                    Match.orElse(() => ({ failedClosed: false, atStepThree: false, expectedAbsent: false })),
+                  )
+                })
+              })
+            ),
+        ),
+        Then('the run fails closed at step three with no expected snapshot left')((s, expect) =>
+          expect({
+            failedClosed: s.facts.failedClosed,
+            atStepThree: s.facts.atStepThree,
+            expectedAbsent: s.facts.expectedAbsent,
+          }).toEqual({ failedClosed: true, atStepThree: true, expectedAbsent: true })
+        ),
+      ),
+    )
+
+    scenario(
+      'A recording that outlasts the run fails closed on early termination',
+      Gherkin.Do.pipe(
+        Given('the two-worker race program')('program', () => Effect.succeed(checkThenSet)),
+        When('it replays against its own trace with one snapshot appended')(
+          'facts',
+          (s) =>
+            Effect.promise(() =>
+              Kernel.run(s.program, {}).then((first) => {
+                const trace = traceOf(first)
+                const padded = [...trace, orThrow(trace.at(-1), 'expected a non-empty trace')]
+                return Kernel.run(s.program, { expectTrace: padded }).then((replay) => {
+                  const failed = failureOf(replay)
+                  return Match.value(failed.failure).pipe(
+                    Match.tag('ReplayTraceDiverged', (diverged) => ({
+                      failedClosed: true,
+                      actualAbsent: diverged.actual === undefined,
+                    })),
+                    Match.orElse(() => ({ failedClosed: false, actualAbsent: false })),
+                  )
+                })
+              })
+            ),
+        ),
+        Then('the run fails closed with the missing actual step named')((s, expect) =>
+          expect({
+            failedClosed: s.facts.failedClosed,
+            actualAbsent: s.facts.actualAbsent,
+          }).toEqual({ failedClosed: true, actualAbsent: true })
         ),
       ),
     )
