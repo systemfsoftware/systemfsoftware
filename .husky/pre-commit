@@ -1,14 +1,27 @@
 #!/usr/bin/env sh
-# Skip during a merge: the staged set is the merge result, not authored work,
-# and lint-staged's stash/restore corrupts in-progress merge state.
-if [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
-  exit 0
-fi
+# Skip while a merge, rebase or cherry-pick is in progress: the staged set is the
+# result of that operation, not authored work, and a formatter that rewrites and
+# re-stages it would corrupt the operation in flight.
+for state in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD; do
+  if [ -e "$(git rev-parse --git-path "$state")" ]; then
+    exit 0
+  fi
+done
 
-# Skip lint-staged for pure repos/ subtree commits and the subtrees.toml
-# registration commit. The alternation must be anchored per-branch: the earlier
+# Skip for pure repos/ subtree commits and the subtrees.toml registration commit.
+# The alternation must be anchored per-branch: the earlier
 # `^(repos/|subtrees\.toml)$` matched the literal string `repos/` and therefore
 # never skipped a single vendored path (git-subtree-vendor G23).
 if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
-  pnpm precommit
+  # Staged-only and cheap: refuse unresolved conflict markers before any formatter runs.
+  .husky/check-conflict-markers || exit 1
+
+  # Direct binary: no pnpm boot. --no-stash writes no backup stash (no extra
+  # objects per commit) and implies --no-revert: formatters re-stage their edits,
+  # and only an unfixable lint error fails the commit.
+  if [ ! -x ./node_modules/.bin/lint-staged ]; then
+    echo "pre-commit: ./node_modules/.bin/lint-staged is missing; run pnpm install." >&2
+    exit 1
+  fi
+  ./node_modules/.bin/lint-staged --no-stash --config .lintstagedrc.js
 fi

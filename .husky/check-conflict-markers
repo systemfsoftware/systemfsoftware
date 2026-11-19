@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# Refuse a commit whose staged text files still hold an unresolved merge conflict:
+# a `<<<<<<< ` line, followed by a `=======` line, followed by a `>>>>>>> ` line.
+# A bare `=======` (a setext heading underline) or a lone marker-like line is
+# ordinary text and passes; only the full ordered sequence is a conflict.
+# Reads the staged blobs (the index), not the working tree, and skips binaries.
+set -eu
+
+candidates=$(git grep --cached -I -l -E '^<<<<<<< ' -- . ':(exclude)repos' 2>/dev/null || true)
+[ -n "$candidates" ] || exit 0
+
+status=0
+while IFS= read -r file; do
+  if git show ":$file" | awk '
+    state == 0 && /^<<<<<<< / { state = 1; next }
+    state == 1 && /^=======$/ { state = 2; next }
+    state == 2 && /^>>>>>>> / { found = 1; exit }
+    END { exit found ? 0 : 1 }
+  '; then
+    echo "pre-commit: unresolved conflict markers in staged file: $file" >&2
+    status=1
+  fi
+done <<LIST
+$candidates
+LIST
+exit "$status"
