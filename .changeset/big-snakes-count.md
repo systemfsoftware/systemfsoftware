@@ -1,0 +1,5 @@
+---
+"@systemfsoftware/trace-spec": minor
+---
+
+Add `OtlpExportSource.source`: a trace source over the JSON bodies an OTLP/HTTP exporter pushed to a collector the caller runs, so a trace contract can judge spans as they left the process. It accepts hex trace and span ids (normalised to lowercase), integer status codes, nanosecond times as decimal strings, and int64 attribute values as decimal strings or safe JSON integers, and it refuses a body that is not a trace export request. The span records it yields do not carry the span kind or the resource and scope attributes, so a check for secrets in those must read the raw bodies.
