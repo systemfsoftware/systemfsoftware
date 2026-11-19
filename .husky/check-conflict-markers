@@ -13,7 +13,7 @@ status=0
 while IFS= read -r file; do
   if git show ":$file" | awk '
     state == 0 && /^<<<<<<< / { state = 1; next }
-    state == 1 && /^=======$/ { state = 2; next }
+    state == 1 && /^=======\r?$/ { state = 2; next }
     state == 2 && /^>>>>>>> / { found = 1; exit }
     END { exit found ? 0 : 1 }
   '; then
