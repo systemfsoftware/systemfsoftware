@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { OtlpExportSource } from '@systemfsoftware/trace-spec'
+import { Observation, OtlpExportSource } from '@systemfsoftware/trace-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 const TRACE = '5b8efff798038103d269b633813fc60c'
@@ -87,15 +87,28 @@ Feature('Reading the spans an exporter pushed')
     scenario(
       'A body that is not a trace export request fails the read as a transport failure naming the collector and the body',
       Gherkin.Do.pipe(
-        Given('a good export and a body that is not one')('pushed', () => pushed([secondBatch, 'not an export'])),
-        When('the trace is read')('failure', () => readOf(TRACE).pipe(Effect.flip)),
-        Then('the read fails naming the collector and the trace')(({ failure }, expect) =>
-          expect({ tag: failure._tag, source: 'source' in failure ? failure.source : null, traceId: failure.traceId })
-            .toEqual({
-              tag: 'TransportObservationError',
-              source: 'loopback collector',
-              traceId: TRACE,
-            })
+        Given('a good export followed by a body that is not JSON')(
+          'pushed',
+          () => pushed([secondBatch, 'not an export']),
+        ),
+        When('the trace is read, then read again with a logs export in place of the bad body')(
+          'failures',
+          () =>
+            Effect.all([
+              readOf(TRACE).pipe(Effect.flip),
+              pushed([secondBatch, '{"resourceLogs":[]}']).pipe(Effect.andThen(readOf(TRACE)), Effect.flip),
+            ]),
+        ),
+        Then('each read fails naming the collector, the trace and the second body')(({ failures }, expect) =>
+          expect(failures.map((failure) => ({
+            transport: failure instanceof Observation.TransportObservationError,
+            source: 'source' in failure ? failure.source : null,
+            traceId: failure.traceId,
+            namesTheBody: failure.message.includes('body[1]'),
+          }))).toEqual([
+            { transport: true, source: 'loopback collector', traceId: TRACE, namesTheBody: true },
+            { transport: true, source: 'loopback collector', traceId: TRACE, namesTheBody: true },
+          ])
         ),
       ),
     )
