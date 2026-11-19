@@ -4,9 +4,6 @@
     "affectedUsingTaskInputs": true
   },
   "agentGuidance": false,
-  "globalDependencies": [
-    "scripts/tools/patch-tsgo-if-needed.mjs"
-  ],
   "globalPassThroughEnv": [
     "XDG_CACHE_HOME",
     "PLAYWRIGHT_BROWSERS_PATH",

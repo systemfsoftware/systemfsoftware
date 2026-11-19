@@ -6,7 +6,7 @@
   "description": "Private behaviour suite for @systemfsoftware/effect-sim-kernel. It lives outside the kernel because the Gherkin runner it is written in runs on the kernel.",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -b",
+    "typecheck": "effect-tsgo tsc -b",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },

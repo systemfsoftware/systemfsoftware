@@ -86,8 +86,7 @@ patch again.
 Running `prepare` unconditionally is the upstream default, but this repository
 installs with `--ignore-scripts` on purpose (other `prepare` hooks have
 mutated `dist` mid-gate and backed up gigabytes of compiler binaries; see
-`pack-lifecycle-hooks-mutate-dist-mid-gate.md` and the guard in
-`scripts/tools/patch-tsgo-if-needed.mjs`). Re-enabling scripts to fix one
+`pack-lifecycle-hooks-mutate-dist-mid-gate.md`). Re-enabling scripts to fix one
 stale plugin would re-open those failures.
 
 The durable form is a named turbo prerequisite: the root `tsgo:patch` script
@@ -98,25 +97,18 @@ fresh `--ignore-scripts` worktree therefore self-heals before it can fail with
 a stale plugin; no lifecycle scripts are enabled and the lint gate itself is
 untouched.
 
-`patch-tsgo-if-needed.mjs` (the native-`tsc` half of the patch) is deliberately
-NOT part of the prerequisite. Patching `tsc` activates the compiler-side Effect
-diagnostics configured in `packages/toolchain/tsconfig/effect.json`
-(`TS377xxx`), which are dormant in every environment that skips the patch —
-including CI, whose install runs `prepare` and that prepare passes
-`--no-typescript`. Under tsgo 0.70.0 those dormant rules report about 1,970
-findings across 22 packages (1,663 `strictBooleanExpressions`, 137
-`newSchemaClass`, and smaller counts of `asyncFunction`, `deterministicKeys`,
-`nodeBuiltinImport`, `processEnv`, …), so activating the compiler gate is an
-adoption program of its own — the `tsgoRulesPendingAdoption` mechanism exists
-for exactly this at the oxlint level — and must be ruled on before the `tsc`
-patch runs automatically.
-
-Until then, `scripts/tools/tsgo-clean-gate.mjs` (root `gate:tsgo-clean`, last
-step of `check:static`) holds the line for the packages already adopted: it
-patches `tsc`, runs `tsc -b --force` over the enrolled list — `packages/sim/
-effect-sim-kernel` and `packages/sim/effect-sim-kernel-tests`, the packages
-measured clean under the full patched-compiler typecheck on 2026-11-19 (CONST-T12:
-enrollment is a measured-clean list, never a path convention; a package with
-any existing finding fails the gate, so it enrolls only after its own adoption
-PR) — and restores the previous patch state in a `finally`. `--force` matters:
-`tsgo-clean-gate` must not trust `tsbuildinfo` written by a different compiler.
+The compiler-side Effect diagnostics (`TS377xxx`, configured in
+`packages/toolchain/tsconfig/effect.json`) are adopted per package, not by
+patching `node_modules/typescript`: a package opts in by running the installed
+CLI directly — `"typecheck": "effect-tsgo tsc -b"` — which reports
+`7.0.2+effect-tsgo.0.70.0` and leaves the pinned TypeScript binary untouched
+(sha256-verified identical before and after). Under tsgo 0.70.0 the dormant
+rules report about 1,970 findings across 22 not-yet-adopted packages, so those
+keep their plain `tsc -b` task until their own remediation PR; the two adopted
+packages (`packages/sim/effect-sim-kernel`, `packages/sim/effect-sim-kernel-tests`)
+were measured clean under the full `effect-tsgo tsc -b` typecheck before their
+task switched. `scripts/tools/patch-tsgo-if-needed.mjs` is deleted: its only
+remaining caller was an earlier allowlist gate script, itself replaced by this
+direct-CLI design after review. A known `TS377xxx` violation fails the opted-in
+typecheck and a revert returns it to green, so the diagnostics are enforced
+exactly where they are adopted and nowhere else.
