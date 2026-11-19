@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Observation, OtlpExportSource } from '@systemfsoftware/trace-spec'
-import { Context, Effect, Layer, Ref } from 'effect'
+import { Context, Effect, Layer, Ref, Schema } from 'effect'
 
 const TRACE = '5b8efff798038103d269b633813fc60c'
 const TRACE_UPPER = '5B8EFFF798038103D269B633813FC60C'
@@ -101,7 +101,7 @@ Feature('Reading the spans an exporter pushed')
         ),
         Then('each read fails naming the collector, the trace and the second body')(({ failures }, expect) =>
           expect(failures.map((failure) => ({
-            transport: failure instanceof Observation.TransportObservationError,
+            transport: Schema.is(Observation.TransportObservationError)(failure),
             source: 'source' in failure ? failure.source : null,
             traceId: failure.traceId,
             namesTheBody: failure.message.includes('body[1]'),
