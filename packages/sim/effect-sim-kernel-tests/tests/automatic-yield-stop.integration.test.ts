@@ -31,16 +31,17 @@ const scopeWithReader = (receipts: Array<string>) =>
   )
 
 /** Stops the scope after each step of its run, and returns the steps that left the resource acquired. */
-const leaksAtEveryStop = async (): Promise<ReadonlyArray<number>> => {
-  const whole = await Kernel.run(scopeWithReader([]))
-  const leaks: Array<number> = []
-  for (let step = 1; step <= whole.steps.length; step++) {
-    const receipts: Array<string> = []
-    await Kernel.run(scopeWithReader(receipts), { interrupt: { atStep: step } })
-    if (receipts.includes('acquired') && !receipts.includes('released')) leaks.push(step)
-  }
-  return leaks
-}
+const leaksAtEveryStop = (): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.gen(function*() {
+    const whole = yield* Effect.promise(() => Kernel.run(scopeWithReader([])))
+    const leaks: Array<number> = []
+    for (let step = 1; step <= whole.steps.length; step++) {
+      const receipts: Array<string> = []
+      yield* Effect.promise(() => Kernel.run(scopeWithReader(receipts), { interrupt: { atStep: step } }))
+      if (receipts.includes('acquired') && !receipts.includes('released')) leaks.push(step)
+    }
+    return leaks
+  })
 
 Feature('A scope whose work yields automatically still releases its resource when stopped')
   .live("reproduces the defect on Effect 4.1.4's automatic yields, which the kernel must follow")
@@ -53,10 +54,7 @@ Feature('A scope whose work yields automatically still releases its resource whe
           'scope',
           () => Effect.succeed(scopeWithReader),
         ),
-        When('the scope is stopped after each step of its run')(
-          'leaks',
-          () => Effect.promise(() => leaksAtEveryStop()),
-        ),
+        When('the scope is stopped after each step of its run')('leaks', () => leaksAtEveryStop()),
         Then('no stop leaves the acquired resource unreleased')((s, expect) => expect(s.leaks).toEqual([])),
       ),
     )

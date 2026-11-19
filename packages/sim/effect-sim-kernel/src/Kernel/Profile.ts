@@ -102,7 +102,7 @@ if (import.meta.vitest !== void 0) {
   const { pick } = await import('./Pct.js')
 
   class Counter extends Context.Service<Counter, Ref.Ref<number>>()(
-    '@systemfsoftware/effect-sim-kernel/test/Counter',
+    '@systemfsoftware/effect-sim-kernel/Kernel/Profile/Counter',
   ) {}
 
   const Operation = Schema.Literals(['update', 'yieldNow', 'promise', 'queue', 'deferred', 'semaphore', 'allPure'])

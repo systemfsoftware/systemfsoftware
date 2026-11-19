@@ -168,6 +168,13 @@ const describeKernelFailure = (failure: Kernel.RunFailure): string =>
       { _tag: 'Runaway' },
       (runaway) => `ran past ${runaway.steps} steps with ${runaway.pending} fibers pending`,
     ),
+    Match.when(
+      { _tag: 'ReplayTraceDiverged' },
+      (diverged) =>
+        `the replayed trace diverged at step ${diverged.atStep}: expected ${JSON.stringify(diverged.expected)}, got ${
+          JSON.stringify(diverged.actual)
+        }`,
+    ),
     Match.exhaustive,
   )
 
@@ -200,7 +207,7 @@ const throwRecord = (failure: Opaque, schedule: Schedule, recorder: SpanRecorder
   })
 
 const throwKernelFailure = (failure: Kernel.RunFailure, schedule: Schedule, recorder: SpanRecorder): never =>
-  throwRecord(new KernelFailure({ detail: describeKernelFailure(failure) }), schedule, recorder)
+  throwRecord(KernelFailure.make({ detail: describeKernelFailure(failure) }), schedule, recorder)
 
 const throwExitFailure = <A, E>(exit: Exit.Failure<A, E>, schedule: Schedule, recorder: SpanRecorder): never =>
   throwRecord(Cause.squash(exit.cause), schedule, recorder)
@@ -333,7 +340,7 @@ if (import.meta.vitest !== void 0) {
 
   const ProbeValue = Schema.Natural.pipe(Schema.check(Schema.isLessThanOrEqualTo(1_000)))
 
-  class Probe extends Context.Service<Probe, number>()('@systemfsoftware/effect-spec-runtime/test/Probe') {}
+  class Probe extends Context.Service<Probe, number>()('@systemfsoftware/effect-spec-runtime/KernelCase/Probe') {}
 
   const announcedOnce = (seen: Array<string>): boolean => seen.length === 1 && seen[0] === `live case: ${LiveReason}`
 
@@ -400,7 +407,9 @@ if (import.meta.vitest !== void 0) {
     (scoped, [outcome]) => Effect.map(scoped(outcome), (released) => released === expectsRelease(outcome)),
   )
 
-  class Shelf extends Context.Service<Shelf, Ref.Ref<number>>()('@systemfsoftware/effect-spec-runtime/test/Shelf') {}
+  class Shelf
+    extends Context.Service<Shelf, Ref.Ref<number>>()('@systemfsoftware/effect-spec-runtime/KernelCase/Shelf')
+  {}
 
   const LayerSteps = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 40 })))
 

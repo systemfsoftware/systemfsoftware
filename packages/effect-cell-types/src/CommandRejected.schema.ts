@@ -10,7 +10,7 @@ export class CommandRejected
   }
 }
 
-const commandRejectedMessageOf = (issue: string): string => new CommandRejected({ issue }).message
+const commandRejectedMessageOf = (issue: string): string => CommandRejected.make({ issue }).message
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/vitest')

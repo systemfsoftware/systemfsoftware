@@ -9,7 +9,7 @@ export interface LockHandle {
 }
 
 export class Locks extends Context.Service<Locks, LockHandle>()(
-  '@systemfsoftware/conformance-spec/tests/Locks',
+  '@systemfsoftware/conformance-spec/tests/__fixtures__/Locks',
 ) {}
 
 /** A correct lock: the holder is checked and set in one atomic step. */

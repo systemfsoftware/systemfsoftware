@@ -63,6 +63,34 @@ export interface StepRecord {
    * it can change the outcome. Seam for preemption-bounded search (pruning).
    */
   readonly visible: boolean
+  readonly boundary: BoundaryKind | undefined
+  readonly activeBlocked: boolean
+}
+
+/** @internal */
+export type BoundaryKind = 'auto-yield' | 'explicit-yield'
+
+/** @internal */
+export interface BoundaryRecord {
+  readonly step: number
+  readonly kind: BoundaryKind
+  readonly activeFiber: number | undefined
+  readonly runnableFibers: ReadonlyArray<number | undefined>
+  readonly chosenFiber: number | undefined
+  readonly preempted: boolean
+}
+
+/** @internal */
+export interface TraceSnapshot {
+  readonly boundary: BoundaryKind | undefined
+  readonly runnable: ReadonlyArray<number | undefined>
+}
+
+/** @internal */
+export interface TraceDivergence {
+  readonly atStep: number
+  readonly expected: TraceSnapshot | undefined
+  readonly actual: TraceSnapshot
 }
 
 /** @internal */
@@ -100,7 +128,7 @@ const CURRENT_FIBER = '~effect/Fiber/currentFiber'
 // The fiber methods the kernel wraps: `evaluate` intercepts resumes that would
 // otherwise run inline outside every decision; the other three observe a fiber
 // reaching into another fiber's task.
-const FIBER_METHODS = ['addObserver', 'interruptUnsafe', 'pollUnsafe', 'evaluate'] as const
+const FIBER_METHODS = ['addObserver', 'interruptUnsafe', 'pollUnsafe', 'evaluate', 'yieldNow'] as const
 
 const REF_FIELDS = ['ref'] as const
 const DEFERRED_FIELDS = ['effect', 'resumes'] as const
@@ -547,6 +575,15 @@ const dispatchInterrupt = (
   return dispatchObserved(fiber, kernel, original, args)
 }
 
+const dispatchYieldNow = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  kernel.noteYieldBoundary(args[2] === true ? 'auto-yield' : 'explicit-yield', fiber)
+  return dispatchObserved(fiber, kernel, original, args)
+}
 const dispatchFiberCall = (
   fiber: AnyFiber,
   method: string,
@@ -556,6 +593,7 @@ const dispatchFiberCall = (
 ): Field =>
   Match.value(method).pipe(
     Match.when('evaluate', () => dispatchEvaluate(fiber, kernel, original, args)),
+    Match.when('yieldNow', () => dispatchYieldNow(fiber, kernel, original, args)),
     Match.when('interruptUnsafe', () => dispatchInterrupt(fiber, kernel, original, args)),
     Match.orElse(() => dispatchObserved(fiber, kernel, original, args)),
   )
@@ -569,6 +607,9 @@ export interface Kernel {
   readonly pending: ReadonlyArray<Task>
   readonly fibers: ReadonlySet<AnyFiber>
   readonly steps: ReadonlyArray<StepRecord>
+  readonly boundaries: ReadonlyArray<BoundaryRecord>
+  /** The first trace mismatch against `expectTrace`, once one is seen. */
+  readonly traceDivergence: TraceDivergence | undefined
   /** The decisions the schedule explored, in order (R4's replayable path). */
   readonly decisions: ReadonlyArray<Decision>
   readonly escapes: Array<Escape>
@@ -592,6 +633,8 @@ export interface Kernel {
   effectDefault(): Decision
   step(input: StepInput): void
   resumeExternally(fiber: AnyFiber, run: () => void): void
+  /** Notes that `fiber` just took a `yieldNow` of the given kind, ending its slice. */
+  noteYieldBoundary(kind: BoundaryKind, fiber: AnyFiber): void
   /** True the first time `fiber` is evaluated in this run, false after. */
   firstEvaluation(fiber: AnyFiber): boolean
   /** Runs `after` right after `fiber`'s queued resume; false when none is queued. */
@@ -613,6 +656,7 @@ export interface Kernel {
 export interface MakeKernelOptions {
   /** When false, decisions stay on Effect's order until `beginExploration`. */
   readonly exploring: boolean
+  readonly expectTrace?: ReadonlyArray<TraceSnapshot> | undefined
 }
 
 /** @internal */
@@ -621,6 +665,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   const fibers = new Set<AnyFiber>()
   const evaluated = new WeakSet<AnyFiber>()
   const steps: Array<StepRecord> = []
+  const boundaries: Array<BoundaryRecord> = []
   const decisions: Array<Decision> = []
   const escapes: Array<Escape> = []
   const touches = new Set<object>()
@@ -646,6 +691,12 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   let root: AnyFiber | undefined = undefined
   let running = false
   let restoreHooks: (() => void) | undefined = undefined
+  let yieldBoundary: BoundaryKind | undefined = undefined
+  let yieldBoundaryFiber: AnyFiber | undefined = undefined
+  let boundaryForStep: BoundaryKind | undefined = undefined
+  let boundaryActiveForStep: AnyFiber | undefined = undefined
+  let runnableAtDecision: ReadonlyArray<number | undefined> = []
+  let traceDivergence: TraceDivergence | undefined = undefined
 
   const taskAt = (index: Decision): Task | undefined => pending[index]
   const stepOn = (task: Task | undefined): number => (task === undefined ? -1 : task.step)
@@ -774,6 +825,30 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     phase = 'paused'
   }
 
+  const clearBoundary = (): void => {
+    boundaryForStep = undefined
+    boundaryActiveForStep = undefined
+  }
+
+  const captureBoundary = (): void => {
+    if (yieldBoundary === undefined) return
+    boundaryForStep = yieldBoundary
+    boundaryActiveForStep = yieldBoundaryFiber
+    yieldBoundary = undefined
+    yieldBoundaryFiber = undefined
+  }
+
+  const runnableIds = (tasks: ReadonlyArray<Task>): ReadonlyArray<number | undefined> =>
+    tasks.map((task) => task.owner?.id)
+
+  const ownerPending = (fiber: AnyFiber | undefined): boolean =>
+    fiber !== undefined && pending.some((task) => task.owner === fiber)
+
+  const sameRunnable = (
+    left: ReadonlyArray<number | undefined>,
+    right: ReadonlyArray<number | undefined>,
+  ): boolean => left.length === right.length && left.every((id, index) => id === right[index])
+
   const ranOn = (task: Task): AnyFiber | undefined => ranInTask ?? task.owner
 
   const runTask = (task: Task): AnyFiber | undefined => {
@@ -792,9 +867,48 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
 
   const sharedWork = (ran: AnyFiber | undefined): boolean => extraScheduling() || touchesFiber(ran)
 
-  const isVisible = (task: Task, ran: AnyFiber | undefined): boolean => task.external || sharedWork(ran)
+  const isVisible = (task: Task, ran: AnyFiber | undefined): boolean =>
+    [task.external, sharedWork(ran), touches.size > 0].some(Boolean)
 
-  const stepRecord = (input: StepInput, task: Task, ran: AnyFiber | undefined): StepRecord => ({
+  const expectedAt = (step: number): TraceSnapshot | undefined => options.expectTrace?.[step - 1]
+
+  const divergedAlready = (): boolean => traceDivergence !== undefined
+
+  const runnableMatches = (
+    expected: TraceSnapshot,
+    actual: TraceSnapshot,
+  ): boolean => sameRunnable(expected.runnable, actual.runnable)
+
+  const traceMatches = (expected: TraceSnapshot, actual: TraceSnapshot): boolean =>
+    [expected.boundary === actual.boundary, runnableMatches(expected, actual)].every(Boolean)
+
+  const snapshotOf = (record: StepRecord): TraceSnapshot => ({
+    boundary: record.boundary,
+    runnable: runnableAtDecision,
+  })
+
+  const traceMismatch =
+    (record: StepRecord) => (expected: TraceSnapshot) => (actual: TraceSnapshot): TraceDivergence | undefined =>
+      [traceMatches(expected, actual)].every(Boolean) ? undefined : { atStep: record.step, expected, actual }
+
+  const mismatchAt = (record: StepRecord): TraceDivergence | undefined => {
+    const expected = expectedAt(record.step)
+    if (expected === undefined) return undefined
+    return traceMismatch(record)(expected)(snapshotOf(record))
+  }
+
+  const checkTrace = (record: StepRecord): void => {
+    if (divergedAlready()) return
+    traceDivergence = mismatchAt(record)
+  }
+
+  const stepRecord = (
+    input: StepInput,
+    task: Task,
+    ran: AnyFiber | undefined,
+    boundary: BoundaryKind | undefined,
+    activeBlocked: boolean,
+  ): StepRecord => ({
     step: stepCount,
     choice: input.choice,
     options: input.options,
@@ -804,12 +918,47 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     external: task.external,
     fiberId: ran?.id,
     visible: isVisible(task, ran),
+    boundary,
+    activeBlocked,
   })
 
-  const recordStep = (input: StepInput, task: Task, ran: AnyFiber | undefined): void => {
-    lastRan = ran
-    steps.push(stepRecord(input, task, ran))
+  const boundaryPreempted = (chosenId: number | undefined, activeId: number | undefined): boolean =>
+    [chosenId !== activeId, runnableAtDecision.includes(activeId)].every(Boolean)
+
+  const ranId = (ran: AnyFiber | undefined): number | undefined => ran?.id
+
+  const boundaryActiveId = (): number | undefined => boundaryActiveForStep?.id
+
+  const boundaryRecordFor = (kind: BoundaryKind, ran: AnyFiber | undefined): BoundaryRecord => ({
+    step: stepCount,
+    kind,
+    activeFiber: boundaryActiveId(),
+    runnableFibers: runnableAtDecision,
+    chosenFiber: ranId(ran),
+    preempted: boundaryPreempted(ranId(ran), boundaryActiveId()),
+  })
+
+  const recordBoundary = (ran: AnyFiber | undefined): void => {
+    const kind = boundaryForStep
+    if (kind === undefined) return
+    boundaries.push(boundaryRecordFor(kind, ran))
+  }
+
+  const hasLastRan = (): boolean => lastRan !== undefined
+
+  const previousBlocked = (): boolean => hasLastRan() && !ownerPending(lastRan)
+
+  const recordDecision = (input: StepInput): void => {
     if (exploring) decisions.push(input.choice)
+  }
+
+  const recordStep = (input: StepInput, task: Task, ran: AnyFiber | undefined): void => {
+    const record = stepRecord(input, task, ran, boundaryForStep, previousBlocked())
+    checkTrace(record)
+    recordBoundary(ran)
+    lastRan = ran
+    steps.push(record)
+    recordDecision(input)
   }
 
   const queuedResumeOf = (fiber: AnyFiber) => (task: Task): boolean => task.external && task.owner === fiber
@@ -836,6 +985,9 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   }
 
   const step = (input: StepInput): void => {
+    clearBoundary()
+    captureBoundary()
+    runnableAtDecision = runnableIds(pending)
     const task = takeTask(input.choice)
     if (task === undefined) {
       throw new Error(`effect-sim-kernel: no task to run at decision ${input.choice}`)
@@ -867,6 +1019,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     pending,
     fibers,
     steps,
+    boundaries,
     decisions,
     escapes,
     scheduler,
@@ -884,6 +1037,9 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     get running(): boolean {
       return running
     },
+    get traceDivergence(): TraceDivergence | undefined {
+      return traceDivergence
+    },
     start: (started: AnyFiber): void => {
       root = started
       running = true
@@ -897,6 +1053,11 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     resumeExternally: (fiber: AnyFiber, run: () => void): void => {
       pending.push({ owner: fiber, run, external: true, forced: false, step: stepCount })
       scheduledInStep++
+    },
+    noteYieldBoundary: (kind: BoundaryKind, fiber: AnyFiber): void => {
+      if (phase !== 'step') return
+      yieldBoundary = kind
+      yieldBoundaryFiber = fiber
     },
     firstEvaluation: (fiber: AnyFiber): boolean => {
       if (evaluated.has(fiber)) return false

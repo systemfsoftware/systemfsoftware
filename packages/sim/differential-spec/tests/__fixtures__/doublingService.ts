@@ -1,4 +1,6 @@
 import { Effect } from 'effect'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import * as HttpClient from 'effect/http/HttpClient'
 
 type Field<A = unknown> = A
 
@@ -70,4 +72,9 @@ export const doublingService: Effect.Effect<DoublingService> = Effect.callback<D
 
 /** Asks the service over a real HTTP request for twice `x`. */
 export const askedToDouble = (origin: string) => (x: number): Effect.Effect<number> =>
-  Effect.promise(() => fetch(`${origin}/?x=${x}`).then((response) => response.text()).then(Number))
+  HttpClient.get(`${origin}/?x=${x}`).pipe(
+    Effect.flatMap((response) => response.text),
+    Effect.map(Number),
+    Effect.orDie,
+    Effect.provide(FetchHttpClient.layer),
+  )

@@ -55,7 +55,7 @@ const stateFits = <S>(state: Schema.Codec<S>, initial: S): Effect.Effect<void, M
   Effect.mapError(
     Schema.decodeUnknownEffect(state)(initial),
     () =>
-      new ModelError({
+      ModelError.make({
         problem: 'state-schema-mismatch',
         detail: 'the model initial state does not satisfy the declared state Schema',
       }),

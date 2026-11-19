@@ -28,7 +28,8 @@
     "map": "deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --frozen --allow-read=. --allow-run=git scripts/tools/workspace-map.ts",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
     "pack:all": "node scripts/tools/pack-all.mjs",
-    "prepare": "concurrently \"husky\" \"effect-tsgo patch --oxlint --no-typescript --skip-missing\""
+    "prepare": "concurrently \"husky\" \"effect-tsgo patch --oxlint --no-typescript --skip-missing\"",
+    "tsgo:patch": "effect-tsgo patch --oxlint --no-typescript --skip-missing"
   },
   "devDependencies": {
     "@commitlint/cli": "^21",

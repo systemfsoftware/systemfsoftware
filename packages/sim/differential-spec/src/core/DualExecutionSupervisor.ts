@@ -84,7 +84,7 @@ const judgementOf = <OutputA, OutputB, E>(
 ): DualExitJudgement =>
   decisionOf(
     judgeDualExits(
-      new JudgeDualExits({
+      JudgeDualExits.make({
         bothSucceeded: bothSucceeded(exits),
         oracleHeld: oracleHeldOf(exits, oracle),
         failuresMatch: failuresMatch(exits),
@@ -147,7 +147,7 @@ const disagreementOf = <OutputA, OutputB, E>(
 ): Attempt<OutputA, OutputB, E> | undefined => {
   const selection = decisionOf(
     selectDisagreementAttempt(
-      new SelectDisagreementAttempt({
+      SelectDisagreementAttempt.make({
         orderDisagrees: disagrees(runs.order, oracle),
         seededDisagrees: disagrees(runs.seeded, oracle),
       }),
@@ -197,7 +197,7 @@ const disparate = (report: string): DifferentialReport => ({ holds: false, repor
 const reportCheckImpl = (report: DifferentialReport, expect: Expect): Check =>
   report.holds
     ? expect(report, report.report).toEqual(held)
-    : Effect.die(new DisparityFailure({ report: report.report }))
+    : Effect.die(DisparityFailure.make({ report: report.report }))
 
 export const reportCheck: {
   (expect: Expect): (report: DifferentialReport) => Check

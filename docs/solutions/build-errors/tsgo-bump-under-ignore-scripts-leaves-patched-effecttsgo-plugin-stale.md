@@ -88,7 +88,25 @@ installs with `--ignore-scripts` on purpose (other `prepare` hooks have
 mutated `dist` mid-gate and backed up gigabytes of compiler binaries; see
 `pack-lifecycle-hooks-mutate-dist-mid-gate.md` and the guard in
 `scripts/tools/patch-tsgo-if-needed.mjs`). Re-enabling scripts to fix one
-stale plugin would re-open those failures. The cheapest durable form is this
-record plus re-patching as a named step of every Effect-line bump, which the
-bump's own verification (`turbo run lint`) already forces to happen before
-push.
+stale plugin would re-open those failures.
+
+The durable form is a named turbo prerequisite: the root `tsgo:patch` script
+runs `effect-tsgo patch --oxlint --no-typescript --skip-missing` (hash-idempotent
+for the oxlint binding, `oxlint-dts`, and `oxlint-tsgolint`), and both `lint`
+and `lint:tsgo` declare `//#tsgo:patch` in `dependsOn`. Every lint run on a
+fresh `--ignore-scripts` worktree therefore self-heals before it can fail with
+a stale plugin; no lifecycle scripts are enabled and the lint gate itself is
+untouched.
+
+`patch-tsgo-if-needed.mjs` (the native-`tsc` half of the patch) is deliberately
+NOT part of the prerequisite. Patching `tsc` activates the compiler-side Effect
+diagnostics configured in `packages/toolchain/tsconfig/effect.json`
+(`TS377xxx`), which are dormant in every environment that skips the patch —
+including CI, whose install runs `prepare` and that prepare passes
+`--no-typescript`. Under tsgo 0.70.0 those dormant rules report about 1,970
+findings across 22 packages (1,663 `strictBooleanExpressions`, 137
+`newSchemaClass`, and smaller counts of `asyncFunction`, `deterministicKeys`,
+`nodeBuiltinImport`, `processEnv`, …), so activating the compiler gate is an
+adoption program of its own — the `tsgoRulesPendingAdoption` mechanism exists
+for exactly this at the oxlint level — and must be ruled on before the `tsc`
+patch runs automatically.
