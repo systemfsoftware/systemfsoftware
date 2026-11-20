@@ -12,7 +12,7 @@ done
 # The alternation must be anchored per-branch: the earlier
 # `^(repos/|subtrees\.toml)$` matched the literal string `repos/` and therefore
 # never skipped a single vendored path (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
+if git -c core.quotePath=false diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
   # Staged-only and cheap: refuse unresolved conflict markers before any formatter runs.
   .husky/check-conflict-markers || exit 1
 
