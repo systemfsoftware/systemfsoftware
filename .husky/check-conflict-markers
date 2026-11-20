@@ -6,12 +6,24 @@
 # Reads the staged blobs (the index), not the working tree, and skips binaries.
 set -eu
 
-candidates=$(git grep --cached -I -l -E '^<<<<<<< ' -- . ':(exclude)repos' 2>/dev/null || true)
+# quotePath=false keeps non-ASCII names literal so `git show` can find them.
+# git grep exits 1 for "no match" and above 1 for a real failure, which fails closed.
+grep_status=0
+candidates=$(git -c core.quotePath=false grep --cached -I -l -E '^<<<<<<< ' -- . ':(exclude)repos') || grep_status=$?
+if [ "$grep_status" -gt 1 ]; then
+  echo "pre-commit: conflict-marker scan failed (git grep exit $grep_status)." >&2
+  exit 1
+fi
 [ -n "$candidates" ] || exit 0
 
 status=0
 while IFS= read -r file; do
-  if git show ":$file" | awk '
+  if ! content=$(git show ":$file"); then
+    echo "pre-commit: cannot read staged file: $file" >&2
+    status=1
+    continue
+  fi
+  if printf '%s\n' "$content" | awk '
     state == 0 && /^<<<<<<< / { state = 1; next }
     state == 1 && /^=======\r?$/ { state = 2; next }
     state == 2 && /^>>>>>>> / { found = 1; exit }

@@ -43,3 +43,13 @@ tags:
   `>>>>>>>`) in one staged file. A bare `=======` is a setext heading underline and a lone
   marker-like line is prose; matching either rejects ordinary files.
 - Keep typecheck, tests and builds out of local hooks; CI is the gate.
+
+## Escape hatches and limits
+
+- Humans who split hunks with `git add -p`: `--no-stash` stages the unstaged hunks of any
+  file the formatter touches. Commit such files with the formatter already applied, or format
+  and stage the whole file first, so the formatter has nothing to rewrite.
+- A full conflict block at column 0 is rejected even in docs and fixtures. Tests that need
+  markers should build the text at runtime instead of committing it.
+- Read paths with `core.quotePath=false`; the default quotes non-ASCII names and a later
+  `git show` on the quoted name fails. A failed read must fail the commit, never pass it.
