@@ -22,8 +22,8 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProvidedContext, UserConsoleLog } from 'vitest'
-import { startVitest } from 'vitest/node'
-import type { SerializedError, TestCase, TestModule } from 'vitest/node'
+import { BaseSequencer, startVitest } from 'vitest/node'
+import type { SerializedError, TestCase, TestModule, TestSpecification } from 'vitest/node'
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
@@ -198,6 +198,16 @@ export interface ProbeRunOptions {
   /** Leaves the seed store on for the nested run. Off by default, because a probe run persists no store (KTD6);
    * a scenario that asks for recording keeps its own budget and gets the built-in `record` default. */
   readonly record?: boolean | undefined
+  readonly isolate?: boolean | undefined
+  readonly fileParallelism?: boolean | undefined
+  readonly maxWorkers?: number | undefined
+  readonly sequencer?: typeof BaseSequencer | undefined
+}
+
+export class ModuleIdSequencer extends BaseSequencer {
+  override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    return [...files].sort((a, b) => a.moduleId.localeCompare(b.moduleId))
+  }
 }
 
 /** Every nested-run failure carries this: what failed, and why. */
@@ -423,8 +433,12 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                 sequence: {
                   shuffle: options.shuffle ?? false,
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
+                  ...(options.sequencer === undefined ? {} : { sequencer: options.sequencer }),
                 },
                 provide: recordingBudgetOf(options.provide, options.record),
+                ...(options.isolate === undefined ? {} : { isolate: options.isolate }),
+                ...(options.fileParallelism === undefined ? {} : { fileParallelism: options.fileParallelism }),
+                ...(options.maxWorkers === undefined ? {} : { maxWorkers: options.maxWorkers }),
                 ...(options.env === undefined ? {} : { env: { ...options.env } }),
               },
               {
