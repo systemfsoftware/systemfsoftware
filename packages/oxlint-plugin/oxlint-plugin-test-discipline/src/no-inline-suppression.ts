@@ -8,8 +8,7 @@ import { scanSuppressions, type Suppression } from './rules/suppression-scan.js'
 /**
  * `no-inline-suppression [file...]` — fails when any scanned file holds a comment opening with an
  * oxlint/eslint disable directive, `@ts-expect-error`, `@ts-ignore` or `@ts-nocheck`. With no arguments it scans the git-tracked
- * sources under the working directory, except the repository's vendored `repos/` tree, which is read-only code another
- * project owns. It reads no configuration, and no comment can exempt a file:
+ * sources under the working directory. It reads no configuration, and no comment can exempt a file:
  * oxlint obeys a disable directive even for a JS plugin rule that names it, so this check runs outside
  * oxlint.
  *
@@ -18,16 +17,13 @@ import { scanSuppressions, type Suppression } from './rules/suppression-scan.js'
 
 const SCANNED_PATHSPECS = ['*.ts', '*.tsx', '*.mts', '*.cts', '*.js', '*.jsx', '*.mjs', '*.cjs'] as const
 
-/** Vendored subtrees sit under the repository root's `repos/`: code this repository reads but never edits. */
-const VENDORED_PATHSPEC = ':(top,exclude)repos/'
-
 const run = promisify(execFile)
 
 /** A file git still tracks but the working tree has deleted: nothing in it can suppress anything. */
 const isMissing = (error: unknown): boolean => error instanceof Error && 'code' in error && error.code === 'ENOENT'
 
 const trackedSources = async (): Promise<readonly string[]> => {
-  const { stdout } = await run('git', ['ls-files', '-z', '--', ...SCANNED_PATHSPECS, VENDORED_PATHSPEC], {
+  const { stdout } = await run('git', ['ls-files', '-z', '--', ...SCANNED_PATHSPECS], {
     maxBuffer: 1024 * 1024 * 1024,
   })
   return stdout.split('\0').filter((path) => path.length > 0)
