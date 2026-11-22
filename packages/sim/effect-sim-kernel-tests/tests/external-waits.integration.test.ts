@@ -3,6 +3,7 @@ import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Layer } from 'effect'
 
 import { fileReadProgram, hostTimerProgram, makeHostFiles, removeHostFiles } from './__fixtures__/externalFixtures.js'
+import { nodeHostResources } from './__fixtures__/hostFixtures.js'
 import { blockedFailureOf, completedRunOf, completedValueOf, escapeOf } from './__fixtures__/kernelFixtures.js'
 import { answeringService, askAfterConnecting } from './__fixtures__/socketFixtures.js'
 
@@ -26,7 +27,10 @@ Feature('Waiting on the host outside the controlled schedule')
         Given('a real report file on the host')('files', () => realReport),
         When('a program reads the report under the default rules')(
           'run',
-          (s) => Effect.promise(() => Kernel.run(fileReadProgram(s.files.report), { external: 'fail' })),
+          (s) =>
+            Effect.promise(() =>
+              Kernel.run(fileReadProgram(s.files.report), { external: 'fail', host: nodeHostResources })
+            ),
         ),
         Then('the run fails, naming a wait on a file')((s, expect) => expect(blockedFailureOf(s.run).on).toBe('File')),
       ),
@@ -38,7 +42,10 @@ Feature('Waiting on the host outside the controlled schedule')
         Given('a real report file on the host')('files', () => realReport),
         When('a program reads the report with host waits allowed')(
           'run',
-          (s) => Effect.promise(() => Kernel.run(fileReadProgram(s.files.report), { external: 'await' })),
+          (s) =>
+            Effect.promise(() =>
+              Kernel.run(fileReadProgram(s.files.report), { external: 'await', host: nodeHostResources })
+            ),
         ),
         Then('the program gets the report back and every step keeps the default order')((s, expect) => {
           const steps = completedRunOf(s.run).steps

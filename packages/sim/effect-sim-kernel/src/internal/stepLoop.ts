@@ -19,6 +19,7 @@ import { describeSuspended, newResources, resourceCounts, waitKindOf } from './d
 import type { AnyFiber, ResourceCounts, SuspendedFiber, WaitKind } from './deadlock.js'
 import { installEscapeRecorder } from './escapeRecorder.js'
 import type { Escape, HostTimer, TimerName } from './escapeRecorder.js'
+import { type HostResources, type HostResourceWatch, processResources } from './hostResources.js'
 import { makeKernel } from './kernel.js'
 import type {
   BoundaryRecord,
@@ -143,6 +144,11 @@ export interface RunOptions {
    */
   readonly external?: 'fail' | 'await'
   /**
+   * Where the run reads the host resources alive while it stalls. The default reads the process's own list,
+   * which Node 26 leaves pending file requests out of; pass `fileRequestHooks(createHook)` there.
+   */
+  readonly host?: HostResources
+  /**
    * `'body'` keeps every decision before `beginExploration` on Effect's order,
    * so a harness's own setup is never explored (R15).
    */
@@ -171,6 +177,7 @@ interface Drive<A, E> {
   readonly root: AnyFiber<A, E>
   readonly options: RunOptions
   readonly before: ResourceCounts
+  readonly watch: HostResourceWatch
   readonly guard: number
   readonly hostImmediate: HostTimer
 }
@@ -239,8 +246,10 @@ const runawayOf = (kernel: Kernel, options: RunOptions, guard: number): RunFailu
   return { ...runOutcomeTags.runaway, steps: kernel.steps.length, pending: kernel.pending.length }
 }
 
-const quiescenceFailure = (kernel: Kernel, before: ResourceCounts): RunFailure => {
-  const resources = newResources(before)
+const countsNow = (watch: HostResourceWatch): ResourceCounts => resourceCounts(watch.names())
+
+const quiescenceFailure = (kernel: Kernel, before: ResourceCounts, watch: HostResourceWatch): RunFailure => {
+  const resources = newResources(before, countsNow(watch))
   if (resources.length === 0) {
     return { ...runOutcomeTags.deadlock, suspended: describeSuspended(kernel.fibers) }
   }
@@ -266,7 +275,8 @@ const hostCheckYield = <A, E>(state: Drive<A, E>): Promise<void> => {
 const hostYield = <A, E>(state: Drive<A, E>): Promise<void> =>
   hostCheckYield(state).then(() => drain(DEFAULT_STEP_TURNS)).then(() => drain(DEFAULT_QUIESCENCE_TURNS))
 
-const awaitedResources = <A, E>(state: Drive<A, E>): ReadonlyArray<string> => newResources(state.before)
+const awaitedResources = <A, E>(state: Drive<A, E>): ReadonlyArray<string> =>
+  newResources(state.before, countsNow(state.watch))
 
 const waitsRemain = (resources: ReadonlyArray<string>): boolean =>
   resources.some((resource) => waitKindOf([resource]) === 'File' || waitKindOf([resource]) === 'Socket')
@@ -277,7 +287,7 @@ const loweredBaseline = (
 ): ResourceCounts => new Map([...before].map(([name, count]) => [name, Math.min(count, now.get(name) ?? 0)]))
 
 const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
-  drive({ ...state, before: loweredBaseline(state.before, resourceCounts()) })
+  drive({ ...state, before: loweredBaseline(state.before, countsNow(state.watch)) })
 
 const waitedOutcome = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => revivedAfterHost(state, 0)
 
@@ -292,7 +302,7 @@ const revivedByResources = <A, E>(state: Drive<A, E>, waited: number): Promise<R
 
 const revivedAfterLimit = <A, E>(state: Drive<A, E>, waited: number): Promise<RunResult<A, E> | undefined> =>
   waited > MAX_HOST_WAITS
-    ? Promise.resolve(failedOn<A, E>(state.kernel, quiescenceFailure(state.kernel, state.before)))
+    ? Promise.resolve(failedOn<A, E>(state.kernel, quiescenceFailure(state.kernel, state.before, state.watch)))
     : revivedAfterHost(state, waited + 1)
 
 const waitForExternal = <A, E>(state: Drive<A, E>, _excuse: RunFailure): Promise<RunResult<A, E> | undefined> =>
@@ -312,7 +322,7 @@ const stallByExternal = <A, E>(state: Drive<A, E>, excuse: RunFailure): Promise<
 const classifyStall = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> =>
   seamOffersProgress(state.options.onQuiescent)
     ? Promise.resolve(undefined)
-    : stallByExternal(state, quiescenceFailure(state.kernel, state.before))
+    : stallByExternal(state, quiescenceFailure(state.kernel, state.before, state.watch))
 
 const seamOrFailure = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => classifyStall(state)
 
@@ -468,6 +478,7 @@ const RUN_OPTION_KEYS: ReadonlyArray<string> = [
   'expectTrace',
   'explore',
   'external',
+  'host',
   'interrupt',
   'maxSteps',
   'onQuiescent',
@@ -494,6 +505,16 @@ const isProgram = (candidate: KernelField): boolean => !isRunOptions(candidate)
  * taken, and a per-step record of which fiber ran. A run started while one is
  * active queues behind it, so two runs never share the global hooks.
  */
+// A throw before the drive attaches its own cleanup still ends the run, so no global hook outlives it.
+const endingRun = <T>(started: () => Promise<T>, end: () => void): Promise<T> => {
+  try {
+    return started().finally(end)
+  } catch (error) {
+    end()
+    return Promise.reject(error)
+  }
+}
+
 const lockedRun = <A, E>(
   program: Effect.Effect<A, E>,
   options: RunOptions,
@@ -507,19 +528,24 @@ const lockedRun = <A, E>(
     kernel.escapes.push(escape)
   })
   const userSeam = options.onQuiescent
-  const root = Effect.runFork(
-    Effect.provideService(program, Clock.Clock, kernel.clocks.clock),
-    { scheduler: kernel.scheduler },
-  )
-  kernel.start(root)
-  return drive<A, E>({
-    kernel,
-    root,
-    options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
-    before: resourceCounts(),
-    guard: 0,
-    hostImmediate: recorder.hostImmediate,
-  }).finally(() => {
+  const watch = (options.host ?? processResources).begin()
+  return endingRun(() => {
+    const root = Effect.runFork(
+      Effect.provideService(program, Clock.Clock, kernel.clocks.clock),
+      { scheduler: kernel.scheduler },
+    )
+    kernel.start(root)
+    return drive<A, E>({
+      kernel,
+      root,
+      options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
+      before: countsNow(watch),
+      watch,
+      guard: 0,
+      hostImmediate: recorder.hostImmediate,
+    })
+  }, () => {
+    watch.end()
     recorder.restore()
     kernel.release()
     release()

@@ -4,6 +4,7 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Effect, FileSystem, Layer, Path, Schema } from 'effect'
 
 import { passReportOf } from './__fixtures__/checkReports.js'
+import { nodeHostResourcesLayer } from './__fixtures__/hostResources.js'
 import { releasingLock, successPathLock, tempFileReport } from './__fixtures__/Resources.js'
 
 const Feature = makeFeature({ it })
@@ -78,7 +79,7 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
 
     scenario(
       'A file created before its removal is registered is left behind when the holder stops in between',
-      { scenarioLayer: Layer.merge(NodeFileSystem.layer, Path.layer) },
+      { scenarioLayer: Layer.mergeAll(NodeFileSystem.layer, Path.layer, nodeHostResourcesLayer) },
       Gherkin.Do.pipe(
         Given('a program that creates a report file first and registers its removal only after a later step succeeds')(
           'holder',

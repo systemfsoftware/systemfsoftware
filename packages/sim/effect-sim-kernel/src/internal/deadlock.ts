@@ -5,6 +5,7 @@
  * the frames it is suspended in.
  */
 import type { Fiber } from 'effect'
+import { dual } from 'effect/Function'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -23,25 +24,12 @@ export interface SuspendedFiber {
 /** @internal */
 export type AnyFiber<A = unknown, E = unknown> = Fiber.Fiber<A, E>
 
-interface HostProcess {
-  readonly getActiveResourcesInfo: () => ReadonlyArray<string>
-}
-
 // The innermost frames are the ones that name the wait.
 const FRAME_DEPTH = 6
 const NO_FRAMES: ReadonlyArray<string> = []
-const NO_RESOURCES: ReadonlyArray<string> = []
 
 const isHostObject = (candidate: Field): candidate is object => typeof candidate === 'object'
 const isFrameList = (candidate: Field): candidate is ReadonlyArray<Field> => Array.isArray(candidate)
-const isHostProcess = (candidate: Field): candidate is HostProcess => isHostObject(candidate)
-
-const hostProcess = (): Field => Reflect.get(globalThis, 'process')
-
-const resourceNames = (): ReadonlyArray<string> => {
-  const host: Field = hostProcess()
-  return isHostProcess(host) ? host.getActiveResourcesInfo() : NO_RESOURCES
-}
 
 const bump = (counts: Map<string, number>, resource: string): void => {
   counts.set(resource, (counts.get(resource) ?? 0) + 1)
@@ -52,9 +40,9 @@ export type ResourceCounts = ReadonlyMap<string, number>
 
 /** A snapshot of the process resources alive right now, by resource kind. */
 /** @internal */
-export const resourceCounts = (): ResourceCounts => {
+export const resourceCounts = (names: ReadonlyArray<string>): ResourceCounts => {
   const counts = new Map<string, number>()
-  for (const resource of resourceNames()) bump(counts, resource)
+  for (const resource of names) bump(counts, resource)
   return counts
 }
 
@@ -72,11 +60,14 @@ const appendExtra = (
 
 /** Resource kinds that appeared since `before`, as `"<kind> x<count>"` entries. */
 /** @internal */
-export const newResources = (before: ResourceCounts): ReadonlyArray<string> => {
+export const newResources: {
+  (before: ResourceCounts, now: ResourceCounts): ReadonlyArray<string>
+  (now: ResourceCounts): (before: ResourceCounts) => ReadonlyArray<string>
+} = dual(2, (before: ResourceCounts, now: ResourceCounts): ReadonlyArray<string> => {
   const appeared: Array<string> = []
-  for (const entry of resourceCounts()) appendExtra(appeared, before, entry)
+  for (const entry of now) appendExtra(appeared, before, entry)
   return appeared
-}
+})
 
 const SOCKET = /Socket|TCP|UDP|Pipe|GetAddrInfo/u
 const FILE = /FS|File/u
