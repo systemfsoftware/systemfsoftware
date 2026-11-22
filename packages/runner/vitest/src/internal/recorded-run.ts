@@ -111,7 +111,8 @@ const capturingRuntime = (captured: Array<CapturedProperty>, ledger: FileLedger)
     captured.push({ name, program })
   },
   provide: (effect) => effect,
-  ledger,
+  ledgerFor: () => ledger,
+  filepath: () => 'recorded-run',
 })
 
 const taskOfRecorded = (
