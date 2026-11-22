@@ -20,7 +20,7 @@ Feature('Rerunning a refuted property, and seeding its runs from the commit')
           () => replayRunOutput({ fixture: 'replay-config', file: 'refuted.probe.ts' }),
         ),
         Then('the reprinted line names the config file after the vitest run command')((s, expect) =>
-          expect(s.output).toContain(rerunWith('vitest.config.ts'))
+          expect(s.output).toContain(rerunWith('tests/__fixtures__/replay-config/vitest.probe.config.ts'))
         ),
       ),
     )
@@ -44,7 +44,7 @@ Feature('Rerunning a refuted property, and seeding its runs from the commit')
           () => replayRunOutput({ fixture: 'replay-subroot', file: 'refuted.probe.ts' }),
         ),
         Then('the path is the one from the package directory, not from the test root')((s, expect) =>
-          expect(s.output).toContain(rerunWith('vitest.config.ts'))
+          expect(s.output).toContain(rerunWith('tests/__fixtures__/replay-subroot/vitest.probe.config.ts'))
         ),
       ),
     )
@@ -57,11 +57,11 @@ Feature('Rerunning a refuted property, and seeding its runs from the commit')
             replayRunOutput({
               fixture: 'replay-spaced',
               file: 'refuted.probe.ts',
-              config: 'my config/vitest.config.ts',
+              config: 'my config/vitest.probe.config.ts',
             }),
         ),
         Then('the path is one quoted word')((s, expect) =>
-          expect(s.output).toContain(rerunWith("'my config/vitest.config.ts'"))
+          expect(s.output).toContain(rerunWith("'tests/__fixtures__/replay-spaced/my config/vitest.probe.config.ts'"))
         ),
       ),
     )
@@ -75,7 +75,7 @@ Feature('Rerunning a refuted property, and seeding its runs from the commit')
           () => replayRunOutput({ fixture: 'replay-projects', file: 'beta/refuted.probe.ts' }),
         ),
         Then("the line carries beta's config, not the root config")((s, expect) =>
-          expect(s.output).toContain(rerunWith('beta/vitest.config.ts'))
+          expect(s.output).toContain(rerunWith('tests/__fixtures__/replay-projects/beta/vitest.probe.config.ts'))
         ),
       ),
     )

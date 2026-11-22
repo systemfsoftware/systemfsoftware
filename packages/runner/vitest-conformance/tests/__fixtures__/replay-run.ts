@@ -9,7 +9,7 @@ export interface ReplayRun {
   readonly fixture: string
   /** The test file filter. */
   readonly file: string
-  /** The config file to load with `--config`, relative to the fixture; found from the directory when absent. */
+  /** The config file to load with `--config`, relative to the fixture; `vitest.probe.config.ts` when absent. */
   readonly config?: string
   /** Environment variables on top of one that decides no tier (no `CI`, `AGENT` or Stryker variable). */
   readonly env?: Readonly<Record<string, string>>
@@ -29,7 +29,7 @@ const outputOfExit = ({ stdout = '', stderr = '' }: { readonly stdout?: string; 
 const runOutputOf = (run: ReplayRun): Promise<string> =>
   execFileAsync(
     vitestBin,
-    ['run', ...(run.config === undefined ? [] : ['--config', run.config]), run.file],
+    ['run', '--config', run.config ?? 'vitest.probe.config.ts', run.file],
     { cwd: fileURLToPath(new URL(`./${run.fixture}/`, import.meta.url)), env: { ...baseEnvironment, ...run.env } },
   ).then(({ stdout, stderr }) => `${stdout}${stderr}`, outputOfExit)
 
