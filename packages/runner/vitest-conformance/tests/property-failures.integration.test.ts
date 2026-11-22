@@ -6,8 +6,8 @@ import type { ProvidedContext } from 'vitest'
 import {
   CoverageErrorShape,
   errorOf,
+  type ModuleError,
   NonBooleanErrorShape,
-  type RawError,
   readSeedStore,
   RefutedErrorShape,
   removeSeedStore,
@@ -49,9 +49,9 @@ const seedStoreCleanup = Layer.effectDiscard(
   Effect.addFinalizer(() => Effect.sync(() => removeSeedStore(REPLAY))),
 )
 
-const firstVacuous = (errors: ReadonlyArray<RawError>) =>
+const firstVacuous = (errors: ReadonlyArray<ModuleError>) =>
   Option.getOrThrow(
-    Option.firstSomeOf(errors.map((error) => Schema.decodeUnknownOption(VacuousErrorShape)(error))),
+    Option.firstSomeOf(errors.map((error) => Schema.decodeUnknownOption(VacuousErrorShape)(error.raw))),
   )
 
 Feature('A property failure crosses a real Vitest worker boundary')

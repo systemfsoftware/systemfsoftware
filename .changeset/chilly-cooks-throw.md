@@ -13,4 +13,4 @@
 "@systemfsoftware/trace-taxonomy": none
 ---
 
-Test-tooling dependency update only; no consumer-visible change.
+No consumer-visible package changes.

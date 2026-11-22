@@ -177,10 +177,17 @@ export interface ProbeRun {
   /** Every error the nested run reported, as its reporter exposed it. Empty when no test failed. */
   readonly errors: ReadonlyArray<CapturedError>
   /**
-   * Every error a test module reported at file end, as its reporter exposed it. A module-level `afterAll` throw —
-   * the fork's file-end vacuous verdict — lands here rather than on any test case (KTD8).
+   * Every error a test module reported at file end, as its reporter exposed it, with the file that reported it. A
+   * module-level `afterAll` throw — the fork's file-end vacuous verdict — lands here rather than on any test case (KTD8).
    */
-  readonly moduleErrors: ReadonlyArray<RawError>
+  readonly moduleErrors: ReadonlyArray<ModuleError>
+}
+
+/** One file-end error and the test file whose module reported it. */
+export interface ModuleError {
+  /** The module id Vitest gave the reporting file: its absolute path. */
+  readonly file: string
+  readonly raw: RawError
 }
 
 export interface ProbeRunOptions {
@@ -375,7 +382,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
     const evidenceFiles = options.globs.map(evidenceFilePath)
     const consoleLines: Array<ConsoleLine> = []
     const capturedErrors: Array<CapturedError> = []
-    const moduleErrors: Array<RawError> = []
+    const moduleErrors: Array<ModuleError> = []
     const report = yield* Effect.acquireUseRelease(
       Effect.gen(function*() {
         const workdir = yield* Effect.tryPromise({
@@ -423,7 +430,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                     },
                     onTestModuleEnd: (testModule: TestModule): void => {
                       testModule.errors().forEach((error) => {
-                        moduleErrors.push(error)
+                        moduleErrors.push({ file: testModule.moduleId, raw: error })
                       })
                     },
                   },
