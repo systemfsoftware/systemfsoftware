@@ -4,6 +4,11 @@ set -e
 # the subtrees.toml registration commit does. Anchor the alternation so real
 # paths match — `^repos/$` matches the literal string and no file under it
 # (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
-  pnpm exec commitlint --edit "$1"
+if git -c core.quotePath=false diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
+  # Direct binary: no pnpm boot on every commit message.
+  if [ ! -x ./node_modules/.bin/commitlint ]; then
+    echo "commit-msg: ./node_modules/.bin/commitlint is missing; run pnpm install." >&2
+    exit 1
+  fi
+  ./node_modules/.bin/commitlint --edit "$1"
 fi
