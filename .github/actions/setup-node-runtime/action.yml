@@ -26,6 +26,11 @@ runs:
     - name: Enable Corepack
       shell: bash
       run: corepack enable
+    # turbo.json lists NODE_RUNTIME_VERSION in globalEnv, so every task hash carries the Node release that ran
+    # it. Without it a Node upgrade leaves every hash unchanged and turbo replays results the old Node produced.
+    - name: Record the Node release for Turbo's task hashes
+      shell: bash
+      run: echo "NODE_RUNTIME_VERSION=$(node --version)" >> "$GITHUB_ENV"
     - id: store
       name: The workspace's pnpm store
       shell: bash
