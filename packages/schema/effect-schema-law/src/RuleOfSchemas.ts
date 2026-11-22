@@ -1,7 +1,6 @@
 import { it } from '@systemfsoftware/vitest'
 import {
   Effect,
-  Equal,
   Equivalence,
   Match,
   Option,
@@ -326,15 +325,10 @@ const registerSurvivingLaws = <A, I>(
   registerEncodeLawIfRefused(name, subject, observation.decodeRefused, runs)
 }
 
-const roundTripValueOf = <A, I>(subject: LawSubject<A, I>) => (value: A) => {
+const singleInhabitantVerdict = <A, I>(subject: LawSubject<A, I>, value: A): LawVerdict => {
   const trip = roundTripOf(subject, value)
-  return trip.instance ? trip.back : undefined
+  return { holds: trip.holds, instance: trip.instance }
 }
-
-const singleInhabitantVerdict = <A, I>(subject: LawSubject<A, I>, value: A): LawVerdict => ({
-  holds: Equal.equals(roundTripValueOf(subject)(value), roundTripValueOf(subject)(value)),
-  instance: roundTripOf(subject, value).instance,
-})
 
 const registerSingleInhabitant = <A, I>(name: string, subject: LawSubject<A, I>): void => {
   instancedProp(
