@@ -26,6 +26,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./config": {
+      "@systemfsoftware/source": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.mjs"
+    },
     "./failure": {
       "@systemfsoftware/source": "./src/failure.ts",
       "types": "./dist/failure.d.ts",
@@ -92,6 +97,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./config": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.mjs"
       },
       "./failure": {
         "types": "./dist/failure.d.ts",

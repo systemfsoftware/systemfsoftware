@@ -11,13 +11,10 @@ import type * as Effect from 'effect/Effect'
 import type * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import * as V from 'vitest'
-import type { Plugin } from 'vitest/config'
 import type { Asserted, Check, Checks, Expect } from './internal/checks.js'
-import { ambientSource, budgetOf, type BudgetSource } from './internal/property/budget.js'
-import { checkDefaultsKey, type PropertyBudget, type ProvidedCheckDefaults } from './internal/property/defaults.js'
+import { checkDefaultsKey, type ProvidedCheckDefaults } from './internal/property/defaults.js'
 import type * as Engine from './internal/property/engine.js'
 import type * as Property from './internal/property/kinds.js'
-import { replayPlugin } from './internal/property/replay-reporter.js'
 import type {
   EffectLaneRefusal,
   NoCheckRefusal,
@@ -534,27 +531,4 @@ export {
  *
  * @since 4.0.0
  */
-export type { BudgetSource } from './internal/property/budget.js'
 export type { PropertyBudget } from './internal/property/defaults.js'
-
-/**
- * The property-check entry a Vitest config provides under `test.provide`, keyed by the name the runner reads:
- * the tier's runs, and off the local tier (CI, or a Stryker worker's mutation tier) a seed derived from the checked-out commit (so one
- * commit draws the same cases wherever it runs) with no seed-store writes. A local or agent run gets 100 runs, no seed.
- * Pass a `source` of `env` and `commit` readers to decide from values other than `process.env` and the checked-out git commit.
- *
- * @since 4.2.0
- */
-export const propertyCheck = (
-  source: BudgetSource = ambientSource,
-): { readonly '@systemfsoftware/vitest:property-check': PropertyBudget } => ({
-  [checkDefaultsKey]: budgetOf(source),
-})
-
-/**
- * A Vite plugin, listed in a Vitest config's `plugins`, that reprints a refuted property's rerun line with
- * `--config <the config file the run loaded>`, so the rerun draws the budget the failing run drew.
- *
- * @since 4.2.0
- */
-export const propertyReplay: () => Plugin = replayPlugin

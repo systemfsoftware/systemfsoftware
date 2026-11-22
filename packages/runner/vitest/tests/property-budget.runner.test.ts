@@ -1,4 +1,5 @@
-import { it, propertyCheck, vi } from '@systemfsoftware/vitest'
+import { it, vi } from '@systemfsoftware/vitest'
+import { propertyCheck } from '@systemfsoftware/vitest/config'
 
 const KEY = '@systemfsoftware/vitest:property-check'
 const NO_COMMIT = (): string => {

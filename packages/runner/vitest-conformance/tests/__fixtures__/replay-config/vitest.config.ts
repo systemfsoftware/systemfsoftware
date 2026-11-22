@@ -1,4 +1,4 @@
-import { propertyReplay } from '@systemfsoftware/vitest'
+import { propertyReplay } from '@systemfsoftware/vitest/config'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({

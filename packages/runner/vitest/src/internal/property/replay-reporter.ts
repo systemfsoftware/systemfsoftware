@@ -1,41 +1,52 @@
 /**
- * @internal A Vitest plugin that reprints a refuted property's rerun line with the config file the run loaded, so a
- * rerun from the line draws the same budget instead of the defaults of a config-less run.
+ * @internal A Vitest plugin that reprints a refuted property's rerun line with the config file of the project that ran
+ * the test, so a rerun from the line draws the same budget instead of the defaults of a config-less run.
  */
 import type { Plugin } from 'vitest/config'
 import type { Reporter, TestCase, Vitest } from 'vitest/node'
 
+const fs = () => process.getBuiltinModule('node:fs')
+const path = () => process.getBuiltinModule('node:path')
+
 const RERUN = /^(\s*(?:CONFORMANCE_REPLAY="[^"]*" )?pnpm --filter \S+ exec vitest run )(.*)$/u
 
-type Rewrite = (line: string) => ReadonlyArray<string>
+const PLAIN_PATH = /^[\w./@+-]+$/u
 
-const withConfig = (configFile: string): Rewrite => (line) => {
+const shellQuoted = (path: string): string => PLAIN_PATH.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`
+
+const withConfig = (configArg: string) => (line: string): ReadonlyArray<string> => {
   const match = RERUN.exec(line)
-  return match === null ? [] : [`${match[1]}--config ${configFile} ${match[2]}`.trim()]
+  return match === null ? [] : [`${match[1]}--config ${configArg} ${match[2]}`.trim()]
 }
 
-const withoutConfig: Rewrite = () => []
+const isPackageRoot = (dir: string): boolean =>
+  fs().existsSync(path().join(dir, 'package.json')) || path().dirname(dir) === dir
 
-const errorsOf = (testCase: TestCase) => testCase.result().errors ?? []
+const packageRootOf = (dir: string): string => isPackageRoot(dir) ? dir : packageRootOf(path().dirname(dir))
+
+// The rerun line runs through `pnpm --filter <package> exec`, from the directory of the package that owns the test.
+const configArgsOf = (testCase: TestCase): ReadonlyArray<string> => {
+  const configFile = testCase.project.vite.config.configFile
+  return configFile === undefined
+    ? []
+    : [shellQuoted(path().relative(packageRootOf(path().dirname(testCase.module.moduleId)), configFile))]
+}
 
 const textLines = (error: { readonly message: string; readonly stack?: string | undefined }): ReadonlyArray<string> =>
   [error.message, error.stack].join('\n').split('\n')
 
-const rewrittenLines = (rewrite: Rewrite, testCase: TestCase): ReadonlyArray<string> =>
-  testCase.result().state === 'failed' ? errorsOf(testCase).flatMap(textLines).flatMap(rewrite) : []
+const errorsOf = (testCase: TestCase) => testCase.result().errors ?? []
 
-const rewriteOf = (vitest: Vitest): Rewrite => {
-  const configFile = vitest.vite.config.configFile
-  return configFile === undefined
-    ? withoutConfig
-    : withConfig(process.getBuiltinModule('node:path').relative(vitest.config.root, configFile))
-}
+const failedLines = (testCase: TestCase): ReadonlyArray<string> =>
+  testCase.result().state === 'failed' ? errorsOf(testCase).flatMap(textLines) : []
+
+const rewrittenLines = (testCase: TestCase): ReadonlyArray<string> =>
+  configArgsOf(testCase).flatMap((configArg) => failedLines(testCase).flatMap(withConfig(configArg)))
 
 const replayWithLoadedConfig = (vitest: Vitest): Reporter => {
   const lines = new Set<string>()
-  const rewrite = rewriteOf(vitest)
   return {
-    onTestCaseResult: (testCase) => rewrittenLines(rewrite, testCase).forEach((line) => lines.add(line)),
+    onTestCaseResult: (testCase) => rewrittenLines(testCase).forEach((line) => lines.add(line)),
     onTestRunEnd: () => {
       if (lines.size === 0) return
       vitest.logger.log(

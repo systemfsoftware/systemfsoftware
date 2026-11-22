@@ -11,11 +11,9 @@ export type BudgetEnvironment = Readonly<Record<string, string | undefined>>
 /** @internal The seed a commit names: its first eight hex digits, and 1 where those read as 0 or are not hex. */
 export const seedOfCommit = (sha: string): number => Number.parseInt(sha.slice(0, 8), 16) || 1
 
-/** @internal The checked-out commit, read from git. Node only, and loaded on demand so the entry stays importable elsewhere. */
-export const gitHead = (): string => {
-  const childProcess = process.getBuiltinModule('node:child_process')
-  return childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-}
+/** @internal The checked-out commit, read from git. */
+export const gitHead = (): string =>
+  process.getBuiltinModule('node:child_process').execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 
 /** @internal Where a budget reads its tier and its commit from. */
 export interface BudgetSource {
