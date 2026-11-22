@@ -32,7 +32,7 @@ When a run stalls, the kernel decides whether it waits on the host (a timer, a f
 ## Symptoms
 
 - On Node 24 an in-flight `fs.readFile` plus `fs.promises.readFile` lists `["FSReqCallback","FSReqPromise", ...]`. On Node 26 the same moment lists neither; `GetAddrInfoReqWrap`, `Timeout` and `Immediate` are still listed.
-- `async_hooks` still sees the requests on Node 26: `init` fires with `FSREQCALLBACK` (both callback and promise reads use it on Node 26; Node 24 uses `FSREQPROMISE` for promise reads).
+- `async_hooks` still sees the requests on Node 26: `init` fires with `FSREQCALLBACK` or `FSREQPROMISE`. Node 26 issues `fs.promises.readFile` through `FSREQCALLBACK` and other promise calls such as `stat` through `FSREQPROMISE`, so the source tracks both.
 
 ## What Didn't Work
 

@@ -69,7 +69,7 @@ import { createHook } from 'node:async_hooks'
 await Kernel.run(program, { external: 'await', host: Kernel.fileRequestHooks(createHook) })
 ```
 
-`Kernel.fileRequestHooks` keeps the process list for sockets, DNS lookups and timers, and follows each file request through `async_hooks` from the moment it is issued until its callback runs. An Effect caller that runs the kernel for its own callers reads the source from `Kernel.HostResourcesService` and passes it on, as `Conformance.released` does.
+`Kernel.fileRequestHooks` keeps the process list for sockets, DNS lookups and timers, and follows each file request through `async_hooks` from the moment it is issued until its callback runs. An Effect caller that runs the kernel for its own callers reads the source from `Kernel.HostResourcesService` and passes it on, as `Conformance.released` does. `Kernel.search`, `Kernel.shrink` and `Kernel.pick` take no `host` and read the process list, so on Node 26 a file stall under them is named a deadlock rather than a file wait; they explore schedules and fail on any host wait either way.
 
 ## One kernel at a time
 

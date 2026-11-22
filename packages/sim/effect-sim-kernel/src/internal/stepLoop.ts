@@ -505,6 +505,16 @@ const isProgram = (candidate: KernelField): boolean => !isRunOptions(candidate)
  * taken, and a per-step record of which fiber ran. A run started while one is
  * active queues behind it, so two runs never share the global hooks.
  */
+// A throw before the drive attaches its own cleanup still ends the run, so no global hook outlives it.
+const endingRun = <T>(started: () => Promise<T>, end: () => void): Promise<T> => {
+  try {
+    return started().finally(end)
+  } catch (error) {
+    end()
+    return Promise.reject(error)
+  }
+}
+
 const lockedRun = <A, E>(
   program: Effect.Effect<A, E>,
   options: RunOptions,
@@ -519,20 +529,22 @@ const lockedRun = <A, E>(
   })
   const userSeam = options.onQuiescent
   const watch = (options.host ?? processResources).begin()
-  const root = Effect.runFork(
-    Effect.provideService(program, Clock.Clock, kernel.clocks.clock),
-    { scheduler: kernel.scheduler },
-  )
-  kernel.start(root)
-  return drive<A, E>({
-    kernel,
-    root,
-    options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
-    before: countsNow(watch),
-    watch,
-    guard: 0,
-    hostImmediate: recorder.hostImmediate,
-  }).finally(() => {
+  return endingRun(() => {
+    const root = Effect.runFork(
+      Effect.provideService(program, Clock.Clock, kernel.clocks.clock),
+      { scheduler: kernel.scheduler },
+    )
+    kernel.start(root)
+    return drive<A, E>({
+      kernel,
+      root,
+      options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
+      before: countsNow(watch),
+      watch,
+      guard: 0,
+      hostImmediate: recorder.hostImmediate,
+    })
+  }, () => {
     watch.end()
     recorder.restore()
     kernel.release()
