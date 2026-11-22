@@ -2,12 +2,12 @@
 
 ## Setup
 
-Requires Node 24+ and pnpm 11 (pinned via `packageManager`; `corepack enable` picks it up).
+Requires Node 26+ and pnpm 12 (pinned via `packageManager`; `corepack enable` picks it up).
 
-The formatter and the comment-checker hook come from the repo's nix flake: run `nix develop` (or `direnv allow` to enter it automatically) before `pnpm lint`/`pnpm format` — `bin/dprint` resolves the flake-built formatter, `comment-checker` resolves to the sandboxed wrapper (no network, read-only working directory) that the Claude Code hook runs, and everything else still comes from Node 24 + corepack pnpm 11.
+The formatter and the comment-checker hook come from the repo's nix flake: run `nix develop` (or `direnv allow` to enter it automatically) before `pnpm lint`/`pnpm format` — `bin/dprint` resolves the flake-built formatter, `comment-checker` resolves to the sandboxed wrapper (no network, read-only working directory) that the Claude Code hook runs, and everything else still comes from Node 26 + corepack pnpm 12.
 
 ```bash
-nix develop        # puts dprint, comment-checker (sandboxed), node 24 and deno on PATH
+nix develop        # puts dprint, comment-checker (sandboxed), node 26 and deno on PATH
 pnpm install
 pnpm build        # tsdown, dependency order
 pnpm typecheck    # tsc (TypeScript 7)
