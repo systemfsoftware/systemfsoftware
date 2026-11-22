@@ -85,5 +85,9 @@
       "./package.json": "./package.json"
     },
     "provenance": true
+  },
+  "inlinedDependencies": {
+    "@effect/platform-node": "4.1.4",
+    "@effect/platform-node-shared": "4.1.4"
   }
 }
