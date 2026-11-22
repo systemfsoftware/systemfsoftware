@@ -90,6 +90,12 @@ each interruption; the first step that leaves something held fails with the
 `interruption-left-held` judgement naming that step. A program that settles
 nowhere reports how many interruption points were tried in its pass bound.
 
+Both runs await host waits. On Node 26 a program that waits on a file needs
+`Kernel.HostResourcesService` provided (for example
+`Layer.succeed(Kernel.HostResourcesService, Kernel.fileRequestHooks(createHook))`
+with `createHook` from `node:async_hooks`), or the kernel reads its file wait
+as a deadlock.
+
 ## When a check runs and when it does not
 
 A `.conformance.test.ts` calls a check from its own scenario body, and the

@@ -1,5 +1,5 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Exit } from 'effect'
+import { Effect, Exit, Option } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 
@@ -8,6 +8,18 @@ import { failed, incomplete, interruptionLeftHeldAt, type Report } from './repor
 export interface ReleaseSpec<ProbeFailure> {
   readonly probe: Effect.Effect<void, ProbeFailure>
 }
+
+const withHost = (options: Kernel.RunOptions, host: Option.Option<Kernel.HostResources>): Kernel.RunOptions =>
+  Option.match(host, { onNone: () => options, onSome: (resources) => ({ ...options, host: resources }) })
+
+const ranOnHost = <A, E>(
+  program: Effect.Effect<A, E, Scope.Scope>,
+  options: Kernel.RunOptions,
+): Effect.Effect<Kernel.RunResult<A, E>> =>
+  Effect.flatMap(
+    Effect.serviceOption(Kernel.HostResourcesService),
+    (host) => Effect.promise(() => Kernel.run(Effect.scoped(program), withHost(options, host))),
+  )
 const settledCount = <A, E>(counted: Kernel.RunResult<A, E>): boolean =>
   'exit' in counted && Exit.isSuccess(counted.exit)
 
@@ -66,7 +78,7 @@ const probedHeld = <A, E, ProbeFailure>(
   bound: Kernel.Bound,
 ): Effect.Effect<Report<never, never> | undefined> =>
   Effect.flatMap(
-    Effect.promise(() => Kernel.run(Effect.scoped(program), { external: 'await', interrupt: { atStep } })),
+    ranOnHost(program, { external: 'await', interrupt: { atStep } }),
     (ran) =>
       Effect.map(Effect.promise(() => Effect.runPromiseExit(probe)), (probed) =>
         heldFailureOf(ran, atStep, bound, probed)),
@@ -98,8 +110,7 @@ const firstHeld = <A, E, ProbeFailure>(
 
 const countedOf = <A, E>(
   program: Effect.Effect<A, E, Scope.Scope>,
-): Effect.Effect<Kernel.RunResult<A, E>> =>
-  Effect.promise(() => Kernel.run(Effect.scoped(program), { external: 'await' }))
+): Effect.Effect<Kernel.RunResult<A, E>> => ranOnHost(program, { external: 'await' })
 
 const settledChecked = <A, E, ProbeFailure>(
   program: Effect.Effect<A, E, Scope.Scope>,
