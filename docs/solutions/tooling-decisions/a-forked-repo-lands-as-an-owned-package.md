@@ -61,5 +61,5 @@ Adopting candidate 1 or 3 after this diverges is a discard, not a move. No upstr
 ## Related
 
 - `packages/discern/AGENTS.md` — the fork's provenance and the gates it answers to
-- `CONSTITUTION.md`, `repos/constitution/ENFORCEMENT.md` — the `REPO-O1` / `REPO-S3` boundary this record applies
+- `CODING_STANDARDS.md`, `repos/constitution/CODING_STANDARDS.md` — the `REPO-O1` / `REPO-S3` boundary this record applies
 - `subtrees.toml` — the vendored trees, each read-only

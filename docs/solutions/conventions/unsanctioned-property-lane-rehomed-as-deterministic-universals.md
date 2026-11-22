@@ -31,7 +31,7 @@ Four lanes reject the plan-authored file, each on a different axis:
 
 3. **`property-file-purity` (the content axis).** A property file admits only `it.prop`/`it.effect.prop` with boolean predicates; the arrow laws need `Effect.runSync` comparisons, trace arrays, and multi-value assertions. Conversely `PROPERTY_TEST_SUFFIX` makes any FastCheck import inside an integration file a violation, so `it.prop` cannot simply move into the gherkin file. The purity rule forces a choice between the two homes, and the placement rules have already eliminated the property home.
 
-4. **The plan-lane mismatch (process axis).** A plan that names a test file without deriving it from the lane taxonomy authors an unsanctionable artifact; under CONST-E9 the correction re-homes the work — never the instrument.
+4. **The plan-lane mismatch (process axis).** A plan that names a test file without deriving it from the lane taxonomy authors an unsanctionable artifact; under SF-FIN-1 the correction re-homes the work — never the instrument.
 
 ## The Invariant
 

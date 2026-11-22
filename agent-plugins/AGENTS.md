@@ -2,7 +2,7 @@
 
 Deno-only plugins outside the pnpm workspace: `pnpm --filter` does not reach them. Verify each with `deno task check` (and `deno task test` where a suite exists) from the plugin directory; root `pnpm check:local` still formats them.
 
-You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+You are editing an enforcement instrument. Read the Checks and gates rules (`SF-GATE-1` to `SF-GATE-6`) in `repos/constitution/CODING_STANDARDS.md` before this lands.
 
 | ID         | Rule                                                                                                                                                          | Gate                                                                                                                                           |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

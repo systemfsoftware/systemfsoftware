@@ -65,7 +65,7 @@ suffix boundary is invisible when crossed; the manifest boundary is a type error
 
 ## Purity is already carried
 
-`CONSTITUTION.md` `CONST-P3` judges pure-versus-effectful by return type alone and forbids inferring it
+`CODING_STANDARDS.md` `SF-GATE-4` judges pure-versus-effectful by return type alone and forbids inferring it
 from a folder or a package. A `kernel` suffix is a second, weaker statement of a fact the type
 already carries: `Effect<A, E, R>` in the signature settles it, and a rename cannot.
 
@@ -103,7 +103,7 @@ rather than by a rule that has to be pointed at the right file first.
 ## Why the pure boundary is not a new package
 
 The tempting move is to extract every pure decision into one such package and aim the instruments at
-it. That is the folder split under another name: it relocates code by purity, which `CONST-P3` forbids
+it. That is the folder split under another name: it relocates code by purity, which `SF-GATE-4` forbids
 inferring and which the FCIS ruling rejects because folder geometry satisfies the diagram rather than
 the dependency graph, and destroys change-locality. A feature's decision, its schema and its I/O end
 up in three packages.
@@ -139,7 +139,7 @@ manifest facts.
   expression language cannot reproduce an imperative body byte-for-byte — a module that
   accumulates into a mutable local through a `for` loop has no expression form, so compiled
   authorship cannot cover the population it would have to govern.
-- **Folder split, `pure/` beside `shell/`.** Loses to `CONST-P3` directly: it re-encodes purity in
+- **Folder split, `pure/` beside `shell/`.** Loses to `SF-GATE-4` directly: it re-encodes purity in
   placement, which is the same category error as the suffix with a different separator.
 
 ## The falsification, and what it changed

@@ -2,7 +2,7 @@
 
 Read this file when a check fails, not before.
 
-You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+You are editing an enforcement instrument. Read the Checks and gates rules (`SF-GATE-1` to `SF-GATE-6`) in `repos/constitution/CODING_STANDARDS.md` before this lands.
 
 ## Reproduce locally
 

@@ -11,7 +11,7 @@
 import { Match, Option, Schema } from 'effect'
 
 /**
- * A property's seed: a whole number a generator chose, never negative (CONST-D1).
+ * A property's seed: a whole number a generator chose, never negative (SF-IMP-1).
  *
  * @internal
  */
@@ -23,7 +23,7 @@ export const PropertySeed = Schema.Int.pipe(
 export type PropertySeed = typeof PropertySeed.Type
 
 /**
- * The count of runs a property's check was configured with, never negative (CONST-D1).
+ * The count of runs a property's check was configured with, never negative (SF-IMP-1).
  *
  * @internal
  */

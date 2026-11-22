@@ -30,7 +30,7 @@ tags: [call-site, stack-trace-limit, effect-match, const-p2, property-engine]
 
 - **Shallow registration.** Code that runs between a user's API call and call-site capture stays within a fixed, small frame depth. Capture the site first (`const site = callFrame()`) and pass it down, or dispatch directly.
 - **Delete the flag, not the branch.** When a registration helper branches on a boolean, remove the boolean: split the helper per case. The law surface's `gated(…, exempt)` became `judged` and `exempted`, so no dispatch remains.
-- **Combinator dispatch belongs to pure decisions.** CONST-P2 rewrites (`Match`, `Option`) are safe in decisions that capture no stack, such as `verdictKindOf` and `resolveSeed`.
+- **Combinator dispatch belongs to pure decisions.** SF-SHP-1 rewrites (`Match`, `Option`) are safe in decisions that capture no stack, such as `verdictKindOf` and `resolveSeed`.
 
 ```ts
 // wrong: combinator frames sit between the user call and callFrame()
@@ -47,7 +47,7 @@ const model = (name, spec, oracle) =>
 
 ## Why This Works
 
-The site depends on stack depth, not on logic, so the refactor passes every check that does not read `site`. With a direct dispatch, $d_{user}$ stays at the depth `callFrame` was written for. With the flag split, no branch is left for CONST-P2 to object to.
+The site depends on stack depth, not on logic, so the refactor passes every check that does not read `site`. With a direct dispatch, $d_{user}$ stays at the depth `callFrame` was written for. With the flag split, no branch is left for SF-SHP-1 to object to.
 
 ## Prevention
 

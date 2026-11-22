@@ -22,7 +22,7 @@ The error channel of a workflow was policed from the start: `Inhabited` resolves
 uninhabited or untagged error channel to a marker whose property name is the remediation
 (`workflow-error-channel-gates.md`). The success channel was not — a workflow could succeed
 with a bare `number`, a plain interface record, or a single class. Each is a state machine
-hidden in a scalar or a field, the shape defect `CONST-D4` names, and none was refused.
+hidden in a scalar or a field, the shape defect `SF-IMP-2` names, and none was refused.
 
 The compiled enforcement now closes the gap: `Workflow.make` refuses a decider whose success
 channel is not a tagged union of at least two `S.TaggedClass` variants sharing one family
@@ -52,7 +52,7 @@ Every site migrates up the ladder, never skipping a rung:
 
 - **Re-author** — a plain record or interface is the decision: promote its real outcome
   dimensions into `S.TaggedClass` variants, each carrying only its valid fields per
-  `CONST-D4` in the Stryker fork's TypeScript checker workflow, since moved out of this repo in #429 — `CheckFinished | RetestRequired`).
+  `SF-IMP-2` in the Stryker fork's TypeScript checker workflow, since moved out of this repo in #429 — `CheckFinished | RetestRequired`).
 - **Split** — a single aggregate success variant whose consumer branches on a field is a
   hidden state machine: split by the consumer's actual branching
   (the Stryker fork's `dry-run` workflow — `DryRunPassed | DryRunFailed` from a `{ testCount, failedTestCount }` record; its `plan-instrumentation` workflow — `InPlaceInstrument | EphemeralInstrument`, which also killed a `backupDirectoryHint: ''` sentinel).

@@ -15,7 +15,7 @@ pnpm test         # vitest — property + composition suites
 pnpm lint         # dprint check + self-hosted oxlint
 ```
 
-Read [`CONSTITUTION.md`](CONSTITUTION.md) (the design law) and [`AGENTS.md`](AGENTS.md) (workspace invariants) first.
+Read [`repos/constitution/CODING_STANDARDS.md`](repos/constitution/CODING_STANDARDS.md) (the organization's coding standards) and [`AGENTS.md`](AGENTS.md) (workspace invariants) first.
 
 ## Commits
 

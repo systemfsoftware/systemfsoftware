@@ -5,5 +5,3 @@
 # `github:systemfsoftware/systemfsoftware` flake input and every `$/` action downloads and unpacks this archive on a
 # cold runner, so the subtrees stay out of it.
 /repos/ export-ignore
-# CONSTITUTION.md is a symlink into repos/constitution; the Actions runner fails on a symlink whose target the archive lacks.
-/CONSTITUTION.md export-ignore

@@ -46,7 +46,7 @@ the Stryker the workspace installs, so a lockfile bump could change Stryker's be
 2. **The plan schema is published.** `@systemfsoftware/stryker-js-cli-contract` exports `ShardPlan`, and the CLI
    bundles the same definition and writes its plan with `fromJsonString(ShardPlan)`.
 3. **A copy compared with itself certifies nothing.** A fake built from the same belief as the code under test agrees
-   with it by construction (CONST-T10).
+   with it by construction (SF-TST-2).
 
 ## Architectural Invariants
 

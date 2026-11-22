@@ -1,7 +1,7 @@
 [[repos]]
 name = "constitution"
 url = "https://github.com/systemfsoftware/constitution"
-description = "Shared engineering constitution: pure-core / imperative-shell design law"
+description = "The organization\'s shared CODING_STANDARDS.md and REVIEW.md, included from REVIEW.md"
 branch = "main"
 
 [[repos]]
