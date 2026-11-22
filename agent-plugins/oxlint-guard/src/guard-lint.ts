@@ -45,6 +45,8 @@ export interface LintFs {
   readonly exists: (target: string) => Promise<boolean>
   readonly isDirectory: (target: string) => Promise<boolean>
   readonly readFirstLine: (target: string) => Promise<string | null>
+  /** Owner uid of the entry, of the link itself unless `follow`; null when unknown. */
+  readonly ownerOf: (target: string, follow: boolean) => Promise<number | null>
 }
 
 type LintPlan =
@@ -248,9 +250,10 @@ const describeDenoSpawnFailure = (failure: SpawnFailure): string => {
 
 const CONFIG_BASENAMES: readonly string[] = OXLINT_CONFIG_BASENAMES
 
-// The walk for configs and binaries must never escape the project: on a shared
-// host, a binary planted in an ancestor directory (e.g. /tmp/node_modules/
-// .bin/oxlint) would otherwise be selected and run against the agent's files.
+// The walk for configs and binaries must never escape the edited file's
+// project: on a shared host, a binary planted in an ancestor directory (e.g.
+// /tmp/node_modules/.bin/oxlint) would otherwise be selected and run against
+// the agent's files.
 const PROJECT_ROOT_ENV = 'CLAUDE_PROJECT_DIR'
 
 const walkUp = (startDir: string): readonly string[] => {
@@ -275,23 +278,58 @@ const dirsUpToRoot = (startDir: string, root: string): readonly string[] => {
   return firstOutside === -1 ? walked : walked.slice(0, firstOutside)
 }
 
-const findProjectRoot = async (
-  fs: LintFs,
-  cwd: string,
-  env: Readonly<Record<string, string | undefined>>,
-): Promise<string> => {
-  const fromEnv = env[PROJECT_ROOT_ENV]
-  if (fromEnv !== undefined && fromEnv.trim() !== '') {
-    return path.resolve(fromEnv)
-  }
-  // Nearest enclosing git/worktree root — a .git entry may be a directory or,
-  // in a worktree, a file pointing at the real git dir.
-  for (const dir of walkUp(cwd)) {
+// Nearest enclosing git/worktree root — a .git entry may be a directory or,
+// in a worktree, a file pointing at the real git dir.
+const findGitRoot = async (fs: LintFs, startDir: string): Promise<string | null> => {
+  for (const dir of walkUp(startDir)) {
     if (await fs.exists(path.join(dir, '.git'))) {
       return dir
     }
   }
-  return cwd
+  return null
+}
+
+const ROOT_UID = 0
+
+// The session's owner: its .git when it has one, else the directory the user
+// pointed the session at (followed, since the user chose that path).
+const sessionOwner = async (fs: LintFs, sessionRoot: string): Promise<number | null> => {
+  const gitEntry = path.join(sessionRoot, '.git')
+  return await fs.exists(gitEntry) ? fs.ownerOf(gitEntry, false) : fs.ownerOf(sessionRoot, true)
+}
+
+// The session's project root bounds the walk. A file outside it (e.g. in a
+// sibling worktree) is bounded by its own git root instead, but only when that
+// .git itself (never a symlink's target) has the same non-root owner as the
+// session — the ownership test git applies before trusting a repository — so a
+// .git planted in a shared directory never makes that directory's binaries
+// eligible. A root-owned session (e.g. one started in /tmp) vouches for no
+// other repository.
+const findProjectRoot = async (
+  fs: LintFs,
+  filePath: string,
+  cwd: string,
+  env: Readonly<Record<string, string | undefined>>,
+): Promise<string> => {
+  const fromEnv = env[PROJECT_ROOT_ENV]
+  const sessionRoot = fromEnv !== undefined && fromEnv.trim() !== ''
+    ? path.resolve(fromEnv)
+    : await findGitRoot(fs, cwd) ?? cwd
+  if (withinRoot(sessionRoot, filePath)) {
+    return sessionRoot
+  }
+  const fileRoot = await findGitRoot(fs, path.dirname(filePath))
+  if (fileRoot === null) {
+    return sessionRoot
+  }
+  const [owner, fileOwner] = await Promise.all([
+    sessionOwner(fs, sessionRoot),
+    fs.ownerOf(path.join(fileRoot, '.git'), false),
+  ])
+  if (owner !== null && owner !== ROOT_UID && owner === fileOwner) {
+    return fileRoot
+  }
+  return sessionRoot
 }
 
 const findFirstExisting = async (fs: LintFs, candidates: readonly string[]): Promise<string | null> => {
@@ -346,7 +384,7 @@ const gather = async (
   env: Readonly<Record<string, string | undefined>>,
 ): Promise<GatheredFacts> => {
   const resolved = path.resolve(cwd, filePath)
-  const root = await findProjectRoot(fs, cwd, env)
+  const root = await findProjectRoot(fs, resolved, cwd, env)
   const dirs = dirsUpToRoot(path.dirname(resolved), root)
   const extension = path.extname(resolved).slice(1)
   const exists = await fs.exists(resolved)
@@ -652,6 +690,13 @@ const snapshotEnv = (options: LintGuardOptions): Record<string, string | undefin
 
 const realLintFs: LintFs = {
   exists: denoExists,
+  ownerOf: async (target, follow) => {
+    try {
+      return (await (follow ? Deno.stat(target) : Deno.lstat(target))).uid
+    } catch {
+      return null
+    }
+  },
   isDirectory: async (target) => {
     try {
       return (await Deno.stat(target)).isDirectory

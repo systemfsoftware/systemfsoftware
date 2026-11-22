@@ -1,6 +1,10 @@
 import plugin from '@systemfsoftware/oxlint-plugin-test-discipline'
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
+import { LANE_MISMATCH_ACTUAL, LANE_MISMATCH_FIX } from '../test-suffix-outside-src.config.js'
 
 RuleTester.it = vitest.it
 RuleTester.itOnly = vitest.it.only
@@ -14,159 +18,381 @@ const ruleTester = new RuleTester({
   },
 })
 
-/** Where one fixture is linted: every sanctioned lane word, a plain test name, a runner package, and under `src/`. */
-const PLACES: ReadonlyArray<readonly [string, string]> = [
-  ['NamedIntegration', '/repo/pkg/tests/x.integration.test.ts'],
-  ['NamedConformance', '/repo/pkg/tests/x.conformance.test.ts'],
-  ['NamedDifferential', '/repo/pkg/tests/x.differential.test.ts'],
-  ['NamedTrace', '/repo/pkg/tests/x.trace.test.ts'],
-  ['NamedPlainly', '/repo/pkg/tests/x.test.ts'],
-  ['InRunnerPackage', '/repo/packages/runner/vitest/tests/x.integration.test.ts'],
-  ['UnderSrc', '/repo/pkg/src/__tests__/x.workflow.property.test.ts'],
-]
+const root = join(mkdtempSync(join(tmpdir(), 'e2e-tier-placement-')), 'node_modules', 'checkout')
 
-const everywhere = <C extends { readonly name: string }>(
-  testCase: C,
-): Array<C & { readonly filename: string }> =>
-  PLACES.map(([place, filename]) => ({ ...testCase, name: `${testCase.name}_${place}`, filename }))
+const write = (path: string, text: string): void => {
+  mkdirSync(dirname(join(root, path)), { recursive: true })
+  writeFileSync(join(root, path), text)
+}
 
-const SETTINGS_KEY = '@systemfsoftware/oxlint-plugin-test-discipline'
-const RUNNER = '@systemfsoftware/effect-e2e/runner'
+const link = (path: string, target: string): void => {
+  mkdirSync(dirname(join(root, path)), { recursive: true })
+  symlinkSync(join(root, target), join(root, path))
+}
+
+const installed = (name: string): void => {
+  const store = `node_modules/.pnpm/${name.replace('/', '+')}@1.0.0/node_modules/${name}`
+  write(`${store}/package.json`, JSON.stringify({ name }))
+  link(`node_modules/${name}`, store)
+}
+
+write('packages/core/package.json', JSON.stringify({ name: '@example/core', exports: { '.': './src/index.ts' } }))
+write('packages/core/src/index.ts', 'export const total = 1\n')
+write('packages/core/tests/__fixtures__/reaching.ts', "export * from '../../src/index.ts'\n")
+write('packages/core/tests/__fixtures__/driving.ts', "export { chromium } from 'example-driver'\n")
+write('packages/gherkin/package.json', JSON.stringify({ name: '@systemfsoftware/effect-gherkin-spec', exports: {} }))
+write('packages/gherkin/src/index.ts', 'export const makeFeature = 1\n')
+write('apps/shop-e2e/package.json', JSON.stringify({ name: '@example/shop-e2e', private: true }))
+write('apps/shop-e2e/tests/__fixtures__/stack.ts', "export { chromium } from 'example-driver'\n")
+write('apps/shop-e2e/tests/__fixtures__/leaky.ts', "export { total } from '@example/core'\n")
+write('apps/shop-e2e/tests/__fixtures__/order.json', '{}')
+write('apps/broken/package.json', '{ not json')
+write('packages/core/tests/sneak/package.json', '{}')
+write('apps/shop-e2e/tests/__fixtures__/locked.ts', "export { chromium } from 'example-driver'\n")
+chmodSync(join(root, 'apps/shop-e2e/tests/__fixtures__/locked.ts'), 0)
+write('apps/shop-e2e/tests/__fixtures__/sneak.mjs', "export { total } from '@example/core'\n")
+link('apps/shop-e2e/tests/__fixtures__/escape.ts', 'packages/core/src/index.ts')
+write('tests/nested/package.json', JSON.stringify({ private: true }))
+write(
+  'tests/nested/apps/quiet/package.json',
+  JSON.stringify({ name: '@example/quiet', exports: { '.': './index.js' } }),
+)
+write('apps/sealed-e2e/package.json', JSON.stringify({ name: '@example/sealed-e2e', private: true, exports: {} }))
+write('apps/nulled-e2e/package.json', JSON.stringify({ name: '@example/nulled-e2e', private: true, exports: null }))
+
+const runsAsRoot = process.getuid?.() === 0
+installed('example-driver')
+write(
+  'node_modules/.pnpm/example-runner@1.0.0/node_modules/example-runner/package.json',
+  JSON.stringify({ name: 'example-runner' }),
+)
+link('apps/shop-e2e/node_modules/example-runner', 'node_modules/.pnpm/example-runner@1.0.0/node_modules/example-runner')
+installed('@systemfsoftware/effect-gherkin-spec')
+link('node_modules/@example/core', 'packages/core')
+write('apps/harness-e2e/package.json', JSON.stringify({ name: '@example/harness-e2e', private: true }))
+link('apps/harness-e2e/node_modules/@systemfsoftware/effect-gherkin-spec', 'packages/gherkin')
+
+const at = (path: string): string => join(root, path)
+
 const GHERKIN = `import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'\n`
-const E2E_ROLE = { [SETTINGS_KEY]: { role: 'e2e' } } as const
-const RUNNER_ROLE = { [SETTINGS_KEY]: { role: 'vitest-runner' } } as const
-const UNDECODABLE_ROLE = { [SETTINGS_KEY]: { role: 'nonsense' } } as const
+const DRIVER = `import { chromium } from 'example-driver'\n`
+const JOURNEY = at('apps/shop-e2e/tests/buying.e2e.ts')
+const INTEGRATION = at('packages/core/tests/total.integration.test.ts')
 
-const outsidePackage = { messageId: 'e2eOutsideE2ePackage' }
-const integrationInPackage = { messageId: 'integrationInE2ePackage' }
+const error = (messageId: string) => ({ messageId })
 
 ruleTester.run('e2e-tier-placement', plugin.rules['e2e-tier-placement'], {
   valid: [
-    ...everywhere({
-      name: 'Should_Pass_When_AnE2ePackageHoldsAnE2eLaneFile',
-      code: `import { expect, test } from '${RUNNER}'\n`,
-      settings: E2E_ROLE,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_OnlyTheComposingApiOfTheRunnerIsImported',
-      code: `import { makeGlobalSetup, makeRunner, RUN_OUTPUT_KEY } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_OnlyExpectIsImportedFromTheRunner',
-      code: `import { expect } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_OnlyDescribeIsImportedFromTheRunner',
-      code: `import { describe } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_OnlyAHookIsImportedFromTheRunner',
-      code: `import { beforeAll } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_TheRunnerImportIsTypeOnlyInTheDeclaration',
-      code: `import type { E2ETest, RunnerOptions } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_TheRunnerImportIsTypeOnlyInTheSpecifier',
-      code: `import { type RunnerOptions } from '${RUNNER}'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_TestIsImportedFromVitest',
-      code: `import { test } from 'vitest'\n`,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_AnIntegrationTestIsInAPackageWithNoRole',
+    {
+      name: 'Should_Pass_When_AnE2eFeatureDrivesTheSystemThroughRegistryPackagesAndLocalFixtures',
+      code: `${GHERKIN}${DRIVER}import { stack } from './__fixtures__/stack.ts'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeatureReadsADataFileInItsTests',
+      code: `${GHERKIN}import order from './__fixtures__/order.json'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_Pass_When_AnIntegrationFeatureImportsItsOwnSource',
+      code: `${GHERKIN}import { total } from '../src/index.ts'\n`,
+      filename: INTEGRATION,
+    },
+    {
+      name: 'Should_Pass_When_AFeatureReachesWorkspaceCodeInAPackageThatShipsNothing',
+      code: `${GHERKIN}import { total } from '@example/core'\n`,
+      filename: at('apps/shop-e2e/tests/total.integration.test.ts'),
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeatureImportsAPackageItsOwnNodeModulesLinksToTheRootStore',
+      code: `${GHERKIN}import { run } from 'example-runner'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeaturesPackageHasAnEmptyExportsMap',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/sealed-e2e/tests/buying.e2e.ts'),
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeaturesPackageHasANullExportsMap',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/nulled-e2e/tests/buying.e2e.ts'),
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeatureImportsAnUnprefixedNodeBuiltin',
+      code: `${GHERKIN}import { readFileSync } from 'fs'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_Pass_When_AnE2eFeatureIsJudgedInAPackageLinkedFromAnotherCheckoutsNodeModules',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/shop-e2e/tests/checkout.e2e.ts'),
+    },
+    {
+      name: 'Should_Pass_When_ThePackageManifestDoesNotParse',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/broken/tests/buying.e2e.ts'),
+    },
+    {
+      name: 'Should_Pass_When_TheFileHasNoPackageToJudge',
       code: GHERKIN,
-    }),
-    ...everywhere({
-      name: 'Should_Pass_When_AnE2ePackageHoldsATestThatAlsoImportsTheRunnerTest',
-      code: `${GHERKIN}import { test } from '${RUNNER}'\n`,
-      settings: E2E_ROLE,
-    }),
-    {
-      name: 'Should_Pass_When_AnAdmittedE2eFileIsInAnE2ePackage',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-      settings: E2E_ROLE,
-    },
-    {
-      name: 'Should_Pass_When_TheRunnerDoesNotCollectTheFile_FixturesDirectlyUnderTests',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/__fixtures__/x.e2e.ts',
-    },
-    {
-      name: 'Should_Pass_When_TheRunnerDoesNotCollectTheFile_ASuiteTemplateUnderFixtures',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/__fixtures__/suite/tests/x.e2e.ts',
-    },
-    {
-      name: 'Should_Pass_When_TheFileIsUnderSrcAndSoNotATest',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/src/x.e2e.ts',
-    },
-    {
-      name: 'Should_Pass_When_TheFileIsOutsideTestsAndSoNotATest',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/helpers/x.e2e.ts',
-    },
-    {
-      name: 'Should_Pass_When_AnAdmittedE2eFileImportsOnlyExpectFromTheRunner',
-      code: `import { expect } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
+      filename: '/nowhere/pkg/tests/x.e2e.ts',
     },
   ],
   invalid: [
-    ...everywhere({
-      name: 'Should_ReportOutsideE2ePackage_When_AKnownBadE2eLaneFileIsInAPackageWithNoRole',
-      code: `import { expect, test } from '${RUNNER}'\n`,
-      errors: [outsidePackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportOutsideE2ePackage_When_TheRunnerTestIsImportedUnderAnAlias',
-      code: `import { test as it } from '${RUNNER}'\n`,
-      errors: [outsidePackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportOutsideE2ePackage_When_TheRunnerIsImportedAsANamespace',
-      code: `import * as E2E from '${RUNNER}'\n`,
-      errors: [outsidePackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportIntegrationInE2ePackage_When_AGherkinOnlyTestIsInAnE2ePackage',
-      code: GHERKIN,
-      settings: E2E_ROLE,
-      errors: [integrationInPackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportIntegrationInE2ePackage_When_AGherkinTestOnlyImportsExpectFromTheRunner',
-      code: `${GHERKIN}import { expect } from '${RUNNER}'\n`,
-      settings: E2E_ROLE,
-      errors: [integrationInPackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportOutsideE2ePackage_When_TheDeclaredRoleIsTheVitestRunnerRole',
-      code: `import { test } from '${RUNNER}'\n`,
-      settings: RUNNER_ROLE,
-      errors: [outsidePackage],
-    }),
-    ...everywhere({
-      name: 'Should_ReportOutsideE2ePackage_When_TheDeclaredRoleDoesNotDecode',
-      code: `import { test } from '${RUNNER}'\n`,
-      settings: UNDECODABLE_ROLE,
-      errors: [outsidePackage],
-    }),
     {
-      name: 'Should_ReportOutsideE2ePackage_When_AnAdmittedE2eFileIsInAPackageWithNoRole',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/x.e2e.ts',
-      errors: [outsidePackage],
+      name: 'Should_RefuseAnE2eLookalike_When_ItIsUnderSrc',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('packages/core/src/buying.e2e.test.ts'),
+      errors: [error('e2eOutsideTests')],
     },
     {
-      name: 'Should_ReportOutsideE2ePackage_When_TheRunnerCollectsAFileUnderANestedFixturesDir',
-      code: `import { test } from '${RUNNER}'\n`,
-      filename: '/repo/pkg/tests/nested/__fixtures__/x.e2e.ts',
-      errors: [outsidePackage],
+      name: 'Should_RefuseAnE2eFeature_When_ItsPackageShipsCodeInACheckoutUnderATestsDirectory',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('tests/nested/apps/quiet/tests/buying.e2e.ts'),
+      errors: [error('e2eOutsideE2ePackage')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ANestedManifestUnderTestsClaimsToShipNothing',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('packages/core/tests/sneak/buying.e2e.ts'),
+      errors: [error('e2eOutsideE2ePackage')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItTypeImportsAFixtureThatValueImportsAWorkspacePackage',
+      code: `${GHERKIN}import type { total } from './__fixtures__/leaky.ts'\n`,
+      filename: JOURNEY,
+      errors: [error('e2eReachesSource')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItReExportsATypeOfAWorkspacePackage',
+      code: `${GHERKIN}export type { Total } from '@example/core'\n`,
+      filename: JOURNEY,
+      errors: [error('e2eReachesSource')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFile_When_ItIsOutsideTests',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/shop-e2e/stack/buying.e2e.ts'),
+      errors: [error('e2eOutsideTests')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFile_When_ItIsAFixture',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('apps/shop-e2e/tests/__fixtures__/buying.e2e.ts'),
+      errors: [error('e2eOutsideTests')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItsPackageShipsCode',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: at('packages/core/tests/buying.e2e.ts'),
+      errors: [error('e2eOutsideE2ePackage')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItTypeImportsAWorkspacePackage',
+      code: `${GHERKIN}import type { total } from '@example/core'\n`,
+      filename: JOURNEY,
+      errors: [error('e2eReachesSource')],
+    },
+    {
+      name: 'Should_RefuseAnE2eFeature_When_ItTypeImportsAnotherPackagesSourceByPath',
+      code: `${GHERKIN}import type { total } from '../../../packages/core/src/index.ts'\n`,
+      filename: JOURNEY,
+      errors: [error('e2eReachesSource')],
+    },
+  ],
+})
+
+const suffix = (filename: string, code: string, expected: string) => ({
+  code,
+  filename,
+  errors: [{
+    messageId: 'laneMismatch',
+    data: { name: filename.split('/').at(-1), expected, actual: LANE_MISMATCH_ACTUAL, fix: LANE_MISMATCH_FIX },
+  }],
+})
+
+ruleTester.run('test-suffix-outside-src, judged on disk', plugin.rules['test-suffix-outside-src'], {
+  valid: [
+    {
+      name: 'Should_NameItE2e_When_AFeatureImportsAPackageItsOwnNodeModulesLinksToTheRootStore',
+      code: `${GHERKIN}import { run } from 'example-runner'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_NameItE2e_When_ItTypeImportsCreateRequireBesideAValueOfTheModuleBuiltin',
+      code: `${GHERKIN}import { builtinModules, type createRequire } from 'node:module'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_NameItE2e_When_ItReExportsALoaderAsAType',
+      code: `${GHERKIN}${DRIVER}export type { createRequire } from 'node:module'\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_NameItE2e_When_ALoaderIsNamedOnlyInATypePosition',
+      code:
+        `${GHERKIN}${DRIVER}type BuiltinGetter = typeof process.getBuiltinModule\ninterface Loader { createRequire: () => void }\n`,
+      filename: JOURNEY,
+    },
+    {
+      name: 'Should_NameItIntegration_When_AFixtureIsImportedAsATypeAndThenAsAValue',
+      code:
+        `${GHERKIN}import type { total as Total } from './__fixtures__/reaching.ts'\nimport { total } from './__fixtures__/reaching.ts'\n`,
+      filename: INTEGRATION,
+    },
+    {
+      name: 'Should_IgnoreALeftoverE2eRole_When_TheFeatureReachesNothingOfOurs',
+      code: `${GHERKIN}${DRIVER}`,
+      filename: JOURNEY,
+      settings: { '@systemfsoftware/oxlint-plugin-test-discipline': { role: 'e2e' } },
+    },
+    { name: 'Should_NameItE2e_When_AFeatureReachesNothingOfOurs', code: `${GHERKIN}${DRIVER}`, filename: JOURNEY },
+    {
+      name: 'Should_NameItIntegration_When_AFeatureReachesItsSourceThroughAFixture',
+      code: `${GHERKIN}import { total } from './__fixtures__/reaching.ts'\n`,
+      filename: INTEGRATION,
+    },
+    {
+      name: 'Should_NameItIntegration_When_AFeatureImportsItsOwnPackageByName',
+      code: `${GHERKIN}import { total } from '@example/core'\n`,
+      filename: INTEGRATION,
+    },
+  ],
+  invalid: [
+    {
+      name: 'Should_RefuseAnE2eFile_When_ItIsNoFeature',
+      code: DRIVER,
+      filename: JOURNEY,
+      errors: [{ messageId: 'noLane' }],
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureRequiresThroughAnAliasedCreateRequire',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}import { createRequire } from 'node:module'\nconst load = createRequire(import.meta.url)\nconst core = load('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureLoadsTheModuleBuiltinAtRuntime',
+      ...suffix(JOURNEY, `${GHERKIN}const loader = process.getBuiltinModule('node:module')\n`, '.integration.test.ts'),
+    },
+    ...(runsAsRoot ? [] : [{
+      name: 'Should_AskForTheIntegrationName_When_AFixtureAnE2eFeatureImportsCannotBeRead',
+      ...suffix(JOURNEY, `${GHERKIN}import { chromium } from './__fixtures__/locked.ts'\n`, '.integration.test.ts'),
+    }]),
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureDynamicallyImportsTheModuleBuiltin',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const { createRequire: load } = await import('node:module')\nconst core = load(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportEqualsRequiresAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import core = require('@example/core')\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsCreateRequireByAStringName',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}import { 'createRequire' as load } from 'node:module'\nconst core = load(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureReadsTheBuiltinLoaderIntoAVariable',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const fetchBuiltin = process.getBuiltinModule\nconst loader = fetchBuiltin('node:module')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureReachesTheModuleBuiltinByAComputedName',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const loader = process['getBuiltinModule']('node:module')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_ALocalJavaScriptHelperReachesAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from './__fixtures__/sneak.mjs'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_ASymlinkInTestsPointsAtSource',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from './__fixtures__/escape.ts'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheE2eName_When_AnIntegrationFeatureImportsOnlyRegistryPackages',
+      ...suffix(INTEGRATION, `${GHERKIN}${DRIVER}`, '.e2e.ts'),
+    },
+    {
+      name: 'Should_AskForTheE2eName_When_AnIntegrationFeaturesFixturesReachOnlyRegistryPackages',
+      ...suffix(INTEGRATION, `${GHERKIN}import { chromium } from './__fixtures__/driving.ts'\n`, '.e2e.ts'),
+    },
+    {
+      name: 'Should_AskForTheE2eName_When_AnIntegrationFeatureReachesOurCodeOnlyAsATypeImport',
+      ...suffix(INTEGRATION, `${GHERKIN}import type { total } from '@example/core'\n`, '.e2e.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_TheGherkinHarnessItselfIsAWorkspacePackage',
+      ...suffix(at('apps/harness-e2e/tests/buying.e2e.ts'), `${GHERKIN}${DRIVER}`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from '@example/core'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsAnotherPackagesSourceByPath',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}import { total } from '../../../packages/core/src/index.ts'\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureUsesASubpathImport',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from '#core'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureDynamicallyImportsAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}const core = await import('@example/core')\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureDynamicallyImportsAComputedTarget',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}const name = '@example/' + 'core'\nconst core = await import(name)\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureRequiresAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}const core = require('@example/core')\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureCreatesARequireForAWorkspacePackage',
+      ...suffix(
+        JOURNEY,
+        `${GHERKIN}import { createRequire } from 'node:module'\nconst core = createRequire(import.meta.url)('@example/core')\n`,
+        '.integration.test.ts',
+      ),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureReExportsAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}export * from '@example/core'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AnE2eFeatureImportsAPackageThatIsNotInstalled',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from '@example/aliased'\n`, '.integration.test.ts'),
+    },
+    {
+      name: 'Should_AskForTheIntegrationName_When_AFixtureAnE2eFeatureImportsReachesAWorkspacePackage',
+      ...suffix(JOURNEY, `${GHERKIN}import { total } from './__fixtures__/leaky.ts'\n`, '.integration.test.ts'),
     },
   ],
 })

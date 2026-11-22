@@ -193,7 +193,8 @@ const program = Effect.gen(function*() {
 
 The principles and design laws governing code in this repository live in standalone Compound Engineering packs:
 
-- [Cell Architecture](compound-packs/cell-architecture): File kinds, services and layers, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
+- [Cell Architecture](compound-packs/cell-architecture): File kinds, handles and scopes, and cell composition in packages built on @systemfsoftware/effect-cell-types.
+- [Effect Architecture](compound-packs/effect-architecture): Adapter names, driver loading, instance state, layer naming and service wiring across Effect 4 code.
 - [Schema Modelling](compound-packs/schema-modelling): How Effect Schema declares invariants, states and foreign wire shapes, how refined values generate, and how failing generated laws and refusal properties are handled.
 - [Configuration](compound-packs/configuration): How an application's settings reach its code through a `<Feature>Config` in context, and how each environment variable is declared as one described Config in src/config.ts.
 - [Package Surface](compound-packs/package-surface): What a workspace package exposes through its exports map, under how many names, and how a change to that surface is versioned.
@@ -204,7 +205,7 @@ The principles and design laws governing code in this repository live in standal
 - [Page Accessibility](compound-packs/page-accessibility): How a static or island site's built pages are accessibility-tested in a real browser: axe at WCAG 2.2 AA plus best-practice in every colour scheme and at narrow and wide widths, needs-review contrast and non-text contrast, keyboard, focus, pointer targets, 200% zoom, reflow and text spacing, reduced motion and pausable motion, forced colours, structure, text alternatives, forms, and ARIA snapshots of key regions.
 - [Design System](compound-packs/design-system): How an app builds and styles UI with the Astryx design system through Tailwind: components, token utilities, where styles may be written, roots, themes and navigation.
 - [Screen Content](compound-packs/screen-content): What a user-facing screen shows and says: real data, claims the deployed product delivers, failure states that say what happened and what to do next, and copy without stock AI patterns.
-- [CI Workflows](compound-packs/ci-workflows): What a CI check is for, and that CI never grades the repository itself.
+- [Check Hygiene](compound-packs/check-hygiene): What a CI check is for, and when a lint rule may be proposed and the shape it ships in.
 - [Public Repository](compound-packs/public-repository): What a public repository never contains: private repository, package and product names, private tracker ids or local filesystem paths.
 
 Concepts, definitions, and verification gates are indexed in [CONCEPTS.md](CONCEPTS.md).
@@ -234,7 +235,7 @@ Add this repository as a flake input, and give your flake the registry as a subs
 
 Then take the producer's tarballs and a pnpm store built from them with `lib.mkProducerTarballs` and `lib.mkPnpmConsumerStore` from `pnpm-release-management`. The full consumer route, including the `files.".deps"` wiring, is in [Distribution through Nix](https://github.com/systemfsoftware/pnpm-release-management#distribution-through-nix).
 
-Third-party peers install from npm as usual. For example, `effect` is `^4.1.2`:
+Third-party peers install from npm as usual. For example, `effect` is `^4.1.4`:
 
 ```bash
 pnpm add 'effect@^4'
@@ -350,7 +351,8 @@ The cell architecture's worked example is the [Effect Endgame Starter Kit](https
 
 ## Documentation
 
-- [Cell Architecture](compound-packs/cell-architecture): file kinds, services and layers, and how cells compose.
+- [Cell Architecture](compound-packs/cell-architecture): file kinds, handles, scopes, and how cells compose.
+- [Effect Architecture](compound-packs/effect-architecture): adapter names, driver loading, instance state, layers, and service wiring.
 - [Schema Modelling](compound-packs/schema-modelling): how Effect Schema declares invariants and wire shapes.
 - [Testing](compound-packs/testing) and [Property Testing](compound-packs/property-testing): what a behaviour test proves, and what makes a property real.
 - [Package Surface](compound-packs/package-surface): what a workspace package exposes through its `exports` map.

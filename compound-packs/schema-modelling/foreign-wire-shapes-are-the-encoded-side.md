@@ -11,9 +11,11 @@ Declare a foreign payload's Encoded side with exactly the fields the adapter rea
 
 Keep the codec in the `*.schema.ts` of the adapter that talks to the third party. No module outside that adapter reads a raw foreign field (`code?`, `errno?`, a status line string) or holds the provider's grammar.
 
+A third-party parser (an AST parser, a JSONC or YAML parser) runs in the adapter's implementation module (its `*.handle.ts`, `*.service.ts` or plain adapter file), before `Schema.decode`. The adapter's `*.schema.ts` declares only the codec's Schema transformations over the parsed value, because schema files are decision code and never import a parser (pack: cell-architecture, presentation-is-a-formatter-the-write-phase-calls.md).
+
 Decoding refuses only input the domain cannot represent. Never refuse valid but unwelcome foreign input: an "unavailable" answer decodes to a domain value the decider judges.
 
-Prove the codec through the port's contract cases (testing pack: adapters-run-against-real-local-resources.md) and the schema's generated laws. A behaviour test never names a foreign field, status, endpoint or payload.
+Prove the codec through the port's contract cases (testing pack: adapters-run-against-real-local-resources.md) and the schema's generated laws. A codec that forbids encoding follows the one-way rule (one-way-codecs-forbid-a-direction-only-when-no-honest-value-exists.md). A behaviour test never names a foreign field, status, endpoint or payload.
 
 ```typescript
 // WRONG: wire shape reshaped, unwelcome input refused

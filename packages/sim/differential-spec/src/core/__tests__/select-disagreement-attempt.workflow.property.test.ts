@@ -17,26 +17,30 @@ const decisionOf = <A>(result: Result.Result<A, never>): A =>
     onSuccess: (decision: A): A => decision,
   })
 
-const decide = (orderDisagrees: boolean, seededDisagrees: boolean): DisagreementAttempt =>
-  decisionOf(selectDisagreementAttempt(new SelectDisagreementAttempt({ orderDisagrees, seededDisagrees })))
+const decideOf =
+  (workflow: typeof selectDisagreementAttempt) =>
+  (orderDisagrees: boolean, seededDisagrees: boolean): DisagreementAttempt =>
+    decisionOf(workflow(SelectDisagreementAttempt.make({ orderDisagrees, seededDisagrees })))
 
 it.prop(
   '∀b_Disagreement_≡OnOrder',
-  { of: [Schema.Boolean, Schema.Boolean], subject: decide },
+  { of: [Schema.Boolean, Schema.Boolean], subject: selectDisagreementAttempt },
   (subject, [orderDisagrees, seededDisagrees]) =>
-    Schema.is(DisagreedOnOrder)(subject(orderDisagrees, seededDisagrees)) === orderDisagrees,
+    Schema.is(DisagreedOnOrder)(decideOf(subject)(orderDisagrees, seededDisagrees)) === orderDisagrees,
 )
 
 it.prop(
   '∀b_Disagreement_≡OnSeeded',
-  { of: [Schema.Boolean, Schema.Boolean], subject: decide },
+  { of: [Schema.Boolean, Schema.Boolean], subject: selectDisagreementAttempt },
   (subject, [orderDisagrees, seededDisagrees]) =>
-    Schema.is(DisagreedOnSeeded)(subject(orderDisagrees, seededDisagrees)) === (!orderDisagrees && seededDisagrees),
+    Schema.is(DisagreedOnSeeded)(decideOf(subject)(orderDisagrees, seededDisagrees)) ===
+      (!orderDisagrees && seededDisagrees),
 )
 
 it.prop(
   '∀b_Disagreement_≡None',
-  { of: [Schema.Boolean, Schema.Boolean], subject: decide },
+  { of: [Schema.Boolean, Schema.Boolean], subject: selectDisagreementAttempt },
   (subject, [orderDisagrees, seededDisagrees]) =>
-    Schema.is(NoDisagreement)(subject(orderDisagrees, seededDisagrees)) === (!orderDisagrees && !seededDisagrees),
+    Schema.is(NoDisagreement)(decideOf(subject)(orderDisagrees, seededDisagrees)) ===
+      (!orderDisagrees && !seededDisagrees),
 )

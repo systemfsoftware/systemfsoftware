@@ -4,7 +4,7 @@ import { callSite } from '@systemfsoftware/vitest/failure'
 import { type Asserted, step } from '@systemfsoftware/vitest/integration'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule, Tracer } from 'effect'
 import { dual } from 'effect/Function'
-import { StepError } from './StepError.schema.js'
+import { StepError } from './StepError.js'
 import * as SuiteScope from './SuiteScope.js'
 
 export interface PollOptions {

@@ -12,7 +12,7 @@ import {
   createScenarioWithFresh,
   type FeatureBody,
 } from './FeatureRuntime.js'
-import type { StepError } from './StepError.schema.js'
+import type { StepError } from './StepError.js'
 
 export {
   type FeatureBody,

@@ -1,0 +1,3 @@
+# @systemfsoftware/effect-spec-runtime@1.2.0
+
+A live scenario can name the pipeline its second run executes: `scenario(title, { live: reason, rerun: pipeline }, firstPipeline)`. Every passing case runs again on fresh services to find state kept outside its layer, so a live scenario whose first run waits on an act that happens once, such as a person approving a sign-in in a browser, would ask for that act a second time. With `rerun` the second run executes the given pipeline over the same layers instead, and that check still runs. The runtime's `RegisterFn` accepts the rerun scenario through the new `CaseLive` type.

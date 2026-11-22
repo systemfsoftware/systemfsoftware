@@ -11,7 +11,9 @@ interface LockHandle {
   readonly release: (key: string) => Effect.Effect<void>
 }
 
-class Locks extends Context.Service<Locks, LockHandle>()('@systemfsoftware/conformance-spec/tests/corpus/Locks') {}
+class Locks extends Context.Service<Locks, LockHandle>()(
+  '@systemfsoftware/conformance-spec/tests/__fixtures__/failure-corpus/judgement-failure/Locks',
+) {}
 
 const twoStepLock: Layer.Layer<Locks> = Layer.effect(
   Locks,

@@ -10,7 +10,7 @@ export interface CollectionHandle {
 }
 
 export class Collections extends Context.Service<Collections, CollectionHandle>()(
-  '@systemfsoftware/conformance-spec/tests/Collections',
+  '@systemfsoftware/conformance-spec/tests/__fixtures__/Stores/Collections',
 ) {}
 
 /** A correct collection: every operation matches the collection model. */

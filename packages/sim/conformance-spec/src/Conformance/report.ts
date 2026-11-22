@@ -121,6 +121,10 @@ const failureText = (failure: Kernel.RunFailure): string =>
     Match.tag('Blocked', (blocked) => `the run blocked on ${blocked.on}`),
     Match.tag('Deadlock', deadlockText),
     Match.tag('Runaway', (runaway) => `the run passed ${runaway.steps} steps with work still pending`),
+    Match.tag(
+      'ReplayTraceDiverged',
+      (diverged) => `the replayed trace diverged at step ${diverged.atStep}`,
+    ),
     Match.exhaustive,
   )
 

@@ -28,9 +28,9 @@ const NEVER_READ: ObservedSpans = { spans: NO_SPANS, addedAtMillis: 0 }
 const WINDOWS: Windows = { settleMillis: 10, timeoutMillis: 100 }
 const SLOW: Windows = { settleMillis: 500, timeoutMillis: 100 }
 
-const step: SettleStep = (settlement, read, elapsedMillis, windows) =>
+const stepOf = (workflow: typeof settleRemoteRead): SettleStep => (settlement, read, elapsedMillis, windows) =>
   Result.match(
-    settleRemoteRead(
+    workflow(
       new SettleRemoteRead({
         observed: settlement,
         read,
@@ -119,42 +119,42 @@ const unfinishedMeansSomethingWasSeen = (subject: SettleStep, read: ReadonlyArra
 
 it.prop(
   '∀r_SettleUnion_=DistinctRead',
-  { of: [Schema.Array(SpanRecord)], subject: step },
-  (subject, [read]) => unionIsTheDistinctRead(subject, read),
+  { of: [Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => unionIsTheDistinctRead(stepOf(subject), read),
 )
 
 it.prop(
   '∀r_SettleReplay_≡FirstUnion',
-  { of: [Schema.Array(SpanRecord)], subject: step },
-  (subject, [read]) => replayAddsNothing(subject, read),
+  { of: [Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => replayAddsNothing(stepOf(subject), read),
 )
 
 it.prop(
   '∀r_SettleShrink_⊇EveryRead',
-  { of: [Schema.Array(SpanRecord), Schema.Array(SpanRecord)], subject: step },
-  (subject, [earlier, later]) => laterReadKeepsEveryEarlierId(subject, earlier, later),
+  { of: [Schema.Array(SpanRecord), Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [earlier, later]) => laterReadKeepsEveryEarlierId(stepOf(subject), earlier, later),
 )
 
 it.prop(
   '∀r_SettleFirstRecord_=FirstSeen',
-  { of: [Schema.Array(SpanRecord)], subject: step },
-  (subject, [read]) => firstRecordOfEachIdSurvives(subject, read),
+  { of: [Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => firstRecordOfEachIdSurvives(stepOf(subject), read),
 )
 
 it.prop(
   '∀r_SettleWindow_=QuietForSettle',
-  { of: [Schema.NonEmptyArray(SpanRecord)], subject: step },
-  (subject, [read]) => settlesExactlyAtTheWindow(subject, read),
+  { of: [Schema.NonEmptyArray(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => settlesExactlyAtTheWindow(stepOf(subject), read),
 )
 
 it.prop(
   '∀r_SettleVacant_=AbsentAtDeadline',
-  { of: [Schema.Array(SpanRecord)], subject: step },
-  (subject, [read]) => absenceMeansNothingWasSeen(subject, read),
+  { of: [Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => absenceMeansNothingWasSeen(stepOf(subject), read),
 )
 
 it.prop(
   '∀r_SettleGrowing_=UnfinishedAtDeadline',
-  { of: [Schema.Array(SpanRecord)], subject: step },
-  (subject, [read]) => unfinishedMeansSomethingWasSeen(subject, read),
+  { of: [Schema.Array(SpanRecord)], subject: settleRemoteRead },
+  (subject, [read]) => unfinishedMeansSomethingWasSeen(stepOf(subject), read),
 )

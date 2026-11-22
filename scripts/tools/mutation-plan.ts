@@ -269,7 +269,7 @@ const mutateRefusalsOf = (pkg: string, shards: Shapes, { config, shared, mutate 
       const ownFiles = new Set(own.files)
       return [
         {
-          reason: 'own-mutate-targets',
+          reason: 'own-mutate-targets' as const,
           package: pkg,
           shards,
           config,
@@ -407,7 +407,11 @@ export const splitRefusalsOf = (
 export const keptIgnoresOf = (packages: readonly MutationFacts[]): ReadonlyMap<string, readonly string[]> =>
   new Map(packages.map((facts) => {
     const [first, ...rest] = JOB_SHAPES.map((shape) =>
-      ProbeFactsSchema.matchOrElse(facts.probes[shape], { Loaded: ({ scope }) => scope.ignorePatterns }, () => [])
+      ProbeFactsSchema.matchOrElse(
+        facts.probes[shape],
+        { Loaded: ({ scope }) => scope.ignorePatterns },
+        (): readonly string[] => [],
+      )
     )
     return [facts.dir, (first ?? []).filter((pattern) => rest.every((patterns) => patterns.includes(pattern)))]
   }))
@@ -495,7 +499,7 @@ export const annotationOf = (refusal: Refusal): string =>
  */
 const decodeShardPlan = Schema.decodeUnknownResult(Schema.fromJsonString(ShardPlan))
 
-/** The number of mutants a `stryker plan --out` file plans, or why the file is not a version 1 shard plan. */
+/** The number of mutants a `stryker plan --out` file plans, or why the file is not a shard plan the contract decodes. */
 export const mutantCountOf = (text: string): Result.Result<number, string> =>
   Result.match(decodeShardPlan(text), {
     onSuccess: (plan) =>

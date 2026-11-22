@@ -46,7 +46,7 @@ const declaredState = <S>(state: Schema.Codec<S>, initial: S): Effect.Effect<voi
   ).pipe(Effect.asVoid)
 
 const modelError = (problem: 'state-schema-mismatch' | 'state-not-structural', detail: string): ModelError =>
-  new ModelError({ problem, detail })
+  ModelError.make({ problem, detail })
 
 /** Rejects a model at definition, before any run (R6: the state must be a structural Schema value). */
 const validated = <C, S, R>(model: Model<C, S, R>): Effect.Effect<void, ModelError> =>

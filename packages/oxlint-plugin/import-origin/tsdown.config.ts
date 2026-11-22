@@ -3,14 +3,19 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
+const typesPathOf = (defaultPath: string): string => defaultPath.replace(/\.mjs$/, '.d.ts')
+
 const injectTypesEntry = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  const entry = exports['.']
-  if (typeof entry === 'string') {
-    exports['.'] = { types: './dist/index.d.ts', default: entry }
-  } else if (typeof entry === 'object') {
-    const { default: defaultEntry, types: _existingTypes, ...rest } = entry
-    const withDefault = typeof defaultEntry === 'string' ? { default: defaultEntry } : {}
-    exports['.'] = { ...rest, types: './dist/index.d.ts', ...withDefault }
+  for (const [subpath, entry] of Object.entries(exports)) {
+    if (subpath === './package.json') continue
+    if (typeof entry === 'string') {
+      exports[subpath] = { types: typesPathOf(entry), default: entry }
+    } else if (typeof entry === 'object') {
+      const { default: defaultEntry, types: _existingTypes, ...rest } = entry
+      if (typeof defaultEntry === 'string') {
+        exports[subpath] = { ...rest, types: typesPathOf(defaultEntry), default: defaultEntry }
+      }
+    }
   }
   return exports
 }
@@ -19,6 +24,7 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/index.ts',
+    workspace: './src/WorkspacePackages.ts',
   },
   format: 'esm',
   dts: true,

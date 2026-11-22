@@ -246,6 +246,28 @@
         "type": "github"
       }
     },
+    "importPnpmLock_5": {
+      "inputs": {
+        "nixpkgs": [
+          "stryker-js-effect",
+          "nixpkgs"
+        ],
+        "systems": "systems_5"
+      },
+      "locked": {
+        "lastModified": 1790096829,
+        "narHash": "sha256-mnjMXjY/fo5OQH/iYNPijIqo0jAb/z7EhHtfXLlzOrs=",
+        "owner": "Scrumplex",
+        "repo": "importPnpmLock.nix",
+        "rev": "ca18d47b0e98a4b51404f69ce5ab51efb6ebc151",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Scrumplex",
+        "repo": "importPnpmLock.nix",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1790652569,
@@ -296,11 +318,11 @@
     },
     "nixpkgs_4": {
       "locked": {
-        "lastModified": 1794042290,
-        "narHash": "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U=",
+        "lastModified": 1794386569,
+        "narHash": "sha256-x9sADJvoVG0L6RejZB+/BB4YiGZFBZrfTlhF4uBq1tQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f4a03c008967841f2a0b3cb7c436fc6fc31671f6",
+        "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
         "type": "github"
       },
       "original": {
@@ -418,7 +440,8 @@
         "comment-checker": "comment-checker",
         "gritlint": "gritlint",
         "nixpkgs": "nixpkgs_4",
-        "pnpm-release-management": "pnpm-release-management_3"
+        "pnpm-release-management": "pnpm-release-management_3",
+        "stryker-js-effect": "stryker-js-effect"
       }
     },
     "rust-overlay": {
@@ -555,6 +578,36 @@
         "type": "github"
       }
     },
+    "stryker-js-effect": {
+      "inputs": {
+        "comment-checker": [
+          "comment-checker"
+        ],
+        "gritlint": [
+          "gritlint"
+        ],
+        "importPnpmLock": "importPnpmLock_5",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pnpm-release-management": [
+          "pnpm-release-management"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794732797,
+        "narHash": "sha256-M6eP/2gfSRNxtrM29X3mHgjpLfeZADr/s/s4PJGu1Pk=",
+        "owner": "systemfsoftware",
+        "repo": "stryker-js-effect",
+        "rev": "c6e954c87b8e130dbb2d00963786039e6bff0354",
+        "type": "github"
+      },
+      "original": {
+        "owner": "systemfsoftware",
+        "repo": "stryker-js-effect",
+        "type": "github"
+      }
+    },
     "systems": {
       "locked": {
         "lastModified": 1681028828,
@@ -601,6 +654,21 @@
       }
     },
     "systems_4": {
+      "locked": {
+        "lastModified": 1681028828,
+        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "systems_5": {
       "locked": {
         "lastModified": 1681028828,
         "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",

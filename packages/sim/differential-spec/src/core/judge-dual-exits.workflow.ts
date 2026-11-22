@@ -11,15 +11,15 @@ import {
 
 const whenBothSucceeded = (oracleHeld: boolean): DualExitJudgement =>
   Match.value(oracleHeld).pipe(
-    Match.when(true, () => new Agreed({})),
-    Match.when(false, () => new DisagreedByOutput({})),
+    Match.when(true, () => Agreed.make({})),
+    Match.when(false, () => DisagreedByOutput.make({})),
     Match.exhaustive,
   )
 
 const whenNotBothSucceeded = (failuresMatch: boolean): DualExitJudgement =>
   Match.value(failuresMatch).pipe(
-    Match.when(true, () => new Agreed({})),
-    Match.when(false, () => new DisagreedByFailureFingerprint({})),
+    Match.when(true, () => Agreed.make({})),
+    Match.when(false, () => DisagreedByFailureFingerprint.make({})),
     Match.exhaustive,
   )
 

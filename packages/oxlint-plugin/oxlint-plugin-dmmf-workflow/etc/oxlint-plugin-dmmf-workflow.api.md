@@ -21,6 +21,7 @@ const _default: {
         'workflow-file-export-topology': Rule;
         'workflow-file-make-presence': Rule;
         'workflow-variant-constructed': Rule;
+        'decision-code-imports': Rule;
     };
     configs: {
         recommended: {

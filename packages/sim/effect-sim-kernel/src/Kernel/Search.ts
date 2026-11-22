@@ -17,7 +17,7 @@ import { installUnobserved } from '../internal/Unobserved.js'
 import type { Bound, Pruning, UnobservedPrimitive } from './Bound.js'
 import { pruned, unpruned } from './Bound.js'
 import { run } from './Run.js'
-import type { Choice, Decision, RunResult } from './Run.js'
+import type { Choice, Decision, RunResult, StepRecord } from './Run.js'
 
 const CompletedTag = { _tag: 'Completed' } as const
 const OverBudgetTag = { _tag: 'OverBudget' } as const
@@ -175,11 +175,11 @@ const runOptions = <A, E>(
   return { choose, maxSteps }
 }
 
-const deviationsBefore = (steps: ReadonlyArray<{ readonly deviation: boolean }>): ReadonlyArray<number> => {
+const deviationsBefore = (steps: ReadonlyArray<StepRecord>): ReadonlyArray<number> => {
   let spent = 0
   return steps.map((step) => {
     const before = spent
-    spent += Number(step.deviation)
+    spent += Number(step.deviation && !step.activeBlocked)
     return before
   })
 }

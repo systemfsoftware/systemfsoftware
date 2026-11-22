@@ -15,7 +15,7 @@ permissions:
 jobs:
   release:
     name: release · shared tooling
-    uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@9615867c17489fb04be8bc74f568659d687df612
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@1e897828d917341fb7dd444c7bbd6cfa0998caa9
     with:
       ci-workflow: ci.yml
       npm-publish: true

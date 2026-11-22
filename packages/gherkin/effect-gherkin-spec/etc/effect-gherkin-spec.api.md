@@ -291,16 +291,22 @@ export const stageWhen: WhenStage;
 // @public
 export type StepCheck<E = never, R = never> = Check | Effect.Effect<Check, E, R>;
 
-// Warning: (ae-forgotten-export) The symbol "StepError_base" needs to be exported by the entry point index.d.ts
-//
 // @public
-export class StepError extends StepError_base {
+export class StepError extends StepFailure {
     // (undocumented)
     get message(): string;
 }
 
 // @public
 export const StepExpect: Context.Reference<Expect | null>;
+
+// Warning: (ae-forgotten-export) The symbol "StepFailure_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class StepFailure extends StepFailure_base {
+    // (undocumented)
+    get message(): string;
+}
 
 // @public (undocumented)
 export type StepText<A extends object = object> = string | ((scope: A) => string);
@@ -352,14 +358,14 @@ export type WhenStage = {
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:111:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:112:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:114:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:122:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:155:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:170:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:228:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:336:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:121:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:122:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:124:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:132:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:165:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:180:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:238:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:346:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

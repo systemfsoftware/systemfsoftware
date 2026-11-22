@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/effect-sim-kernel",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "license": "Apache-2.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
@@ -35,7 +35,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc -b",
+    "typecheck": "effect-tsgo tsc -b",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor-quiet run",

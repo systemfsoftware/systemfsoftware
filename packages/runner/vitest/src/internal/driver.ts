@@ -13,7 +13,6 @@
  * the gate refuses what the body wrote and never judged, then a body that judged nothing at all (R4).
  */
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as Function from 'effect/Function'
 import { Asserted, isCheck, type Ledger } from './checks.js'
 import { noCheckRefusal, refusalOf, refuseUnyielded } from './refusals.js'
@@ -93,9 +92,9 @@ const driveBody = <Arg, Y, Done>(
 ): Effect.Effect<void, never, never> =>
   Effect.suspend(() => {
     const steps = body(...args)
-    return Effect.onExit(
+    return Effect.onError(
       Effect.flatMap(stepThrough(steps, ledger, undefined), () => gate(ledger)),
-      (exit) => Exit.isSuccess(exit) ? Effect.void : unwind(steps),
+      () => unwind(steps),
     )
   })
 

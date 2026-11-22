@@ -113,11 +113,17 @@ const memberTags = <C>(command: C, fields: Schema.Struct.Fields): Record<string,
 const outcomeTag = <D, E>(outcome: Result.Result<D, E>): string =>
   Result.match(outcome, { onSuccess: tagOf, onFailure: tagOf })
 
-const annotateCellIdentity = (name: string, stacktrace: string, decideStacktrace: string): Effect.Effect<void> =>
+const annotateCellIdentity = (
+  name: string,
+  stacktrace: string,
+  decideStacktrace: string | undefined,
+): Effect.Effect<void> =>
   Effect.gen(function*() {
     yield* Effect.annotateCurrentSpan('cell.name', name)
     yield* Effect.annotateCurrentSpan('cell.stacktrace', stacktrace)
-    yield* Effect.annotateCurrentSpan('cell.decide_stacktrace', decideStacktrace)
+    yield* decideStacktrace === undefined
+      ? Effect.void
+      : Effect.annotateCurrentSpan('cell.decide_stacktrace', decideStacktrace)
   })
 
 const annotateCommand = <C>(schema: InstrumentedCommandSchema, decoded: C): Effect.Effect<void> =>
@@ -179,7 +185,7 @@ const recordDuration = (
 const monitoredRun = <A, E, R>(
   name: string,
   stacktrace: string,
-  decideStacktrace: string,
+  decideStacktrace: string | undefined,
   histogram: Metric.Metric<number, Metric.HistogramState>,
   core: (settle: Settle) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -386,7 +392,7 @@ const rejectedRun = <Raw, A, WE, WR>(
   Effect.gen(function*() {
     yield* settle('failure')
     yield* Effect.annotateCurrentSpan('cell.outcome', 'CommandRejected')
-    return yield* writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, new CommandRejected({ issue }), raw)
+    return yield* writeValue<Raw, CommandRejected, A, WE, WR>(name, handlers, CommandRejected.make({ issue }), raw)
   })
 
 const encodeValue = <S extends Schema.Constraint & { readonly EncodingServices: never }>(
@@ -539,6 +545,111 @@ export const named: {
   ): <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>) => ReadChain<I, Raw, RE, RR>
 } = dual((args: IArguments) => typeof args[0] === 'string', namedImpl)
 
+export type WriterPhases = readonly ['read', 'decode', 'write']
+
+export interface WriterHandlerRecord<Command extends InstrumentedCommandSchema, Raw, Out = unknown> {
+  readonly Decoded: (command: Command['Type'], raw: Raw) => Effect.Effect<Out, Out, Out>
+  readonly CommandRejected: (rejected: CommandRejected, raw: Raw) => Effect.Effect<Out, Out, Out>
+}
+
+export type WriterCell<I, RE, RR, H> =
+  & Cell<
+    I,
+    Effect.Success<HandlerOutput<H>>,
+    RE | Effect.Error<HandlerOutput<H>>,
+    RR | Effect.Services<HandlerOutput<H>>
+  >
+  & { readonly phases: WriterPhases }
+
+export interface WriterDecodedChain<I, Raw, RE, RR, Command extends InstrumentedCommandSchema> {
+  readonly 'sentence: must write after decode': true
+  write<H extends WriterHandlerRecord<Command, Raw>>(handlers: H): WriterCell<I, RE, RR, H>
+}
+
+export interface WriterReadChain<I, Raw, RE, RR> {
+  readonly 'sentence: must decode after read': true
+  decode<Command extends InstrumentedCommandSchema>(
+    command: Command,
+  ): [Raw] extends [Command['Encoded']] ? WriterDecodedChain<I, Raw, RE, RR, Command> : ReadNotEncoded
+}
+
+const writerImpl = <N extends string>(
+  name: ValidOperationName<N>,
+  options?: NamedCellOptions,
+): <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>) => WriterReadChain<I, Raw, RE, RR> => {
+  const histogram = histogramFor(name, options)
+
+  return <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>): WriterReadChain<I, Raw, RE, RR> => {
+    const stacktrace = String(new Error().stack)
+    const decode = <Command extends InstrumentedCommandSchema>(
+      command: Command,
+    ): [Raw] extends [Command['Encoded']] ? WriterDecodedChain<I, Raw, RE, RR, Command> : ReadNotEncoded => {
+      const write = <H extends WriterHandlerRecord<Command, Raw>>(handlers: H): WriterCell<I, RE, RR, H> => {
+        type A = Effect.Success<HandlerOutput<H>>
+        type WE = Effect.Error<HandlerOutput<H>>
+        type WR = Effect.Services<HandlerOutput<H>>
+        const onDecoded = handlers.Decoded
+        assertShape<(decoded: Command['Type'], raw: Raw) => Effect.Effect<A, WE, WR>>(onDecoded)
+        const decodedRun = (decoded: Command['Type'], raw: Raw, settle: Settle): Effect.Effect<A, WE, WR> =>
+          Effect.gen(function*() {
+            yield* annotateFields(command, decoded)
+            yield* annotateCommand(command, decoded)
+            yield* settle('success')
+            return yield* Effect.withSpan(onDecoded(decoded, raw), `${name}.write`)
+          })
+        const run = (input: I): Effect.Effect<A, RE | WE, RR | WR> =>
+          monitoredRun(name, stacktrace, undefined, histogram, (settle) =>
+            Effect.gen(function*() {
+              const raw = yield* Effect.withSpan(read(input), `${name}.read`)
+              const written = yield* Result.match(Schema.decodeUnknownResult(command)(raw), {
+                onFailure: (issue) => rejectedRun<Raw, A, WE, WR>(name, handlers, raw, issue.message, settle),
+                onSuccess: (decoded) => decodedRun(decoded, raw, settle),
+              })
+              assertShape<A>(written)
+              return written
+            }))
+        const cell = {
+          [CellTypeId]: CellTypeId,
+          run,
+          phases: Object.freeze(['read', 'decode', 'write'] as const),
+          ...Prototype,
+        }
+        assertShape<WriterCell<I, RE, RR, H>>(cell)
+        return cell
+      }
+      const chain = { 'sentence: must write after decode': true as const, write }
+      type Chain = [Raw] extends [Command['Encoded']] ? WriterDecodedChain<I, Raw, RE, RR, Command> : ReadNotEncoded
+      assertShape<Chain>(chain)
+      return chain
+    }
+    return { 'sentence: must decode after read': true as const, decode }
+  }
+}
+
+/**
+ * Starts a cell that reads and writes and decides nothing, at a static operation name. Use it
+ * where no domain outcome is chosen: a reporter or sink that lays out what it read. A branch
+ * that only picks how something looks belongs in the plain formatter `Decoded` calls; a branch
+ * that picks a domain outcome means the operation is a decision, built with {@link named}.
+ *
+ * The chain is `writer(name, options?)(read).decode(Command).write({ Decoded, CommandRejected })`,
+ * one call per phase: `read` gathers the command's `Encoded` form, the library decodes it with
+ * `Command`, and the matching handler writes. The span, the command's declared attributes, the duration histogram
+ * and its `result_class` are the same as {@link named}'s; there is no decide span and no
+ * decision attribute.
+ */
+export const writer: {
+  <N extends string>(
+    options?: NamedCellOptions,
+  ): (
+    name: ValidOperationName<N>,
+  ) => <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>) => WriterReadChain<I, Raw, RE, RR>
+  <N extends string>(
+    name: ValidOperationName<N>,
+    options?: NamedCellOptions,
+  ): <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>) => WriterReadChain<I, Raw, RE, RR>
+} = dual((args: IArguments) => typeof args[0] === 'string', writerImpl)
+
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.
   const { it } = await import('@systemfsoftware/vitest')
@@ -579,11 +690,11 @@ if (import.meta.vitest !== void 0) {
     error: LawMalformed,
     decide: (command): Result.Result<LawAdmitted | LawRefused, LawMalformed> =>
       Match.value(command.length < 0).pipe(
-        Match.when(true, () => Result.fail(new LawMalformed({ length: command.length }))),
+        Match.when(true, () => Result.fail(LawMalformed.make({ length: command.length }))),
         Match.when(false, () =>
           Match.value(command.length > 3).pipe(
-            Match.when(true, () => Result.succeed(new LawAdmitted({ length: command.length }))),
-            Match.when(false, () => Result.succeed(new LawRefused({ why: 'too short' }))),
+            Match.when(true, () => Result.succeed(LawAdmitted.make({ length: command.length }))),
+            Match.when(false, () => Result.succeed(LawRefused.make({ why: 'too short' }))),
             Match.exhaustive,
           )),
         Match.exhaustive,
@@ -612,7 +723,7 @@ if (import.meta.vitest !== void 0) {
     { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         return Option.getOrThrow(observed.operation).name === Operation
       }),
   )
@@ -622,7 +733,7 @@ if (import.meta.vitest !== void 0) {
     { of: [Schema.Int], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('tests.span.length') === length,
@@ -636,7 +747,7 @@ if (import.meta.vitest !== void 0) {
     { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('app.span.command.law.decision') === observed.tag,
@@ -651,7 +762,7 @@ if (import.meta.vitest !== void 0) {
     { of: [RefusedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
-        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const observed = Option.getOrThrow(yield* run(LawCommand.make({ length })))
         const attributes = Option.getOrThrow(observed.operation).attributes
         return holds([
           attributes.get('app.span.command.law.failure') === 'LawMalformed',

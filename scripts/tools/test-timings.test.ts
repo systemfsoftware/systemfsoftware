@@ -1174,7 +1174,8 @@ const encodePlan = Schema.encodeResult(Schema.fromJsonString(ShardPlan))
 const planOf = (mutants: number): string =>
   Result.getOrThrowWith(
     encodePlan({
-      version: 1,
+      version: 2,
+      scope: { _tag: 'Unscoped' },
       targetSeconds: 900,
       shards: [{
         index: 1,
@@ -1299,7 +1300,7 @@ const writesPlan = (plan: unknown): string =>
     JSON.stringify(plan)
   }\nPLAN\n`
 
-Deno.test('the mutation plan fails naming the package when stryker plan fails or writes no version 1 shard plan', async () => {
+Deno.test('the mutation plan fails naming the package when stryker plan fails or writes no shard plan its contract decodes', async () => {
   const root = await mutationWorkspace({
     '@x/a': { files: { 'src/decide.workflow.ts': WORKFLOW, 'stryker.config.ts': INHERITED_CONFIG } },
   })
@@ -1309,13 +1310,14 @@ Deno.test('the mutation plan fails naming the package when stryker plan fails or
       ['#!/bin/sh\necho "instrumenter crashed" >&2\nexit 1\n', '@x/a: stryker plan exited 1: instrumenter crashed'],
       [
         '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out="$2"; shift; done\necho \'{"version":2}\' > "$out"\n',
-        '@x/a: stryker plan wrote no version 1 shard plan',
+        '@x/a: stryker plan wrote no shard plan its contract decodes',
       ],
-      // Version 1 in its counted fields, but plans the CLI's contract refuses: shards sharing a label, and a plan
-      // with no target or matrix.
+      // The contract's version in its counted fields, but plans it refuses: shards sharing a label, and a plan with
+      // no scope, target or matrix.
       [
         writesPlan({
-          version: 1,
+          version: 2,
+          scope: { _tag: 'Unscoped' },
           targetSeconds: 900,
           shards: [1, 2].map(() => ({
             index: 1,
@@ -1328,8 +1330,8 @@ Deno.test('the mutation plan fails naming the package when stryker plan fails or
         'shard plan shards share the label "1/1"',
       ],
       [
-        writesPlan({ version: 1, shards: [{ projects: [{ mutants: ['m'] }] }] }),
-        '@x/a: stryker plan wrote no version 1 shard plan',
+        writesPlan({ version: 2, shards: [{ projects: [{ mutants: ['m'] }] }] }),
+        '@x/a: stryker plan wrote no shard plan its contract decodes',
       ],
     ]
     for (const [script, reason] of cases) {

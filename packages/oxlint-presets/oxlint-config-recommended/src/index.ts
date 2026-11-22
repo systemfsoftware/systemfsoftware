@@ -1,4 +1,4 @@
-import { correctness as tsgoCorrectness, recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
+import { presets as tsgoPresets } from '@effect/tsgo/oxlint-presets'
 import cellArchitectureConfig, { jsPlugins as cellJsPlugins } from '@systemfsoftware/oxlint-config-cell-architecture'
 import dmmfConfig, { jsPlugins as dmmfJsPlugins } from '@systemfsoftware/oxlint-config-dmmf'
 import { ignorePatterns } from '@systemfsoftware/oxlint-config-rule-authoring'
@@ -121,9 +121,35 @@ const testFilePatterns = [
 
 const entryFilePatterns = [...testFilePatterns, '**/test-types/**', '**/examples/**'] as const
 
+// Every @effect/tsgo preset is on. A rule listed here still has findings in this repo, counted at
+// the @effect/tsgo 0.69.0 upgrade; the PR that fixes a rule's findings deletes its line.
+const tsgoRulesPendingAdoption: ReadonlyArray<string> = [
+  'effecttsgo/prefer-effect-array', // 609
+  'effecttsgo/prefer-effect-string', // 177
+  'effecttsgo/new-schema-class', // 158
+  'effecttsgo/prefer-effect-record', // 63
+  'effecttsgo/api-stability-leak', // 50
+  'effecttsgo/deterministic-keys', // 40
+  'effecttsgo/missing-concurrency-option', // 37
+  'effecttsgo/global-json', // 24
+  'effecttsgo/strict-effect-provide', // 24
+  'effecttsgo/yield-in-call-argument', // 15
+  'effecttsgo/prefer-schema-type-property', // 12
+  'effecttsgo/async-function', // 2
+  'effecttsgo/global-console-in-effect', // 2
+  'effecttsgo/prefer-schema-tagged-error', // 2
+  'effecttsgo/map-map-error-to-map-both', // 1
+  'effecttsgo/global-fetch-in-effect', // 1
+]
+
+const everyTsgoRule = Object.assign({}, ...Object.values(tsgoPresets).map((preset) => promoteWarnToError(preset.rules)))
+
+const adoptedTsgoRules = Object.fromEntries(
+  Object.entries(everyTsgoRule).filter(([rule]) => !tsgoRulesPendingAdoption.includes(rule)),
+)
+
 const libraryRules: NonNullable<OxlintConfig['rules']> = {
-  ...promoteWarnToError(tsgoCorrectness.rules),
-  ...promoteWarnToError(tsgoRecommended.rules),
+  ...adoptedTsgoRules,
   ...effectPlatform.configs.recommended.rules,
   ...unstableApiUsage,
   'effecttsgo/global-date-in-effect': 'error',

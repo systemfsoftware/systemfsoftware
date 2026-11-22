@@ -2,8 +2,8 @@
 title: A failure state tells the person what happened in their terms and what they can do next, never raw error text
 applies_when:
   - designing or rendering an error, failure, offline or timeout state on a user-facing screen
-  - catching an error in code whose result a person sees
-  - showing a person the result of a failed request, job or tool call
+  - catching an error in UI code whose result a person sees on a screen
+  - showing a person the result of a failed request, job or tool call on a user-facing screen
 tags: [content, error-states, failure]
 ---
 
