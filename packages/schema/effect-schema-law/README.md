@@ -2,10 +2,10 @@
 
 Property-test codec laws for [Effect](https://effect.website) `Schema`.
 
-A schema is a two-way codec. `ruleOfSchemas` asserts the two laws as ordinary Vitest tests, drawing inputs from the schema itself through Effect's `Arbitrary` and driving the runs with fast-check:
+A schema's round trip starts from a Type value and is the default it is held to: `decode(encode(value))` is equivalent to `value`, and re-encoding is equivalent to the original encoded form. `ruleOfSchemas` asserts those laws as ordinary Vitest tests, drawing inputs from the schema itself through Effect's `Arbitrary` and driving the runs with fast-check:
 
-- **Round-trip identity** — `decode(encode(x))` equals `x`.
-- **Encode stability** — re-encoding the decoded value reproduces the original encoded form.
+- **Round-trip identity** — `decode(encode(x))` is equivalent to `x`.
+- **Encode stability** — re-encoding the decoded value is equivalent to the original encoded form.
 
 ```ts
 import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
@@ -16,6 +16,30 @@ const Email = S.String.pipe(S.brand('Email'))
 // inside a Vitest file — registers two property tests
 ruleOfSchemas('Email', Email)
 ```
+
+## One-way schemas
+
+A schema may forbid a direction with `SchemaGetter.forbidden`, and Effect reports the restriction as a `Forbidden` schema issue. A value the codec refuses to encode has no round trip, so the law holds for that value instead of refuting it; a value that encodes must still round-trip, and any failure that is not a `Forbidden` issue refutes as before.
+
+The laws recognise a one-way schema from what the codec returns, never from a name, suffix or annotation. At registration a fixed sample of Type-side values decides only how the Type-side laws are titled and which law for the surviving direction is registered:
+
+- `∀x_<name>Enc_=x` and `∀x_<name>_=x` — no refusal was sampled; the schema is held to the round trip.
+- `∀x_<name>Enc_→Forbidden|=x` and `∀x_<name>_→Forbidden|=x` — a refusal was sampled; the values it refuses have no round trip to state.
+- `∀i_<name>Dec_→Deterministic` — added when an encode refusal was sampled. `i` is drawn from `Schema.toEncoded(schema)`; decoding it twice must yield the same outcome and equivalent values, and a decoded value must be one the encode law accepts.
+- `∀x_<name>Enc_→Deterministic` — added when a decode refusal was sampled (an encode-only schema). Encoding `x` twice must yield the same outcome and equivalent encoded values.
+
+A verdict never depends on the sample: a refusal drawn at run time holds under either title. The sample only decides what the laws are called and whether the surviving-direction law exists.
+
+The generated laws do not prove that a one-way decode maps each input to the right value — a decoder that returns a constant passes them. That proof is an example, a property of its own, or an adapter's contract cases. Decode totality over the Encoded side is not required either: a decoder that refuses unwelcome input is a working codec.
+
+## A law that evaluated nothing
+
+A law never reports a pass for a relation no draw evaluated. When every draw held but no draw was an instance, the test ends **skipped** with the reason:
+
+- a surviving-direction decode law whose Encoded side the generator cannot draw decodable values from — declare the wire format on the Encoded side so the generator can draw it, or write the transformation over the parsed value; until then only examples or contract cases exercise the decoder;
+- a Type-side law titled `=x` on which no value completed a round trip, or an encode-determinism law on which no value encoded.
+
+A law under a `→Forbidden|=x` title has an instance on every draw, because the refusal is part of what it states. A refutation is raised before the skip is decided, so a skip never hides a failure.
 
 ## Recursive schemas
 
