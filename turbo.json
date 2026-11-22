@@ -4,6 +4,7 @@
     "affectedUsingTaskInputs": true
   },
   "agentGuidance": false,
+  "globalEnv": ["NODE_RUNTIME_VERSION"],
   "globalPassThroughEnv": [
     "XDG_CACHE_HOME",
     "PLAYWRIGHT_BROWSERS_PATH",
