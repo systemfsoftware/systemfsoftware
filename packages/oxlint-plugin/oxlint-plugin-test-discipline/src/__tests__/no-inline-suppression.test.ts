@@ -71,6 +71,7 @@ const TRACKED = {
   ]
     .join('\n'),
   'README.md': '<!-- eslint-disable -->\n',
+  'repos/vendored/src/upstream.ts': "// @ts-expect-error -- upstream code\nexport const n: number = 'n'\n",
 }
 
 const UNTRACKED = { 'src/scratch.ts': '// oxlint-disable\n' }
