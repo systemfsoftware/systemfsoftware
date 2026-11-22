@@ -242,6 +242,20 @@ export default defineConfig({
 })
 ```
 
+Rather than write the key by hand, spread `propertyCheck()` into `test.provide`, and add `propertyReplay()` to `plugins`:
+
+```ts
+// vitest.config.ts
+import { propertyCheck, propertyReplay } from '@systemfsoftware/vitest'
+
+export default defineConfig({
+  plugins: [propertyReplay()],
+  test: { provide: { ...propertyCheck() } },
+})
+```
+
+`propertyCheck()` gives 1000 runs on the CI tier with a seed taken from the checked-out commit (`parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so main, the merge queue and a pull request draw the same cases for one commit; the mutation tier's runs inside a Stryker worker; and 100 runs locally or under an agent. `propertyReplay()` reprints a refuted property's "Rerun only this scenario" line with `--config <the config file the run loaded>`, so the rerun draws the same budget.
+
 **Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
 
 **Migration**: code that relied on a provided seed making every property share one stream must set `arbitrary: { seed: <literal> }` on each property that needs a literal seed.
