@@ -8,7 +8,7 @@ const RERUN_TAIL = 'src/a.test.ts -t "Should_BeRefuted_When_Run"'
 const rerunWith = (configArg: string): string =>
   `pnpm --filter @scope/pkg exec vitest run --config ${configArg} ${RERUN_TAIL}`
 
-Feature('Rerunning a refuted property with the config the run loaded')
+Feature('Rerunning a refuted property, and seeding its runs from the commit')
   .live('each scenario starts a nested Vitest run whose config file the simulation kernel cannot observe')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
@@ -80,24 +80,24 @@ Feature('Rerunning a refuted property with the config the run loaded')
       ),
     )
     scenario(
-      'A local run gets a hundred runs and no seed',
+      'A local run is not seeded',
       Gherkin.Do.pipe(
         Given('a run on the local tier')(
           'output',
           () => replayRunOutput({ fixture: 'replay-config', file: 'budget.probe.ts' }),
         ),
-        Then('the budget is a hundred runs')((s, expect) => expect(s.output).toContain('BUDGET {"runs":100}')),
+        Then('the budget carries no seed')((s, expect) => expect(s.output).not.toContain('"seed"')),
       ),
     )
     scenario(
-      'A CI run gets a thousand runs and a seed from the checked-out commit',
+      'A CI run is seeded from the checked-out commit and writes no seeds',
       Gherkin.Do.pipe(
         Given('a run on the CI tier')(
           'output',
           () => replayRunOutput({ fixture: 'replay-config', file: 'budget.probe.ts', env: { CI: 'true' } }),
         ),
-        Then('the budget is a thousand runs seeded from the commit, with no seed-store writes')((s, expect) =>
-          expect(s.output).toContain(`BUDGET {"runs":1000,"record":false,"seed":${seedOfCheckedOutCommit()}}`)
+        Then("the budget carries the commit's seed and record false")((s, expect) =>
+          expect(s.output).toContain(`"record":false,"seed":${seedOfCheckedOutCommit()}}`)
         ),
       ),
     )
@@ -113,13 +113,11 @@ Feature('Rerunning a refuted property with the config the run loaded')
               env: zeroCommitCiEnv,
             }),
         ),
-        Then('the seed is one')((s, expect) =>
-          expect(s.output).toContain('BUDGET {"runs":1000,"record":false,"seed":1}')
-        ),
+        Then('the seed is one')((s, expect) => expect(s.output).toContain('"record":false,"seed":1}')),
       ),
     )
     scenario(
-      'A run in a Stryker worker gets the mutation tier, seeded from the commit',
+      'A run in a Stryker worker is seeded from the commit and writes no seeds',
       Gherkin.Do.pipe(
         Given('a run inside a Stryker worker')(
           'output',
@@ -130,8 +128,8 @@ Feature('Rerunning a refuted property with the config the run loaded')
               env: { CI: 'true', STRYKER_MUTATOR_WORKER: '1' },
             }),
         ),
-        Then('the budget is thirty runs seeded from the commit')((s, expect) =>
-          expect(s.output).toContain(`BUDGET {"runs":30,"record":false,"seed":${seedOfCheckedOutCommit()}}`)
+        Then("the budget carries the commit's seed and record false")((s, expect) =>
+          expect(s.output).toContain(`"record":false,"seed":${seedOfCheckedOutCommit()}}`)
         ),
       ),
     )
