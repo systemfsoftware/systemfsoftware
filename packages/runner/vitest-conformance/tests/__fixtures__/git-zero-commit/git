@@ -1,0 +1,3 @@
+#!/bin/sh
+# A git whose HEAD begins with eight zeros: `git rev-parse HEAD` prints it.
+echo 00000000abcdef0123456789abcdef0123456789

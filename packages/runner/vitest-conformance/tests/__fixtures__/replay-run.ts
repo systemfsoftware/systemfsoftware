@@ -17,8 +17,8 @@ export interface ReplayRun {
 
 const vitestBin = fileURLToPath(new URL('../../node_modules/.bin/vitest', import.meta.url))
 
-const { AGENT: _agent, STRYKER_MUTATOR_WORKER: _stryker, ...inherited } = process.env
-const baseEnvironment = { ...inherited, CI: '' }
+const { AGENT: _agent, STRYKER_MUTATOR_WORKER: _stryker, PATH: inheritedPath = '', ...inherited } = process.env
+const baseEnvironment = { ...inherited, PATH: inheritedPath, CI: '' }
 
 const execFileAsync = promisify(execFile)
 
@@ -40,6 +40,12 @@ export const replayRunOutput = (run: ReplayRun): Effect.Effect<string, ProbeFail
     catch: (cause) => new ProbeFailure({ stage: 'run', detail: `${run.fixture}: ${run.file} did not run`, cause }),
   })
 
-/** The seed the checked-out commit names: its first eight hex digits as a number, from git itself. */
+/** The seed the checked-out commit names: its first eight hex digits as a number, or 1 when that is 0. */
 export const seedOfCheckedOutCommit = (): number =>
-  Number.parseInt(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).slice(0, 8), 16)
+  Number.parseInt(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).slice(0, 8), 16) || 1
+
+/** CI, with a `git` first on `PATH` that reports a HEAD beginning with eight zeros. */
+export const zeroCommitCiEnv: Readonly<Record<string, string>> = {
+  CI: 'true',
+  PATH: `${fileURLToPath(new URL('./git-zero-commit', import.meta.url))}:${inheritedPath}`,
+}

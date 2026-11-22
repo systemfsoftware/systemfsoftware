@@ -2,9 +2,9 @@
 
 A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. `expect` is the parameter of the test's own body, every check is yielded, and one observed state gets one check. Write the obvious thing and you also get a fresh build of your services, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
 
-Everything upstream exports is still exported except what the callback parameter replaces. `it`, `test`, `it.live`, `it.each`, `it.layer`, `layer`, `describe`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods` and `describeWrapped` are here; `expect` and `assert` are not; `it.effect`, `it.scoped` and `it.scopedLive` are refusals carrying the generator rewrite; and the Vitest values the fork keeps are re-exported by name — the list is under [Compatibility](#compatibility-with-effectvitest). Two things differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower. On top of that surface the fork adds `@systemfsoftware/vitest/integration` (`step`, `captureRunBinding`), `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
+Everything upstream exports is still exported except what the callback parameter replaces. `it`, `test`, `it.live`, `it.each`, `it.layer`, `layer`, `describe`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods` and `describeWrapped` are here; `expect` and `assert` are not; `it.effect`, `it.scoped` and `it.scopedLive` are refusals carrying the generator rewrite; and the Vitest values the fork keeps are re-exported by name — the list is under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds `layer(L, { shared: true })`, a lawful `it.prop`, `VitestTestContext` (the running test's context, published so a library can read it), the `@systemfsoftware/vitest/integration` entry (`step`, `captureRunBinding`) and the `@systemfsoftware/vitest/vite` plugin that configures property runs. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
 
-The defaults are forced, not opted into. Every package in this workspace imports `@systemfsoftware/vitest` by its own name, and published packages peer on it directly — nothing resolves through an alias to the upstream specifier.
+The defaults are forced, not opted into: import the package under its own name, and a manifest names the runner its tests actually run.
 
 ## Install
 
@@ -12,15 +12,8 @@ The defaults are forced, not opted into. Every package in this workspace imports
 pnpm add -D @systemfsoftware/vitest
 ```
 
-Every workspace package and published library imports `@systemfsoftware/vitest` by its own name — there is no alias to the upstream specifier, so a manifest names the runner its tests actually run. Outside a pnpm workspace, install it directly:
-
-```bash
-# outside a pnpm workspace
-npm install -D @systemfsoftware/vitest
-```
-
 > [!NOTE]
-> `effect` and `vitest` are peer dependencies — you bring your own, on the `effect` 4.0.0-rc line.
+> `effect` (`^4.1.4`) and `vitest` (`^5.1.0`) are peer dependencies; you bring your own.
 
 ## Quick start
 
@@ -42,6 +35,18 @@ layer(Store.layer)('store', (it) => {
 ```
 
 A test body is a generator, and the runner drives it: `yield*` a service, an Effect or a check. The layer is built fresh for the test, and the test runs twice on two different builds — a test that only passes the first time is a test that leaked state.
+
+## Entry points
+
+| Import                                      | What it is for                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `@systemfsoftware/vitest`                   | The test API: `it`, `test`, `layer`, `describe`, `it.prop`, `it.law`, the failure types and the check types.              |
+| `@systemfsoftware/vitest/vite`              | `propertyTests()`, the Vite plugin a Node `vitest.config.ts` lists in `plugins`; see [The Vite plugin](#the-vite-plugin). |
+| `@systemfsoftware/vitest/integration`       | `step` and `captureRunBinding`, for libraries that run checks on a runtime of their own.                                  |
+| `@systemfsoftware/vitest/guard`             | The setup file that refuses a raw `expect` and a test registered with Vitest's own `it`.                                  |
+| `@systemfsoftware/vitest/property-defaults` | The setup file that sets the run count of direct `Arbitrary` checks from the environment.                                 |
+| `@systemfsoftware/vitest/failure`           | Rendering a spec failure record, for harnesses that print failures.                                                       |
+| `@systemfsoftware/vitest/TestClock`         | The `effect/TestClock` compat entry for Effect v3 code.                                                                   |
 
 ## Checks
 
@@ -79,7 +84,7 @@ layer(Service.layer)((it) => { it(name, function*({ expect }) { ... }) })
 describe('a block', (it) => { ... })
 ```
 
-`it`, `test`, `it.live`, `it.each`, `it.only`, `it.skip`, `it.skipIf`, `it.runIf`, `it.fails`, `it.layer`, `layer` and `describeWrapped` all take a generator body. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe. `it.prop`, `it.effect.prop`, `it.law` and `flakyTest` are unchanged from #512.
+`it`, `test`, `it.live`, `it.each`, `it.only`, `it.skip`, `it.skipIf`, `it.runIf`, `it.fails`, `it.layer`, `layer` and `describeWrapped` all take a generator body. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
 
 The habit lanes are refusals, not aliases: `it.effect`, `it.scoped` and `it.scopedLive` are compile-time errors and run-time throws carrying the generator rewrite. `it.effect.prop` still runs properties. `beforeEach` and `afterEach` are refused too — build what a test needs inside it; services come fresh per test from `layer`.
 
@@ -179,7 +184,7 @@ it.prop(
 )
 ```
 
-`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is optional and must be a positive integer when given. The effective check options merge field by field: the property's own fields win over the configured default (`test.provide`, set by `@systemfsoftware/vitest-config`: 30 in a Stryker worker, 1000 in CI, 100 otherwise) over the built-in `runs: 100`, so `{ runs: 3 }` still inherits the configured `size` and caps. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a `runs` that is not a positive integer — from the property or from the configured default — fails as `InvalidBudget`, naming where the bad value came from; the positional form fails as a type error and a refusal.
+`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is optional and must be a positive integer when given. The effective check options merge field by field: the property's own fields win over the configured default (`test.provide`, which [the Vite plugin](#the-vite-plugin) fills: 30 in a Stryker worker, 1000 in CI, 100 otherwise) over the built-in `runs: 100`, so `{ runs: 3 }` still inherits the configured `size` and caps. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a `runs` that is not a positive integer — from the property or from the configured default — fails as `InvalidBudget`, naming where the bad value came from; the positional form fails as a type error and a refusal.
 
 ### The constant-impostor gate
 
@@ -242,20 +247,7 @@ export default defineConfig({
 })
 ```
 
-Rather than write the key by hand, list the `propertyTests()` plugin from `@systemfsoftware/vitest/vite` in a Node `vitest.config.ts`. It provides the budget under that key and registers the reporter that reprints a refuted property's rerun line with the config the run loaded:
-
-```ts
-// vitest.config.ts
-import { propertyTests } from '@systemfsoftware/vitest/vite'
-
-export default defineConfig({
-  plugins: [propertyTests()],
-})
-```
-
-The budget is 1000 runs on the CI tier, the mutation tier's runs inside a Stryker worker, and 100 runs locally or under an agent. Off the local tier it carries a seed taken from the checked-out commit (`git rev-parse HEAD`: `parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so runs of one commit draw the same cases. The commit is read when the config loads, never on the local tier; if git cannot read one, the run stops with a message naming the directory and what git said. A `test.provide` entry the config sets itself is kept.
-
-The reprinted line is `pnpm --filter <package> exec vitest run --config <config file> …`, with the config path written relative to the package directory the line runs from and quoted for a shell. Under `test.projects`, list the plugin in each project's config: the line carries the config of the project that ran the refuted test.
+The [Vite plugin](#the-vite-plugin) provides this budget for you, with a seed taken from the checked-out commit off the local tier.
 
 **Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
 
@@ -266,7 +258,7 @@ The reprinted line is `pnpm --filter <package> exec vitest run --config <config 
 - Refuted: `{ "_tag": "Refuted", "property": "full test name", "seed": 42, "attempt": 5, "size": 3, "path": [0,1], "failure": "ReturnedFalse" }`
 - NonBoolean: `{ "_tag": "NonBoolean", "property": "full test name", "seed": 42, "runs": 100 }`
 
-Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
+Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the Vite plugin sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
 
 **Stale seeds**: a recorded seed-store refutation whose draw now passes no longer fails the property; the property's novel draws decide it, and the stale line can be deleted. A recorded draw that still fails but whose recorded shrink steps no longer replay (the generator's shrinking or the failure's kind changed) refutes the property with that draw, unshrunk, as its counterexample. An explicit `CONFORMANCE_REPLAY` replay that no longer reproduces its failure fails with `ReplayNoLongerReproduces` — the stored seed-store path is the one that passes.
 
@@ -302,6 +294,24 @@ it.prop(
 ```
 
 A class fails only when a sequential statistical test is confident its share is below the minimum, and passes once it is confident the share is at least 0.9 of the minimum — QuickCheck's `checkCoverage` settings, certainty 10⁹ and tolerance 0.9. The tolerance is what lets the check terminate: a class sitting exactly on its minimum would otherwise draw forever. `runs` is therefore a minimum run count, not a maximum, and the failure names the label and the observed share.
+
+## The Vite plugin
+
+`propertyTests()` from `@systemfsoftware/vitest/vite` is for a Node `vitest.config.ts`. It provides the run's property budget under `test.provide['@systemfsoftware/vitest:property-check']` and registers the reporter that reprints a refuted property's rerun line with the config the run loaded:
+
+```ts
+// vitest.config.ts
+import { propertyTests } from '@systemfsoftware/vitest/vite'
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  plugins: [propertyTests()],
+})
+```
+
+The budget is 1000 runs on the CI tier, the mutation tier's 30 runs inside a Stryker worker, and 100 runs locally or under an agent. Off the local tier it carries a seed taken from the checked-out commit (`git rev-parse HEAD`: `parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and `record: false`, so runs of one commit draw the same cases and write nothing to the seed store. The commit is read when the config loads and never on the local tier; if git cannot read one, the run stops with a message naming the directory and what git said. A `test.provide` entry the config sets itself is kept.
+
+When a property is refuted, the run ends by reprinting its rerun line as `pnpm --filter <package> exec vitest run --config <config file> …`. The config path is written relative to the package directory the line runs from and quoted for a shell, so a rerun draws the budget the failing run drew. Under `test.projects`, list the plugin in each project's config: the line carries the config of the project that ran the refuted test.
 
 ## For testing libraries
 
@@ -370,7 +380,7 @@ This is a fork of the surface, not a superset of it. What changed:
 - **`export * from "vitest"` is gone.** The Vitest values the fork keeps — `vi`, `expectTypeOf`, `assertType`, `beforeAll`, `afterAll`, `onTestFailed`, `onTestFinished`, `inject`, `recordArtifact`, `vitest` — are re-exported explicitly, so a refused value cannot arrive through a star export.
 - **A test body is a generator**, so a sync, `async` or Effect-returning body is refused with the rewrite.
 - **`describe` is the fork's lawful collector** (forced concurrency and shuffle, the fork's methods), not upstream's. Vitest's own collector stays reachable as `import { describe } from 'vitest'`.
-- **`skipIf` and `runIf` take a `boolean`**, where upstream took `unknown`; an `unknown` or `any` condition is refused by this repo's lint.
+- **`skipIf` and `runIf` take a `boolean`**, where upstream took `unknown`.
 
 What else differs is what runs by default, what a check refuses, and what `toEqual` means — that is why the fork is imported under its own name rather than aliasing upstream.
 

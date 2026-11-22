@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import * as Layer from 'effect/Layer'
-import { replayRunOutput, seedOfCheckedOutCommit } from './__fixtures__/replay-run'
+import { replayRunOutput, seedOfCheckedOutCommit, zeroCommitCiEnv } from './__fixtures__/replay-run'
 
 const Feature = makeFeature({ it })
 
@@ -98,6 +98,23 @@ Feature('Rerunning a refuted property with the config the run loaded')
         ),
         Then('the budget is a thousand runs seeded from the commit, with no seed-store writes')((s, expect) =>
           expect(s.output).toContain(`BUDGET {"runs":1000,"record":false,"seed":${seedOfCheckedOutCommit()}}`)
+        ),
+      ),
+    )
+    scenario(
+      'A CI run whose commit begins with eight zeros is seeded with one',
+      Gherkin.Do.pipe(
+        Given('a run on the CI tier where git reports a commit beginning with eight zeros')(
+          'output',
+          () =>
+            replayRunOutput({
+              fixture: 'replay-config',
+              file: 'budget.probe.ts',
+              env: zeroCommitCiEnv,
+            }),
+        ),
+        Then('the seed is one')((s, expect) =>
+          expect(s.output).toContain('BUDGET {"runs":1000,"record":false,"seed":1}')
         ),
       ),
     )
