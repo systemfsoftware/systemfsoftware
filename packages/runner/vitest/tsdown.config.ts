@@ -10,6 +10,7 @@ const typesOf: Record<string, string> = {
   './guard': './dist/guard.d.ts',
   './integration': './dist/integration.d.ts',
   './property-defaults': './dist/property-defaults.d.ts',
+  './vite': './dist/vite.d.ts',
 }
 
 const withTypes = (entry: ExportEntry | undefined, types: string): ExportEntry | undefined => {
@@ -38,6 +39,7 @@ export default defineConfig({
     guard: './src/guard.ts',
     integration: './src/integration.ts',
     'property-defaults': './src/property-defaults.ts',
+    vite: './src/vite.ts',
   },
   format: 'esm',
   dts: true,

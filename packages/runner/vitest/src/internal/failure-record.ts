@@ -19,7 +19,8 @@ import { replayOfParts, replayTextOf } from '../replay.schema.js'
 import { framesOf as stackFramesOf, isUserFrame, siteOfFrame, type StackFrame } from './call-site.js'
 import { type Breach, FailureRecordRefused } from './errors.schema.js'
 import type { Witness } from './property/error.schema.js'
-import { providedPackage } from './provided.js'
+import { providedConfigFile, providedPackage, providedPackageRoot, providedRoot } from './provided.js'
+import { type RerunTarget, rerunTargetOf } from './rerun-target.js'
 
 /** A value the renderer narrows rather than assumes. */
 type Opaque<A = unknown> = A
@@ -64,6 +65,11 @@ export interface TestIdentity {
   readonly file: string
   /** The scenario name the rerun command filters on with `-t`. */
   readonly name: string
+  /**
+   * Where the rerun command runs and what it names, placed from the running test's absolute path and the facts the
+   * run published. Omitted, the command takes `package` and `file` as given.
+   */
+  readonly rerun?: RerunTarget | undefined
 }
 
 /**
@@ -750,10 +756,24 @@ const replayPrefixText = (text: string | undefined): string => text === undefine
 const replayPrefixOf = (replayText: string | undefined, replay: ReplayValue | undefined): string =>
   replayPrefixText(replayText ?? kernelReplayTextOf(replay))
 
-const isCompleteIdentity = (identity: TestIdentity): boolean => and(identity.file.length > 0, identity.name.length > 0)
+const targetOf = (identity: TestIdentity): RerunTarget =>
+  identity.rerun ?? { package: identity.package, file: identity.file, project: '', config: '' }
 
-const filterPrefixOf = (identity: TestIdentity): string =>
-  identity.package.length === 0 ? '' : `pnpm --filter ${identity.package} exec `
+const isCompleteIdentity = (identity: TestIdentity): boolean =>
+  and(targetOf(identity).file.length > 0, identity.name.length > 0)
+
+const SHELL_SAFE = /^[\w@%+=:,./-]+$/u
+
+const shellWord = (text: string): string => SHELL_SAFE.test(text) ? text : quoted(text)
+
+const optionOf = (flag: string, value: string): string => value.length === 0 ? '' : ` ${flag} ${shellWord(value)}`
+
+const filterPrefixOf = (target: RerunTarget): string =>
+  target.package.length === 0 ? '' : `pnpm --filter ${target.package} exec `
+
+const rerunCommandOf = (target: RerunTarget, name: string): string =>
+  `${filterPrefixOf(target)}vitest run ${shellWord(target.file)}${optionOf('--config', target.config)}` +
+  `${optionOf('--project', target.project)} -t ${quoted(name)}`
 
 const rerunLineOf = (
   identity: TestIdentity,
@@ -761,8 +781,7 @@ const rerunLineOf = (
   replayText: string | undefined,
 ): string | undefined =>
   isCompleteIdentity(identity)
-    ? `  ${replayPrefixOf(replayText, replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
-      quoted(identity.name)
+    ? `  ${replayPrefixOf(replayText, replay)}${rerunCommandOf(targetOf(identity), identity.name)}`
     : undefined
 
 const rerunLinesOf = (
@@ -1044,6 +1063,10 @@ interface TaskLike {
   readonly name?: string | undefined
   readonly fullName?: string | undefined
   readonly fullTestName?: string | undefined
+  readonly file?: {
+    readonly filepath?: string | undefined
+    readonly projectName?: string | undefined
+  } | undefined
 }
 
 const textOrEmpty = (value: string | undefined): string => isText(value) ? value : EMPTY_TEXT
@@ -1053,11 +1076,31 @@ const firstNonEmptyText = (values: ReadonlyArray<string | undefined>): string =>
 const fileOf = (fullName: string | undefined): string =>
   textOrEmpty(fullName).split(LEVEL_SEPARATOR).at(0) ?? EMPTY_TEXT
 
-const identityOf = (task: TaskLike): TestIdentity => ({
-  package: providedPackage() ?? EMPTY_TEXT,
-  file: fileOf(task.fullName),
-  name: firstNonEmptyText([task.fullTestName, task.name]),
-})
+const NO_FILE: NonNullable<TaskLike['file']> = {}
+
+const taskFileOf = (task: TaskLike): NonNullable<TaskLike['file']> => task.file ?? NO_FILE
+
+const rerunOf = (task: TaskLike, packageName: string, file: string): RerunTarget =>
+  rerunTargetOf({
+    package: packageName,
+    filepath: textOrEmpty(taskFileOf(task).filepath),
+    projectRelativeFile: file,
+    project: textOrEmpty(taskFileOf(task).projectName),
+    packageRoot: providedPackageRoot(),
+    workspaceRoot: providedRoot(),
+    configFile: providedConfigFile(),
+  })
+
+const identityOf = (task: TaskLike): TestIdentity => {
+  const packageName = providedPackage() ?? EMPTY_TEXT
+  const file = fileOf(task.fullName)
+  return {
+    package: packageName,
+    file,
+    name: firstNonEmptyText([task.fullTestName, task.name]),
+    rerun: rerunOf(task, packageName, file),
+  }
+}
 
 const currentTask = (): TaskLike => TestRunner.getCurrentTest() ?? {}
 

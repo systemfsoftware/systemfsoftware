@@ -12,7 +12,6 @@ import type * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import * as V from 'vitest'
 import type { Asserted, Check, Checks, Expect } from './internal/checks.js'
-import { checkDefaultsKey, type ProvidedCheckDefaults } from './internal/property/defaults.js'
 import type * as Engine from './internal/property/engine.js'
 import type * as Property from './internal/property/kinds.js'
 import type {
@@ -28,13 +27,20 @@ import type {
 import * as internal from './internal/runner.js'
 import * as testContextInternal from './internal/test-context.js'
 
-declare module 'vitest' {
-  interface ProvidedContext {
-    [checkDefaultsKey]?: ProvidedCheckDefaults
-    '@systemfsoftware/vitest:package'?: string
-    '@systemfsoftware/vitest:workspace-root'?: string
-  }
-}
+/**
+ * A run's property settings and the service they reach the runner through. A test provides `PropertyConfig` with
+ * the values its scenario needs; every other run reads them from its environment.
+ *
+ * @since 4.2.0
+ */
+export { PropertyConfig, type PropertySettings } from './config.js'
+
+/**
+ * The budget tiers a run's properties use.
+ *
+ * @since 4.2.0
+ */
+export type { PropertyTier } from './internal/property/budget.schema.js'
 
 /**
  * The Vitest values the fork keeps. `expect`, `assert`, `beforeEach` and `afterEach` are deliberately absent:

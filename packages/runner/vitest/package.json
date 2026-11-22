@@ -51,6 +51,11 @@
       "types": "./dist/TestClock.d.ts",
       "default": "./dist/TestClock.mjs"
     },
+    "./vite": {
+      "@systemfsoftware/source": "./src/vite.ts",
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -112,6 +117,10 @@
       "./TestClock": {
         "types": "./dist/TestClock.d.ts",
         "default": "./dist/TestClock.mjs"
+      },
+      "./vite": {
+        "types": "./dist/vite.d.ts",
+        "default": "./dist/vite.mjs"
       },
       "./package.json": "./package.json"
     },

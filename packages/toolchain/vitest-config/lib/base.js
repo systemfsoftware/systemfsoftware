@@ -1,5 +1,6 @@
 import { realpath } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
 
@@ -17,6 +18,7 @@ import { exists, firstExisting, readJson } from './files.js'
  *   readonly exemption: { readonly projects: readonly string[] | '*', readonly registrar: string } | undefined,
  *   readonly forkSetupFiles: ReadonlyArray<string>,
  *   readonly name: string,
+ *   readonly plugins: ReadonlyArray<import('vite').Plugin>,
  *   readonly root: string,
  * }} PackageFacts
  */
@@ -114,6 +116,26 @@ const forkSetupFile = async (cwd, name, subpath) => {
   return realpath(found)
 }
 
+/**
+ * The fork's `./vite` plugin, which publishes the commit and config facts its runner reads in workers. It loads from
+ * the fork's build, since Node cannot import its TypeScript source; before the fork is built, or from a fork
+ * without the entry, the run goes without it and the runner falls back to what its workers' environment names.
+ *
+ * @param {string} cwd the package directory
+ * @param {string} name the package's npm name
+ * @returns {Promise<ReadonlyArray<import('vite').Plugin>>}
+ */
+const forkPlugins = async (cwd, name) => {
+  const forkDir = name === forkPackage ? cwd : join(cwd, 'node_modules', forkPackage)
+  const manifestPath = join(forkDir, 'package.json')
+  if (!(await exists(manifestPath))) return []
+  const entry = Reflect.get(Object(Reflect.get(Object(await readJson(manifestPath)), 'exports')), './vite')
+  const file = stringField(entry, 'default')
+  if (file.length === 0 || !(await exists(join(forkDir, file)))) return []
+  const plugin = await import(pathToFileURL(await realpath(join(forkDir, file))).href)
+  return [plugin.propertyRunFacts()]
+}
+
 // A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
 // test`, and turbo's per-package task), so `<cwd>/package.json` is the package this config belongs to.
 /**
@@ -129,7 +151,8 @@ const packageFacts = async (cwd) => {
     ? []
     : [await forkSetupFile(cwd, name, './guard'), await forkSetupFile(cwd, name, './property-defaults')]
   const root = await workspaceRoot(cwd)
-  return { exemption, forkSetupFiles: forkFiles, name, root }
+  const plugins = exemption?.projects === '*' ? [] : await forkPlugins(cwd, name)
+  return { exemption, forkSetupFiles: forkFiles, name, plugins, root }
 }
 
 /**
@@ -245,6 +268,7 @@ export const defineConfig = async (config) => {
   const base = withProvide(withSetupFiles(config.test, declared === undefined, facts), facts)
   return defineVitestConfig({
     ...config,
+    plugins: [...(config.plugins ?? []), ...facts.plugins],
     test: declared === undefined
       ? base
       : { ...base, projects: /** @type {Projects} */ (declared.map((project) => projectWithSetup(project, facts))) },

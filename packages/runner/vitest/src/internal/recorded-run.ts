@@ -16,6 +16,7 @@ import * as Option from 'effect/Option'
 import type * as Tracer from 'effect/Tracer'
 import type * as V from 'vitest'
 import { TestRunner } from 'vitest'
+import { PropertyConfig, type PropertySettings } from '../config.js'
 import { Asserted, type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { refusingUnyielded } from './driver.js'
 import { type FailureRecord, renderFailureRecord, type TestIdentity, testIdentityOf } from './failure-record.js'
@@ -43,6 +44,8 @@ export interface RecordedProperty<G extends Engine.Gens, S extends Engine.Proper
   readonly budget?: ProvidedCheckDefaults | undefined
   /** The path of the test file whose seed store to read and write; absent, the run keeps no store. */
   readonly store?: string | undefined
+  /** The settings the run reads in place of its environment's, e.g. a replay to feed back. */
+  readonly settings?: PropertySettings | undefined
 }
 
 type PropertyProgram = (task: Engine.PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>
@@ -70,17 +73,34 @@ const provideRun = <A, E>(
     Effect.provideService(VitestTestContext, ctx),
   )
 
+const underSettings = <A, E>(
+  effect: Effect.Effect<A, E>,
+  settings: PropertySettings | undefined,
+): Effect.Effect<A, E> => settings === undefined ? effect : Effect.provideService(effect, PropertyConfig, settings)
+
 const runRecorded = <A, E>(
   ctx: V.TestContext,
   program: RecordedRun<A, E>,
+  settings: PropertySettings | undefined,
 ): Promise<FailureRecord | undefined> => {
   const ledger = makeLedger(ctx)
   const recorder = createSpanRecorder()
   return Effect.runPromiseExit(
-    provideRun(Effect.tap(program(checksFor(ledger)), () => refusingUnyielded(ledger)), ledger, ctx).pipe(
-      Effect.withTracer(recorder.tracer),
-    ),
+    underSettings(
+      provideRun(Effect.tap(program(checksFor(ledger)), () => refusingUnyielded(ledger)), ledger, ctx),
+      settings,
+    )
+      .pipe(Effect.withTracer(recorder.tracer)),
   ).then((exit) => outcomeOf(exit, recorder, testIdentityOf()))
+}
+
+const recordUnder = <A, E>(
+  program: RecordedRun<A, E>,
+  settings: PropertySettings | undefined,
+): Promise<FailureRecord | undefined> => {
+  const task = TestRunner.getCurrentTest()
+  if (task === undefined) return Promise.resolve(undefined)
+  return runRecorded(task.context, program, settings)
 }
 
 /**
@@ -89,11 +109,8 @@ const runRecorded = <A, E>(
  *
  * @internal
  */
-export const recordOfRun = <A, E>(program: RecordedRun<A, E>): Promise<FailureRecord | undefined> => {
-  const task = TestRunner.getCurrentTest()
-  if (task === undefined) return Promise.resolve(undefined)
-  return runRecorded(task.context, program)
-}
+export const recordOfRun = <A, E>(program: RecordedRun<A, E>): Promise<FailureRecord | undefined> =>
+  recordUnder(program, undefined)
 
 interface CapturedProperty {
   readonly name: string
@@ -128,17 +145,22 @@ const taskOfRecorded = (
   }
 }
 
+interface RecordedFileOptions {
+  readonly budget?: ProvidedCheckDefaults | undefined
+  readonly store?: string | undefined
+  readonly settings?: PropertySettings | undefined
+}
+
 /** Runs every captured program in registration order, each as `recordOfProperty` runs one. */
 const runCaptured = (
   captured: ReadonlyArray<CapturedProperty>,
-  budget: ProvidedCheckDefaults | undefined,
-  store: string | undefined,
+  options: RecordedFileOptions,
 ): Promise<Array<FailureRecord | undefined>> =>
   captured.reduce<Promise<Array<FailureRecord | undefined>>>(
     (previous, entry) =>
       previous.then((records) => {
-        const task = taskOfRecorded(entry.name, budget, store)
-        return recordOfRun(() => entry.program(task)).then((record) => [...records, record])
+        const task = taskOfRecorded(entry.name, options.budget, options.store)
+        return recordUnder(() => entry.program(task), options.settings).then((record) => [...records, record])
       }),
     Promise.resolve([]),
   )
@@ -151,13 +173,12 @@ interface CapturedFile {
 /** Registers a whole file's properties on a capturing runtime with a fresh ledger, and runs them in order. */
 const capturedRun = (
   register: (api: PropApi<never>) => void,
-  budget: ProvidedCheckDefaults | undefined,
-  store: string | undefined,
+  options: RecordedFileOptions,
 ): Promise<CapturedFile> => {
   const captured: Array<CapturedProperty> = []
   const ledger = makeFileLedger()
   register(makeProperty(capturingRuntime(captured, ledger)))
-  return runCaptured(captured, budget, store).then((records) => ({ records, ledger }))
+  return runCaptured(captured, options).then((records) => ({ records, ledger }))
 }
 
 /**
@@ -173,13 +194,7 @@ export const recordOfProperty = <
 >(
   input: RecordedProperty<G, S, N>,
 ): Promise<FailureRecord | undefined> =>
-  capturedRun((api) => api.prop(input.name, input.spec, input.holds), input.budget, input.store)
-    .then(({ records }) => records[0])
-
-interface RecordedFileOptions {
-  readonly budget?: ProvidedCheckDefaults | undefined
-  readonly store?: string | undefined
-}
+  capturedRun((api) => api.prop(input.name, input.spec, input.holds), input).then(({ records }) => records[0])
 
 const EMPTY_FILE_OPTIONS: RecordedFileOptions = {}
 
@@ -195,11 +210,9 @@ export const recordOfFile: {
   (options?: RecordedFileOptions): (register: (api: PropApi<never>) => void) => Promise<RecordedFile>
 } = Function.dual(
   (args: IArguments): boolean => typeof args[0] === 'function',
-  (register: (api: PropApi<never>) => void, options?: RecordedFileOptions): Promise<RecordedFile> => {
-    const resolved = options ?? EMPTY_FILE_OPTIONS
-    return capturedRun(register, resolved.budget, resolved.store).then(({ records, ledger }) => ({
+  (register: (api: PropApi<never>) => void, options?: RecordedFileOptions): Promise<RecordedFile> =>
+    capturedRun(register, options ?? EMPTY_FILE_OPTIONS).then(({ records, ledger }) => ({
       records,
       vacuous: ledger.finalise(),
-    }))
-  },
+    })),
 )

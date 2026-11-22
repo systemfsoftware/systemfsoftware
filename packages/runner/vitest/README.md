@@ -231,6 +231,40 @@ if (error._tag === 'VacuousProperty') {
 }
 ```
 
+### Run budgets
+
+Every property in a run draws from one budget, decided by the run's tier:
+
+| Tier       | Chosen when                               | Runs   | Seed                 | Records failing seeds |
+| ---------- | ----------------------------------------- | ------ | -------------------- | --------------------- |
+| `replay`   | `CONFORMANCE_REPLAY` is set               | 100    | the replay's         | no                    |
+| `mutation` | `STRYKER_MUTATOR_WORKER` is set           | 30     | the commit's, else 0 | no                    |
+| `nightly`  | `PROPERTY_TIER=nightly`                   | 10 000 | the commit's         | no                    |
+| `local`    | `AGENT` is set, or no CI                  | 100    | fresh                | yes                   |
+| `ci`       | `CI` is set and not `false`, `0` or empty | 1 000  | the commit's         | no                    |
+
+The first row that applies wins. Every tier caps `size` at 10 and `maxShrinks` at 100. The commit is `GITHUB_SHA`, `CI_COMMIT_SHA` or `COMMIT_SHA`, else the one `git rev-parse HEAD` reads when the config loads; its first eight hex digits are the seed each property's own seed is derived from, so a CI failure reproduces on the same commit.
+
+`PROPERTY_RUNS` (a positive whole number) and `PROPERTY_SEED` (a whole number, as a failure printed it) apply over the tier and over a property's own `runs` and `seed`, so one failure can be rerun without editing the test. A value outside that grammar fails the run with a `ConfigError` naming the variable.
+
+The settings reach the runner as `PropertyConfig`. A test that drives the runner hands it settings rather than setting the environment:
+
+```ts
+import { type PropertySettings } from '@systemfsoftware/vitest'
+import { recordOfProperty } from '@systemfsoftware/vitest/failure'
+
+const settings: PropertySettings = {
+  tier: 'ci',
+  runs: Option.some(7),
+  seed: Option.none(),
+  replay: Option.none(),
+  commit: Option.none(),
+}
+await recordOfProperty({ name, spec, holds, settings })
+```
+
+`@systemfsoftware/vitest/vite` exports `propertyRunFacts()`, a Vite plugin that publishes what only the main process can read to the run's workers: the checked-out commit, the config file the project loaded and its package directory. `@systemfsoftware/vitest-config` lists it. A run without it seeds from the commit its workers' environment names, and its rerun lines name no config.
+
 ### Seeds and the seed store
 
 A provided budget asks for derandomized runs by carrying a `seed`. Each property then gets its own stable seed derived from that seed and its identity, so different properties draw different inputs and the same property draws the same inputs in every process and on every machine:
@@ -242,7 +276,7 @@ export default defineConfig({
 })
 ```
 
-**Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
+**Seed precedence**: `PROPERTY_SEED` wins over everything. Otherwise a property's own `arbitrary: { seed: 7 }` wins over a provided or commit seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
 
 **Migration**: code that relied on a provided seed making every property share one stream must set `arbitrary: { seed: <literal> }` on each property that needs a literal seed.
 
@@ -251,7 +285,7 @@ export default defineConfig({
 - Refuted: `{ "_tag": "Refuted", "property": "full test name", "seed": 42, "attempt": 5, "size": 3, "path": [0,1], "failure": "ReturnedFalse" }`
 - NonBoolean: `{ "_tag": "NonBoolean", "property": "full test name", "seed": 42, "runs": 100 }`
 
-Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; the shared config sets `record: false` in CI and in Stryker workers. Commit seed store updates like snapshot files.
+Recorded seeds replay before novel draws on every run, whatever the budget. Only a refuted or non-boolean failure writes, and only in a run that is not derandomized and does not set `record: false`; only the `local` tier records. Commit seed store updates like snapshot files.
 
 **Stale seeds**: a recorded seed-store refutation whose draw now passes no longer fails the property; the property's novel draws decide it, and the stale line can be deleted. A recorded draw that still fails but whose recorded shrink steps no longer replay (the generator's shrinking or the failure's kind changed) refutes the property with that draw, unshrunk, as its counterexample. An explicit `CONFORMANCE_REPLAY` replay that no longer reproduces its failure fails with `ReplayNoLongerReproduces` — the stored seed-store path is the one that passes.
 

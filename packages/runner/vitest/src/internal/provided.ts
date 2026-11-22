@@ -11,15 +11,15 @@
  */
 import { Option, Schema } from 'effect'
 import { inject } from 'vitest'
+import { commitKey, configFileKey, packageKey, packageRootKey, workspaceRootKey } from './provided-keys.js'
 import { PackageName, type PackageName as PackageNameValue, WorkspaceRoot } from './provided.schema.js'
 
-/** @internal */
-export const packageKey = '@systemfsoftware/vitest:package'
-
-/** @internal */
-export const workspaceRootKey = '@systemfsoftware/vitest:workspace-root'
-
-type ProvidedKey = typeof packageKey | typeof workspaceRootKey
+type ProvidedKey =
+  | typeof packageKey
+  | typeof workspaceRootKey
+  | typeof commitKey
+  | typeof configFileKey
+  | typeof packageRootKey
 
 type Opaque<A = unknown> = A
 
@@ -45,3 +45,12 @@ export const providedPackage = (): PackageNameValue | undefined => readNamed(pac
 
 /** @internal */
 export const providedRoot = (): WorkspaceRoot | undefined => readNamed(workspaceRootKey, WorkspaceRoot)
+
+/** @internal */
+export const providedCommit = (): Option.Option<string> => Option.fromUndefinedOr(read(commitKey))
+
+/** @internal */
+export const providedConfigFile = (): string | undefined => read(configFileKey)
+
+/** @internal */
+export const providedPackageRoot = (): string | undefined => read(packageRootKey)
