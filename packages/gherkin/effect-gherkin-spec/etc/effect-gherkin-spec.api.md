@@ -8,13 +8,13 @@ import { Asserted } from '@systemfsoftware/vitest/integration';
 import { Check } from '@systemfsoftware/vitest';
 import { Context } from 'effect';
 import { Duration } from 'effect';
-import * as Effect$1 from 'effect/Effect';
 import { Effect } from 'effect';
+import * as Effect_2 from 'effect/Effect';
 import { Expect } from '@systemfsoftware/vitest';
 import { it } from '@systemfsoftware/vitest';
-import * as Layer$1 from 'effect/Layer';
 import { Layer } from 'effect';
 import { layer } from '@systemfsoftware/vitest';
+import * as Layer_2 from 'effect/Layer';
 import * as Result from 'effect/Result';
 import { Schedule } from 'effect';
 import { Schema } from 'effect';
@@ -56,7 +56,7 @@ export type FeatureBody<RShared = never, RFresh = never, RFreshReq = never, S ex
     readonly background: (pipeline: BackgroundEffect<RShared | RFresh | RFreshReq>) => void;
     readonly scenarioOutline: OutlineFn<RShared, RFresh, RFreshReq>;
     readonly scope: GherkinEffect<ScopeServices<S> & GivenStage, never, ScopeIdentifiers<S>>;
-    readonly Do: Effect$1.Effect<object, never, never>;
+    readonly Do: Effect_2.Effect<object, never, never>;
 }) => void;
 
 // Warning: (ae-forgotten-export) The symbol "EmptyScopeMap" needs to be exported by the entry point index.d.ts
@@ -65,8 +65,8 @@ export type FeatureBody<RShared = never, RFresh = never, RFreshReq = never, S ex
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilder<S>;
     body: (body: FeatureBody<never, never, never, S>) => void;
-    withLayer: <RShared>(layer: Layer$1.Layer<RShared>) => FeatureBuilderWithLayer<RShared, S>;
-    withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(layer: Layer$1.Layer<RFresh, never, RFreshReq>) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
+    withLayer: <RShared>(layer: Layer_2.Layer<RShared>) => FeatureBuilderWithLayer<RShared, S>;
+    withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilder<S2>;
 };
 
@@ -82,14 +82,14 @@ export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap>
     readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, S>;
     body: (body: FeatureBody<RShared, never, never, S>) => void;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>;
-    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer$1.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>;
+    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>;
 };
 
 // @public (undocumented)
 export type FeatureBuilderWithScenarioLayer<RFresh, RFreshReq extends Scope.Scope, S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     body: (body: FeatureBody<never, RFresh, RFreshReq, S>) => void;
-    withLayer: <RShared>(layer: Layer$1.Layer<RShared>) => FeatureBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>;
+    withLayer: <RShared>(layer: Layer_2.Layer<RShared>) => FeatureBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S2>;
 };
 
@@ -158,7 +158,7 @@ export type LiveDeclaration<RRerun> = {
     readonly rerun?: never;
 } | {
     readonly live: string;
-    readonly rerun?: Effect$1.Effect<Top, StepError, RRerun>;
+    readonly rerun?: Effect_2.Effect<Top, StepError, RRerun>;
 };
 
 // @public (undocumented)
@@ -225,18 +225,18 @@ export const renderTitle: {
 
 // @public (undocumented)
 export const resolveScenarioArgs: {
-    <R = never>(third: Effect$1.Effect<Top, StepError, R> | undefined): (second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined) => {
-        pipeline: Effect$1.Effect<Top, StepError, R>;
+    <R = never>(third: Effect_2.Effect<Top, StepError, R> | undefined): (second: Effect_2.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined) => {
+        pipeline: Effect_2.Effect<Top, StepError, R>;
         opts: ScenarioOptions<never, never, R> | null;
     };
-    <R = never>(second: Effect$1.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined, third: Effect$1.Effect<Top, StepError, R> | undefined): {
-        pipeline: Effect$1.Effect<Top, StepError, R>;
+    <R = never>(second: Effect_2.Effect<Top, StepError, R> | ScenarioOptions<never, never, R> | undefined, third: Effect_2.Effect<Top, StepError, R> | undefined): {
+        pipeline: Effect_2.Effect<Top, StepError, R>;
         opts: ScenarioOptions<never, never, R> | null;
     };
 };
 
 // @public (undocumented)
-export type ScenarioBody<R = never> = Effect$1.Effect<Top, StepError, R>;
+export type ScenarioBody<R = never> = Effect_2.Effect<Top, StepError, R>;
 
 // Warning: (ae-forgotten-export) The symbol "ScenarioCallable" needs to be exported by the entry point index.d.ts
 //
@@ -248,12 +248,12 @@ export type ScenarioFn<RShared = never, RFresh = never, RFreshReq = never> = Sce
 
 // @public (undocumented)
 export type ScenarioOptions<RScenario = never, RExtra = never, RRerun = never> = {
-    readonly scenarioLayer?: Layer$1.Layer<RScenario>;
-    readonly layer?: Layer$1.Layer<RExtra>;
+    readonly scenarioLayer?: Layer_2.Layer<RScenario>;
+    readonly layer?: Layer_2.Layer<RExtra>;
 } & LiveDeclaration<RRerun>;
 
 // @public
-export type ScenarioRun<R = never> = (expect: Expect) => Effect$1.Effect<void, StepError, R | Scope.Scope | Asserted>;
+export type ScenarioRun<R = never> = (expect: Expect) => Effect_2.Effect<void, StepError, R | Scope.Scope | Asserted>;
 
 // Warning: (ae-forgotten-export) The symbol "ScopeIdentifiers$1" needs to be exported by the entry point index.d.ts
 //
@@ -358,14 +358,14 @@ export type WhenStage = {
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:121:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:122:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:124:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:132:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:165:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:180:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:238:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:346:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:114:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:115:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:117:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:125:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:156:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:169:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:227:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:331:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
