@@ -146,6 +146,61 @@ it('Should_LeadWithTheRaisingFrame_When_TheFailureWasRaisedInUserCode', function
   })
 })
 
+const rerunLineOf = (record: FailureRecord): string | undefined => record.record.split('\n').at(-1)
+
+const placedAt = (rerun: NonNullable<TestIdentity['rerun']>): TestIdentity => ({ ...IDENTITY, rerun })
+
+it('Should_NameTheConfigAndProject_When_TheRunLoadedANonDefaultConfigUnderProjects', function*({ expect }) {
+  const record = yield* recordOf(
+    [whenStep(Effect.fail(bare()))],
+    undefined,
+    placedAt({
+      package: '@systemfsoftware/vitest',
+      file: 'tests/readiness.runner.test.ts',
+      project: 'node',
+      config: 'vitest.node.config.ts',
+    }),
+  )
+  yield* expect(rerunLineOf(record)).toEqual(
+    '  pnpm --filter @systemfsoftware/vitest exec vitest run tests/readiness.runner.test.ts' +
+      ' --config vitest.node.config.ts --project node -t "readiness is checked for connection acceptance"',
+  )
+})
+
+it('Should_QuoteTheFile_When_ItsPathHoldsASpace', function*({ expect }) {
+  const record = yield* recordOf(
+    [whenStep(Effect.fail(bare()))],
+    undefined,
+    placedAt({
+      package: '@systemfsoftware/vitest',
+      file: 'tests/ready ness.runner.test.ts',
+      project: '',
+      config: '',
+    }),
+  )
+  yield* expect(rerunLineOf(record)).toEqual(
+    '  pnpm --filter @systemfsoftware/vitest exec vitest run "tests/ready ness.runner.test.ts"' +
+      ' -t "readiness is checked for connection acceptance"',
+  )
+})
+
+it('Should_RunVitestDirectly_When_TheRunNamesNoPackage', function*({ expect }) {
+  const record = yield* recordOf(
+    [whenStep(Effect.fail(bare()))],
+    undefined,
+    placedAt({
+      package: '',
+      file: 'packages/runner/vitest/tests/readiness.runner.test.ts',
+      project: '',
+      config: 'packages/runner/vitest/vitest.config.ts',
+    }),
+  )
+  yield* expect(rerunLineOf(record)).toEqual(
+    '  vitest run packages/runner/vitest/tests/readiness.runner.test.ts' +
+      ' --config packages/runner/vitest/vitest.config.ts -t "readiness is checked for connection acceptance"',
+  )
+})
+
 it('Should_OmitTheFrameName_When_EffectsRuntimeNamedTheCallback', function*({ expect }) {
   const stack = `LogSourceError: boom\n${frameLine('OnSuccessImpl.~effect/Effect/successCont', HANDLER_SITE)}`
   const record = yield* recordOf([whenStep(Effect.fail(raised('boom', stack)))])

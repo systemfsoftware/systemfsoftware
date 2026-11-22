@@ -1,6 +1,6 @@
 /**
  * The replay channel (R9-R12, KTD5, AE4): a property failure's replay text, fed back through `CONFORMANCE_REPLAY`,
- * reproduces the same verdict. A refuted property's text rebuilds the generator's token, so the same shrunk
+ * reproduces the same verdict. Each scenario hands the run that text as its settings. A refuted property's text rebuilds the generator's token, so the same shrunk
  * counterexample returns; a vacuous verdict's text names each property's seed and runs, so the same frozen outputs
  * return without a novel draw. A text naming another identity, or the kernel's own form, leaves the property on its
  * normal draws; a text naming neither form refuses the run.
@@ -8,17 +8,15 @@
  * Expected values are the first run's fields or literals (CONST-T10), never the parser's own output.
  */
 import {
-  afterAll,
   it,
-  onTestFinished,
   PropertyRefuted,
+  type PropertySettings,
   ReplayNoLongerReproduces,
   ReplayUnreadable,
   type VacuousProperty,
-  vi,
 } from '@systemfsoftware/vitest'
 import { type FailureRecord, recordOfFile, recordOfProperty, replayOfText } from '@systemfsoftware/vitest/failure'
-import { Effect, Schema } from 'effect'
+import { Effect, Option, Schema } from 'effect'
 
 type Opaque<A = unknown> = A
 
@@ -74,6 +72,15 @@ const passingIntFor = (name: string) => ({
   holds: (): boolean => true,
 })
 
+// The settings a run reads when `CONFORMANCE_REPLAY` carries the given text.
+const replaying = (text: string): PropertySettings => ({
+  tier: 'replay',
+  runs: Option.none(),
+  seed: Option.none(),
+  replay: Option.some(text),
+  commit: Option.none(),
+})
+
 const emptySubject = (): Record<string, never> => ({})
 
 const VACUOUS_NAME = '∀x_VacuousReplayed_⊆Frozen'
@@ -81,13 +88,9 @@ const VACUOUS_NAME = '∀x_VacuousReplayed_⊆Frozen'
 it('Should_ReproduceTheRefutedVerdict_When_ItsReplayTextIsFedBack', function*({ expect }) {
   const first = yield* Effect.promise(() => recordOfProperty(refutedFor('∀x_RefutedFirst_≢Itself', 1)))
   const refuted = refutedOf(first)
-  yield* Effect.sync(() => {
-    vi.stubEnv('CONFORMANCE_REPLAY', refuted.replay)
-  })
-  onTestFinished(() => {
-    vi.unstubAllEnvs()
-  })
-  const second = yield* Effect.promise(() => recordOfProperty(refutedFor('∀x_RefutedFirst_≢Itself', 999)))
+  const second = yield* Effect.promise(() =>
+    recordOfProperty({ ...refutedFor('∀x_RefutedFirst_≢Itself', 999), settings: replaying(refuted.replay) })
+  )
   const replayed = refutedOf(second)
   yield* expect({
     firstSeed: refuted.property.seed,
@@ -110,13 +113,9 @@ it('Should_Fail_When_TheExplicitReplayNoLongerReproduces', function*({ expect })
   const name = '∀x_StaleReplay_≢Passed'
   const first = yield* Effect.promise(() => recordOfProperty(refutedFor(name, 1)))
   const refuted = refutedOf(first)
-  yield* Effect.sync(() => {
-    vi.stubEnv('CONFORMANCE_REPLAY', refuted.replay)
-  })
-  onTestFinished(() => {
-    vi.unstubAllEnvs()
-  })
-  const second = yield* Effect.promise(() => recordOfProperty(passingIntFor(name)))
+  const second = yield* Effect.promise(() =>
+    recordOfProperty({ ...passingIntFor(name), settings: replaying(refuted.replay) })
+  )
   const stale = staleOf(second)
   yield* expect({ tag: stale._tag, name: stale.property.name, replay: stale.replay }).toEqual({
     tag: 'ReplayNoLongerReproduces',
@@ -139,12 +138,6 @@ it('Should_ReproduceTheVacuousVerdict_When_ItsReplayTextIsFedBack', function*({ 
     })
   )
   const served = vacuousOf(first.vacuous)
-  yield* Effect.sync(() => {
-    vi.stubEnv('CONFORMANCE_REPLAY', served.replay)
-  })
-  onTestFinished(() => {
-    vi.unstubAllEnvs()
-  })
   const second = yield* Effect.promise(() =>
     recordOfFile((api) => {
       api.prop(
@@ -155,7 +148,7 @@ it('Should_ReproduceTheVacuousVerdict_When_ItsReplayTextIsFedBack', function*({ 
           return true
         },
       )
-    })
+    }, { settings: replaying(served.replay) })
   )
   const replayed = vacuousOf(second.vacuous)
   const firstEntry = firstEntryOf(served)
@@ -171,13 +164,12 @@ it('Should_ReproduceTheVacuousVerdict_When_ItsReplayTextIsFedBack', function*({ 
 
 it('Should_KeepItsNormalDraws_When_TheReplayNamesAnotherIdentity', function*({ expect }) {
   const other = yield* Effect.promise(() => recordOfProperty(refutedFor('∀x_OtherIdentityFirst_≢Itself', 1)))
-  yield* Effect.sync(() => {
-    vi.stubEnv('CONFORMANCE_REPLAY', refutedOf(other).replay)
-  })
-  onTestFinished(() => {
-    vi.unstubAllEnvs()
-  })
-  const second = yield* Effect.promise(() => recordOfProperty(refutedFor('∀x_OtherIdentitySecond_≢Itself', 999)))
+  const second = yield* Effect.promise(() =>
+    recordOfProperty({
+      ...refutedFor('∀x_OtherIdentitySecond_≢Itself', 999),
+      settings: replaying(refutedOf(other).replay),
+    })
+  )
   yield* expect({ seed: refutedOf(second).property.seed }).toEqual({ seed: 999 })
 })
 
@@ -186,16 +178,8 @@ it('Should_ReadTheKernelForm_When_TheTextNamesASeedAndDecisions', function*({ ex
 })
 
 it('Should_RefuseTheRun_When_TheReplayTextNamesNeitherForm', function*({ expect }) {
-  yield* Effect.sync(() => {
-    vi.stubEnv('CONFORMANCE_REPLAY', 'not a replay')
-  })
-  onTestFinished(() => {
-    vi.unstubAllEnvs()
-  })
-  const record = yield* Effect.promise(() => recordOfProperty(holdingFor('∀x_HoldingRefused_⊆Replay')))
+  const record = yield* Effect.promise(() =>
+    recordOfProperty({ ...holdingFor('∀x_HoldingRefused_⊆Replay'), settings: replaying('not a replay') })
+  )
   yield* expect({ text: refusalOf(record).text }).toEqual({ text: 'not a replay' })
-})
-
-afterAll(() => {
-  vi.unstubAllEnvs()
 })

@@ -1,16 +1,12 @@
 /**
- * @internal The configured property-check defaults: the `test.provide` key they arrive under, and the
- * reader the engine calls when a property resolves its budget. The record carries no `replay`, because a
- * replay token names one falsification rather than a default for every property.
+ * @internal A property budget a run provides itself under `test.provide`, which outranks its tier's. The record
+ * carries no `replay`, because a replay token names one falsification rather than a default for every property.
  */
 import type * as Arbitrary from 'effect/Arbitrary'
 import { inject } from 'vitest'
-import { providedBudgetOf } from './tiers.js'
 
-/** @internal The `test.provide` key the shared config fills with this run's tier's check options. */
+/** @internal The `test.provide` key a run fills with its own check options. */
 export const checkDefaultsKey = '@systemfsoftware/vitest:property-check'
-
-const processEnvironment = () => ({ ...(typeof process === 'undefined' ? undefined : process.env) })
 
 /**
  * The check options a run supplies as its property default, minus `replay`. `record` asks the engine to write a
@@ -26,9 +22,5 @@ export interface PropertyBudget extends Omit<Arbitrary.CheckOptions, 'replay'> {
 /** @internal The check options a run supplies as its property default (KTD4). */
 export type ProvidedCheckDefaults = PropertyBudget
 
-/**
- * @internal The property-check defaults a run provided through `test.provide`, else the tier's budget for this
- * process's environment, read from the same table the setup entry uses.
- */
-export const providedCheckDefaults = (): ProvidedCheckDefaults =>
-  inject(checkDefaultsKey) ?? providedBudgetOf(processEnvironment())
+/** @internal The property-check defaults a run provided through `test.provide`, or `undefined` when it provided none. */
+export const providedCheckDefaults = (): ProvidedCheckDefaults | undefined => inject(checkDefaultsKey)

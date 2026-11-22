@@ -9,8 +9,6 @@
  */
 import * as Arbitrary from 'effect/Arbitrary'
 import * as Cause from 'effect/Cause'
-import * as Config from 'effect/Config'
-import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
@@ -22,10 +20,13 @@ import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
+import { PropertyConfig, type PropertySettings } from '../../config.js'
 import { type PropertyReplay, ReplayChannelFromText } from '../../replay.schema.js'
 import { callFrame, withRaisingFrame } from '../call-site.js'
 import { InvalidBudget } from '../errors.schema.js'
 import { type TestIdentity, witnessOf } from '../failure-record.js'
+import { providedCommit } from '../provided.js'
+import { tierBudgetOf, withSeedOverride } from './budget.js'
 import { countHit, type CoverageClass, type CoverageDraw, type CoverageFailure, judgeCoverage } from './coverage.js'
 import { checkDefaultsKey, type ProvidedCheckDefaults } from './defaults.js'
 import {
@@ -114,7 +115,7 @@ export interface PropertyTask {
   readonly identity: TestIdentity
   /** The absolute path of the test file whose seed store is read and written beside it (KTD6); `null` keeps no store. */
   readonly filepath: string | null
-  /** The provided property budget, or `undefined` when the run provided none. */
+  /** The budget the run provided itself, or `undefined` for its tier's budget. */
   readonly budget: ProvidedCheckDefaults | undefined
 }
 
@@ -267,19 +268,31 @@ const resolvedRuns = (options: Arbitrary.CheckOptions): number => options.runs ?
 /**
  * The effective check options: the property's own fields over the configured default over `runs: 100`,
  * merged field by field so a property that sets only `runs` still inherits the configured size and caps.
- * The resolved seed replaces the provided and explicit `seed` fields, which are inputs to the derivation
- * rather than a shared stream (KTD4).
+ * `PROPERTY_RUNS` and `PROPERTY_SEED` apply last, over both. Otherwise the resolved seed replaces the provided and
+ * explicit `seed` fields, which are inputs to the derivation rather than a shared stream (KTD4).
  */
 const EMPTY_PROVIDED_BUDGET: ProvidedCheckDefaults = {}
 
-const resolveBudget = (name: string, spec: BudgetInput, task: PropertyTask, fresh: number): Budget => {
+const overriddenRuns = (options: Arbitrary.CheckOptions, runs: Option.Option<number>): Arbitrary.CheckOptions =>
+  Option.match(runs, { onNone: () => options, onSome: (count) => ({ ...options, runs: count }) })
+
+const resolveBudget = (
+  name: string,
+  spec: BudgetInput,
+  task: PropertyTask,
+  fresh: number,
+  settings: PropertySettings,
+): Budget => {
   const explicit = explicitOptions(spec)
   const provided = task.budget ?? EMPTY_PROVIDED_BUDGET
   requirePositiveRuns((runs) => invalidPropertyBudget(name, runs), explicit.runs)
   requirePositiveRuns(invalidProvidedBudget, provided.runs)
   requireOwnSeed(name, explicit.seed)
-  const options = mergedOptions(task.budget, explicit)
-  const seed = resolveSeed({ own: explicit.seed, provided: provided.seed, identity: task.identity, fresh })
+  const options = overriddenRuns(mergedOptions(task.budget, explicit), settings.runs)
+  const seed = Option.getOrElse(
+    settings.seed,
+    () => resolveSeed({ own: explicit.seed, provided: provided.seed, identity: task.identity, fresh }),
+  )
   return { runs: resolvedRuns(options), options: { ...options, seed }, seed }
 }
 
@@ -500,8 +513,6 @@ const propertyRunOf = <G extends Gens, S extends PropertySubject, E, R>(
   seed: seeded(budget.seed),
   runs: runCounted(budget.runs),
 })
-
-const REPLAY_VARIABLE = 'CONFORMANCE_REPLAY'
 
 const replayEntryOf = (
   text: Option.Option<string>,
@@ -936,23 +947,42 @@ const propertyPlatform = Layer.unwrap(
   }),
 )
 
+// A test that provides `PropertyConfig` itself runs under its settings; every other run reads its environment.
+const settingsFromEnvironment: Effect.Effect<PropertySettings> = Effect.service(PropertyConfig).pipe(
+  Effect.provide(PropertyConfig.layer),
+  Effect.orDie,
+)
+
+const propertySettings: Effect.Effect<PropertySettings> = Effect.serviceOption(PropertyConfig).pipe(
+  Effect.flatMap((provided) =>
+    Option.match(provided, {
+      onSome: (settings): Effect.Effect<PropertySettings> => Effect.succeed(settings),
+      onNone: () => settingsFromEnvironment,
+    })
+  ),
+)
+
+const budgetedTask = (task: PropertyTask, settings: PropertySettings): PropertyTask => ({
+  ...task,
+  budget: withSeedOverride(task.budget ?? tierBudgetOf(settings, providedCommit()), settings),
+})
+
 const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
   task: PropertyTask,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
   Effect.provide(
     Effect.gen(function*() {
+      const settings = yield* propertySettings
+      const budgeted = budgetedTask(task, settings)
       const fresh = (yield* Random.nextInt) >>> 0
-      const baseBudget = resolveBudget(registration.name, registration.spec, task, fresh)
+      const baseBudget = resolveBudget(registration.name, registration.spec, budgeted, fresh, settings)
       const hash = identityHash(task.identity)
-      const replayText = yield* Config.option(Config.String(REPLAY_VARIABLE)).pipe(
-        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
-        Effect.orDie,
-      )
+      const replayText = settings.replay
       const entry = Option.getOrUndefined(yield* replayEntryOf(replayText, hash, registration.site))
       const arbitrary = arbitraryOf(registration.spec.of)
       yield* Option.match(Option.fromNullishOr(entry), {
-        onNone: () => storeRun(registration, task, baseBudget, arbitrary, hash),
+        onNone: () => storeRun(registration, budgeted, baseBudget, arbitrary, hash),
         onSome: (replay) => replayRun(registration, baseBudget, arbitrary, hash, replay, Option.getOrThrow(replayText)),
       })
     }),
