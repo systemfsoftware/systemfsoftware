@@ -27,7 +27,7 @@ tags:
 
 In each failing package run `pnpm run api:update` (`api-extractor run --local`) after `tsdown`, and commit the changed reports. Review the diff: it must be alias renames only. Because the packages' build hash changed, add an intent with `pnpm change` (REPO-R2).
 
-Choose each intent's bump from the packed tarball, not from the API report. `etc/*.api.md` is not published (`files: ["dist"]`), so a report change alone earns nothing; but the tsdown bump that rode along rewrote `dist/` in 24 of 27 packages (a new hashed `rolldown-runtime-*.mjs` chunk name and changed region comments), and the other changed tarballs differ in the devDependency ranges their `package.json` declares. Any tarball byte change earns `patch`. Check it: build and `pnpm pack` the package on the branch and on `main`, extract both, and `diff -r`. In this bump only three packages packed byte-identical and took `none`.
+Choose each intent's bump from the packed tarball, not from the API report. `etc/*.api.md` is not published (`files: ["dist"]`), so a report change alone earns nothing; but the tsdown bump that rode along rewrote `dist/` in 21 of 27 packages (a new hashed `rolldown-runtime-*.mjs` chunk name and changed region comments), and three more differ only in the devDependency ranges their `package.json` declares. Any tarball byte change earns `patch`. Check it: build and `pnpm pack` the package on the branch and on `main`, extract both, and `diff -r`. In this bump only three packages packed byte-identical and took `none`.
 
 ## Prevention
 
