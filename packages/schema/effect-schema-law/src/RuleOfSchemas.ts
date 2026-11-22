@@ -1,6 +1,7 @@
 import { it } from '@systemfsoftware/vitest'
 import {
   Effect,
+  Equal,
   Equivalence,
   Match,
   Option,
@@ -14,15 +15,7 @@ import * as Arbitrary from 'effect/Arbitrary'
 import { TestRunner } from 'vitest'
 import { type CodecStep, decodeStep, encodeStep } from './codec-step.js'
 import { LawDrawFailed, LawErred, LawRefuted } from './law-failure.schema.js'
-import {
-  deterministic,
-  instancedProp,
-  LAW_MAX_SIZE,
-  type LawVerdict,
-  prop,
-  runLaw,
-  skipIfUninstanced,
-} from './property.js'
+import { instancedProp, LAW_MAX_SIZE, type LawVerdict, prop, runLaw, skipIfUninstanced } from './property.js'
 
 /** What a full round trip of one `Type` value found. `back` is present only when the draw was an instance. */
 type RoundTrip<A> =
@@ -338,11 +331,18 @@ const roundTripValueOf = <A, I>(subject: LawSubject<A, I>) => (value: A) => {
   return trip.instance ? trip.back : undefined
 }
 
+const singleInhabitantVerdict = <A, I>(subject: LawSubject<A, I>, value: A): LawVerdict => ({
+  holds: Equal.equals(roundTripValueOf(subject)(value), roundTripValueOf(subject)(value)),
+  instance: roundTripOf(subject, value).instance,
+})
+
 const registerSingleInhabitant = <A, I>(name: string, subject: LawSubject<A, I>): void => {
-  deterministic(`∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`, {
-    of: [subject.schema],
-    subject: roundTripValueOf(subject),
-  })
+  instancedProp(
+    `∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`,
+    { of: [subject.schema], subject },
+    (lawSubject, [value]) => singleInhabitantVerdict(lawSubject, value),
+    NO_ROUND_TRIP_REASON,
+  )
 }
 
 const lawsOf = <A, I>(name: string, schema: S.Codec<A, I>, options?: RuleOfSchemasOptions): void => {

@@ -1,4 +1,4 @@
-import { Cause, Effect, Equal, Exit, Formatter, Schema } from 'effect'
+import { Cause, Effect, Exit, Formatter, Schema } from 'effect'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as fc from 'fast-check'
 import { inject, it } from 'vitest'
@@ -232,11 +232,3 @@ export const instancedProp = <const G extends Gens, S>(
     )
     skipIfUninstanced(context, instanced, skipReason)
   })
-
-const deterministicHolds = <V extends ReadonlyArray<unknown>, A>(subject: (...values: V) => A, values: V): boolean =>
-  Equal.equals(subject(...values), subject(...values))
-
-export const deterministic = <const G extends Gens, A>(
-  name: string,
-  spec: PropertySpec<G, (...values: Values<G>) => A>,
-): void => prop(name, spec, (subject, values) => deterministicHolds(subject, values))
