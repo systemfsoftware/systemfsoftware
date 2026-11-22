@@ -16,7 +16,7 @@ export namespace SpanRecorder {
 
 // @public (undocumented)
 export namespace Suite {
-    export { Bindings, CaseLive, Config$1 as Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, open, openCase, openShared, openSharedCase };
+    export { Bindings, CaseLive, Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, open, openCase, openShared, openSharedCase };
 }
 
 // @public (undocumented)

@@ -11,7 +11,7 @@ export namespace Blueprint {
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
+    export { Cell, CellTypeId, Do, Kind, Run, TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
 }
 
 // @public (undocumented)

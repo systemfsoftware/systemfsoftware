@@ -77,14 +77,16 @@ const SCALAR_TYPES: Record<string, true> = { string: true, number: true, boolean
 
 const isScalar = (value: unknown): value is string | number | boolean => SCALAR_TYPES[typeof value] === true
 
-type OtelScalarArray = ReadonlyArray<string | number | boolean | null | undefined>
+// opentelemetry-api 1.10 widened AttributeValue to `unknown`, so the value is narrowed here, not assumed.
+const scalarArrayOrNull = (value: OtelAttributeValue): Span.AttributeValue | null => {
+  if (!Array.isArray(value)) return null
+  const items: ReadonlyArray<OtelAttributeValue> = value
+  return items.filter(isScalar)
+}
 
-const scalarArrayOrNull = (value: OtelAttributeValue): Span.AttributeValue | null =>
-  Array.isArray(value) ? (value satisfies OtelScalarArray).filter(isScalar) : null
+const definedOrEmpty = (value: OtelAttributeValue): OtelAttributeValue => value ?? []
 
-const definedOrEmpty = (value: OtelAttributeValue | undefined): OtelAttributeValue => value ?? []
-
-const attributeValue = (value: OtelAttributeValue | undefined): Span.AttributeValue | null =>
+const attributeValue = (value: OtelAttributeValue): Span.AttributeValue | null =>
   isScalar(value) ? value : scalarArrayOrNull(definedOrEmpty(value))
 
 const isPresent = (
