@@ -97,7 +97,7 @@
             self.packages.${pkgs.stdenv.hostPlatform.system}.stryker
             self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
             pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.sandbox
-            pkgs.nodejs_24
+            pkgs.nodejs_26
             pkgs.pnpm_12
             pkgs.deno
             self.packages.${pkgs.stdenv.hostPlatform.system}.bun
