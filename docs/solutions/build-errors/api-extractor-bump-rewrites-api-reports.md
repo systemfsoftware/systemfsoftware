@@ -30,3 +30,7 @@ In each failing package run `pnpm run api:update` (`api-extractor run --local`) 
 ## Prevention
 
 Take an api-extractor bump together with regenerated reports. Never loosen `api:check`.
+
+## Second failure in the same bump: `@opentelemetry/api` 1.10 widened `AttributeValue`
+
+1.10.0 defines `AttributeValue` as a deprecated alias of `AnyValue`, and `AnyValue` is `unknown`. In `trace-spec`, `OtelAttributeValue | undefined` then became `unknown | undefined`, and oxlint's `no-redundant-type-constituents` failed the package lint. Fix the cause in the code, not in the lint config: take the value as `OtelAttributeValue`, narrow it with `Array.isArray` and the `isScalar` guard, and keep the `?? []` default so an `undefined` attribute still yields an empty array. Do not spell the parameter `unknown`; `ban-unknown` rejects it.
