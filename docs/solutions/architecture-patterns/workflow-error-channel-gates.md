@@ -146,5 +146,5 @@ const decision = Either.match(verdict, {
 
 - The `Workflow` constructor's `UntaggedError`, `SingleVariantDecision` and `ErrorClassDecision` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
-- `CODING_STANDARDS.md` `SF-IMP-3` (Each Error Its Own Variant) and `SF-TST-3` (Mutation Is the Measure)
+- `CODING_STANDARDS.md` `SF-IMP-3` (Each Error Its Own Variant) and `SF-TST-5` (Mutation Is the Measure)
 - `SandboxBootError` and its sibling `MicroVM` errors in `@systemfsoftware/effect-microsandbox` — reference usage of `S.TaggedError` in the monorepo

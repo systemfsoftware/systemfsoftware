@@ -15,6 +15,8 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 | Doc                                                                      | Trigger                                                                                                                    |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | `repos/constitution/CODING_STANDARDS.md`, `repos/constitution/REVIEW.md` | you plan, write or review any change; before you propose a test, a check or a design                                       |
+| `repos/constitution/GRADERS.md`                                          | you build or change a check: a lint rule, CI job, hook, threshold or rubric                                                |
+| `repos/constitution/WORKING.md`                                          | always; `CLAUDE.md` imports it                                                                                             |
 | `CONCEPTS.md`                                                            | domain vocabulary, taxonomy, or convention lookup                                                                          |
 | `.github/AGENTS.md`                                                      | CI check failure or workflow modification                                                                                  |
 | `docs/solutions/`                                                        | researching past decisions, postmortems, or known patterns (categorized with YAML frontmatter: module, tags, problem_type) |
