@@ -19,6 +19,7 @@ export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2
 export interface InlineSchemaTestsOptions {
     // (undocumented)
     dir?: string;
+    // (undocumented)
     runs?: Readonly<Record<string, number>>;
 }
 
