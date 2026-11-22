@@ -1,4 +1,5 @@
 export * from './Bound.js'
+export * from './HostResources.js'
 export * from './Pct.js'
 export { PctDepth, PctSeedCount, PctStepCount } from './Pct.schema.js'
 export * from './Profile.js'

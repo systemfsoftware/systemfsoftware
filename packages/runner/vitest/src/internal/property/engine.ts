@@ -126,8 +126,9 @@ export interface PropertyRuntime<R> {
     program: (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never>,
   ) => void
   readonly provide: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>
-  /** The file ledger every property of this runtime records its impostor verdict into (R20, KTD10). */
-  readonly ledger: FileLedger
+  readonly ledgerFor: (file: string) => FileLedger
+  /** The test file whose properties are being registered. */
+  readonly filepath: () => string
 }
 
 /** @internal */
@@ -172,6 +173,10 @@ interface Registration<G extends Gens, S extends PropertySubject, E, R> {
   readonly gate: boolean
   /** The site the property was declared at, captured there because the fork judges it later (KTD6). */
   readonly site: string | undefined
+  /** The test file that declared the property, so its verdict belongs to that file's ledger (R20). */
+  readonly file: string
+  /** The law kind this property is exempt from the impostor gate by, recorded when the property runs. */
+  readonly exempt: { readonly name: string; readonly kind: string } | undefined
 }
 
 interface Run<G extends Gens, S extends PropertySubject, E, R> {
@@ -857,7 +862,7 @@ const checkOf = <G extends Gens, S extends PropertySubject, E, R>(
   seed: budget.seed,
   identityHash,
   site: registration.site,
-  ledger: registration.runtime.ledger,
+  ledger: registration.runtime.ledgerFor(registration.file),
 })
 
 const runRecordedChecks = <G extends Gens, S extends PropertySubject, E, R>(
@@ -957,7 +962,12 @@ const program = <G extends Gens, S extends PropertySubject, E, R>(
 const programOf = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
 ): (task: PropertyTask) => Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, never> =>
-(task) => registration.runtime.provide(program(registration, task))
+(task) => {
+  if (registration.exempt !== undefined) {
+    registration.runtime.ledgerFor(registration.file).recordExempt(registration.exempt.name, registration.exempt.kind)
+  }
+  return registration.runtime.provide(program(registration, task))
+}
 
 const isSelfModel = <G extends Gens, A>(subject: LawSubject<G, A>, oracle: LawSubject<G, A>): boolean =>
   Object.is(subject, oracle)
@@ -974,8 +984,19 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
     holds: (subject: S, values: Values<G>) => Verdict<E, R>,
     lane: Lane,
     gate: boolean,
+    exempt?: { readonly name: string; readonly kind: string },
   ): void => {
-    const registration: Registration<G, S, E, R> = { runtime, name, spec, holds, lane, gate, site: callFrame() }
+    const registration: Registration<G, S, E, R> = {
+      runtime,
+      name,
+      spec,
+      holds,
+      lane,
+      gate,
+      site: callFrame(),
+      file: runtime.filepath(),
+      exempt,
+    }
     runtime.register(name, programOf(registration))
   }
 
@@ -996,8 +1017,7 @@ export const makeProperty = <R>(runtime: PropertyRuntime<R>): PropApi<R> => {
     holds: (subject: S, values: Values<G>) => boolean,
     kind: LawKind,
   ): void => {
-    runtime.ledger.recordExempt(name, kind)
-    body(`${name} [exempt: ${kind}]`, spec, holds, 'sync', false)
+    body(`${name} [exempt: ${kind}]`, spec, holds, 'sync', false, { name, kind })
   }
 
   const model = <G extends Gens, A, N extends number, S extends LawSubject<G, A>>(
