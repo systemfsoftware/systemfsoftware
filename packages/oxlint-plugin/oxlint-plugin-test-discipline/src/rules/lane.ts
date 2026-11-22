@@ -13,7 +13,7 @@ import { isPropCallee } from './prop-call.js'
 
 /**
  * What a test exercises, read from what it imports and calls. A file is in every
- * lane its content selects, whatever its name or location (`SF-GATE-4`).
+ * lane its content selects, whatever its name or location (`CONST-T12`).
  */
 export type Lane = 'behaviour' | 'conformance' | 'differential' | 'trace' | 'property' | 'e2e'
 

@@ -18,7 +18,7 @@
  */
 import { Effect, Match, Option, Schema, SchemaGetter, SchemaIssue } from 'effect'
 
-/** The seed a replay names: the whole number a generator chose, never negative (SF-IMP-1). */
+/** The seed a replay names: the whole number a generator chose, never negative (CONST-D1). */
 export const ReplaySeed = Schema.Int.pipe(
   Schema.check(Schema.isGreaterThanOrEqualTo(0)),
   Schema.brand('ReplaySeed'),
@@ -50,7 +50,7 @@ export const PropertyHash = Schema.Int.pipe(
 /** @since 4.0.0 */
 export type PropertyHash = typeof PropertyHash.Type
 
-/** The count of runs a property entry names, never negative (SF-IMP-1). */
+/** The count of runs a property entry names, never negative (CONST-D1). */
 export const ReplayRunCount = Schema.Int.pipe(
   Schema.check(Schema.isGreaterThanOrEqualTo(0)),
   Schema.brand('ReplayRunCount'),

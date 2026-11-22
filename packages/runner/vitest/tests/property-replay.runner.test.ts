@@ -5,7 +5,7 @@
  * return without a novel draw. A text naming another identity, or the kernel's own form, leaves the property on its
  * normal draws; a text naming neither form refuses the run.
  *
- * Expected values are the first run's fields or literals (SF-TST-2), never the parser's own output.
+ * Expected values are the first run's fields or literals (CONST-T10), never the parser's own output.
  */
 import {
   it,
