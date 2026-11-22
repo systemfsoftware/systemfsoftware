@@ -539,8 +539,8 @@ export type { PropertyBudget } from './internal/property/defaults.js'
 
 /**
  * The property-check entry a Vitest config provides under `test.provide`, keyed by the name the runner reads:
- * the tier's runs, and on the CI tier a seed derived from the commit (so one commit draws the same cases wherever
- * it runs) with no seed-store writes. A Stryker worker gets the mutation tier's runs; a local or agent run gets 100.
+ * the tier's runs, and off the local tier (CI, or a Stryker worker's mutation tier) a seed derived from the checked-out commit (so one
+ * commit draws the same cases wherever it runs) with no seed-store writes. A local or agent run gets 100 runs, no seed.
  * Pass a `source` of `env` and `commit` readers to decide from values other than `process.env` and the checked-out git commit.
  *
  * @since 4.2.0

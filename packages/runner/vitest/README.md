@@ -254,7 +254,7 @@ export default defineConfig({
 })
 ```
 
-`propertyCheck()` gives 1000 runs on the CI tier with a seed taken from the checked-out commit (`parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so main, the merge queue and a pull request draw the same cases for one commit; the mutation tier's runs inside a Stryker worker; and 100 runs locally or under an agent. `propertyReplay()` reprints a refuted property's "Rerun only this scenario" line with `--config <the config file the run loaded>`, so the rerun draws the same budget.
+`propertyCheck()` gives 1000 runs on the CI tier, and the mutation tier's runs inside a Stryker worker; both carry a seed taken from the checked-out commit (`git rev-parse HEAD`: `parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so runs of one commit draw the same cases. Locally or under an agent it gives 100 runs and no seed. `propertyReplay()` reprints a refuted property's "Rerun only this scenario" line with `--config <the config file the run loaded>`, so the rerun draws the same budget.
 
 **Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
 

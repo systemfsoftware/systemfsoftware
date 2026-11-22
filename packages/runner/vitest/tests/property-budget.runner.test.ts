@@ -27,10 +27,13 @@ it('Should_UseSeedOne_When_TheCommitsLeadingDigitsAreZero', function*({ expect }
   })
 })
 
-it('Should_RunTheMutationTierWithNoSeed_When_InsideAStrykerWorker', function*({ expect }) {
+it('Should_RunTheMutationTierSeededFromTheCommit_When_InsideAStrykerWorker', function*({ expect }) {
   yield* expect(
-    propertyCheck({ env: () => ({ CI: 'true', STRYKER_MUTATOR_WORKER: '1' }), commit: NO_COMMIT }),
-  ).toEqual({ [KEY]: { runs: 30, record: false } })
+    propertyCheck({
+      env: () => ({ CI: 'true', STRYKER_MUTATOR_WORKER: '1' }),
+      commit: () => 'deadbeefcafe0123',
+    }),
+  ).toEqual({ [KEY]: { runs: 30, record: false, seed: 0xdeadbeef } })
 })
 
 it('Should_SeedFromTheCheckedOutCommit_When_TheProcessRunsOnCi', function*({ expect }) {

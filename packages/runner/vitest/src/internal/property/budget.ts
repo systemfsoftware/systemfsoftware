@@ -1,6 +1,6 @@
 /**
- * @internal The property budget a Vitest config provides: the tier's budget from the one table in `tiers.ts`, and on
- * the CI tier a seed derived from the commit, so every run of one commit draws the same cases.
+ * @internal The property budget a Vitest config provides: the tier's budget from the one table in `tiers.ts`, and off
+ * the local tier a seed derived from the commit, so every run of one commit draws the same cases.
  */
 import type { PropertyBudget } from './defaults.js'
 import { providedBudgetOf, tierOf } from './tiers.js'
@@ -31,7 +31,7 @@ export const ambientSource: BudgetSource = { env: processEnvironment, commit: gi
 /** @internal */
 export const budgetOf = (source: BudgetSource): PropertyBudget => {
   const env = source.env()
-  return tierOf(env) === 'ci'
+  return tierOf(env) !== 'local'
     ? { ...providedBudgetOf(env), seed: seedOfCommit(source.commit()) }
     : providedBudgetOf(env)
 }
