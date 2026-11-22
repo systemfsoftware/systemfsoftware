@@ -61,6 +61,16 @@ await Kernel.run(program, { external: 'await' })
 
 A real-timer wait still fails (`Escape`) under `'await'` — timers go through the controlled clock instead. `'await'` beside `path` or `choose` is refused, since an awaited host wait cannot take an explored schedule. For checks that run one ordered program against the real system, use `'await'` with no exploration options.
 
+A run reads the host's pending waits from `process.getActiveResourcesInfo()` unless it is given another source. Node 26 leaves pending file reads and writes out of that list, so on Node 26 a file wait reads as a deadlock. Pass the `host` option there; the kernel imports no Node module, so the caller hands in `createHook`:
+
+```ts
+import { createHook } from 'node:async_hooks'
+
+await Kernel.run(program, { external: 'await', host: Kernel.fileRequestHooks(createHook) })
+```
+
+`Kernel.fileRequestHooks` keeps the process list for sockets, DNS lookups and timers, and follows each file request through `async_hooks` from the moment it is issued until its callback runs. An Effect caller that runs the kernel for its own callers reads the source from `Kernel.HostResourcesService` and passes it on, as `Conformance.released` does.
+
 ## One kernel at a time
 
 The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active queues behind it, in arrival order, instead of sharing the hooks — one kernel owns the process at a time, so two runs never interleave and a scenario never sees another run's decisions. `Kernel.search`, `Kernel.shrink` and `Kernel.pick` reach the kernel through the same queue, one run at a time.
