@@ -32,11 +32,11 @@ import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { type Body, drive } from './driver.js'
 import * as Refusals from './errors.schema.js'
 import { isFailureRecordError } from './failure-record.js'
-import { markTask, UNTIMED_HOOK } from './guard.js'
+import { markTask } from './guard.js'
 import { providedCheckDefaults } from './property/defaults.js'
 import { makeProperty, type PropertyRuntime, type PropertyTask } from './property/engine.js'
 import { NonBooleanVerdict, VacuousProperty } from './property/error.schema.js'
-import { makeFileLedger } from './property/impostor.js'
+import { type FileLedger, makeFileLedger } from './property/impostor.js'
 import { providedRoot } from './provided.js'
 import {
   type HookRefusal,
@@ -455,21 +455,61 @@ const propertyTaskOf = (ctx: V.TestContext): PropertyTask => ({
 const runProperty = <E>(
   ctx: V.TestContext,
   program: (task: PropertyTask) => Effect.Effect<void, E, never>,
-): Promise<void> => runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
+): Promise<void> => {
+  ensureFileJudged(ctx.task.file)
+  return runRecorded(bindRun(Effect.suspend(() => program(propertyTaskOf(ctx))), ctx), ctx, propertyEnv)
+}
 
-/** The sync and effect property lanes of one test file share this ledger; it is judged once, at file end (R20). */
-const propertyLedger = makeFileLedger()
+/**
+ * The ledgers of this worker's test files, keyed by the file that declared each property (R20). A worker that
+ * keeps one module cache across files must still judge each file at that file's own end, so the ledger cannot
+ * be one module-level value: the first file to import this module would own the only lookup.
+ */
+const fileLedgers = new Map<string, FileLedger>()
 
-V.afterAll(() => {
-  const refused = propertyLedger.finalise()
+const judgedFiles = new WeakSet<object>()
+
+const ledgerFor = (filepath: string): FileLedger => {
+  const existing = fileLedgers.get(filepath)
+  if (existing !== undefined) return existing
+  const ledger = makeFileLedger()
+  fileLedgers.set(filepath, ledger)
+  return ledger
+}
+
+const takeLedger = (filepath: string): FileLedger | undefined => {
+  const ledger = fileLedgers.get(filepath)
+  fileLedgers.delete(filepath)
+  return ledger
+}
+
+const throwIfVacuous = (refused: VacuousProperty | undefined): void => {
   if (refused !== undefined) throw new VacuousProperty(refused)
-}, UNTIMED_HOOK)
+}
+
+const finaliseFile = (filepath: string): void => throwIfVacuous(takeLedger(filepath)?.finalise())
+
+/**
+ * Registers the file-end judgement on the running file, once, the first time one of its properties runs. The
+ * task's file is used rather than the current collector, so a property inside a nested suite is still judged
+ * when the file ends.
+ */
+const ensureFileJudged = (file: V.TestContext['task']['file']): void => {
+  if (judgedFiles.has(file)) return
+  judgedFiles.add(file)
+  fileLedgers.delete(file.filepath)
+  V.TestRunner.getSuiteHooks(file).afterAll.push(() => finaliseFile(file.filepath))
+}
+
+/** The test file currently being collected: where a property's ledger is looked up. */
+const currentFilepath = (): string => getCurrentSuite().file.filepath
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {
   register: (name, program) => marked(() => V.it(name, (ctx) => runProperty(ctx, program))),
   provide: (effect) => effect,
-  ledger: propertyLedger,
+  ledgerFor,
+  filepath: currentFilepath,
 }
 
 const property = makeProperty(syncRuntime)
@@ -933,7 +973,8 @@ const makeTesterWith = <R>(
   const effectProperty = makeProperty<R>({
     register: (name, program) => marked(() => it(name, (ctx) => runProperty(ctx, program))),
     provide: (effect) => mapEffect(effect, envFor()),
-    ledger: propertyLedger,
+    ledgerFor,
+    filepath: currentFilepath,
   })
 
   const prop: Vitest.Vitest.EffectProperty<R> = (name, spec, holds) => {
