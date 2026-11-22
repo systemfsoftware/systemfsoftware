@@ -18,7 +18,7 @@ State a relationship that a constant, an echo of the input or a skipped field wo
 - **Conservation and invariants**: a quantity or set the contract says is preserved or bounded. Splitting a bill loses nothing; a filter never grows its input; a sort keeps the same members.
 - **Algebraic**: idempotence `f(f(x)) = f(x)`, commutativity, associativity, or confluence: independent steps applied in any order reach the same state.
 
-"Does not crash", "returns a value", a length that is never negative, and a field copied from input to output are not properties: a trivial implementation passes them (properties-are-shown-to-fail.md). A schema's codec laws (decode after encode) are generated for every exported schema and never written by hand (schema-modelling pack).
+"Does not crash", "returns a value", a length that is never negative, and a field copied from input to output are not properties: a trivial implementation passes them (properties-are-shown-to-fail.md). A schema's codec laws (decode after encode) are generated for every exported schema and never written by hand (schema-modelling pack). A schema that forbids a direction still needs an example, a property or contract cases for what it maps each input to, because its generated laws check the refusal and determinism, not the mapping.
 
 Put the properties on the published operations and the decisions behind them, and prefer one property that relates several operations over several that each restate one.
 

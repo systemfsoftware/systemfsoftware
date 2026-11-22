@@ -11,12 +11,6 @@ import { LawSuiteSource } from './LawSuiteSource.schema.js'
 /** @since 0.1.0 */
 export interface InlineSchemaTestsOptions {
   dir?: string
-  /**
-   * Property budgets for the generated codec law pairs, keyed by the schema's export name. A schema named here
-   * gets `ruleOfSchemas(name, schema, { runs })`, so its two laws run under that budget instead of the
-   * configured default — for a schema whose round trip is heavy per run and cannot finish the default tier
-   * inside the test timeout.
-   */
   runs?: Readonly<Record<string, number>>
 }
 
@@ -99,8 +93,8 @@ export const generateSchemaLaws = (
 
 /**
  * Vite plugin that walks the consumer's `src/` directory, finds every
- * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
- * property tests and `recursionLaws` generation laws for each one.
+ * exported Effect `Schema`, and auto-injects its `ruleOfSchemas` codec
+ * property tests and `recursionLaws` generation laws.
  *
  * The laws are injected by rewriting the consumer's own
  * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
