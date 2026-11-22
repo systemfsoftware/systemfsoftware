@@ -1,5 +1,5 @@
 import { Effect } from 'effect'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { ProbeFailure } from './run-fixtures'
@@ -11,9 +11,14 @@ export interface ReplayRun {
   readonly file: string
   /** The config file to load with `--config`, relative to the fixture; found from the directory when absent. */
   readonly config?: string
+  /** Environment variables on top of one that decides no tier (no `CI`, `AGENT` or Stryker variable). */
+  readonly env?: Readonly<Record<string, string>>
 }
 
 const vitestBin = fileURLToPath(new URL('../../node_modules/.bin/vitest', import.meta.url))
+
+const { AGENT: _agent, STRYKER_MUTATOR_WORKER: _stryker, ...inherited } = process.env
+const baseEnvironment = { ...inherited, CI: '' }
 
 const execFileAsync = promisify(execFile)
 
@@ -25,7 +30,7 @@ const runOutputOf = (run: ReplayRun): Promise<string> =>
   execFileAsync(
     vitestBin,
     ['run', ...(run.config === undefined ? [] : ['--config', run.config]), run.file],
-    { cwd: fileURLToPath(new URL(`./${run.fixture}/`, import.meta.url)), env: { ...process.env, CI: '' } },
+    { cwd: fileURLToPath(new URL(`./${run.fixture}/`, import.meta.url)), env: { ...baseEnvironment, ...run.env } },
   ).then(({ stdout, stderr }) => `${stdout}${stderr}`, outputOfExit)
 
 /** Everything a Vitest CLI run printed, started in a replay fixture so its config file is loaded. */
@@ -34,3 +39,7 @@ export const replayRunOutput = (run: ReplayRun): Effect.Effect<string, ProbeFail
     try: () => runOutputOf(run),
     catch: (cause) => new ProbeFailure({ stage: 'run', detail: `${run.fixture}: ${run.file} did not run`, cause }),
   })
+
+/** The seed the checked-out commit names: its first eight hex digits as a number, from git itself. */
+export const seedOfCheckedOutCommit = (): number =>
+  Number.parseInt(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).slice(0, 8), 16)

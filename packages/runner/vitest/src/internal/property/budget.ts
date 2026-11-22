@@ -1,7 +1,9 @@
 /**
  * @internal The property budget a Vitest config provides: the tier's budget from the one table in `tiers.ts`, and off
- * the local tier a seed derived from the commit, so every run of one commit draws the same cases.
+ * the local tier a seed derived from the commit, so every run of one commit draws the same cases. The local tier never
+ * reads the commit.
  */
+import { Effect } from 'effect'
 import type { PropertyBudget } from './defaults.js'
 import { providedBudgetOf, tierOf } from './tiers.js'
 
@@ -11,25 +13,15 @@ export type BudgetEnvironment = Readonly<Record<string, string | undefined>>
 /** @internal The seed a commit names: its first eight hex digits, and 1 where those read as 0 or are not hex. */
 export const seedOfCommit = (sha: string): number => Number.parseInt(sha.slice(0, 8), 16) || 1
 
-/** @internal The checked-out commit, read from git. */
-export const gitHead = (): string =>
-  process.getBuiltinModule('node:child_process').execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+const seeded = (env: BudgetEnvironment) => (sha: string): PropertyBudget => ({
+  ...providedBudgetOf(env),
+  seed: seedOfCommit(sha),
+})
 
-/** @internal Where a budget reads its tier and its commit from. */
-export interface BudgetSource {
-  readonly env: () => BudgetEnvironment
-  readonly commit: () => string
-}
-
-const processEnvironment = (): BudgetEnvironment => ({ ...(typeof process === 'undefined' ? undefined : process.env) })
-
-/** @internal The process environment and the checked-out git commit. */
-export const ambientSource: BudgetSource = { env: processEnvironment, commit: gitHead }
-
-/** @internal */
-export const budgetOf = (source: BudgetSource): PropertyBudget => {
-  const env = source.env()
-  return tierOf(env) !== 'local'
-    ? { ...providedBudgetOf(env), seed: seedOfCommit(source.commit()) }
-    : providedBudgetOf(env)
-}
+/** @internal `commit` runs only off the local tier. */
+export const budgetOf = <E, R>(
+  source: { readonly env: BudgetEnvironment; readonly commit: Effect.Effect<string, E, R> },
+): Effect.Effect<PropertyBudget, E, R> =>
+  tierOf(source.env) === 'local'
+    ? Effect.succeed(providedBudgetOf(source.env))
+    : Effect.map(source.commit, seeded(source.env))

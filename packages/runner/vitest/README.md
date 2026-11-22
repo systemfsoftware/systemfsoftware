@@ -242,19 +242,20 @@ export default defineConfig({
 })
 ```
 
-Rather than write the key by hand, spread `propertyCheck()` into `test.provide`, and add `propertyReplay()` to `plugins`:
+Rather than write the key by hand, list the `propertyTests()` plugin from `@systemfsoftware/vitest/vite` in a Node `vitest.config.ts`. It provides the budget under that key and registers the reporter that reprints a refuted property's rerun line with the config the run loaded:
 
 ```ts
 // vitest.config.ts
-import { propertyCheck, propertyReplay } from '@systemfsoftware/vitest'
+import { propertyTests } from '@systemfsoftware/vitest/vite'
 
 export default defineConfig({
-  plugins: [propertyReplay()],
-  test: { provide: { ...propertyCheck() } },
+  plugins: [propertyTests()],
 })
 ```
 
-`propertyCheck()` gives 1000 runs on the CI tier, and the mutation tier's runs inside a Stryker worker; both carry a seed taken from the checked-out commit (`git rev-parse HEAD`: `parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so runs of one commit draw the same cases. Locally or under an agent it gives 100 runs and no seed. `propertyReplay()` reprints a refuted property's "Rerun only this scenario" line with `--config <the config file the run loaded>`, so the rerun draws the same budget.
+The budget is 1000 runs on the CI tier, the mutation tier's runs inside a Stryker worker, and 100 runs locally or under an agent. Off the local tier it carries a seed taken from the checked-out commit (`git rev-parse HEAD`: `parseInt(sha.slice(0, 8), 16)`, or 1 when that is 0) and no seed-store writes, so runs of one commit draw the same cases. The commit is read when the config loads, never on the local tier; if git cannot read one, the run stops with a message naming the directory and what git said. A `test.provide` entry the config sets itself is kept.
+
+The reprinted line is `pnpm --filter <package> exec vitest run --config <config file> …`, with the config path written relative to the package directory the line runs from and quoted for a shell. Under `test.projects`, list the plugin in each project's config: the line carries the config of the project that ran the refuted test.
 
 **Seed precedence**: a property's own `arbitrary: { seed: 7 }` wins over a provided seed. With a provided `seed`, the engine hashes it (FNV-1a) with the property's identity — its package, its file relative to the Vitest project root, and its full test name. With neither, each property draws from a fresh random seed. Every failure reports the seed it ran with.
 

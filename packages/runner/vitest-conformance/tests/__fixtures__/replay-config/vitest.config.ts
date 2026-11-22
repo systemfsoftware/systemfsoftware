@@ -1,7 +1,7 @@
-import { propertyReplay } from '@systemfsoftware/vitest/config'
+import { propertyTests } from '@systemfsoftware/vitest/vite'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [propertyReplay()],
+  plugins: [propertyTests()],
   test: { include: ['*.probe.ts'] },
 })

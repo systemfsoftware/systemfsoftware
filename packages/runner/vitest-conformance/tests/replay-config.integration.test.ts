@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import * as Layer from 'effect/Layer'
-import { replayRunOutput } from './__fixtures__/replay-run'
+import { replayRunOutput, seedOfCheckedOutCommit } from './__fixtures__/replay-run'
 
 const Feature = makeFeature({ it })
 
@@ -76,6 +76,64 @@ Feature('Rerunning a refuted property with the config the run loaded')
         ),
         Then("the line carries beta's config, not the root config")((s, expect) =>
           expect(s.output).toContain(rerunWith('beta/vitest.config.ts'))
+        ),
+      ),
+    )
+    scenario(
+      'A local run gets a hundred runs and no seed',
+      Gherkin.Do.pipe(
+        Given('a run on the local tier')(
+          'output',
+          () => replayRunOutput({ fixture: 'replay-config', file: 'budget.probe.ts' }),
+        ),
+        Then('the budget is a hundred runs')((s, expect) => expect(s.output).toContain('BUDGET {"runs":100}')),
+      ),
+    )
+    scenario(
+      'A CI run gets a thousand runs and a seed from the checked-out commit',
+      Gherkin.Do.pipe(
+        Given('a run on the CI tier')(
+          'output',
+          () => replayRunOutput({ fixture: 'replay-config', file: 'budget.probe.ts', env: { CI: 'true' } }),
+        ),
+        Then('the budget is a thousand runs seeded from the commit, with no seed-store writes')((s, expect) =>
+          expect(s.output).toContain(`BUDGET {"runs":1000,"record":false,"seed":${seedOfCheckedOutCommit()}}`)
+        ),
+      ),
+    )
+    scenario(
+      'A run in a Stryker worker gets the mutation tier, seeded from the commit',
+      Gherkin.Do.pipe(
+        Given('a run inside a Stryker worker')(
+          'output',
+          () =>
+            replayRunOutput({
+              fixture: 'replay-config',
+              file: 'budget.probe.ts',
+              env: { CI: 'true', STRYKER_MUTATOR_WORKER: '1' },
+            }),
+        ),
+        Then('the budget is thirty runs seeded from the commit')((s, expect) =>
+          expect(s.output).toContain(`BUDGET {"runs":30,"record":false,"seed":${seedOfCheckedOutCommit()}}`)
+        ),
+      ),
+    )
+    scenario(
+      "A CI run whose commit git cannot read fails naming the directory and git's message",
+      Gherkin.Do.pipe(
+        Given('a run on the CI tier where git finds no repository')(
+          'output',
+          () =>
+            replayRunOutput({
+              fixture: 'replay-config',
+              file: 'budget.probe.ts',
+              env: { CI: 'true', GIT_DIR: '/nonexistent/.git' },
+            }),
+        ),
+        Then('the failure says where git looked and what it said')((s, expect) =>
+          expect(s.output).toMatch(
+            /git rev-parse HEAD could not read the commit in .*replay-config: .*not a git repository/su,
+          )
         ),
       ),
     )

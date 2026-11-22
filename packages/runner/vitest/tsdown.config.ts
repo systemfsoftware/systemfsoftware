@@ -6,7 +6,7 @@ type ExportEntry = string | Record<string, string | undefined>
 const typesOf: Record<string, string> = {
   '.': './dist/index.d.ts',
   './TestClock': './dist/TestClock.d.ts',
-  './config': './dist/config.d.ts',
+  './vite': './dist/vite.d.ts',
   './failure': './dist/failure.d.ts',
   './guard': './dist/guard.d.ts',
   './integration': './dist/integration.d.ts',
@@ -35,7 +35,7 @@ export default defineConfig({
   entry: {
     index: './src/mod.ts',
     TestClock: './src/TestClock.ts',
-    config: './src/config.ts',
+    vite: './src/vite.ts',
     failure: './src/failure.ts',
     guard: './src/guard.ts',
     integration: './src/integration.ts',

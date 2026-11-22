@@ -26,11 +26,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./config": {
-      "@systemfsoftware/source": "./src/config.ts",
-      "types": "./dist/config.d.ts",
-      "default": "./dist/config.mjs"
-    },
     "./failure": {
       "@systemfsoftware/source": "./src/failure.ts",
       "types": "./dist/failure.d.ts",
@@ -55,6 +50,11 @@
       "@systemfsoftware/source": "./src/TestClock.ts",
       "types": "./dist/TestClock.d.ts",
       "default": "./dist/TestClock.mjs"
+    },
+    "./vite": {
+      "@systemfsoftware/source": "./src/vite.ts",
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -98,10 +98,6 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./config": {
-        "types": "./dist/config.d.ts",
-        "default": "./dist/config.mjs"
-      },
       "./failure": {
         "types": "./dist/failure.d.ts",
         "default": "./dist/failure.mjs"
@@ -121,6 +117,10 @@
       "./TestClock": {
         "types": "./dist/TestClock.d.ts",
         "default": "./dist/TestClock.mjs"
+      },
+      "./vite": {
+        "types": "./dist/vite.d.ts",
+        "default": "./dist/vite.mjs"
       },
       "./package.json": "./package.json"
     },
