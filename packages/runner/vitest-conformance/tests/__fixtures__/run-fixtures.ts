@@ -15,7 +15,7 @@
  * Every fixture suite carries the `*.test.ts` suffix: it is a Vitest suite, and that suffix is what the repo's
  * lint reads as a place where the fork's `it.effect` bodies may hold `expect` calls.
  */
-import { Effect, Function, Option, Schema } from 'effect'
+import { Effect, Function, Option, Result, Schema } from 'effect'
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -24,6 +24,12 @@ import { fileURLToPath } from 'node:url'
 import type { ProvidedContext, UserConsoleLog } from 'vitest'
 import { BaseSequencer, startVitest } from 'vitest/node'
 import type { SerializedError, TestCase, TestModule, TestSpecification } from 'vitest/node'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
@@ -243,7 +249,7 @@ export const fileOf: {
   if (found !== undefined) return found
   throw new ProbeFailure({
     stage: 'locate file',
-    detail: `the nested run reported no file ending in ${JSON.stringify(suffix)}; it reported ${
+    detail: `the nested run reported no file ending in ${jsonTextOf(suffix)}; it reported ${
       fileNamesOf(report).length
     } file(s)`,
   })
@@ -259,7 +265,7 @@ export const assertionOf: {
   if (found !== undefined) return found
   throw new ProbeFailure({
     stage: 'locate assertion',
-    detail: `the nested run reported no test named ${JSON.stringify(fullName)}; it reported ${
+    detail: `the nested run reported no test named ${jsonTextOf(fullName)}; it reported ${
       namesOf(report).length
     } assertion(s)`,
   })
@@ -275,8 +281,8 @@ export const errorOf: {
   throw new ProbeFailure({
     stage: 'locate error',
     detail: `the nested run captured no error for ${
-      JSON.stringify(fullName)
-    }; it captured ${run.errors.length} error(s) for ${JSON.stringify(run.errors.map((error) => error.testName))}`,
+      jsonTextOf(fullName)
+    }; it captured ${run.errors.length} error(s) for ${jsonTextOf(run.errors.map((error) => error.testName))}`,
   })
 })
 

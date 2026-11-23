@@ -131,18 +131,34 @@ const tsgoRulesPendingAdoption: ReadonlyArray<string> = [
   'effecttsgo/api-stability-leak', // 50
   'effecttsgo/deterministic-keys', // 40
   'effecttsgo/missing-concurrency-option', // 37
-  'effecttsgo/global-json', // 24
   'effecttsgo/strict-effect-provide', // 24
   'effecttsgo/yield-in-call-argument', // 15
   'effecttsgo/prefer-schema-type-property', // 12
   'effecttsgo/async-function', // 2
-  'effecttsgo/global-console-in-effect', // 2
   'effecttsgo/prefer-schema-tagged-error', // 2
   'effecttsgo/map-map-error-to-map-both', // 1
-  'effecttsgo/global-fetch-in-effect', // 1
 ]
 
 const everyTsgoRule = Object.assign({}, ...Object.values(tsgoPresets).map((preset) => promoteWarnToError(preset.rules)))
+
+// Effect-native checks that mirror the language-service diagnostics @systemfsoftware/tsconfig sets to
+// "error". Listed by name, not only through the presets: `prefer-schema-over-json` is in no @effect/tsgo
+// preset, and a preset can lower a severity in a release without this config noticing.
+const effectNativeRules = {
+  'effecttsgo/global-json': 'error',
+  'effecttsgo/global-json-in-effect': 'error',
+  'effecttsgo/prefer-schema-over-json': 'error',
+  'effecttsgo/global-fetch': 'error',
+  'effecttsgo/global-fetch-in-effect': 'error',
+  'effecttsgo/crypto-random-uuid': 'error',
+  'effecttsgo/crypto-random-uuid-in-effect': 'error',
+  'effecttsgo/global-random': 'error',
+  'effecttsgo/global-random-in-effect': 'error',
+  'effecttsgo/global-console': 'error',
+  'effecttsgo/global-console-in-effect': 'error',
+  'effecttsgo/process-env-in-effect': 'error',
+  'effecttsgo/try-catch-in-effect-gen': 'error',
+} as const
 
 const adoptedTsgoRules = Object.fromEntries(
   Object.entries(everyTsgoRule).filter(([rule]) => !tsgoRulesPendingAdoption.includes(rule)),
@@ -150,6 +166,7 @@ const adoptedTsgoRules = Object.fromEntries(
 
 const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...adoptedTsgoRules,
+  ...effectNativeRules,
   ...effectPlatform.configs.recommended.rules,
   ...unstableApiUsage,
   'effecttsgo/global-date-in-effect': 'error',

@@ -1,11 +1,11 @@
 import { it } from '@systemfsoftware/vitest'
-import { Effect } from 'effect'
+import { Console, Effect } from 'effect'
 
 const ran = (body: string): Effect.Effect<string> =>
-  Effect.sync(() => {
-    console.log(`rerun-body: ${body}`)
-    return body
-  })
+  Effect.as(
+    Effect.provideService(Console.log(`rerun-body: ${body}`), Console.Console, Console.Console.defaultValue()),
+    body,
+  )
 
 it('Should_RunTheRegisteredBodyTwice_When_NoRerunBodyIsGiven', function*({ expect }) {
   const body = yield* ran('default')

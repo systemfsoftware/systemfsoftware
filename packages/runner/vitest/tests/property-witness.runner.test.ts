@@ -1,6 +1,12 @@
 import { it } from '@systemfsoftware/vitest'
 import { type JsonValue, witnessOf } from '@systemfsoftware/vitest/failure'
-import { Effect, Schema } from 'effect'
+import { Effect, Result, Schema } from 'effect'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 type WitnessInput = JsonValue | object | symbol | bigint | undefined
 
@@ -78,6 +84,6 @@ it('Should_MarkEveryValueJsonCannotCarry_When_TheWitnessHoldsOne', function*({ e
 it('Should_RoundTripThroughJson_When_TheWitnessIsProjected', function*({ expect }) {
   const fromJsonText = Schema.fromJsonString(Schema.Json)
   const readBack = Schema.decodeUnknownEffect(fromJsonText)
-  const parsed = yield* Effect.forEach(INPUTS, (input) => readBack(JSON.stringify(witnessOf(input).value)))
+  const parsed = yield* Effect.forEach(INPUTS, (input) => readBack(jsonTextOf(witnessOf(input).value)))
   yield* expect(parsed).toEqual(INPUTS.map((input) => witnessOf(input).value))
 })

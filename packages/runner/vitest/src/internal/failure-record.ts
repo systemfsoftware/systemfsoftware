@@ -12,6 +12,7 @@ import * as Cause from 'effect/Cause'
 import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import * as Tracer from 'effect/Tracer'
 import { TestRunner } from 'vitest'
@@ -21,6 +22,12 @@ import { type Breach, FailureRecordRefused } from './errors.schema.js'
 import type { Witness } from './property/error.schema.js'
 import { providedConfigFile, providedPackage, providedPackageRoot, providedRoot } from './provided.js'
 import { type RerunTarget, rerunTargetOf } from './rerun-target.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 /** A value the renderer narrows rather than assumes. */
 type Opaque<A = unknown> = A
@@ -217,7 +224,7 @@ interface Pair {
 
 const pairOf = (name: string, text: string): Pair => ({ name, text })
 
-const pairTextOf = (pair: Pair): string => `${JSON.stringify(pair.name)}:${pair.text}`
+const pairTextOf = (pair: Pair): string => `${jsonTextOf(pair.name)}:${pair.text}`
 
 const pairTextsOf = (pairs: ReadonlyArray<Pair>): ReadonlyArray<string> => pairs.map(pairTextOf)
 
@@ -230,7 +237,7 @@ const fieldsOf = (value: object): ReadonlyArray<Pair> => pairsOf(value).filter((
 
 const renderValue = (value: Opaque): string => witnessOf(value).rendered
 
-const renderScalar = (value: Opaque): string => isText(value) ? JSON.stringify(value) : renderPrimitive(value)
+const renderScalar = (value: Opaque): string => isText(value) ? jsonTextOf(value) : renderPrimitive(value)
 
 const renderPrimitive = (value: Opaque): string => isBigInt(value) ? `${value}n` : renderPlain(value)
 
@@ -367,7 +374,7 @@ const bracesOf = (pairs: ReadonlyArray<Pair>): string => ` {${pairTextsOf(pairs)
 
 const renderFields = (value: object): string => bracesOf(fieldsOf(value))
 
-const textSummaryOf = (text: string): string => text.length === 0 ? text : JSON.stringify(text)
+const textSummaryOf = (text: string): string => text.length === 0 ? text : jsonTextOf(text)
 
 const scalarSummaryOf = (value: Opaque): string => isText(value) ? textSummaryOf(value) : renderScalar(value)
 

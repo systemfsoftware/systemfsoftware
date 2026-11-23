@@ -16,7 +16,13 @@ import {
   type VacuousProperty,
 } from '@systemfsoftware/vitest'
 import { type FailureRecord, recordOfFile, recordOfProperty, replayOfText } from '@systemfsoftware/vitest/failure'
-import { Effect, Option, Schema } from 'effect'
+import { Effect, Option, Result, Schema } from 'effect'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 type Opaque<A = unknown> = A
 
@@ -97,7 +103,7 @@ it('Should_ReproduceTheRefutedVerdict_When_ItsReplayTextIsFedBack', function*({ 
     replayedSeed: replayed.property.seed,
     firstRuns: refuted.property.runs,
     replayedRuns: replayed.property.runs,
-    sameCounterexample: JSON.stringify(replayed.counterexample) === JSON.stringify(refuted.counterexample),
+    sameCounterexample: jsonTextOf(replayed.counterexample) === jsonTextOf(refuted.counterexample),
     sameReplay: replayed.replay === refuted.replay,
   }).toEqual({
     firstSeed: 1,
@@ -158,7 +164,7 @@ it('Should_ReproduceTheVacuousVerdict_When_ItsReplayTextIsFedBack', function*({ 
     replayedRuns: replayedEntry.property.runs,
     firstSeed: firstEntry.property.seed,
     replayedSeed: replayedEntry.property.seed,
-    sameFrozen: JSON.stringify(replayedEntry.frozen) === JSON.stringify(firstEntry.frozen),
+    sameFrozen: jsonTextOf(replayedEntry.frozen) === jsonTextOf(firstEntry.frozen),
   }).toEqual({ firstRuns: 5, replayedRuns: 5, firstSeed: 3, replayedSeed: 3, sameFrozen: true })
 })
 

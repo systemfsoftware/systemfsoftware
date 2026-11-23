@@ -5,8 +5,16 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Metric from 'effect/Metric'
+import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 
 import { admitDecodedCommand, Admitted, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 const Feature = makeFeature({ it })
 
@@ -50,7 +58,7 @@ const answerSubmissions = {
     Effect.flatMap(Ledger, (ledger) =>
       Effect.as(
         ledger.append(
-          `refused:${JSON.stringify(decision)}:plain:${Object.getPrototypeOf(decision) === Object.prototype}`,
+          `refused:${jsonTextOf(decision)}:plain:${Object.getPrototypeOf(decision) === Object.prototype}`,
         ),
         `refused:${decision.why}`,
       )),
