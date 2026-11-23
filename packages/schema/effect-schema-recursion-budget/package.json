@@ -43,7 +43,7 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.runtime.json",
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.runtime.json"

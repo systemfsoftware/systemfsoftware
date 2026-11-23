@@ -40,7 +40,7 @@
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
   "devDependencies": {

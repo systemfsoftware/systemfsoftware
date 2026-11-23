@@ -138,10 +138,6 @@
       ],
       "cache": false
     },
-    "//#tsgo:patch": {
-      "cache": false,
-      "outputs": []
-    },
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -156,8 +152,7 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "build",
-        "//#tsgo:patch"
+        "build"
       ],
       "env": [
         "NODE_ENV",
@@ -178,9 +173,6 @@
         "!**/*.md"
       ],
       "outputs": [],
-      "dependsOn": [
-        "//#tsgo:patch"
-      ],
       "env": [
         "TSGO_FORMAT"
       ],

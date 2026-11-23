@@ -50,7 +50,7 @@ const lintCommands = (filenames) =>
   [...groupByConfig(lintableSource(filenames))]
     .filter(hasOwningConfig)
     .map(([config, group]) =>
-      `oxlint --fix ${TOLERATE_A_ZERO_FILE_SET} --config ${relative(ROOT, config)} ${
+      `effect-tsgo oxlint --fix ${TOLERATE_A_ZERO_FILE_SET} --config ${relative(ROOT, config)} ${
         group.join(' ')
       } --type-aware --type-check --quiet`
     )
