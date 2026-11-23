@@ -38,7 +38,7 @@
     "clean": "rimraf dist",
     "build": "tsdown -l warn",
     "typecheck": "tsc -b",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "test": "vitest run"
   },

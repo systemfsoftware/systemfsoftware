@@ -8,7 +8,7 @@
   "scripts": {
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}"
   },
   "devDependencies": {
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",

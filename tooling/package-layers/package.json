@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}",
     "test": "vitest run --config vitest.config.ts",
     "properties": "vitest run --config vitest.config.ts src",
     "test:bin": "vitest run --config vitest.bin.config.ts"

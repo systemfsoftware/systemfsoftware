@@ -15,7 +15,7 @@
     "build": "tsdown -l warn",
     "clean": "rimraf dist",
     "typecheck": "tsc -b",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; effect-tsgo oxlint . --format=${f:-default}"
   },
   "dependencies": {
     "@oxlint/plugins": "catalog:oxlint"
