@@ -2,7 +2,7 @@
 
 Governs every plugin and shared kernel below this directory; root `AGENTS.md` governs the rest.
 
-You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+You are editing an enforcement instrument. Read the vendored `repos/constitution/GRADERS.md` before this lands.
 
 ## Diagnostic contract (OP-D1)
 
