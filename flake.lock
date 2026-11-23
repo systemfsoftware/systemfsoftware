@@ -137,11 +137,11 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1794547008,
-        "narHash": "sha256-01i0ullU492Cr+nlOSYOWZ0D9M+Uzi23yLP9vIYXits=",
+        "lastModified": 1794726349,
+        "narHash": "sha256-sQcZU4ZgJaPjXPiLRypyO5wrpoavHtiKDjYDcjspwG0=",
         "owner": "systemfsoftware",
         "repo": "gritlint",
-        "rev": "99ec456979b17dc82a64a52948e6d604ab892b80",
+        "rev": "3721325c10ce2b4052f5f4b375ca81aa997531c7",
         "type": "github"
       },
       "original": {
