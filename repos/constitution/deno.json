@@ -1,13 +1,19 @@
 {
-  "version": "0.1.0",
+  "version": "1.0.0",
   "nodeModulesDir": "auto",
   "tasks": {
-    "test": "deno run --allow-read=CONSTITUTION.md,ENFORCEMENT.md --allow-run=git scripts/validate-constitution.ts",
-    "test:validator": "./scripts/validate-constitution.test.ts",
+    "check": "deno fmt --check",
     "prepare": "git config core.hooksPath .husky"
   },
   "imports": {
-    "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@commitlint/config-conventional": "npm:@commitlint/config-conventional@^21.2.0"
+  },
+  "fmt": {
+    "include": [
+      "**/*.md"
+    ],
+    "exclude": [
+      "docs/plans/"
+    ]
   }
 }
