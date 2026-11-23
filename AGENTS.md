@@ -4,7 +4,7 @@ TypeScript libraries and tooling for pure-core/imperative-shell architecture, Ef
 
 ## Standing Law
 
-Read `CONSTITUTION.md` before architecture or rule authoring.
+The org-wide `CODING_STANDARDS.md`, `REVIEW.md` and `GRADERS.md` live in `repos/constitution/`; Routing says when to load each.
 
 Startup: confirm working directory and active task; run `pnpm check:local` and repair failures before adding scope.
 
@@ -12,13 +12,13 @@ Startup: confirm working directory and active task; run `pnpm check:local` and r
 
 Load docs on-demand when triggers fire; do not perform eager multi-spec reads at startup.
 
-| Doc                                 | Trigger                                                                                                                                         |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONSTITUTION.md`                   | architecture changes, rule authoring, or design disputes                                                                                        |
-| `repos/constitution/ENFORCEMENT.md` | building or changing an instrument that grades work (lint gates, stream rules, CI checks, thresholds, rubrics, advisors); situational read only |
-| `CONCEPTS.md`                       | domain vocabulary, taxonomy, or convention lookup                                                                                               |
-| `.github/AGENTS.md`                 | CI check failure or workflow modification                                                                                                       |
-| `docs/solutions/`                   | researching past decisions, postmortems, or known patterns (categorized with YAML frontmatter: module, tags, problem_type)                      |
+| Doc                                                                         | Trigger                                                                                                                    |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `repos/constitution/CODING_STANDARDS.md` and `repos/constitution/REVIEW.md` | you plan, write, review or propose a test                                                                                  |
+| `repos/constitution/GRADERS.md`                                             | you build or change a check (a lint rule, CI job, hook, threshold or rubric)                                               |
+| `CONCEPTS.md`                                                               | domain vocabulary, taxonomy, or convention lookup                                                                          |
+| `.github/AGENTS.md`                                                         | CI check failure or workflow modification                                                                                  |
+| `docs/solutions/`                                                           | researching past decisions, postmortems, or known patterns (categorized with YAML frontmatter: module, tags, problem_type) |
 
 ## Stack & Conventions
 
@@ -29,15 +29,15 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 ## Surface Classes
 
-| Surface       | Examples                                                               | Rule                                                                                            |
-| ------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Evaluator** | `nix/deno-tool.nix`, `.github/workflows/`, `.github/actions/`          | Its own commit, never shared with the work it judges; gate observed red before and green after. |
-| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/` | Editable, but never an input to a gate.                                                         |
-| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                 | Edit freely; `CONST-E7` governs loosening a constraint.                                         |
+| Surface       | Examples                                                      | Rule                                                                                            |
+| ------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Evaluator** | `nix/deno-tool.nix`, `.github/workflows/`, `.github/actions/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
+| **Doctrine**  | `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`           | Editable, but never an input to a gate.                                                         |
+| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`        | Edit freely; `CONST-E7` governs loosening a constraint.                                         |
 
 ## Directory Map
 
-Root doctrine files `CONSTITUTION.md`, `CONCEPTS.md`. Run `pnpm map` for current packages, publish targets, and leaf coverage.
+Root doctrine file `CONCEPTS.md`. Run `pnpm map` for current packages, publish targets, and leaf coverage.
 
 | Directory         | What it is                                                     | Governance                               |
 | ----------------- | -------------------------------------------------------------- | ---------------------------------------- |

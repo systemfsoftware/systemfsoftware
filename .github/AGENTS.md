@@ -2,7 +2,7 @@
 
 Read this file when a check fails, not before.
 
-You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands.
+You are editing an enforcement instrument. Read the vendored `repos/constitution/GRADERS.md` before this lands.
 
 ## Reproduce locally
 
