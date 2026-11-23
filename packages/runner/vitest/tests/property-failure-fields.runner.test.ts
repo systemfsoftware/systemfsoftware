@@ -13,7 +13,13 @@ import {
   type TestIdentity,
   throwFailureRecord,
 } from '@systemfsoftware/vitest/failure'
-import { Effect, Match, Schema } from 'effect'
+import { Effect, Match, Result, Schema } from 'effect'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 type Opaque<A = unknown> = A
 
@@ -160,7 +166,7 @@ it('Should_NeverRenderTheObjectString_When_TheVerdictIsAnObject', function*({ ex
   yield* expect({
     message: failure.message.includes('[object Object]'),
     drawnText: failure.drawn.rendered.includes('[object Object]'),
-    drawnProjection: JSON.stringify(failure.drawn.value).includes('[object Object]'),
+    drawnProjection: jsonTextOf(failure.drawn.value).includes('[object Object]'),
   }).toEqual({ message: false, drawnText: false, drawnProjection: false })
 })
 

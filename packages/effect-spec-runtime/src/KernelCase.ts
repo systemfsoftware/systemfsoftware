@@ -10,11 +10,17 @@ import {
   testIdentityOf,
   throwFailureRecord,
 } from '@systemfsoftware/vitest/failure'
-import { Cause, Config, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Schema } from 'effect'
+import { Cause, Config, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Result, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import { KernelFailure } from './KernelFailure.schema.js'
 import * as TaskRef from './TaskRef.service.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 /** A value the kernel narrows rather than assumes. */
 type Opaque<A = unknown> = A
@@ -171,8 +177,8 @@ const describeKernelFailure = (failure: Kernel.RunFailure): string =>
     Match.when(
       { _tag: 'ReplayTraceDiverged' },
       (diverged) =>
-        `the replayed trace diverged at step ${diverged.atStep}: expected ${JSON.stringify(diverged.expected)}, got ${
-          JSON.stringify(diverged.actual)
+        `the replayed trace diverged at step ${diverged.atStep}: expected ${jsonTextOf(diverged.expected)}, got ${
+          jsonTextOf(diverged.actual)
         }`,
     ),
     Match.exhaustive,

@@ -1,10 +1,10 @@
-import { Effect, Fiber, Ref } from 'effect'
+import { Console, Effect, Fiber, Ref } from 'effect'
 
 export const counted = (scenario: string): Effect.Effect<string> =>
-  Effect.sync(() => {
-    console.log(`explored-rerun: ${scenario}`)
-    return scenario
-  })
+  Effect.as(
+    Effect.provideService(Console.log(`explored-rerun: ${scenario}`), Console.Console, Console.Console.defaultValue()),
+    scenario,
+  )
 
 export const shelvedByTwoClerks: Effect.Effect<number> = Effect.gen(function*() {
   const shelved = yield* Ref.make(0)

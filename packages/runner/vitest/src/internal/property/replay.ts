@@ -9,6 +9,7 @@
  */
 import type * as Arbitrary from 'effect/Arbitrary'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import {
   type PlainReplayFieldsList,
@@ -20,6 +21,12 @@ import {
   type ReplayChannel,
 } from '../../replay.schema.js'
 import { ReplayToken } from './replay.schema.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 const NUMERIC_SEED = 0
 
@@ -43,7 +50,7 @@ export interface ReplaySelection {
 
 /** @internal */
 export const tokenOfReplay = (entry: RefutedPropertyReplay): string =>
-  JSON.stringify([NUMERIC_SEED, `${entry.seed}`, entry.attempt, entry.size, entry.path, entry.failure])
+  jsonTextOf([NUMERIC_SEED, `${entry.seed}`, entry.attempt, entry.size, entry.path, entry.failure])
 
 // Every failure class a falsification can carry. Keyed by effect's failure tag, so a class effect adds fails to compile.
 const FAILURE_CLASSES: Record<Arbitrary.PropertyFailure<never>['_tag'], true> = {
@@ -62,7 +69,7 @@ export const rootTokensOf = (token: string | undefined): ReadonlyArray<string> =
     onNone: () => [],
     onSome: (decoded) =>
       Object.keys(FAILURE_CLASSES).map((failure) =>
-        JSON.stringify([decoded[0], `${decoded[1]}`, decoded[2], decoded[3], [], failure])
+        jsonTextOf([decoded[0], `${decoded[1]}`, decoded[2], decoded[3], [], failure])
       ),
   })
 

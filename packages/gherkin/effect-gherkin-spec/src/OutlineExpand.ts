@@ -1,5 +1,12 @@
 import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 export type TemplateToken = { tag: string; rest: string }
 
@@ -47,7 +54,7 @@ type JsTypeof =
 
 const stringifyObjectValue = <A = unknown>(value: A): string => {
   if (value === null) return 'null'
-  return JSON.stringify(value)
+  return jsonTextOf(value)
 }
 
 const stringifyByType: Record<JsTypeof, <A = unknown>(value: A) => string> = {

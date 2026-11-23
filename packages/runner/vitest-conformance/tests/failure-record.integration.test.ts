@@ -1,6 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Result, Schema } from 'effect'
 import { assertionOf, errorOf, probeSource, runProbes } from './__fixtures__/run-fixtures'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 const Feature = makeFeature({ it })
 
@@ -14,7 +20,7 @@ const REFUSED_TEST = 'Should_RefuseTheRecord_When_TheFailureNamesNoLocation'
 
 const lineWith = (source: string, needle: string): number => {
   const line = source.split('\n').findIndex((text) => text.includes(needle))
-  if (line < 0) throw new Error(`the probe source holds no line with ${JSON.stringify(needle)}`)
+  if (line < 0) throw new Error(`the probe source holds no line with ${jsonTextOf(needle)}`)
   return line + 1
 }
 

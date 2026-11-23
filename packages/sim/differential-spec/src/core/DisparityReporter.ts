@@ -1,6 +1,12 @@
-import { Cause, Exit } from 'effect'
+import { Cause, Exit, Result, Schema } from 'effect'
 
 import { DisparityFailure } from './DisparityFailure.schema.js'
+
+const prettyJsonOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 export { DisparityFailure }
 
@@ -14,7 +20,7 @@ export interface DisparityRecord<Input = unknown> {
 
 const stringify = <V = unknown>(value: V): string | undefined => {
   try {
-    return JSON.stringify(value, null, 2)
+    return prettyJsonOf(value)
   } catch {
     return undefined
   }

@@ -1,7 +1,13 @@
-import { Match } from 'effect'
+import { Match, Result, Schema } from 'effect'
 import { type Decision, SCHEMA_LAW, VITEST_FORK } from './layers/check.ts'
 import type { Finding, SchemaLawVitest } from './layers/layers.schema.ts'
 import type { Assignment } from './layers/list.ts'
+
+const prettyJsonOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 const SCHEMA_LAW_MESSAGE: Record<SchemaLawVitest['rule'], (field: string) => string> = {
   'fork': (field) => `${SCHEMA_LAW} names the ${VITEST_FORK} fork in ${field}`,
@@ -51,4 +57,4 @@ export const listLines = (rows: readonly Assignment[]): readonly string[] => {
   return rows.map((row) => `${row.package.padEnd(width)}  ${row.category}`)
 }
 
-export const listJson = (rows: readonly Assignment[]): string => JSON.stringify(rows, undefined, 2)
+export const listJson = (rows: readonly Assignment[]): string => prettyJsonOf(rows)

@@ -16,6 +16,12 @@ import { SeedStoreUnreadable } from './error.schema.js'
 import { ReplayToken } from './replay.schema.js'
 import { type SeedStoreEntry, SeedStoreEntry as SeedStoreEntrySchema, SeedStoreLine } from './seed-store.schema.js'
 
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
+
 const decodeLine = (
   file: string,
   index: number,
@@ -46,8 +52,7 @@ export const entriesForProperty: {
     entries.filter((entry) => entry.property === property),
 )
 
-const sameEntry = (left: SeedStoreEntry, right: SeedStoreEntry): boolean =>
-  JSON.stringify(left) === JSON.stringify(right)
+const sameEntry = (left: SeedStoreEntry, right: SeedStoreEntry): boolean => jsonTextOf(left) === jsonTextOf(right)
 
 const derandomized = (budget: PropertyBudget | undefined): boolean => budget?.seed !== undefined
 

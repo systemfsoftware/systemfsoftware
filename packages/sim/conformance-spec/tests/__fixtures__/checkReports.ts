@@ -1,8 +1,14 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Exit, Match } from 'effect'
+import { Exit, Match, Result, Schema } from 'effect'
 
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import type { LockCommand } from './lock.model.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 export type LockOperation = Conformance.Operation<LockCommand, boolean | void>
 
@@ -26,7 +32,7 @@ const described = <C, R>(report: Conformance.Report<C, R>): string => {
   try {
     return Conformance.render(report)
   } catch {
-    return JSON.stringify(report)
+    return jsonTextOf(report)
   }
 }
 

@@ -1,7 +1,13 @@
 import type { Span } from '@systemfsoftware/trace-taxonomy'
-import { Schema } from 'effect'
+import { Result, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import { SpanRecord } from './TraceGraph.schema.js'
+
+const jsonTextOf = <A>(value: A): string =>
+  Result.match(Schema.encodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(value), {
+    onFailure: () => String(value),
+    onSuccess: (text) => text,
+  })
 
 export const Observed = Schema.Struct({
   traceId: Schema.String,
@@ -9,7 +15,7 @@ export const Observed = Schema.Struct({
 })
 export type Observed = typeof Observed.Type
 
-const renderValue = (value: Span.AttributeValue): string => JSON.stringify(value)
+const renderValue = (value: Span.AttributeValue): string => jsonTextOf(value)
 
 const renderEntries = (entries: Iterable<readonly [string, Span.AttributeValue]>): string =>
   [...entries].map(([key, value]) => `${key}=${renderValue(value)}`).join(' ')
