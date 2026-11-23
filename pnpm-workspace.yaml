@@ -11,7 +11,7 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7.0.2
-  microsandbox: 0.7.15
+  microsandbox: 0.7.16
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": ^4.1.4
   "@effect/platform-bun": ^4.1.4
@@ -24,7 +24,7 @@ catalog:
   "@opentelemetry/api": ^1.10.0
   "@opentelemetry/resources": ^3.1.1
   "@opentelemetry/semantic-conventions": ^1.45.0
-  fast-check: ^4.10.2
+  fast-check: ^4.10.3
   "@noble/hashes": ^2.4.0
   vitest: ^5.1.0
   "@vitest/coverage-v8": ^5.1.0
@@ -55,9 +55,9 @@ catalog:
   playwright: ^1.65.1
   "@systemfsoftware/vitest-config": workspace:^
   "@pnpm/logger": ^1100.0.0
-  "@pnpm/workspace.projects-reader": ^1101.1.7
-  "@pnpm/workspace.root-finder": ^1100.1.6
-  "@pnpm/workspace.workspace-manifest-reader": ^1100.3.2
+  "@pnpm/workspace.projects-reader": ^1101.1.8
+  "@pnpm/workspace.root-finder": ^1100.1.7
+  "@pnpm/workspace.workspace-manifest-reader": ^1100.3.3
 catalogMode: prefer
 catalogs:
   peers:
