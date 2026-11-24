@@ -260,13 +260,22 @@ export const placeOrder = Workflow.make({ command: PlaceOrder, decision: Placed,
       filename: WORKFLOW,
     },
     {
-      name: 'Should_Pass_When_AWorkspaceSchemaIsPassedToADecisionHelper',
+      name: 'Should_Pass_When_WorkflowMakeOptionsAreWrappedOrReachedThroughANamespace',
+      code: `import * as Cell from '@systemfsoftware/effect-cell-types'
+import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { PlaceOrder, Refused } from '@acme/domain'
+import { Placed, decidePlace } from './order.schema.js'
+export const viaNamespace = Cell.Workflow.make({ command: PlaceOrder, decision: Placed, error: Refused, decide: decidePlace })
+export const checked = Workflow.make({ command: PlaceOrder, error: Refused, decide: decidePlace } satisfies object)`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_AnAnnotatedWorkspaceSchemaIsUsedAsASchema',
       code: `${SCHEMA_IMPORT}
 ${NAMESPACE_IMPORT}
-import { columnsOf } from './order.schema.js'
-const stampsOf = <A extends S.Top>(instant: A) => ({ at: instant })
-function namesOf<A extends S.Top>(name: A) { return { name } }
-export const Row = S.Struct({ ...columnsOf(PI.Instant), ...stampsOf(PI.Instant), ...namesOf(PI.Name) })`,
+export const Price = PI.Money.annotate({ description: 'price' }).pipe(S.Array)
+export const zero = () => PI.Money.check(S.isGreaterThan(0)).make({ amount: 1 })
+export const Row = S.Struct({ price: PI.Money.annotate({ description: 'price' }) })`,
       filename: SCHEMA,
     },
     {
@@ -439,6 +448,28 @@ import { PlaceOrder } from '@acme/domain'
 export const placeOrder = Workflow.make({ command: PlaceOrder })`,
       filename: WORKFLOW,
       errors: [workspaceUse('PlaceOrder')],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceBindingIsPassedToALocalFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const id = <T>(x: T): T => x
+const columnsOf = (instant: S.Top) => ({ at: instant })
+export const leaked = id(PI.impureFunction)
+export const Row = S.Struct(columnsOf(PI.Instant))`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AnAnnotatedOrPipedWorkspaceSchemaIsPipedOnThroughANonSchemaFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const register = <A>(a: A) => a
+export const Items = PI.Item.pipe(S.toType).pipe(register)
+export const Price = PI.Money.annotate({ description: 'price' }).pipe(register)
+export const Read = PI.Money.annotate`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI')],
     },
     {
       name: 'Should_Report_When_AWorkspaceSchemaIsPassedToAWorkspaceFunction',
