@@ -24,11 +24,13 @@ import {
   RE_EXPORT_ACTUAL,
   RE_EXPORT_FIX,
   RULE_NAME,
+  CELL_TYPES_PACKAGE,
   SCHEMA_MEMBERS,
   SIDE_EFFECT_IMPORT_ACTUAL,
   SIDE_EFFECT_IMPORT_FIX,
   WORKSPACE_BINDING_ACTUAL,
   WORKSPACE_BINDING_FIX,
+  WORKFLOW_SCHEMA_SLOTS,
 } from './decision-code-imports.config.js'
 import { type DecisionCodeManifest, readDecisionCodeManifest } from './DecisionCodeManifest.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
@@ -186,6 +188,12 @@ const directiveSilencingRule = (comment: { readonly value: string }): string | n
 interface SchemaPositions {
   readonly combinatorOf: (call: ESTree.CallExpression) => string | null
   readonly recordReadsOf: (declarator: ESTree.VariableDeclarator) => readonly ESTree.Node[]
+  /** An `S.*` / `Schema.*` combinator, referenced or called. */
+  readonly isSchemaCombinator: (node: ESTree.Node) => boolean
+  /** A call of `Workflow.make` from `@systemfsoftware/effect-cell-types`. */
+  readonly isWorkflowMake: (call: ESTree.CallExpression) => boolean
+  /** A callee whose body is decision code this rule reads: declared in this file or in a relative decision module. */
+  readonly isDecisionCallee: (callee: ESTree.Node) => boolean
 }
 
 const MAX_RECORD_DEPTH = 4
@@ -431,16 +439,34 @@ const isSuspendedSchema = (arrow: ESTree.Node, positions: SchemaPositions): bool
     argumentRoleOf(call, argumentIndexOf(call, arrow), positions) === 'thunk'
 }
 
+const isWorkflowSchemaSlot = (property: ESTree.Node, positions: SchemaPositions): boolean => {
+  if (property.type !== 'Property' || property.computed || property.key.type !== 'Identifier') return false
+  const object = property.parent
+  if (!WORKFLOW_SCHEMA_SLOTS.has(property.key.name) || object === null || object.type !== 'ObjectExpression') {
+    return false
+  }
+  const call = object.parent
+  return call !== null && call.type === 'CallExpression' && call.arguments[0] === object && positions.isWorkflowMake(call)
+}
+
+const isSchemaPipe = (member: ESTree.MemberExpression, positions: SchemaPositions): boolean => {
+  const call = member.parent
+  return call !== null && call.type === 'CallExpression' && call.callee === member && call.arguments.length > 0 &&
+    call.arguments.every((argument) => positions.isSchemaCombinator(argument))
+}
+
 const isSchemaPosition = (expression: ESTree.Node, positions: SchemaPositions): boolean => {
   const node = climbValueWrappers(expression)
   const parent = node.parent
   if (parent === null) return false
   if (parent.type === 'CallExpression') {
+    if (argumentIndexOf(parent, node) >= 0 && positions.isDecisionCallee(stripInstantiation(parent.callee))) return true
     const role = argumentRoleOf(parent, argumentIndexOf(parent, node), positions)
     return role !== null && role !== 'thunk'
   }
   if (parent.type === 'ArrowFunctionExpression' && parent.body === node) return isSuspendedSchema(parent, positions)
   if (parent.type === 'Property' && parent.value === node && parent.parent !== null) {
+    if (isWorkflowSchemaSlot(parent, positions)) return true
     return parent.parent.type === 'ObjectExpression' && isContainerValue(parent.parent, 'fields', positions, 0)
   }
   if (parent.type === 'ArrayExpression') return isContainerValue(parent, 'members', positions, 0)
@@ -461,6 +487,7 @@ const isSchemaUse = (identifier: ESTree.Node, isNamespace: boolean, positions: S
     const member = memberNameOf(parent)
     if (member === null) return false
     if (depth >= firstSchemaMemberIndex && SCHEMA_MEMBERS.has(member)) return true
+    if (depth >= firstSchemaMemberIndex && member === 'pipe') return isSchemaPipe(parent, positions)
     end = parent
     depth += 1
   }
@@ -560,6 +587,13 @@ export const decisionCodeImports = defineRule({
           guardConsequents.some((consequent) => isInsideConsequent(node, consequent))
 
         const schemaRoots = new Map<ESTree.Node, string | null>()
+        const workflowRoots = new Set<ESTree.Node>()
+        const decisionCallees = new Set<ESTree.Node>()
+        const registerReferences = (declaration: ESTree.Node, into: Set<ESTree.Node>): void => {
+          for (const variable of context.sourceCode.getDeclaredVariables(declaration)) {
+            for (const reference of variable.references) into.add(reference.identifier)
+          }
+        }
         const workspaceBindings: Array<{
           readonly variable: ScopeVariable
           readonly isNamespace: boolean
@@ -578,6 +612,14 @@ export const decisionCodeImports = defineRule({
               }
             }
             const kind = classifySource(source, filename, manifest)
+            for (const specifier of valueSpecifiersOf(statement)) {
+              if (source === CELL_TYPES_PACKAGE && importedNameOf(specifier) === 'Workflow') {
+                registerReferences(specifier, workflowRoots)
+              }
+              if (source.startsWith('.') && kind !== 'plainModule' && kind !== 'foreign') {
+                registerReferences(specifier, decisionCallees)
+              }
+            }
             if (kind === 'plainModule') {
               findings.push({
                 node: statement,
@@ -627,6 +669,25 @@ export const decisionCodeImports = defineRule({
               actual: RE_EXPORT_ACTUAL.replace('{{source}}', source),
               fix: RE_EXPORT_FIX.replace('{{source}}', source),
             })
+          }
+        }
+
+        for (const statement of program.body) {
+          const declaration = statement.type === 'ExportNamedDeclaration' && statement.declaration !== null &&
+              statement.declaration !== undefined
+            ? statement.declaration
+            : statement
+          if (declaration.type === 'FunctionDeclaration') registerReferences(declaration, decisionCallees)
+          if (declaration.type === 'VariableDeclaration' && declaration.kind === 'const') {
+            for (const declarator of declaration.declarations) {
+              const init = declarator.init
+              if (
+                init !== null && init !== undefined &&
+                (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+              ) {
+                registerReferences(declarator, decisionCallees)
+              }
+            }
           }
         }
 
@@ -683,6 +744,16 @@ export const decisionCodeImports = defineRule({
         const positions: SchemaPositions = {
           combinatorOf: (call) =>
             schemaRoots.has(calleeRootOf(call.callee)) ? combinatorNameOf(call.callee, schemaRoots) : null,
+          isSchemaCombinator: (node) => {
+            const target = stripInstantiation(node)
+            return schemaRoots.has(calleeRootOf(target.type === 'CallExpression' ? target.callee : target))
+          },
+          isWorkflowMake: (call) => {
+            const callee = stripInstantiation(call.callee)
+            return callee.type === 'MemberExpression' && memberNameOf(callee) === 'make' &&
+              workflowRoots.has(callee.object)
+          },
+          isDecisionCallee: (callee) => decisionCallees.has(callee),
           recordReadsOf: (declarator) =>
             context.sourceCode.getDeclaredVariables(declarator).flatMap((variable) =>
               variable.references.filter((reference) => !reference.isWrite()).map((reference) => reference.identifier)

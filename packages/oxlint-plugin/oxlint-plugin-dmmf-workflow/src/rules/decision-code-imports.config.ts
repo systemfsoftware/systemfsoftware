@@ -9,7 +9,30 @@ export const DECISION_FILE_SUFFIXES: readonly string[] = ['.schema.ts', '.workfl
 
 export const OPEN_PACKAGES: readonly string[] = ['effect', '@systemfsoftware/effect-cell-types']
 
-export const SCHEMA_MEMBERS: ReadonlySet<string> = new Set(['make', 'is', 'fields', 'ast', 'annotations'])
+/**
+ * Members whose receiver is a schema used as a schema: constructors, guards, reflection, Effect 4 annotation and
+ * refinement methods, literal values baked into a literal schema, and a tagged union's guards, matcher and cases. Only
+ * the receiver is admitted; every argument of a call on one of these members is still read on its own.
+ */
+export const SCHEMA_MEMBERS: ReadonlySet<string> = new Set([
+  'make',
+  'is',
+  'fields',
+  'ast',
+  'annotations',
+  'annotate',
+  'check',
+  'literal',
+  'literals',
+  'guards',
+  'match',
+  'cases',
+])
+
+/** Fields of `Workflow.make` from `@systemfsoftware/effect-cell-types` that take a schema. */
+export const WORKFLOW_SCHEMA_SLOTS: ReadonlySet<string> = new Set(['command', 'decision', 'error'])
+
+export const CELL_TYPES_PACKAGE = '@systemfsoftware/effect-cell-types'
 
 export const MANIFEST_FILE = 'decision-code.json'
 
