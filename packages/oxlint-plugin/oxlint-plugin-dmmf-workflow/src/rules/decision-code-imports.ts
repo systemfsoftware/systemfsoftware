@@ -501,7 +501,18 @@ const isSchemaChainFrom = (
     depth += 1
   }
   if (depth < firstSchemaMemberIndex) return false
-  return (admitBareResult && depth === 0) || isSchemaPosition(end, positions)
+  if (isSchemaPosition(end, positions)) return true
+  return admitBareResult && depth === 0 && isSchemaOnlyConst(end, positions)
+}
+
+/** A schema bound to a `const` whose every read in this file is itself a schema use. */
+const isSchemaOnlyConst = (expression: ESTree.Node, positions: SchemaPositions): boolean => {
+  const target = climbValueWrappers(expression)
+  const declarator = target.parent
+  if (!isConstRecordDeclarator(declarator) || declarator.init !== target) return false
+  return positions.recordReadsOf(declarator).every((read) =>
+    isInTypePosition(read) || isSchemaChainFrom(read, 0, positions, false)
+  )
 }
 
 const isSchemaUse = (identifier: ESTree.Node, isNamespace: boolean, positions: SchemaPositions): boolean =>

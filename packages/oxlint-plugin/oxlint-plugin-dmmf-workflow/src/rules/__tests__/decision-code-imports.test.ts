@@ -275,7 +275,9 @@ export const checked = Workflow.make({ command: PlaceOrder, error: Refused, deci
 ${NAMESPACE_IMPORT}
 export const Price = PI.Money.annotate({ description: 'price' }).pipe(S.Array)
 export const zero = () => PI.Money.check(S.isGreaterThan(0)).make({ amount: 1 })
-export const Row = S.Struct({ price: PI.Money.annotate({ description: 'price' }) })`,
+export const Row = S.Struct({ price: PI.Money.annotate({ description: 'price' }) })
+const Described = PI.Money.annotate({ description: 'price' })
+export const Line = S.Struct({ price: Described, prices: S.Array(Described) })`,
       filename: SCHEMA,
     },
     {
@@ -470,6 +472,21 @@ export const Price = PI.Money.annotate({ description: 'price' }).pipe(register)
 export const Read = PI.Money.annotate`,
       filename: SCHEMA,
       errors: [workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AChainedWorkspaceSchemaLeavesASchemaPosition',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const id = <T>(x: T): T => x
+const columnsOf = (instant: S.Top) => ({ at: instant })
+const register = <A>(a: A) => a
+export const leaked = id(PI.Money.annotate({ description: 'price' }))
+export const Row = S.Struct(columnsOf(PI.Instant.pipe(S.toType)))
+export const wrapped = (PI.Money.annotate({ description: 'price' }) satisfies S.Top).pipe(register)
+const aliased = PI.Money.annotate({ description: 'price' })
+export const indirect = aliased.pipe(register)`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI')],
     },
     {
       name: 'Should_Report_When_AWorkspaceSchemaIsPassedToAWorkspaceFunction',
