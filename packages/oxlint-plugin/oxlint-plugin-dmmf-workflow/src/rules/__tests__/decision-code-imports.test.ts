@@ -229,6 +229,58 @@ export const both = S.Union([PI.Money, Money as typeof Money])`,
       filename: SCHEMA,
     },
     {
+      name: 'Should_Pass_When_AWorkspaceSchemaIsReadThroughItsEffect4Members',
+      code: `${SCHEMA_IMPORT}
+import { Fee, Kind, Money, Side, Sku } from '@acme/domain'
+const nonEmpty = S.isMinLength(1)
+export const Price = Money.annotate({ description: 'a price' })
+export const Code = Sku.check(nonEmpty)
+export const Kinds = S.Literals(Kind.literals)
+export const doubled = (n: number) => n * Fee.literal
+export const empty = (side: Side) => Side.guards.Empty(side)
+export const label = (side: Side) => Side.match(side, { Empty: () => 'none', Full: () => 'some' })
+export const full = () => Side.cases.Full.make({})`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_AWorkspaceSchemaIsPipedThroughSchemaCombinatorsOnly',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Items = PI.Item.pipe(S.toType, S.Array)
+export const Checked = PI.Item.pipe(S.check(S.isMinLength(1)))`,
+      filename: SCHEMA,
+    },
+    {
+      name: 'Should_Pass_When_WorkflowMakeTakesWorkspaceSchemasInItsSchemaSlots',
+      code: `${SCHEMA_IMPORT}
+import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { PlaceOrder, Refused } from '@acme/domain'
+import { Placed, decidePlace } from './order.schema.js'
+export const placeOrder = Workflow.make({ command: PlaceOrder, decision: Placed, error: Refused, decide: decidePlace })`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_WorkflowMakeOptionsAreWrappedOrReachedThroughANamespace',
+      code: `import * as Cell from '@systemfsoftware/effect-cell-types'
+import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { PlaceOrder, Refused } from '@acme/domain'
+import { Placed, decidePlace } from './order.schema.js'
+export const viaNamespace = Cell.Workflow.make({ command: PlaceOrder, decision: Placed, error: Refused, decide: decidePlace })
+export const checked = Workflow.make({ command: PlaceOrder, error: Refused, decide: decidePlace } satisfies object)`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Pass_When_AnAnnotatedWorkspaceSchemaIsUsedAsASchema',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Price = PI.Money.annotate({ description: 'price' }).pipe(S.Array)
+export const zero = () => PI.Money.check(S.isGreaterThan(0)).make({ amount: 1 })
+export const Row = S.Struct({ price: PI.Money.annotate({ description: 'price' }) })
+const Described = PI.Money.annotate({ description: 'price' })
+export const Line = S.Struct({ price: Described, prices: S.Array(Described) })`,
+      filename: SCHEMA,
+    },
+    {
       name: 'Should_Pass_When_ANamedNamespaceExportIsWalkedToTheEndOfItsChain',
       code: `${SCHEMA_IMPORT}
 import { Mutant, Report } from '@acme/domain'
@@ -366,6 +418,85 @@ export const x = 1`,
   ],
   invalid: [
     {
+      name: 'Should_Report_When_AnEffect4MemberCallArgumentUsesAWorkspaceFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Price = PI.Money.annotate({ default: () => PI.makeDefault() })
+export const Code = PI.Sku.check(PI.isKnownSku)`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceSchemaIsPipedThroughANonSchemaFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const register = <A>(a: A) => a
+export const Items = PI.Item.pipe(S.toType, register)`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_WorkflowMakeTakesAWorkspaceFunctionOutsideItsSchemaSlots',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { PlaceOrder, decidePlace } from '@acme/domain'
+export const placeOrder = Workflow.make({ command: PlaceOrder, decide: decidePlace })`,
+      filename: WORKFLOW,
+      errors: [workspaceUse('decidePlace')],
+    },
+    {
+      name: 'Should_Report_When_AMakeCallIsNotFromCellTypes',
+      code: `import { Workflow } from './order.schema.js'
+import { PlaceOrder } from '@acme/domain'
+export const placeOrder = Workflow.make({ command: PlaceOrder })`,
+      filename: WORKFLOW,
+      errors: [workspaceUse('PlaceOrder')],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceBindingIsPassedToALocalFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const id = <T>(x: T): T => x
+const columnsOf = (instant: S.Top) => ({ at: instant })
+export const leaked = id(PI.impureFunction)
+export const Row = S.Struct(columnsOf(PI.Instant))`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AnAnnotatedOrPipedWorkspaceSchemaIsPipedOnThroughANonSchemaFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const register = <A>(a: A) => a
+export const Items = PI.Item.pipe(S.toType).pipe(register)
+export const Price = PI.Money.annotate({ description: 'price' }).pipe(register)
+export const Read = PI.Money.annotate`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AChainedWorkspaceSchemaLeavesASchemaPosition',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+const id = <T>(x: T): T => x
+const columnsOf = (instant: S.Top) => ({ at: instant })
+const register = <A>(a: A) => a
+export const leaked = id(PI.Money.annotate({ description: 'price' }))
+export const Row = S.Struct(columnsOf(PI.Instant.pipe(S.toType)))
+export const wrapped = (PI.Money.annotate({ description: 'price' }) satisfies S.Top).pipe(register)
+const aliased = PI.Money.annotate({ description: 'price' })
+export const indirect = aliased.pipe(register)`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
+      name: 'Should_Report_When_AWorkspaceSchemaIsPassedToAWorkspaceFunction',
+      code: `${SCHEMA_IMPORT}
+${NAMESPACE_IMPORT}
+export const Row = S.Struct(PI.columnsOf(PI.Instant))`,
+      filename: SCHEMA,
+      errors: [workspaceUse('PI'), workspaceUse('PI')],
+    },
+    {
       name: 'Should_Report_When_AWorkflowImportsAPlainModule',
       code: `import { formatTotal } from './format.js'
 export const describe = (n: number) => formatTotal(n)`,
@@ -423,13 +554,12 @@ export const keys = Object.keys(rowFields)`,
       errors: [workspaceUse('Mutant')],
     },
     {
-      name: 'Should_Report_When_AWorkspaceSchemaIsPipedOrUsedBare',
+      name: 'Should_Report_When_AWorkspaceNamespaceIsUsedBare',
       code: `${SCHEMA_IMPORT}
 ${NAMESPACE_IMPORT}
-export const Branded = PI.Sku.pipe(S.brand('Sku'))
 export const Whole = S.Struct(PI)`,
       filename: SCHEMA,
-      errors: [workspaceUse('PI'), workspaceUse('PI')],
+      errors: [workspaceUse('PI')],
     },
     {
       name: 'Should_Report_When_DecisionCodeImportsAForeignPackage',
