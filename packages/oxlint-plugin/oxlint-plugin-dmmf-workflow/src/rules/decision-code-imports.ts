@@ -6,6 +6,7 @@ import { isPackageOfEnclosingWorkspace, packageNameOf } from '@systemfsoftware/o
 import { realpathSync, statSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import {
+  CELL_TYPES_PACKAGE,
   DECISION_FILE_SUFFIXES,
   DECISION_MODULE_SUFFIXES,
   DISABLE_DIRECTIVE_ACTUAL,
@@ -24,14 +25,13 @@ import {
   RE_EXPORT_ACTUAL,
   RE_EXPORT_FIX,
   RULE_NAME,
-  CELL_TYPES_PACKAGE,
   SCHEMA_CHAIN_MEMBERS,
   SCHEMA_MEMBERS,
   SIDE_EFFECT_IMPORT_ACTUAL,
   SIDE_EFFECT_IMPORT_FIX,
+  WORKFLOW_SCHEMA_SLOTS,
   WORKSPACE_BINDING_ACTUAL,
   WORKSPACE_BINDING_FIX,
-  WORKFLOW_SCHEMA_SLOTS,
 } from './decision-code-imports.config.js'
 import { type DecisionCodeManifest, readDecisionCodeManifest } from './DecisionCodeManifest.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
