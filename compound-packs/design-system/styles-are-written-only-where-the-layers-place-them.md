@@ -21,6 +21,7 @@ Write all CSS an app owns in the global stylesheet, inside the cascade layers it
 **Why & evidence:** Hard-coded SHA-256 constants drift silently on package bumps or invite tautological hash-pinning tests, vendored internal CSS duplicates package ownership, pre-seeded `<style>` sentinels break if upstream changes its DOM guard, and falling back to an empty hash list on failed build-time extraction silently strips runtime styles without failing the build.
 
 **Gate:**
+
 - Exact version pin in `pnpm-workspace.yaml` (no `^` or `~`).
 - `oxlint` (`no-restricted-imports`) and Node ESM `exports` blocking unexported internal package paths.
 - Build-time Vite virtual-module derivation (`vite build` / `astro build`) throwing on missing, duplicate, or empty `<style>` capture, plus `review` confirming zero literal `'sha256-'` constants in source and provenance recorded at the derivation site.
@@ -28,6 +29,7 @@ Write all CSS an app owns in the global stylesheet, inside the cascade layers it
 - Browser E2E `securitypolicyviolation` test suite against `/web`.
 
 **Calibration:**
+
 - `wrong:` Hard-coding `const SLIDE_RULES_HASH = "'sha256-abc...'"` in `packages/contracts`, importing `@astryxdesign/core/dist/Layer/layerSlideRules.js`, pre-seeding `<style id="astryx-layer-slide-rules">`, or swallowing derivation errors to return `[]`.
 - `right:` Pinning `@astryxdesign/core` to an exact version in `pnpm-workspace.yaml`, mounting `@astryxdesign/core/Layer` in Node during the Vite build to emit `virtual:astryx-slide-rules-csp-hash` with provenance comments, throwing on zero/multiple/empty `<style>` capture, passing the validated `Sha256Source` into `packages/contracts`, and asserting `0` `securitypolicyviolation` events in browser E2E.
 
