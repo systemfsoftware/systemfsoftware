@@ -5,10 +5,8 @@ import {
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
-  LAYER_NAMESPACE,
   MAKE_MEMBER,
   MANAGED_RUNTIME_NAMESPACE,
-  PROVIDE_MEMBER,
   WIRING_PER_CALL_ACTUAL,
   WIRING_PER_CALL_EXPECTED,
   WIRING_PER_CALL_FIX,
@@ -28,7 +26,6 @@ const ruleTester = new RuleTester({
 })
 
 const MANAGED_RUNTIME_MAKE = `${MANAGED_RUNTIME_NAMESPACE}.${MAKE_MEMBER}`
-const LAYER_PROVIDE = `${LAYER_NAMESPACE}.${PROVIDE_MEMBER}`
 
 const wiringPerCall = (name: string) => ({
   messageId: 'wiringPerCall',
@@ -227,6 +224,17 @@ export function build(context) {
 }`,
       filename: 'src/ledger.ts',
     },
+    {
+      // Composing a Layer builds nothing: `provide`, `provideMerge` and `merge` are
+      // descriptions alike, and the runtime that builds them is what the rule judges.
+      name: 'Should_Pass_When_TheLayerIsProvidedInsideAFunctionDeclaration',
+      code: `import { Layer } from 'effect'
+
+export function build(base) {
+  return Layer.provide(AppLive, base)
+}`,
+      filename: 'src/AppLive.ts',
+    },
   ],
   invalid: [
     {
@@ -239,16 +247,6 @@ export function handle(request) {
 }`,
       filename: 'src/Handler.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
-    },
-    {
-      name: 'Should_Report_When_TheLayerIsProvidedInsideAFunctionDeclaration',
-      code: `import { Layer } from 'effect'
-
-export function build(base) {
-  return Layer.provide(AppLive, base)
-}`,
-      filename: 'src/AppLive.ts',
-      errors: [wiringPerCall(LAYER_PROVIDE)],
     },
     {
       // Kills the mutant that exempts every module-scope binding initializer.
@@ -283,14 +281,14 @@ export function boot() {
     {
       // Kills the mutant that resolves only a direct import binding and misses a
       // member taken off the package namespace.
-      name: 'Should_Report_When_TheNamespaceImportProvidesTheLayerInsideAFunction',
+      name: 'Should_Report_When_TheNamespaceImportMakesTheRuntimeInsideAFunction',
       code: `import * as Eff from 'effect'
 
 export function build() {
-  return Eff.Layer.provide(AppLive, baseLayer)
+  return Eff.ManagedRuntime.make(AppLive)
 }`,
-      filename: 'src/AppLive.ts',
-      errors: [wiringPerCall(LAYER_PROVIDE)],
+      filename: 'src/boot.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
     {
       // Kills the mutant that drops the string arm of the imported name. The arm now lives
@@ -319,14 +317,14 @@ export function boot() {
     },
     {
       // Kills the mutant that reads only the non-computed property position.
-      name: 'Should_Report_When_TheComputedStaticMemberProvidesTheLayer',
-      code: `import { Layer } from 'effect'
+      name: 'Should_Report_When_TheComputedStaticMemberMakesTheRuntime',
+      code: `import { ManagedRuntime } from 'effect'
 
-export function build() {
-  return Layer['provide'](AppLive, baseLayer)
+export function boot() {
+  return ManagedRuntime['make'](AppLive)
 }`,
-      filename: 'src/AppLive.ts',
-      errors: [wiringPerCall(LAYER_PROVIDE)],
+      filename: 'src/boot.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
     {
       // Kills the mutant that exempts every module-scope closure: a closure handed
@@ -408,6 +406,19 @@ export const handle = (request) => {
   return runtime.runPromise(serve(request))
 }`,
       filename: 'src/Handler.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
+    },
+    {
+      // A local the returned closures capture is no memo: each call of the factory
+      // builds another runtime that nothing finalizes.
+      name: 'Should_Report_When_AFactoryCapturesAFreshRuntimeInItsReturnedClosures',
+      code: `import { ManagedRuntime } from 'effect'
+
+export const toolsOf = (host) => {
+  const runtime = ManagedRuntime.make(toolLayerOf(host))
+  return { run: (effect) => runtime.runPromise(effect) }
+}`,
+      filename: 'src/tools.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
   ],

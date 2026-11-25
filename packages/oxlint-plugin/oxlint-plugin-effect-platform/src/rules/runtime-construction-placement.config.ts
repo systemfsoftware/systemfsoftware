@@ -6,9 +6,7 @@ export const isInterpretationEdge = (filename: string): boolean => /(?:^|[\\/])m
 export const EFFECT_MODULE = 'effect' as const
 
 export const MANAGED_RUNTIME_NAMESPACE = 'ManagedRuntime' as const
-export const LAYER_NAMESPACE = 'Layer' as const
 export const MAKE_MEMBER = 'make' as const
-export const PROVIDE_MEMBER = 'provide' as const
 
 export interface TrackedWiringCall {
   readonly source: string
@@ -18,7 +16,6 @@ export interface TrackedWiringCall {
 
 export const TRACKED_WIRING_CALLS: readonly TrackedWiringCall[] = [
   { source: EFFECT_MODULE, namespace: MANAGED_RUNTIME_NAMESPACE, member: MAKE_MEMBER },
-  { source: EFFECT_MODULE, namespace: LAYER_NAMESPACE, member: PROVIDE_MEMBER },
 ]
 
 export const MAX_ALIAS_HOPS = 8
@@ -30,7 +27,7 @@ export const WIRING_PER_CALL_EXPECTED =
 export const WIRING_PER_CALL_ACTUAL =
   'the wiring is constructed inside a function body, so every call builds its own runtime' as const
 export const WIRING_PER_CALL_FIX =
-  'build the wiring in one module-scope lazy memoized closure and read that runtime where it is needed; a runtime constructed per call is never finalized and the fibers it starts outlive the caller - delete the construction if this module already reads a process-scope runtime' as const
+  'build the wiring in one module-scope lazy memoized closure and read that runtime where it is needed, or, when the wiring belongs to an object with its own lifetime, run `Layer.build` once in a `Scope` that object owns and provide the built `Context` to each call with `Effect.provide` before running it, so no `ManagedRuntime` is constructed; a runtime constructed per call is never finalized and the fibers it starts outlive the caller - delete the construction if this module already reads a process-scope runtime' as const
 
 export const EAGER_CONSTRUCTION_EXPECTED =
   'runtime construction deferred to first use, inside a module-scope memoizing closure' as const
@@ -45,7 +42,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      '`ManagedRuntime.make` or `Layer.provide` inside a function body rebuilds wiring per call; `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. The rule judges runtime code: files under a `src/` directory segment and `*.test.ts` files; a package-root hook, config, or setup file is outside its subject, `.tst.ts` type-test files run nowhere, and `main.ts` is exempt from the module-scope verdict as the interpretation edge. Lawful and silent in scope: a memoized module-scope closure, module-scope graph composition, `cell.run(input)` at any depth. Shapes, bounds, and examples: the README.',
+      '`ManagedRuntime.make` inside a function body builds a runtime per call that nothing finalizes; `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. The rule judges runtime code: files under a `src/` directory segment and `*.test.ts` files; a package-root hook, config, or setup file is outside its subject, `.tst.ts` type-test files run nowhere, and `main.ts` is exempt from the module-scope verdict as the interpretation edge. Lawful and silent in scope: a memoized module-scope closure, Layer composition (`Layer.provide`, `Layer.provideMerge`, `Layer.merge`) at any depth, `cell.run(input)` at any depth. Shapes, bounds, and examples: the README.',
   },
   schema: [],
   messages: {
