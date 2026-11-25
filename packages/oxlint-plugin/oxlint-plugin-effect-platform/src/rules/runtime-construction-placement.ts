@@ -4,12 +4,15 @@ import { resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import type { ImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 
 import {
+  ACQUIRE_RELEASE_MEMBER,
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
+  EFFECT_MODULE,
+  EFFECT_NAMESPACE,
+  EFFECT_SUBMODULE,
   isInterpretationEdge,
   isRuntimeCodeFile,
-  MANAGED_RUNTIME_NAMESPACE,
   MAX_ALIAS_HOPS,
   MEMOIZING_ASSIGNMENT_OPERATORS,
   meta,
@@ -171,49 +174,56 @@ const isBoundByAModuleScopeBinding = (node: ESTree.Node): boolean => {
   return false
 }
 
-const MAX_WALK_DEPTH = 32
-
-const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
-
-const mentionsName = (value: unknown, name: string, depth: number): boolean => {
-  if (depth > MAX_WALK_DEPTH) return false
-  if (Array.isArray(value)) return value.some((item) => mentionsName(item, name, depth + 1))
-  if (!isNode(value)) return false
-  if (value.type === 'Identifier') return value.name === name
-  for (const [key, child] of Object.entries(value)) {
-    if (key === 'parent') continue
-    if (mentionsName(child, name, depth + 1)) return true
-  }
-  return false
-}
-
-const isReadInsideANestedFunction = (value: unknown, enclosing: FunctionNode, name: string, depth: number): boolean => {
-  if (depth > MAX_WALK_DEPTH) return false
-  if (Array.isArray(value)) return value.some((item) => isReadInsideANestedFunction(item, enclosing, name, depth + 1))
-  if (!isNode(value)) return false
-  if (value !== enclosing && isFunctionNode(value)) return mentionsName(value, name, depth + 1)
-  for (const [key, child] of Object.entries(value)) {
-    if (key === 'parent') continue
-    if (isReadInsideANestedFunction(child, enclosing, name, depth + 1)) return true
-  }
-  return false
-}
-
-const isCapturedDeclaratorBinding = (declarator: ESTree.VariableDeclarator, enclosing: FunctionNode): boolean => {
-  if (declarator.id.type !== 'Identifier') return false
-  return isReadInsideANestedFunction(enclosing, enclosing, declarator.id.name, 0)
+/**
+ * A closure that runs once: invoked by a call whose result a module-scope binding holds
+ * (an invoked factory, a `then` on a module-scope promise). A cache write inside any
+ * other closure is the only memo; a local the closure captures is rebuilt per call.
+ */
+const runsOnceAtModuleScope = (enclosing: FunctionNode): boolean => {
+  const consumer: ESTree.Node | null = enclosing.parent
+  return consumer !== null && consumer.type === 'CallExpression' && isBoundByAModuleScopeBinding(consumer)
 }
 
 const isMemoizedConstruction = (call: ESTree.CallExpression, enclosing: FunctionNode): boolean => {
   let current: ESTree.Node | null = call.parent
   while (current !== null && current !== enclosing) {
     if (isCacheWrite(current)) return true
-    if (current.type === 'VariableDeclarator' && isCapturedDeclaratorBinding(current, enclosing)) return true
     current = current.parent
   }
-  const consumer: ESTree.Node | null = enclosing.parent
-  if (consumer === null || consumer.type !== 'CallExpression') return false
-  return isBoundByAModuleScopeBinding(consumer)
+  return runsOnceAtModuleScope(enclosing)
+}
+
+const isEffectNamespace = (origin: ImportOrigin): boolean =>
+  origin.path.length === 0 &&
+  ((origin.source === EFFECT_MODULE && origin.importedName === EFFECT_NAMESPACE) ||
+    (origin.source === EFFECT_SUBMODULE && origin.importedName === null))
+
+/**
+ * `Effect.acquireRelease(acquire, release)` with the construction inside `acquire`:
+ * the runtime is released when the scope that acquired it closes, so it lives exactly
+ * as long as its owner (a process, an object instance, a call) and is finalized.
+ */
+const isAcquiredWithARelease = (
+  call: ESTree.CallExpression,
+  originOf: (node: ESTree.Node) => ImportOrigin | null,
+): boolean => {
+  let child: ESTree.Node = call
+  let current: ESTree.Node | null = call.parent
+  while (current !== null) {
+    if (
+      current.type === 'CallExpression' &&
+      current.arguments.length >= 2 &&
+      current.arguments[0] === child &&
+      current.callee.type === 'MemberExpression' &&
+      staticMemberNameOf(current.callee) === ACQUIRE_RELEASE_MEMBER
+    ) {
+      const origin = originOf(current.callee.object)
+      if (origin !== null && isEffectNamespace(origin)) return true
+    }
+    child = current
+    current = current.parent
+  }
+  return false
 }
 
 export const runtimeConstructionPlacement = defineRule({
@@ -247,7 +257,9 @@ export const runtimeConstructionPlacement = defineRule({
         if (callee.type !== 'MemberExpression') return
         const member = staticMemberNameOf(callee)
         if (member === null) return
-        const receiver = resolveImportOrigin(callee.object, getScope) ?? dynamicOriginOf(callee.object, dynamicBindings)
+        const originOf = (receiverNode: ESTree.Node): ImportOrigin | null =>
+          resolveImportOrigin(receiverNode, getScope) ?? dynamicOriginOf(receiverNode, dynamicBindings)
+        const receiver = originOf(callee.object)
         if (receiver === null) return
         const tracked = trackedWiringCallOf(receiver, member)
         if (tracked === null) return
@@ -258,6 +270,8 @@ export const runtimeConstructionPlacement = defineRule({
         if (enclosing !== null && isDeferredModuleClosure(enclosing) && isMemoizedConstruction(node, enclosing)) {
           return
         }
+
+        if (enclosing !== null && isAcquiredWithARelease(node, originOf)) return
 
         if (enclosing !== null) {
           context.report({
@@ -272,8 +286,6 @@ export const runtimeConstructionPlacement = defineRule({
           })
           return
         }
-
-        if (tracked.namespace !== MANAGED_RUNTIME_NAMESPACE) return
 
         if (isInterpretationEdge(context.filename)) return
 
