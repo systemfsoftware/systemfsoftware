@@ -27,7 +27,7 @@ export const WIRING_PER_CALL_EXPECTED =
 export const WIRING_PER_CALL_ACTUAL =
   'the wiring is constructed inside a function body, so every call builds its own runtime' as const
 export const WIRING_PER_CALL_FIX =
-  "build the wiring in one module-scope lazy memoized closure and read that runtime where it is needed, or, when the wiring belongs to an object with its own lifetime, build its layer once in that object's scope with `Layer.build` and provide the built context to each call, which needs no runtime; a runtime constructed per call is never finalized and the fibers it starts outlive the caller - delete the construction if this module already reads a process-scope runtime" as const
+  'build the wiring in one module-scope lazy memoized closure and read that runtime where it is needed, or, when the wiring belongs to an object with its own lifetime, run `Layer.build` once in a `Scope` that object owns and provide the built `Context` to each call with `Effect.provide` before running it, so no `ManagedRuntime` is constructed; a runtime constructed per call is never finalized and the fibers it starts outlive the caller - delete the construction if this module already reads a process-scope runtime' as const
 
 export const EAGER_CONSTRUCTION_EXPECTED =
   'runtime construction deferred to first use, inside a module-scope memoizing closure' as const
