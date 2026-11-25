@@ -235,21 +235,6 @@ export function build(base) {
 }`,
       filename: 'src/AppLive.ts',
     },
-    {
-      // An object with its own lifetime acquires its runtime in its own scope; the
-      // release finalizes it when that scope closes.
-      name: 'Should_Pass_When_TheRuntimeIsAcquiredWithARelease',
-      code: `import { Effect, ManagedRuntime } from 'effect'
-
-export const Room = Effect.gen(function* () {
-  const runtime = yield* Effect.acquireRelease(
-    Effect.sync(() => ManagedRuntime.make(RoomLive)),
-    (made) => Effect.promise(() => made.dispose()),
-  )
-  return { send: (message) => runtime.runPromise(deliver(message)) }
-})`,
-      filename: 'src/Room.ts',
-    },
   ],
   invalid: [
     {
@@ -434,29 +419,6 @@ export const toolsOf = (host) => {
   return { run: (effect) => runtime.runPromise(effect) }
 }`,
       filename: 'src/tools.ts',
-      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
-    },
-    {
-      // Only Effect's acquireRelease binds a release to the acquiring scope.
-      name: 'Should_Report_When_TheAcquireReleaseIsNotEffects',
-      code: `import { ManagedRuntime } from 'effect'
-import { Pool } from './pool.js'
-
-export const Room = (input) =>
-  Pool.acquireRelease(() => ManagedRuntime.make(RoomLive), (made) => made.dispose())`,
-      filename: 'src/Room.ts',
-      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
-    },
-    {
-      // A runtime made in the release is not the one acquired.
-      name: 'Should_Report_When_TheRuntimeIsMadeInTheRelease',
-      code: `import { Effect, ManagedRuntime } from 'effect'
-
-export const Room = Effect.acquireRelease(
-  Effect.sync(() => open()),
-  () => Effect.promise(() => ManagedRuntime.make(RoomLive).dispose()),
-)`,
-      filename: 'src/Room.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
   ],

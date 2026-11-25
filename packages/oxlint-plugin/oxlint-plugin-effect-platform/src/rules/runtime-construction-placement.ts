@@ -4,13 +4,9 @@ import { resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import type { ImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 
 import {
-  ACQUIRE_RELEASE_MEMBER,
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
-  EFFECT_MODULE,
-  EFFECT_NAMESPACE,
-  EFFECT_SUBMODULE,
   isInterpretationEdge,
   isRuntimeCodeFile,
   MAX_ALIAS_HOPS,
@@ -193,39 +189,6 @@ const isMemoizedConstruction = (call: ESTree.CallExpression, enclosing: Function
   return runsOnceAtModuleScope(enclosing)
 }
 
-const isEffectNamespace = (origin: ImportOrigin): boolean =>
-  origin.path.length === 0 &&
-  ((origin.source === EFFECT_MODULE && origin.importedName === EFFECT_NAMESPACE) ||
-    (origin.source === EFFECT_SUBMODULE && origin.importedName === null))
-
-/**
- * `Effect.acquireRelease(acquire, release)` with the construction inside `acquire`:
- * the runtime is released when the scope that acquired it closes, so it lives exactly
- * as long as its owner (a process, an object instance, a call) and is finalized.
- */
-const isAcquiredWithARelease = (
-  call: ESTree.CallExpression,
-  originOf: (node: ESTree.Node) => ImportOrigin | null,
-): boolean => {
-  let child: ESTree.Node = call
-  let current: ESTree.Node | null = call.parent
-  while (current !== null) {
-    if (
-      current.type === 'CallExpression' &&
-      current.arguments.length >= 2 &&
-      current.arguments[0] === child &&
-      current.callee.type === 'MemberExpression' &&
-      staticMemberNameOf(current.callee) === ACQUIRE_RELEASE_MEMBER
-    ) {
-      const origin = originOf(current.callee.object)
-      if (origin !== null && isEffectNamespace(origin)) return true
-    }
-    child = current
-    current = current.parent
-  }
-  return false
-}
-
 export const runtimeConstructionPlacement = defineRule({
   meta,
   create(context: Context) {
@@ -257,9 +220,7 @@ export const runtimeConstructionPlacement = defineRule({
         if (callee.type !== 'MemberExpression') return
         const member = staticMemberNameOf(callee)
         if (member === null) return
-        const originOf = (receiverNode: ESTree.Node): ImportOrigin | null =>
-          resolveImportOrigin(receiverNode, getScope) ?? dynamicOriginOf(receiverNode, dynamicBindings)
-        const receiver = originOf(callee.object)
+        const receiver = resolveImportOrigin(callee.object, getScope) ?? dynamicOriginOf(callee.object, dynamicBindings)
         if (receiver === null) return
         const tracked = trackedWiringCallOf(receiver, member)
         if (tracked === null) return
@@ -270,8 +231,6 @@ export const runtimeConstructionPlacement = defineRule({
         if (enclosing !== null && isDeferredModuleClosure(enclosing) && isMemoizedConstruction(node, enclosing)) {
           return
         }
-
-        if (enclosing !== null && isAcquiredWithARelease(node, originOf)) return
 
         if (enclosing !== null) {
           context.report({

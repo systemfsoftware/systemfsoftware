@@ -71,7 +71,7 @@ All six rules are in the recommended set, so the spread enables them at `error`.
 What the placement rule leaves alone, each a shape the rule's own fixtures pin:
 
 - A module-scope closure that memoizes the construction — written into a cache binding (`??=`, `||=`, plain assignment), or made in a closure that runs once because a module-scope binding holds the call that invokes it (an invoked factory, a `then` on a module-scope promise). A local that the returned closures capture is not a memo: each call of the factory builds another runtime.
-- A runtime acquired in its owner's scope: `ManagedRuntime.make` inside the acquire of `Effect.acquireRelease(acquire, release)`. The release finalizes it when that scope closes, so an object with its own lifetime (one runtime per instance) holds a runtime without a module-scope cell.
+- No `ManagedRuntime` where the wiring belongs to an object with its own lifetime (one per instance, as a Durable Object is): build its layer once in that object's scope with `Layer.build` and provide the built context to each call. The rule has nothing to judge there, and a scope the host never closes cannot leave a runtime behind.
 - Layer composition at any depth: `Layer.provide`, `Layer.provideMerge` and `Layer.merge` build a graph, not a runtime. `Cell.provideContext(context)` is silent everywhere — binding a context built once constructs no runtime.
 - `cell.run(input)` at any depth, in any file.
 - `main.ts`, the interpretation edge: exempt from the module-scope verdict, because the process entry is where building the runtime is the point. Wiring built inside one of its functions still reports.
