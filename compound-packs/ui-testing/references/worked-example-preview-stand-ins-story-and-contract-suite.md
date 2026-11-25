@@ -334,7 +334,7 @@ export default definePreview({
 })
 ```
 
-2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in and step files import it.
+2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in, stories and step files import it.
 
 ```typescript
 import { makeFault, makeLanding, makeRecord, resetAll } from './control-primitives'
@@ -429,7 +429,7 @@ declare module '@tanstack/react-router' {
 }
 ```
 
-5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The journey names a seeded order in its step text, and the new order exists because the person placed it in the real UI. Steps import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure.
+5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The journey names a seeded order in its step text, and the new order exists because the person placed it in the real UI. Steps and stories import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure.
 
 ```typescript
 // features/steps/placing-an-order.ts
