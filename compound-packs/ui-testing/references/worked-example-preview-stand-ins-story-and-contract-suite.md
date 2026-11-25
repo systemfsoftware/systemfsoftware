@@ -305,7 +305,7 @@ declare module '@tanstack/react-router' {
 
 ## The Storybook files
 
-1. `.storybook/preview.tsx`: the two `sb.mock` calls, and the decorator that wraps every story in a new registry, the real router and `LinkProvider`. The new registry per story is what gives each story a new runtime and a fresh world. Add `Theme` and the global stylesheet as the design-system pack's roots-load-styles-and-providers.md says.
+1. `.storybook/preview.tsx`: it declares the two `sb.mock` calls, imports the memory router from `src/__mocks__/router`, and wraps every story in `RouterContextProvider` (context only; never `RouterProvider`) and `LinkProvider`, inside a new registry. It never imports `src/router`. The new registry per story is what gives each story a new runtime and a fresh world. Add `Theme` and the global stylesheet as the design-system pack's roots-load-styles-and-providers.md says.
 
 ```tsx
 import { LinkProvider } from '@astryxdesign/core/Link'
@@ -334,7 +334,7 @@ export default definePreview({
 })
 ```
 
-2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in, stories and step files import it.
+2. `src/io/__mocks__/fixture-controls.ts`: the app's named controls, built from the primitives. Each holds behaviour, or one value the stand-in produced. It holds no records and is no I/O service; only the stand-in, stories and step files import it, and production code never imports from `__mocks__`. It re-exports `resetAll`, which the first Given of every journey calls.
 
 ```typescript
 import { makeFault, makeLanding, makeRecord, resetAll } from './control-primitives'
@@ -429,7 +429,7 @@ declare module '@tanstack/react-router' {
 }
 ```
 
-5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The journey names a seeded order in its step text, and the new order exists because the person placed it in the real UI. Steps and stories import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure.
+5. `features/steps/placing-an-order.ts` and `features/placing-an-order.stories.tsx`: a journey and its steps. The story renders the real component (the real `App` works the same way). The journey names a seeded order in its step text, and the new order exists because the person placed it in the real UI. Steps and stories import from `__mocks__` only `resetAll` and the named controls, to steer timing and failure; the first Given calls `resetAll()`.
 
 ```typescript
 // features/steps/placing-an-order.ts
