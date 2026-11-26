@@ -4,10 +4,15 @@ applies_when:
   - declaring a schema field whose values obey a rule (a bound, a format, a closed set, a relation to another field)
   - a decider, handler or cell re-checks a value it already decoded
   - a test declares its own refined schema for a concept production keeps bare
+  - declaring an entity or aggregate schema built from smaller domain values
 tags: [schema, invariants, refinement, struct-check]
 ---
 
 Declare a field's domain rule as a check where the field is declared: a built-in check (`S.isBetween`, `S.isGreaterThanOrEqualTo`, `S.isPattern`, `S.isInt`) or `S.Literals` for a closed set. A rule relating two fields of one value is a check on their struct (`S.Struct({...}).check(S.makeFilter(...))`). A custom `S.makeFilter` states its invariant as a domain sentence in its message.
+
+A concept with its own rule (an amount, a window, an id) is a value-object schema that owns that rule. An entity or aggregate schema composes those schemas instead of repeating a bare `S.String` or `S.Number` for them. A business rule across its parts (allocations within a total, unique child ids) is a check on the aggregate's struct. Fields that only some states carry belong to distinct variants of a tagged union (states-are-tagged-unions.md), never to a struct check. A domain schema needs no cross-field check when its concept has no rule across fields, and a foreign wire shape never carries domain cross-field checks (foreign-wire-shapes-are-the-encoded-side.md).
+
+A `*.schema.ts` models domain concepts, never application configuration, deployment settings or runtime knobs. A struct that groups settings, and any rule relating settings, belongs in `src/config.ts` (pack: configuration, each-environment-variable-is-one-described-config.md), which may reuse a domain value-object schema such as a URL or a bounded quantity.
 
 Never re-check in a decider, handler or cell a condition every valid value of the decoded type must already meet (`n < 0` on a quantity, a format regex on an id, `end < start` on a window). Move it into the schema and delete the consumer's check.
 
