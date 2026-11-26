@@ -1,15 +1,18 @@
 ---
-title: A wire shape a third party owns is declared exactly as sent, as the Encoded side of an adapter's codec, and decodes into a domain Type
+title: A wire shape a third party owns is declared exactly as sent, and the adapter translates it into the domain's own values
 applies_when:
   - declaring a schema for a payload this repository does not own (a runtime error object, an HTTP status line, a third-party API response)
   - domain code reads raw foreign fields such as code?, errno? or a status line
   - writing tests for an adapter that decodes a third party's payload
+  - an adapter builds one domain value from several payloads, or several domain values from one payload
 tags: [schema, foreign-wire, codec, adapter]
 ---
 
-Declare a foreign payload's Encoded side with exactly the fields the adapter reads, each with the type and optionality the third party documents, and decode it with `S.decodeTo` into a domain Type. Never reshape the wire shape to suit the domain. A schema the third party's library exports is imported, never redeclared.
+Declare a foreign payload's Encoded side with exactly the fields the adapter reads, each with the type and optionality the third party documents. Never reshape the wire shape to suit the domain, and never derive a domain schema from a payload's fields. A schema the third party's library exports is imported, never redeclared.
 
-Keep the codec in the `*.schema.ts` of the adapter that talks to the third party. No module outside that adapter reads a raw foreign field (`code?`, `errno?`, a status line string) or holds the provider's grammar.
+A wire shape need not match one domain type. When one payload becomes one domain value, decode it with `S.decodeTo` into that value's schema. When the adapter splits one payload into several value objects, or assembles an aggregate from several payloads, it decodes each wire shape and then decodes the assembled value with the domain schema, so the domain's own checks run.
+
+Keep the wire shapes and codecs in the `*.schema.ts` of the adapter that talks to the third party. No module outside that adapter reads a raw foreign field (`code?`, `errno?`, a status line string) or holds the provider's grammar.
 
 A third-party parser (an AST parser, a JSONC or YAML parser) runs in the adapter's implementation module (its `*.handle.ts`, `*.service.ts` or plain adapter file), before `Schema.decode`. The adapter's `*.schema.ts` declares only the codec's Schema transformations over the parsed value, because schema files are decision code and never import a parser (pack: cell-architecture, presentation-is-a-formatter-the-write-phase-calls.md).
 
