@@ -8,9 +8,9 @@ applies_when:
 tags: [schema, foreign-wire, codec, adapter]
 ---
 
-Declare a foreign payload's Encoded side with exactly the fields the adapter reads, each with the type and optionality the third party documents. Never reshape the wire shape to suit the domain, and never derive a domain schema from a payload's fields. A schema the third party's library exports is imported, never redeclared.
+Declare a foreign payload's wire schema with exactly the fields the adapter reads, each with the type and optionality the third party documents. Never reshape the wire shape to suit the domain, and never derive a domain schema from a payload's fields. A schema the third party's library exports is imported, never redeclared.
 
-A wire shape need not match one domain type. When one payload becomes one domain value, decode it with `S.decodeTo` into that value's schema. When the adapter splits one payload into several value objects, or assembles an aggregate from several payloads, it decodes each wire shape and then decodes the assembled value with the domain schema, so the domain's own checks run.
+A wire shape need not match one domain type. Use `S.decodeTo` when a pure schema transformation turns a payload into a domain value. Otherwise the adapter decodes its wire shapes and builds each domain value through that value's schema, so the domain's own checks run, whether one payload yields several values, several payloads yield one aggregate, or a lookup sits between them.
 
 Keep the wire shapes and codecs in the `*.schema.ts` of the adapter that talks to the third party. No module outside that adapter reads a raw foreign field (`code?`, `errno?`, a status line string) or holds the provider's grammar.
 
