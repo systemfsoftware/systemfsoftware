@@ -4,7 +4,7 @@ Deno worktree hooks for `worktrunk` automating environment setup, warm-copy inde
 
 ## Standing Law
 
-Read `CONSTITUTION.md` before architecture or rule authoring.
+The org-wide `CODING_STANDARDS.md`, `REVIEW.md` and `GRADERS.md` live in `repos/constitution/`; Routing says when to load each.
 
 Startup: confirm working directory and active task; run `deno task check` and repair failures before adding scope.
 
@@ -12,12 +12,12 @@ Startup: confirm working directory and active task; run `deno task check` and re
 
 Load docs on-demand when triggers fire; do not perform eager multi-spec reads at startup.
 
-| Doc                                                     | Trigger                                                                                                                                         |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONSTITUTION.md`                                       | architecture changes, rule authoring, or design disputes                                                                                        |
-| `repos/constitution/ENFORCEMENT.md`                     | building or changing an instrument that grades work (lint gates, stream rules, CI checks, thresholds, rubrics, advisors); situational read only |
-| `docs/solutions/tooling/bash-to-deno-port-semantics.md` | modifying path mapping, git command wrappers, or cross-platform Deno CLI semantics                                                              |
-| `subtrees.toml`                                         | updating or adding vendored git subtrees                                                                                                        |
+| Doc                                                                         | Trigger                                                                            |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `repos/constitution/CODING_STANDARDS.md` and `repos/constitution/REVIEW.md` | you plan, write, review or propose a test                                          |
+| `repos/constitution/GRADERS.md`                                             | you build or change a check (a lint rule, CI job, hook, threshold or rubric)       |
+| `docs/solutions/tooling/bash-to-deno-port-semantics.md`                     | modifying path mapping, git command wrappers, or cross-platform Deno CLI semantics |
+| `subtrees.toml`                                                             | updating or adding vendored git subtrees                                           |
 
 ## Stack & Conventions
 
@@ -28,15 +28,15 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 ## Surface Classes
 
-| Surface       | Examples                                | Rule                                                                                            |
-| ------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Evaluator** | `.github/workflows/`                    | Its own commit, never shared with the work it judges; gate observed red before and green after. |
-| **Doctrine**  | `CONSTITUTION.md`, `AGENTS.md`, `docs/` | Editable, but never an input to a gate.                                                         |
-| **Editable**  | `scripts/`, `deno.json`, `dprint.json`  | Edit freely within active task.                                                                 |
+| Surface       | Examples                               | Rule                                                                                            |
+| ------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Evaluator** | `.github/workflows/`                   | Its own commit, never shared with the work it judges; gate observed red before and green after. |
+| **Doctrine**  | `AGENTS.md`, `docs/`                   | Editable, but never an input to a gate.                                                         |
+| **Editable**  | `scripts/`, `deno.json`, `dprint.json` | Edit freely within active task.                                                                 |
 
 ## Directory Map
 
-Root doctrine file `CONSTITUTION.md`.
+Root doctrine file `AGENTS.md`.
 
 | Directory      | What it is                                                | Governance        |
 | -------------- | --------------------------------------------------------- | ----------------- |

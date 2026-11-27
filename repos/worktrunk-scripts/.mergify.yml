@@ -17,7 +17,7 @@ queue_rules:
   - name: default
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
-      # Ruling 9 (SYS-1246): subtree PRs merge via the subtree queue above; a subtree
+      # Subtree PRs merge via the subtree queue above; a subtree
       # claim without trailers matches no queue and cannot merge at all. The claim is
       # the org definition (systemfsoftware/.github README, "Subtree PRs"): a standalone
       # vendoring verb and standalone "subtree(s)" in the title, on a PR that adds or
