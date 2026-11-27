@@ -51,7 +51,6 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "catalog:",
-    "@effect/platform-node": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -71,7 +70,6 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-node": "catalog:",
     "alchemy": "catalog:",
     "effect": "catalog:peers"
   },

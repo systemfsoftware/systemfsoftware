@@ -15,7 +15,10 @@ export interface Engine {
   readonly scope: Scope.Scope
 }
 
-export type StackProgram<A> = Effect.Effect<CompiledStack<A>, ConfigError> & StackDefinition<never>
+export type StackProgram<A> =
+  & Effect.Effect<CompiledStack<A>, ConfigError>
+  & StackDefinition<never>
+  & Required<Pick<StackDefinition<never>, 'providers' | 'state'>>
 
 export type Deploy = <A>(
   stack: StackProgram<A>,
@@ -48,11 +51,8 @@ const deployFailure = (engine: Engine, stack: string) => (reason: string) =>
 const destroyFailure = (engine: Engine, stack: string) => (reason: string) =>
   new StackDestroyFailed({ stack, stage: engine.stage, reason })
 
-const providersOf = <A>(stack: StackProgram<A>) => stack.providers === undefined ? {} : { providers: stack.providers }
-
 const storeIdOf = <A>(engine: Engine, stack: StackProgram<A>): Effect.Effect<string, StackDeployFailed> => {
-  if (stack.state === undefined) return Effect.succeed('local')
-  const built = buildStack({ name: stack.stackName, state: stack.state, ...providersOf(stack) }).pipe(
+  const built = buildStack({ name: stack.stackName, state: stack.state, providers: stack.providers }).pipe(
     Effect.map((services) => ({ services })),
   )
   const call = { engine, scope: undefined, onFailure: deployFailure(engine, stack.stackName) }
@@ -80,18 +80,20 @@ const checkDurability = <A>(engine: Engine, stack: StackProgram<A>) =>
 const destroyIn = <A, E>(call: EngineCall<E>, stack: StackProgram<A>, child: Scope.Scope) =>
   inEngine(call)(Core.destroy(call.engine.options, stack, { stage: call.engine.stage, scope: child }))
 
-const destroyThenClose = <A>(engine: Engine, stack: StackProgram<A>, child: Scope.Closeable) =>
-  destroyIn({ engine, scope: child, onFailure: destroyFailure(engine, stack.stackName) }, stack, child).pipe(
-    Effect.orDie,
-    Effect.ensuring(Scope.close(child, Exit.void)),
-  )
+const destroyThenClose = (destroy: Effect.Effect<void, StackDestroyFailed>, child: Scope.Closeable) =>
+  destroy.pipe(Effect.orDie, Effect.ensuring(Scope.close(child, Exit.void)))
 
 export const deployStack = (engine: Engine): Deploy => <A>(stack: StackProgram<A>) =>
   Effect.gen(function*() {
     yield* checkDurability(engine, stack)
     const child = yield* Scope.fork(engine.scope, 'sequential')
-    yield* Scope.addFinalizer(engine.scope, destroyThenClose(engine, stack, child))
-    yield* destroyIn({ engine, scope: child, onFailure: destroyFailure(engine, stack.stackName) }, stack, child)
+    const destroy = destroyIn(
+      { engine, scope: child, onFailure: destroyFailure(engine, stack.stackName) },
+      stack,
+      child,
+    )
+    yield* Scope.addFinalizer(engine.scope, destroyThenClose(destroy, child))
+    yield* destroy
     return yield* inEngine({ engine, scope: child, onFailure: deployFailure(engine, stack.stackName) })(
       Core.deploy(engine.options, stack, { stage: engine.stage, scope: child }),
     )

@@ -4,7 +4,9 @@ import { Resource } from 'alchemy/Resource'
 import { Stack } from 'alchemy/Stack'
 import { Stage } from 'alchemy/Stage'
 import * as State from 'alchemy/State'
-import { Duration, Effect, Layer, Schema } from 'effect'
+import { Context, Duration, Effect, Layer, Schema } from 'effect'
+
+export class ProbeRegion extends Context.Service<ProbeRegion, string>()('StackLayerFixture/ProbeRegion') {}
 
 export interface LedgerEntry {
   readonly op: 'create' | 'delete'

@@ -1,123 +1,32 @@
-import { alchemyStack, StackDestroyFailed, type StackLayerError } from '@systemfsoftware/alchemy-stack-layer'
+import { alchemyStack } from '@systemfsoftware/alchemy-stack-layer'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import * as State from 'alchemy/State'
-import { Cause, Effect, Exit, Layer, Match, Option, Schema, Scope } from 'effect'
-import { type Ledger, makeLedger, probeStack } from './__fixtures__/probe-stack.fixture.js'
+import { Context, Effect, Layer, Scope } from 'effect'
+import { type Ledger, ProbeRegion, probeStack } from './__fixtures__/probe-stack.fixture.js'
+import { freshLedger, opsOf, outcomeOf, releasedExit } from './__fixtures__/stack-outcome.fixture.js'
 
 const Feature = makeFeature({ it })
 
-interface Outcome {
-  readonly tag: string
-  readonly stack?: string
-  readonly stage?: string
-}
-
-const isDestroyFailed = Schema.is(StackDestroyFailed)
-
-const located = (tag: string) => (error: { readonly stack: string; readonly stage: string }): Outcome => ({
-  tag,
-  stack: error.stack,
-  stage: error.stage,
-})
-
-const describeError = (error: StackLayerError): Outcome =>
-  Match.valueTags(error, {
-    StageUnresolved: (unresolved) => ({ tag: 'StageUnresolved', stack: unresolved.stack }),
-    StackDeployFailed: located('StackDeployFailed'),
-    StackDestroyFailed: located('StackDestroyFailed'),
-    DurableStateRequired: located('DurableStateRequired'),
+const reclaimed = (ledger: Ledger) =>
+  alchemyStack('Reclaimed', {
+    dev: false,
+    stage: 'lifecycle_reclaimed',
+    deploy: probeStack({ ledger, stackName: 'Reclaimed' }),
   })
-
-const defectOutcome = <E>(cause: Cause.Cause<E>): Outcome => {
-  const squashed = Cause.squash(cause)
-  return isDestroyFailed(squashed) ? describeError(squashed) : { tag: Cause.pretty(cause) }
-}
-
-const failureOutcome = (cause: Cause.Cause<StackLayerError>): Outcome =>
-  Option.match(Cause.findErrorOption(cause), { onNone: () => defectOutcome(cause), onSome: describeError })
-
-const outcomeOf = <A>(exit: Exit.Exit<A, StackLayerError>): Outcome =>
-  Exit.isSuccess(exit) ? { tag: 'success' } : failureOutcome(exit.cause)
-
-const releasedExit = <A>(layer: Layer.Layer<A, StackLayerError>) => Effect.exit(Effect.scoped(Layer.build(layer)))
-
-const opsOf = (ledger: Ledger) => ledger.entries.map((entry) => `${entry.op} ${entry.id}`)
-
-const fresh = (refuseCreate: ReadonlyArray<string> = [], refuseDelete = false) =>
-  Effect.sync(() => makeLedger({ refuseCreate: new Set(refuseCreate), refuseDelete }))
 
 Feature('deploying and destroying a stack on the engine')
   .live("deploys run on the engine's own fibers and the real clock")
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'a setup that deploys a second stack which fails still destroys the first',
-      Gherkin.Do.pipe(
-        Given('a ledger that refuses to create the second stack')('ledger', () => fresh(['Second-probe'])),
-        When('the setup deploys the first stack, then the second, and the file ends')('exit', (s) =>
-          releasedExit(
-            alchemyStack('Pair', {
-              stage: 'lifecycle_pair',
-              deploy: (deploy) =>
-                Effect.gen(function*() {
-                  yield* deploy(probeStack({ ledger: s.ledger, stackName: 'First' }))
-                  return yield* deploy(probeStack({ ledger: s.ledger, stackName: 'Second' }))
-                }),
-            }).layer,
-          )),
-        Then('the second deploy failure is reported and the first stack was destroyed')((s, expect) =>
-          expect({ outcome: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
-            outcome: { tag: 'StackDeployFailed', stack: 'Second', stage: 'lifecycle_pair' },
-            ops: ['create First-probe', 'delete First-probe'],
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'a destroy that fails fails the release and names the stack and stage',
-      Gherkin.Do.pipe(
-        Given('a ledger whose deletes fail')('ledger', () => fresh([], true)),
-        When('a cloud deploy of the stack is released')('exit', (s) =>
-          releasedExit(
-            alchemyStack('Refusing', {
-              dev: false,
-              stage: 'lifecycle_refusing',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'Refusing' }),
-            }).layer,
-          )),
-        Then('the release fails with the stack and its stage')((s, expect) =>
-          expect(outcomeOf(s.exit)).toEqual({
-            tag: 'StackDestroyFailed',
-            stack: 'Refusing',
-            stage: 'lifecycle_refusing',
-          })
-        ),
-      ),
-    )
-
-    scenario(
       'a run killed before teardown is reclaimed by the next run at the same stage',
       Gherkin.Do.pipe(
-        Given('a ledger shared by both runs')('ledger', () => fresh()),
+        Given('a ledger shared by both runs')('ledger', () => freshLedger()),
         When('the first run deploys and its scope is never closed')('abandoned', (s) =>
           Effect.gen(function*() {
             const scope = yield* Scope.make()
-            const layer = alchemyStack('Reclaimed', {
-              dev: false,
-              stage: 'lifecycle_reclaimed',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'Reclaimed' }),
-            }).layer
-            return yield* Effect.exit(Layer.buildWithScope(layer, scope))
+            return yield* Effect.exit(Layer.buildWithScope(reclaimed(s.ledger).layer, scope))
           })),
-        When('the next run deploys at the same stage and ends')('exit', (s) =>
-          releasedExit(
-            alchemyStack('Reclaimed', {
-              dev: false,
-              stage: 'lifecycle_reclaimed',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'Reclaimed' }),
-            }).layer,
-          )),
+        When('the next run deploys at the same stage and ends')('exit', (s) => releasedExit(reclaimed(s.ledger).layer)),
         Then('the leftover was destroyed before the new deploy')((s, expect) =>
           expect({ first: outcomeOf(s.abandoned), next: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
             first: { tag: 'success' },
@@ -134,75 +43,36 @@ Feature('deploying and destroying a stack on the engine')
     )
 
     scenario(
-      'a cloud run over local state fails before anything deploys',
+      'a setup layer provides what the deploy function needs, and the stack layer requires nothing more',
       Gherkin.Do.pipe(
-        Given('a ledger for a stack kept only in process memory')('ledger', () => fresh()),
-        When('the stack is deployed to the cloud')('exit', (s) =>
-          releasedExit(
-            alchemyStack('LocalOnly', {
-              dev: false,
-              stage: 'lifecycle_local',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'LocalOnly', state: State.inMemoryState() }),
-            }).layer,
-          )),
-        Then('it fails saying durable state is required, and nothing was created or deleted')((s, expect) =>
-          expect({ outcome: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
-            outcome: { tag: 'DurableStateRequired', stack: 'LocalOnly', stage: 'lifecycle_local' },
-            ops: [],
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'a leftover that cannot be destroyed stops the next deploy as a destroy failure',
-      Gherkin.Do.pipe(
-        Given('a ledger shared by both runs')('ledger', () => fresh()),
-        When('the first run deploys and its scope is never closed')('abandoned', (s) =>
-          Effect.gen(function*() {
-            const scope = yield* Scope.make()
-            const layer = alchemyStack('Stuck', {
-              dev: false,
-              stage: 'lifecycle_stuck',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'Stuck' }),
-            }).layer
-            return yield* Effect.exit(Layer.buildWithScope(layer, scope))
-          })),
-        When('the next run starts at the same stage while deletes are refused')('exit', (s) =>
-          releasedExit(
-            alchemyStack('Stuck', {
-              dev: false,
-              stage: 'lifecycle_stuck',
-              deploy: probeStack({
-                ledger: { ...s.ledger, behaviour: { ...s.ledger.behaviour, refuseDelete: true } },
-                stackName: 'Stuck',
-              }),
-            }).layer,
-          )),
-        Then('it fails naming the stack and stage as a destroy failure, and deploys nothing new')((s, expect) =>
-          expect({ next: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
-            next: { tag: 'StackDestroyFailed', stack: 'Stuck', stage: 'lifecycle_stuck' },
-            ops: ['create Stuck-probe'],
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'a stack with no configured stage built outside a test file has no stage',
-      Gherkin.Do.pipe(
-        Given('a ledger')('ledger', () => fresh()),
-        When('the stack is built where no running test file is known')(
-          'exit',
+        Given('a ledger')('ledger', () => freshLedger()),
+        When('a stack whose deploy function reads a region from its setup layer is deployed and released')(
+          'released',
           (s) =>
-            releasedExit(
-              alchemyStack('Unstaged', { deploy: probeStack({ ledger: s.ledger, stackName: 'Unstaged' }) }).layer,
+            Effect.scoped(
+              Effect.gen(function*() {
+                const stack = alchemyStack('Regional', {
+                  stage: 'lifecycle_regional',
+                  setup: Layer.succeed(ProbeRegion, 'eu-west'),
+                  deploy: (deploy) =>
+                    Effect.gen(function*() {
+                      const region = yield* ProbeRegion
+                      const deployed = yield* deploy(probeStack({ ledger: s.ledger, stackName: 'Regional' }))
+                      return { label: deployed.label, region }
+                    }),
+                })
+                const services = yield* Layer.build(stack.layer)
+                return Context.get(services, stack)
+              }),
             ),
         ),
-        Then('it fails naming the stack, and nothing was created')((s, expect) =>
-          expect({ outcome: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
-            outcome: { tag: 'StageUnresolved', stack: 'Unstaged' },
-            ops: [],
+        Then('the outputs carry the deployed label and the setup region, and the stack was created then destroyed')((
+          s,
+          expect,
+        ) =>
+          expect({ outputs: s.released, ops: opsOf(s.ledger) }).toEqual({
+            outputs: { label: 'Regional', region: 'eu-west' },
+            ops: ['create Regional-probe', 'delete Regional-probe'],
           })
         ),
       ),
@@ -211,7 +81,7 @@ Feature('deploying and destroying a stack on the engine')
     scenario(
       'two stacks are destroyed in reverse deploy order',
       Gherkin.Do.pipe(
-        Given('a ledger')('ledger', () => fresh()),
+        Given('a ledger')('ledger', () => freshLedger()),
         When('a setup deploys stack A then stack B and the file ends')('exit', (s) =>
           releasedExit(
             alchemyStack('Ordered', {
@@ -235,16 +105,18 @@ Feature('deploying and destroying a stack on the engine')
     scenario(
       'without the engine toggle the config dev flag decides',
       Gherkin.Do.pipe(
-        Given('a ledger')('ledger', () => fresh()),
-        When('a config that says dev runs with no engine toggle and no sidecar')('exit', (s) =>
-          releasedExit(
-            alchemyStack('Local', {
-              dev: true,
-              sidecar: false,
-              stage: 'lifecycle_dev',
-              deploy: probeStack({ ledger: s.ledger, stackName: 'Local' }),
-            }).layer,
-          )),
+        Given('a ledger')('ledger', () => freshLedger()),
+        When('a config that says dev runs with no engine toggle, so its sidecar opens and closes with the layer')(
+          'exit',
+          (s) =>
+            releasedExit(
+              alchemyStack('Local', {
+                dev: true,
+                stage: 'lifecycle_dev',
+                deploy: probeStack({ ledger: s.ledger, stackName: 'Local' }),
+              }).layer,
+            ),
+        ),
         Then('the deploy ran against the local target')((s, expect) =>
           expect({ outcome: outcomeOf(s.exit), devFlags: s.ledger.entries.map((entry) => entry.dev) }).toEqual({
             outcome: { tag: 'success' },

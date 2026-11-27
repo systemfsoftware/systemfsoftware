@@ -1,8 +1,7 @@
 import * as Core from '@alchemy.run/test/Core'
-import * as NodeServices from '@effect/platform-node/NodeServices'
 import { TestFile } from '@systemfsoftware/effect-spec-runtime'
 import type { Input } from 'alchemy/Input'
-import { Context, Effect, Layer, type Scope } from 'effect'
+import { Context, Effect, Layer, Option, type Scope } from 'effect'
 import * as Digest from 'effect/crypto/Digest'
 import { dual } from 'effect/Function'
 import {
@@ -59,14 +58,13 @@ class StackOwnProviders extends Context.Service<StackOwnProviders, true>()(
 
 const stackOwnProviders: Core.MakeOptions['providers'] = Layer.succeed(StackOwnProviders, true)
 
-const platform = Layer.merge(NodeServices.layer, Digest.layerWebCrypto)
-
 const stageOfRunningFile = (name: string) =>
-  Effect.gen(function*() {
-    const file = yield* TestFile
-    if (file === '') return yield* new StageUnresolved({ stack: name })
-    return yield* fileStage({ baseStage: Core.resolveStage({}), file }).pipe(Effect.provide(platform))
-  })
+  Effect.flatMap(TestFile, (file) =>
+    Option.match(file, {
+      onNone: () => Effect.fail(new StageUnresolved({ stack: name })),
+      onSome: (testFile) =>
+        fileStage({ baseStage: Core.resolveStage({}), testFile }).pipe(Effect.provide(Digest.layerWebCrypto)),
+    }))
 
 const resolveStage = (name: string, configured: string | undefined) =>
   configured === undefined ? stageOfRunningFile(name) : Effect.succeed(configured)

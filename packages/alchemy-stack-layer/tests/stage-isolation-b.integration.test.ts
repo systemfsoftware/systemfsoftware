@@ -2,23 +2,18 @@ import { alchemyStack } from '@systemfsoftware/alchemy-stack-layer'
 import { Gherkin, Given, it, makeFeature, sharedLayer, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { makeLedger, probeStack } from './__fixtures__/probe-stack.fixture.js'
+import { deletedOnlyAt } from './__fixtures__/stack-outcome.fixture.js'
 
 const Feature = makeFeature({ it })
 
-const THIS_FILE_STAGE = 'offline_5f770716'
+const THIS_FILE_STAGE = 'offline_1f7a4e72'
 
 const ledger = makeLedger()
 
 const stagesOf = (op: 'create' | 'delete') =>
   ledger.entries.filter((entry) => entry.op === op).map((entry) => entry.stage)
 
-const deletedOnlyHere = Effect.suspend(() =>
-  stagesOf('delete').length === 1 && stagesOf('delete')[0] === THIS_FILE_STAGE
-    ? Effect.void
-    : Effect.die(`expected one delete at ${THIS_FILE_STAGE}, saw ${stagesOf('delete').join(', ')}`)
-)
-
-sharedLayer(Layer.effectDiscard(Effect.addFinalizer(() => deletedOnlyHere)))
+sharedLayer(Layer.effectDiscard(Effect.addFinalizer(() => deletedOnlyAt({ ledger, stage: THIS_FILE_STAGE }))))
 
 const SharedStack = alchemyStack('SharedStack', { deploy: probeStack({ ledger, stackName: 'SharedStack' }) })
 

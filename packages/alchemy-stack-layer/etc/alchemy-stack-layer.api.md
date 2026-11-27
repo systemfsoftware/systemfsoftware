@@ -8,12 +8,14 @@ import { CompiledStack } from 'alchemy/Stack';
 import { ConfigError } from 'effect/Config';
 import { Context } from 'effect';
 import * as Core from '@alchemy.run/test/Core';
+import * as Digest from 'effect/crypto/Digest';
 import { Effect } from 'effect';
 import { Input } from 'alchemy/Input';
 import { Layer } from 'effect';
 import * as Schema from 'effect/Schema';
 import { Scope } from 'effect';
 import { StackDefinition } from 'alchemy/Stack';
+import { TestFileInfo } from '@systemfsoftware/effect-spec-runtime';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
@@ -57,6 +59,17 @@ export interface EngineConfig {
 }
 
 // @public (undocumented)
+export const fileStage: (input: FileStageInput) => Effect.Effect<string, never, Digest.Digest>;
+
+// @public (undocumented)
+export interface FileStageInput {
+    // (undocumented)
+    readonly baseStage: string;
+    // (undocumented)
+    readonly testFile: TestFileInfo;
+}
+
+// @public (undocumented)
 export interface SetupLayerConfig<Outputs, E, R, ESetup> extends EngineConfig {
     // (undocumented)
     readonly deploy: StackSetup<Outputs, E, R | Scope.Scope>;
@@ -87,7 +100,7 @@ export type StackKey<Name extends string> = `@systemfsoftware/alchemy-stack-laye
 export type StackLayerError = StackDeployFailed | StackDestroyFailed | DurableStateRequired | StageUnresolved;
 
 // @public (undocumented)
-export type StackProgram<A> = Effect.Effect<CompiledStack<A>, ConfigError> & StackDefinition<never>;
+export type StackProgram<A> = Effect.Effect<CompiledStack<A>, ConfigError> & StackDefinition<never> & Required<Pick<StackDefinition<never>, 'providers' | 'state'>>;
 
 // @public (undocumented)
 export type StackSetup<Outputs, E, R> = (deploy: Deploy) => Effect.Effect<Outputs, E, R>;

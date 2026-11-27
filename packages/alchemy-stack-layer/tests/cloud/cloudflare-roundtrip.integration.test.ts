@@ -1,4 +1,3 @@
-import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Core from '@alchemy.run/test/Core'
 import { alchemyStack } from '@systemfsoftware/alchemy-stack-layer'
 import { Gherkin, Given, it, makeFeature, sharedLayer, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -7,7 +6,12 @@ import { type Cause, Config, Effect, Layer, Redacted, Schedule } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
-import { CLOUD_STACK_NAME, cloudProbeStack, probeWorkerName } from '../__fixtures__/cloudflare-stack.fixture.js'
+import {
+  CLOUD_STACK_NAME,
+  cloudProbeOptions,
+  cloudProbeStack,
+  probeWorkerName,
+} from '../__fixtures__/cloudflare-stack.fixture.js'
 import { PROBE_REPLY } from '../__fixtures__/probe-worker.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -31,7 +35,7 @@ const stateRowsAt = (stage: string) =>
       const store = yield* (yield* State.State)
       return yield* store.list({ stack: CLOUD_STACK_NAME, stage })
     }),
-    { providers: Cloudflare.providers(), state: Cloudflare.state() },
+    cloudProbeOptions,
   )
 
 const workerStatusAt = (stage: string) =>

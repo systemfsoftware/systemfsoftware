@@ -12,3 +12,4 @@ export {
   type StandaloneConfig,
 } from './AlchemyStack.js'
 export { DurableStateRequired, StackDeployFailed, StackDestroyFailed, StageUnresolved } from './StackErrors.schema.js'
+export { fileStage, type FileStageInput } from './StageName.js'

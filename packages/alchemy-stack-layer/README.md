@@ -39,7 +39,7 @@ A stack's deploy runs in the shared layer's setup, which has no time limit, so a
 
 ## Deploying more than one stack
 
-`config.deploy` also takes a function that receives `deploy` and returns the outputs, for a setup that deploys several stacks or provisions a dependency first. A `setup` layer provides what that function needs:
+`config.deploy` takes a stack definition with its own `providers` and `state`, as `Alchemy.Stack(name, { providers, state }, effect)` returns. It also takes a function that receives `deploy` and returns the outputs, for a setup that deploys several stacks or provisions a dependency first. A `setup` layer provides what that function needs:
 
 ```ts
 const Billing = alchemyStack('Billing', {
@@ -61,10 +61,12 @@ Stacks are destroyed in reverse deploy order. A stack is registered for destroy 
 Dev mode, the sidecar and the stage resolve exactly as `@alchemy.run/test` resolves them, from one code path:
 
 - **Dev:** `ALCHEMY_TEST_DEV`, then the config's `dev`, then `ALCHEMY_DEV`. A local run starts the dev sidecar and deploys to the local Workers runtime; `ALCHEMY_TEST_DEV=0` deploys the same file to the cloud.
-- **Stage:** the config's `stage` is used as given. Without one, the stage is `ALCHEMY_TEST_STAGE`, else the per-user test stage, followed by `_` and 8 hex digits of the SHA-256 of the test file's repository-relative path. Two files that deploy the same stack never share a deployment.
+- **Stage:** the config's `stage` is used as given. Without one, the stage is `ALCHEMY_TEST_STAGE`, else the per-user test stage, followed by `_` and 8 hex digits of the SHA-256 of the test file's Vitest project name, root directory name and path from the root (see `fileStage` below). Two files that deploy the same stack never share a deployment.
 - **State:** where a deployment records its state is the stack definition's own `state`. A cloud run over local or in-memory state fails before it deploys, with `DurableStateRequired`: a cloud deployment recorded only on one machine cannot be found or destroyed from another.
 
 The config's `dev`, `stage`, `sidecar` and `profile` are forwarded to the engine unchanged.
+
+`fileStage({ baseStage, testFile })` is exported for scripts that need the stage a test file deploys under, such as a CI job that checks a stage is empty. `testFile` is effect-spec-runtime's `TestFileInfo`: the file's path from the Vitest root, the root directory's name, and the Vitest project name. The suffix is 8 hex digits of the SHA-256 of those three joined by NUL bytes, so a file keeps its stage across checkouts and machines, and two packages with the same test path get different stages. `fileStage` needs a `Digest` service, such as `Digest.layerWebCrypto` from `effect/crypto/Digest`.
 
 ## Teardown
 
@@ -84,8 +86,8 @@ ALCHEMY_TEST_DEV=0 ALCHEMY_TEST_STAGE=<stage> pnpm --filter @systemfsoftware/alc
 ## Install
 
 ```bash
-pnpm add -D @systemfsoftware/alchemy-stack-layer alchemy @effect/platform-node effect
+pnpm add -D @systemfsoftware/alchemy-stack-layer alchemy effect
 ```
 
 > [!NOTE]
-> `alchemy`, `@effect/platform-node` and `effect` are peer dependencies — you bring your own.
+> `alchemy` and `effect` are peer dependencies — you bring your own.

@@ -7,15 +7,15 @@ const Feature = makeFeature({ it })
 
 const ledger = makeLedger({ createDelay: '1 second' })
 
-const opsOf = (op: 'create' | 'delete') => ledger.entries.filter((entry) => entry.op === op).length
+const countOf = (op: 'create' | 'delete') => ledger.entries.filter((entry) => entry.op === op).length
 
-const destroyedOnce = Effect.suspend(() =>
-  opsOf('create') === 1 && opsOf('delete') === 1
+const destroyedOnce = Effect.suspend(() => {
+  const creates = countOf('create')
+  const deletes = countOf('delete')
+  return creates === 1 && deletes === 1
     ? Effect.void
-    : Effect.die(
-      `expected one create and one delete after the file ended, saw ${opsOf('create')} and ${opsOf('delete')}`,
-    )
-)
+    : Effect.die(`expected one create and one delete after the file ended, saw ${creates} and ${deletes}`)
+})
 
 sharedLayer(Layer.effectDiscard(Effect.addFinalizer(() => destroyedOnce)))
 
@@ -29,7 +29,7 @@ Feature('signing in reads the deployed stack', { timeout: 300 }).withLayer(Share
     Gherkin.Do.pipe(
       Given('the stack is deployed')('stack', () => SignInStack),
       Then('its outputs are readable and it was created once')((s, expect) =>
-        expect({ label: s.stack.label, creates: opsOf('create'), deletes: opsOf('delete') })
+        expect({ label: s.stack.label, creates: countOf('create'), deletes: countOf('delete') })
           .toEqual({ label: 'SignInStack', creates: 1, deletes: 0 })
       ),
     ),
@@ -39,7 +39,7 @@ Feature('signing in reads the deployed stack', { timeout: 300 }).withLayer(Share
     Gherkin.Do.pipe(
       Given('the stack is deployed')('stack', () => SignInStack),
       Then('no second deploy ran')((s, expect) =>
-        expect({ label: s.stack.label, creates: opsOf('create'), deletes: opsOf('delete') })
+        expect({ label: s.stack.label, creates: countOf('create'), deletes: countOf('delete') })
           .toEqual({ label: 'SignInStack', creates: 1, deletes: 0 })
       ),
     ),
