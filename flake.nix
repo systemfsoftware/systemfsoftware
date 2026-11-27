@@ -54,10 +54,8 @@
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
-          unwrapped = comment-checker.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker;
-          sandboxed = pkgs.callPackage ./nix/comment-checker-sandbox.nix {
-            comment-checker = unwrapped;
-          };
+          unwrapped = comment-checker.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker-unwrapped;
+          sandboxed = comment-checker.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker;
           workspace = workspaceOf pkgs;
           stryker = stryker-js-effect.packages.${pkgs.stdenv.hostPlatform.system}.stryker;
           denoTool = import ./nix/deno-tool.nix { inherit (pkgs) lib writeShellApplication deno; };
