@@ -19,6 +19,7 @@ import * as Result from 'effect/Result';
 import { Schedule } from 'effect';
 import { Schema } from 'effect';
 import * as Scope from 'effect/Scope';
+import { sharedLayer } from '@systemfsoftware/effect-spec-runtime';
 import { Suite } from '@systemfsoftware/effect-spec-runtime';
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime';
 import { YieldableError } from 'effect/Cause';
@@ -65,31 +66,33 @@ export type FeatureBody<RShared = never, RFresh = never, RFreshReq = never, S ex
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilder<S>;
     body: (body: FeatureBody<never, never, never, S>) => void;
-    withLayer: <RShared>(layer: Layer_2.Layer<RShared>) => FeatureBuilderWithLayer<RShared, S>;
+    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderWithLayer<R2, E2, S>;
     withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilder<S2>;
 };
 
 // @public (undocumented)
-export type FeatureBuilderBoth<RShared, RFresh, RFreshReq extends RShared, S extends ScopeMap = EmptyScopeMap> = {
-    readonly live: (reason: string) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>;
+export type FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq extends RShared, S extends ScopeMap = EmptyScopeMap> = {
+    readonly live: (reason: string) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>;
     body: (body: FeatureBody<RShared, RFresh, RFreshReq, S>) => void;
-    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S2>;
+    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderBoth<RShared | R2, EShared | E2, RFresh, RFreshReq, S>;
+    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S2>;
 };
 
 // @public (undocumented)
-export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap> = {
-    readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, S>;
+export type FeatureBuilderWithLayer<RShared, EShared, S extends ScopeMap = EmptyScopeMap> = {
+    readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, EShared, S>;
     body: (body: FeatureBody<RShared, never, never, S>) => void;
-    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>;
-    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>;
+    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderWithLayer<RShared | R2, EShared | E2, S>;
+    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, EShared, S2>;
+    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>;
 };
 
 // @public (undocumented)
 export type FeatureBuilderWithScenarioLayer<RFresh, RFreshReq extends Scope.Scope, S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     body: (body: FeatureBody<never, RFresh, RFreshReq, S>) => void;
-    withLayer: <RShared>(layer: Layer_2.Layer<RShared>) => FeatureBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>;
+    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderBoth<R2 | RFreshReq, E2, RFresh, RFreshReq, S>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S2>;
 };
 
@@ -270,6 +273,8 @@ export type ScopeMap = ScopeMap$1;
 // @public (undocumented)
 export type ScopeServices<S extends ScopeMap> = ScopeServices$1<S>;
 
+export { sharedLayer }
+
 // @public (undocumented)
 export type Stage = InitialStage | GivenStage | WhenStage | ThenStage;
 
@@ -365,7 +370,7 @@ export type WhenStage = {
 // dist/index.d.ts:156:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:169:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
 // dist/index.d.ts:227:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:331:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:333:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

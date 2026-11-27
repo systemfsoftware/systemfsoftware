@@ -33,22 +33,29 @@ export type EffectVitestBindings = Suite.Bindings
 
 export type FeatureBuilderBoth<
   RShared,
+  EShared,
   RFresh,
   RFreshReq extends RShared,
   S extends ScopeMap = EmptyScopeMap,
 > = {
-  readonly live: (reason: string) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
+  readonly live: (reason: string) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>
   body: (body: FeatureBody<RShared, RFresh, RFreshReq, S>) => void
-  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S2>
+  withLayer: <R2, E2, RIn extends RShared = never>(
+    layer: Layer.Layer<R2, E2, RIn>,
+  ) => FeatureBuilderBoth<RShared | R2, EShared | E2, RFresh, RFreshReq, S>
+  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S2>
 }
 
-export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap> = {
-  readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, S>
+export type FeatureBuilderWithLayer<RShared, EShared, S extends ScopeMap = EmptyScopeMap> = {
+  readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, EShared, S>
   body: (body: FeatureBody<RShared, never, never, S>) => void
-  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>
+  withLayer: <R2, E2, RIn extends RShared = never>(
+    layer: Layer.Layer<R2, E2, RIn>,
+  ) => FeatureBuilderWithLayer<RShared | R2, EShared | E2, S>
+  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, EShared, S2>
   withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
-  ) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
+  ) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>
 }
 export type FeatureBuilderWithScenarioLayer<
   RFresh,
@@ -57,9 +64,7 @@ export type FeatureBuilderWithScenarioLayer<
 > = {
   readonly live: (reason: string) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
   body: (body: FeatureBody<never, RFresh, RFreshReq, S>) => void
-  withLayer: <RShared>(
-    layer: Layer.Layer<RShared>,
-  ) => FeatureBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>
+  withLayer: <R2, E2>(layer: Layer.Layer<R2, E2>) => FeatureBuilderBoth<R2 | RFreshReq, E2, RFresh, RFreshReq, S>
   withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S2>
 }
 
@@ -86,7 +91,7 @@ export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
    * Feature('User management').withLayer(DatabaseFixture)
    * ```
    */
-  withLayer: <RShared>(layer: Layer.Layer<RShared>) => FeatureBuilderWithLayer<RShared, S>
+  withLayer: <R2, E2>(layer: Layer.Layer<R2, E2>) => FeatureBuilderWithLayer<R2, E2, S>
   /**
    * Provide a per-scenario fresh fixture layer.
    *
@@ -123,9 +128,9 @@ export type FeatureFn = FeatureStarter & {
   readonly only: FeatureStarter
 }
 const orphanContext = <Missing>(): Context.Context<Missing> => Context.makeUnsafe<Missing>(new Map())
-const withOrphanRequirements = <RShared, RFreshReq>(
-  layerDef: Layer.Layer<RShared>,
-): Layer.Layer<RShared | RFreshReq> =>
+const withOrphanRequirements = <RShared, E, RFreshReq>(
+  layerDef: Layer.Layer<RShared, E>,
+): Layer.Layer<RShared | RFreshReq, E> =>
   layerDef.pipe(
     Layer.build,
     Effect.map((built) =>
@@ -135,6 +140,11 @@ const withOrphanRequirements = <RShared, RFreshReq>(
     ),
     Layer.unwrap,
   )
+
+const composeShared = <RShared, EShared, R2, E2, RIn extends RShared>(
+  next: Layer.Layer<R2, E2, RIn>,
+  prior: Layer.Layer<RShared, EShared>,
+): Layer.Layer<RShared | R2, EShared | E2> => next.pipe(Layer.provideMerge(prior))
 
 export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const configOf = (
@@ -209,16 +219,16 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     )
   }
 
-  const runWithLayer = <RShared, S extends ScopeMap>(
+  const runWithLayer = <RShared, EShared, S extends ScopeMap>(
     name: string,
-    layerDef: Layer.Layer<RShared>,
+    layerDef: Layer.Layer<RShared, EShared>,
     scopeMap: S,
     body: FeatureBody<RShared, never, never, S>,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
     live: Suite.LiveCase | undefined,
   ): void => {
-    Suite.openShared<void, StepError, RShared, void>(
+    Suite.openShared<void, StepError, RShared, EShared, void>(
       deps,
       configOf(name, describeMode, suiteOpts, live),
       { layer: layerDef },
@@ -239,9 +249,9 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     )
   }
 
-  const runWithBoth = <RShared, RFresh, RFreshReq extends RShared, S extends ScopeMap>(
+  const runWithBoth = <RShared, EShared, RFresh, RFreshReq extends RShared, S extends ScopeMap>(
     name: string,
-    layerDef: Layer.Layer<RShared>,
+    layerDef: Layer.Layer<RShared, EShared>,
     scopeMap: S,
     body: FeatureBody<RShared, RFresh, RFreshReq, S>,
     describeMode: DescribeMode,
@@ -249,7 +259,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     live: Suite.LiveCase | undefined,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
-    Suite.openSharedCase<void, StepError, RShared, RFresh, RFreshReq, void>(
+    Suite.openSharedCase<void, StepError, RShared, EShared, RFresh, RFreshReq, void>(
       deps,
       configOf(name, describeMode, suiteOpts, live),
       { layer: layerDef },
@@ -273,6 +283,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
 
   const makeBuilderBoth = <
     RShared,
+    EShared,
     RFresh,
     RFreshReq extends RShared,
     S extends ScopeMap,
@@ -281,12 +292,12 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
     live: Suite.LiveCase | undefined,
-    layerDef: Layer.Layer<RShared>,
+    layerDef: Layer.Layer<RShared, EShared>,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     scopeMap: S,
-  ): FeatureBuilderBoth<RShared, RFresh, RFreshReq, S> => ({
+  ): FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S> => ({
     live: (reason) =>
-      makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
+      makeBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
@@ -296,7 +307,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         scopeMap,
       ),
     body: (body) => {
-      runWithBoth<RShared, RFresh, RFreshReq, S>(
+      runWithBoth<RShared, EShared, RFresh, RFreshReq, S>(
         name,
         layerDef,
         scopeMap,
@@ -307,8 +318,18 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         featureScenarioLayer,
       )
     },
+    withLayer: <R2, E2, RIn extends RShared = never>(next: Layer.Layer<R2, E2, RIn>) =>
+      makeBuilderBoth<RShared | R2, EShared | E2, RFresh, RFreshReq, S>(
+        name,
+        describeMode,
+        suiteOpts,
+        live,
+        composeShared(next, layerDef),
+        featureScenarioLayer,
+        scopeMap,
+      ),
     withScope: <S2 extends ScopeMap>(newMap: S2) =>
-      makeBuilderBoth<RShared, RFresh, RFreshReq, S2>(
+      makeBuilderBoth<RShared, EShared, RFresh, RFreshReq, S2>(
         name,
         describeMode,
         suiteOpts,
@@ -319,16 +340,16 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       ),
   })
 
-  const makeBuilderWithLayer = <RShared, S extends ScopeMap>(
+  const makeBuilderWithLayer = <RShared, EShared, S extends ScopeMap>(
     name: string,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
     live: Suite.LiveCase | undefined,
-    layerDef: Layer.Layer<RShared>,
+    layerDef: Layer.Layer<RShared, EShared>,
     scopeMap: S,
-  ): FeatureBuilderWithLayer<RShared, S> => ({
+  ): FeatureBuilderWithLayer<RShared, EShared, S> => ({
     live: (reason) =>
-      makeBuilderWithLayer<RShared, S>(
+      makeBuilderWithLayer<RShared, EShared, S>(
         name,
         describeMode,
         suiteOpts,
@@ -337,7 +358,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         scopeMap,
       ),
     body: (body) => {
-      runWithLayer<RShared, S>(
+      runWithLayer<RShared, EShared, S>(
         name,
         layerDef,
         scopeMap,
@@ -347,10 +368,19 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         live,
       )
     },
+    withLayer: <R2, E2, RIn extends RShared = never>(next: Layer.Layer<R2, E2, RIn>) =>
+      makeBuilderWithLayer<RShared | R2, EShared | E2, S>(
+        name,
+        describeMode,
+        suiteOpts,
+        live,
+        composeShared(next, layerDef),
+        scopeMap,
+      ),
     withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(
       scenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     ) =>
-      makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
+      makeBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
@@ -360,7 +390,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         scopeMap,
       ),
     withScope: <S2 extends ScopeMap>(newMap: S2) =>
-      makeBuilderWithLayer<RShared, S2>(
+      makeBuilderWithLayer<RShared, EShared, S2>(
         name,
         describeMode,
         suiteOpts,
@@ -402,13 +432,13 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         featureScenarioLayer,
       )
     },
-    withLayer: <RShared>(layerDef: Layer.Layer<RShared>) =>
-      makeBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>(
+    withLayer: <R2, E2>(layerDef: Layer.Layer<R2, E2>) =>
+      makeBuilderBoth<R2 | RFreshReq, E2, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
         live,
-        withOrphanRequirements<RShared, RFreshReq>(layerDef),
+        withOrphanRequirements<R2, E2, RFreshReq>(layerDef),
         featureScenarioLayer,
         scopeMap,
       ),
@@ -434,8 +464,8 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     body: (body) => {
       runNothing<S>(name, scopeMap, body, describeMode, suiteOpts, live)
     },
-    withLayer: <RShared>(layerDef: Layer.Layer<RShared>) =>
-      makeBuilderWithLayer<RShared, S>(
+    withLayer: <R2, E2>(layerDef: Layer.Layer<R2, E2>) =>
+      makeBuilderWithLayer<R2, E2, S>(
         name,
         describeMode,
         suiteOpts,
