@@ -66,33 +66,33 @@ export type FeatureBody<RShared = never, RFresh = never, RFreshReq = never, S ex
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilder<S>;
     body: (body: FeatureBody<never, never, never, S>) => void;
-    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderWithLayer<R2, E2, S>;
+    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderWithLayer<R2, S, E2>;
     withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilder<S2>;
 };
 
 // @public (undocumented)
-export type FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq extends RShared, S extends ScopeMap = EmptyScopeMap> = {
-    readonly live: (reason: string) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>;
+export type FeatureBuilderBoth<RShared, RFresh, RFreshReq extends RShared, S extends ScopeMap = EmptyScopeMap, EShared = never> = {
+    readonly live: (reason: string) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S, EShared>;
     body: (body: FeatureBody<RShared, RFresh, RFreshReq, S>) => void;
-    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderBoth<RShared | R2, EShared | E2, RFresh, RFreshReq, S>;
-    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S2>;
+    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderBoth<RShared | R2, RFresh, RFreshReq, S, EShared | E2>;
+    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S2, EShared>;
 };
 
 // @public (undocumented)
-export type FeatureBuilderWithLayer<RShared, EShared, S extends ScopeMap = EmptyScopeMap> = {
-    readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, EShared, S>;
+export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap, EShared = never> = {
+    readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, S, EShared>;
     body: (body: FeatureBody<RShared, never, never, S>) => void;
-    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderWithLayer<RShared | R2, EShared | E2, S>;
-    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, EShared, S2>;
-    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, EShared, RFresh, RFreshReq, S>;
+    withLayer: <R2, E2, RIn extends RShared = never>(layer: Layer_2.Layer<R2, E2, RIn>) => FeatureBuilderWithLayer<RShared | R2, S, EShared | E2>;
+    withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2, EShared>;
+    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(layer: Layer_2.Layer<RFresh, never, RFreshReq>) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S, EShared>;
 };
 
 // @public (undocumented)
 export type FeatureBuilderWithScenarioLayer<RFresh, RFreshReq extends Scope.Scope, S extends ScopeMap = EmptyScopeMap> = {
     readonly live: (reason: string) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>;
     body: (body: FeatureBody<never, RFresh, RFreshReq, S>) => void;
-    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderBoth<R2 | RFreshReq, E2, RFresh, RFreshReq, S>;
+    withLayer: <R2, E2>(layer: Layer_2.Layer<R2, E2>) => FeatureBuilderBoth<R2 | RFreshReq, RFresh, RFreshReq, S, E2>;
     withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S2>;
 };
 
