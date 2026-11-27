@@ -19,7 +19,7 @@ A registered explored case runs `explore` first and `exploreOnce` as the fork's 
 
 ## Suite
 
-`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, by the first case that runs, every case of the suite sees those same services, and they are released when the suite ends; state a case must not share belongs in the case layer:
+`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, in the suite's setup before its first case starts, with no time limit; every case of the suite sees those same services, and they are released, again with no time limit, when the suite ends. A failed build fails the suite's cases with the build's error, and a shared layer read before its build ran dies with `SharedLayerNotBuilt`. State a case must not share belongs in the case layer:
 
 ```ts
 Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
@@ -44,6 +44,12 @@ Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
 - `register` mode is `Suite.RegisterMode` (`'run' | 'skip' | 'only'`).
 
 An explored case's kernel run re-provides the test's binding onto the program (so the checks the kernel runs count for this test), scopes the run, and reports a failure with its seed and decision path. Its second run takes the same path through `KernelCase.exploreOnce`.
+
+## sharedLayer
+
+`sharedLayer(layer)`, called at module top level, returns a layer that the whole test file shares: it is built once before the file's first case, in setup with no time limit, and released once when the file ends. It takes and returns a plain `Layer`, so it goes wherever a layer goes, and it runs on the same mechanism as a suite's shared layer.
+
+While a shared layer builds, the `TestFile` reference holds the running test file's path, so a layer can name what it creates after the file that created it. Outside a shared build it holds `''`.
 
 ## TaskRef
 
