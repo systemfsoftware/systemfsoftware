@@ -20,6 +20,7 @@ import { test_plugin_corpus_auto_discovered_lint_prefer_const_tracks_lexical_bin
 import { test_plugin_corpus_auto_discovered_ttsc_lint_fails_when_no_config_file_exists } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_auto_discovered_ttsc_lint_fails_when_no_config_file_exists";
 import { test_plugin_corpus_check_watch_fallback_keeps_forwarded_compiler_flags } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_fallback_keeps_forwarded_compiler_flags";
 import { test_plugin_corpus_check_watch_invalidates_json_input_membership_without_restarting_resident } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_invalidates_json_input_membership_without_restarting_resident";
+import { test_plugin_corpus_check_watch_keeps_resident_checks_beside_a_transform_plugin } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_keeps_resident_checks_beside_a_transform_plugin";
 import { test_plugin_corpus_check_watch_preserves_duplicate_resident_entries } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_preserves_duplicate_resident_entries";
 import { test_plugin_corpus_check_watch_rebuilds_a_plugin_binary_the_cache_removed } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_rebuilds_a_plugin_binary_the_cache_removed";
 import { test_plugin_corpus_check_watch_records_use_of_its_plugin_binary } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_check_watch_records_use_of_its_plugin_binary";
@@ -39,6 +40,7 @@ import { test_plugin_corpus_ttsx_runs_a_host_that_declares_no_emit_provenance } 
 import { test_plugin_corpus_watch_rebuilds_for_declared_markdown_and_swagger_inputs } from "./ttsc/native-plugins/corpus-misc/test_plugin_corpus_watch_rebuilds_for_declared_markdown_and_swagger_inputs";
 import { test_plugin_missing_ttsc_export_condition_falls_back_to_default_entry } from "./ttsc/native-plugins/corpus-misc/test_plugin_missing_ttsc_export_condition_falls_back_to_default_entry";
 import { test_project_rule_lifecycle_surfaces_through_package_discovery_cli_api_and_watch } from "./ttsc/native-plugins/corpus-misc/test_project_rule_lifecycle_surfaces_through_package_discovery_cli_api_and_watch";
+import { test_ttsc_watch_plugin_free_check_keeps_private_incremental_state } from "./ttsc/native-plugins/corpus-misc/test_ttsc_watch_plugin_free_check_keeps_private_incremental_state";
 import { test_plugin_corpus_source_plugin_build_failure_reports_go_compiler_stderr } from "./ttsc/native-plugins/corpus-source/test_plugin_corpus_source_plugin_build_failure_reports_go_compiler_stderr";
 import { test_plugin_corpus_source_plugin_default_cache_is_workspace_local_content_cache } from "./ttsc/native-plugins/corpus-source/test_plugin_corpus_source_plugin_default_cache_is_workspace_local_content_cache";
 import { test_plugin_corpus_emit_watch_reuses_plugin_selection_until_config_changes } from "./ttsc/native-plugins/corpus-ttsc/test_plugin_corpus_emit_watch_reuses_plugin_selection_until_config_changes";
@@ -67,6 +69,7 @@ import { test_ttsc_utility_plugins_paths_side_loads_into_driver_host } from "./t
 import { test_ttsc_descriptor_input_report_preserves_order_and_failure } from "./ttsc/native-plugins/utility/test_ttsc_descriptor_input_report_preserves_order_and_failure";
 import { test_ttsc_lint_config_evaluator_keeps_bootstrap_out_of_the_parent_descriptor_channel } from "./ttsc/native-plugins/utility/test_ttsc_lint_config_evaluator_keeps_bootstrap_out_of_the_parent_descriptor_channel";
 import { test_ttsc_lint_descriptor_tracks_external_discovery_candidates } from "./ttsc/native-plugins/utility/test_ttsc_lint_descriptor_tracks_external_discovery_candidates";
+import { test_ttsc_transform_host_failure_reports_its_own_program_once } from "./ttsc/native-plugins/utility/test_ttsc_transform_host_failure_reports_its_own_program_once";
 import { test_ttsc_utility_plugins_lint_banner_paths_and_strip_run_together_in_ttsc_build } from "./ttsc/native-plugins/utility/test_ttsc_utility_plugins_lint_banner_paths_and_strip_run_together_in_ttsc_build";
 import { test_loadprojectplugins_reports_the_directories_its_plugin_builds_key_on } from "./ttsc/project/test_loadprojectplugins_reports_the_directories_its_plugin_builds_key_on";
 import { test_loadprojectplugins_selected_record_root_contains_parent_descriptor_scratch } from "./ttsc/project/test_loadprojectplugins_selected_record_root_contains_parent_descriptor_scratch";
@@ -152,6 +155,7 @@ import { test_watch_topology_tracks_external_inputs_across_project_references } 
 import { test_watch_topology_watches_reload_symlink_targets } from "./ttsc/watch/test_watch_topology_watches_reload_symlink_targets";
 import { test_bun_adapter_forwards_bundler_build_start } from "./unplugin/native-plugins/adapters/test_bun_adapter_forwards_bundler_build_start";
 import { test_bun_content_mapper_permissions_and_dependencies } from "./unplugin/native-plugins/adapters/test_bun_content_mapper_permissions_and_dependencies";
+import { test_bun_filter_runs_under_real_bun } from "./unplugin/native-plugins/adapters/test_bun_filter_runs_under_real_bun";
 import { test_bun_native_host_owns_build_and_runtime_sessions } from "./unplugin/native-plugins/adapters/test_bun_native_host_owns_build_and_runtime_sessions";
 import { test_bun_register_explicit_options_are_not_shadowed_in_same_runtime_order } from "./unplugin/native-plugins/adapters/test_bun_register_explicit_options_are_not_shadowed_in_same_runtime_order";
 import { test_bun_register_preload_only_registers_a_single_default_plugin } from "./unplugin/native-plugins/adapters/test_bun_register_preload_only_registers_a_single_default_plugin";
@@ -380,6 +384,10 @@ const SCENARIOS: readonly (readonly [string, () => unknown])[] = [
     test_plugin_corpus_check_watch_invalidates_json_input_membership_without_restarting_resident,
   ],
   [
+    "test_plugin_corpus_check_watch_keeps_resident_checks_beside_a_transform_plugin",
+    test_plugin_corpus_check_watch_keeps_resident_checks_beside_a_transform_plugin,
+  ],
+  [
     "test_plugin_corpus_check_watch_preserves_duplicate_resident_entries",
     test_plugin_corpus_check_watch_preserves_duplicate_resident_entries,
   ],
@@ -562,6 +570,10 @@ const SCENARIOS: readonly (readonly [string, () => unknown])[] = [
   [
     "test_ttsc_descriptor_input_report_preserves_order_and_failure",
     test_ttsc_descriptor_input_report_preserves_order_and_failure,
+  ],
+  [
+    "test_ttsc_transform_host_failure_reports_its_own_program_once",
+    test_ttsc_transform_host_failure_reports_its_own_program_once,
   ],
   [
     "test_ttsc_utility_plugins_lint_banner_paths_and_strip_run_together_in_ttsc_build",
@@ -895,6 +907,7 @@ const SCENARIOS: readonly (readonly [string, () => unknown])[] = [
     "test_bun_adapter_forwards_bundler_build_start",
     test_bun_adapter_forwards_bundler_build_start,
   ],
+  ["test_bun_filter_runs_under_real_bun", test_bun_filter_runs_under_real_bun],
   [
     "test_bun_native_host_owns_build_and_runtime_sessions",
     test_bun_native_host_owns_build_and_runtime_sessions,
@@ -1150,6 +1163,10 @@ const SCENARIOS: readonly (readonly [string, () => unknown])[] = [
   [
     "test_ttsc_undeclared_run_scrubs_inherited_plugin_config_dir",
     test_ttsc_undeclared_run_scrubs_inherited_plugin_config_dir,
+  ],
+  [
+    "test_ttsc_watch_plugin_free_check_keeps_private_incremental_state",
+    test_ttsc_watch_plugin_free_check_keeps_private_incremental_state,
   ],
   [
     "test_transform_session_store_outlives_its_process",
