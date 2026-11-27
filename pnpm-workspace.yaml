@@ -13,6 +13,8 @@ catalog:
   typescript: ^7.0.2
   microsandbox: 0.7.15
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
+  "@alchemy.run/test": 2.0.0-beta.87
+  alchemy: 2.0.0-beta.87
   "@effect/platform-node": ^4.1.4
   "@effect/platform-bun": ^4.1.4
   "@effect/platform-node-shared": ^4.1.4
