@@ -3,9 +3,9 @@ description: Install Node.js, enable its Corepack, then cache the pnpm store
 
 inputs:
   node-version:
-    description: Node.js version
+    description: Node.js version; empty takes the default release below
     required: false
-    default: "26"
+    default: ""
   working-directory:
     description: The pnpm workspace root, relative to the repository root
     required: false
@@ -21,7 +21,7 @@ runs:
     # `bin` layout and fails with "Cannot find module .../bin/pnpm.cjs".
     - uses: actions/setup-node@v7
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: ${{ inputs.node-version || '26' }}
         check-latest: true
     - name: Enable Corepack
       shell: bash

@@ -10,6 +10,10 @@ inputs:
     description: The pnpm workspace root, relative to the repository root
     required: false
     default: .
+  node-version:
+    description: Node.js release the install runs on; empty takes setup-node-runtime's default
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -17,6 +21,7 @@ runs:
     - uses: $/.github/actions/setup-node-runtime
       with:
         working-directory: ${{ inputs.working-directory }}
+        node-version: ${{ inputs.node-version }}
     - name: Install dependencies
       shell: bash
       working-directory: ${{ inputs.working-directory }}

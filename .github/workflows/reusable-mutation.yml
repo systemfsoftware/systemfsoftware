@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: ""
+      node-version:
+        description: Node release or semver spec (pin an exact one, e.g. `24.22.1`) the job installs and runs on; empty keeps setup-node-runtime's default
+        required: false
+        type: string
+        default: ""
       upload-artifacts:
         description: Upload the merged mutation report as an artifact; false drops it for a quota incident, visibly by the run's inputs, never by swallowing the upload error
         required: false
@@ -110,6 +115,8 @@ jobs:
           sfs-fetch-token: ${{ secrets.sfs-fetch-token }}
       - id: install
         uses: $/.github/actions/install-deps
+        with:
+          node-version: ${{ inputs.node-version }}
       - uses: $/.github/actions/sfs-tools
         with:
           repository: ${{ job.workflow_repository }}

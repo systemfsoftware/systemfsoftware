@@ -92,6 +92,7 @@ Secret `sfs-fetch-token` (see [private flake inputs](#calling-the-reusable-workf
 | `timeout-minutes` | `180`                         | Timeout of the mutation job                                                                      |
 | `runs-on`         | `["self-hosted", "mutation"]` | JSON label list of the mutation job                                                              |
 | `bun-version`     | `""`                          | Exact Bun release (`1.x.y`) put on PATH before install, for a build that runs `bun`; empty: none |
+| `node-version`    | `""`                          | Node release or spec (pin an exact one, e.g. `24.22.1`) the job runs on; empty: the default (26) |
 
 ### `reusable-commitlint.yml`
 
