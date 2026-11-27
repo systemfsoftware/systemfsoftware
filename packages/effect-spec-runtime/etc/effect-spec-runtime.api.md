@@ -4,6 +4,8 @@
 
 ```ts
 
+import * as Context from 'effect/Context';
+
 // @public (undocumented)
 export namespace KernelCase {
     export { LiveCase, announceLive, caseProgram, explore, exploreOnce, liveCase };
@@ -16,13 +18,16 @@ export namespace SpanRecorder {
 
 // @public (undocumented)
 export namespace Suite {
-    export { Bindings, CaseLive, Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, open, openCase, openShared, openSharedCase };
+    export { Bindings, CaseLive, Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, SharedLayerNotBuilt, open, openCase, openShared, openSharedCase, sharedLayer };
 }
 
 // @public (undocumented)
 export namespace TaskRef {
     export { RawVitestTaskRef, VitestTaskContext, VitestTaskRef, provideTaskRef };
 }
+
+// @public (undocumented)
+export const TestFile: Context.Reference<string>;
 
 // (No @packageDocumentation comment for this package)
 
