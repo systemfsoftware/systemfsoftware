@@ -36,6 +36,13 @@ on:
         required: false
         type: string
         default: '["self-hosted", "mutation"]'
+      bun-version:
+        description: >-
+          Exact Bun release (`1.x.y`, never `latest`) to put on PATH before the dependencies install, for a consumer
+          whose build runs `bun` scripts; empty installs no Bun
+        required: false
+        type: string
+        default: ""
       upload-artifacts:
         description: Upload the merged mutation report as an artifact; false drops it for a quota incident, visibly by the run's inputs, never by swallowing the upload error
         required: false
@@ -91,6 +98,12 @@ jobs:
           # Blobless only for a public repository. A private one has no credentials left to fetch a missing blob (persist-credentials
           # is false), and the changed-package diff needs the blob of a deleted file for rename detection.
           filter: ${{ !github.event.repository.private && 'blob:none' || '' }}
+      - id: bun
+        name: Bun, when the consumer names a release
+        if: inputs.bun-version != ''
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ inputs.bun-version }}
       - id: devshell
         uses: $/.github/actions/consumer-devshell
         with:
