@@ -1,7 +1,7 @@
 /// <reference types="vitest/importMeta" />
 import { type Checks, type Expect, type Vitest, VitestTestContext } from '@systemfsoftware/vitest'
 import { type Asserted, captureRunBinding, type RunBinding } from '@systemfsoftware/vitest/integration'
-import { Cause, Context, Effect, Exit, Layer, Scope } from 'effect'
+import { Cause, Context, Effect, Exit, Layer, Option, Scope } from 'effect'
 import { dual } from 'effect/Function'
 import { afterAll, beforeAll, type TestOptions, TestRunner } from 'vitest'
 import * as KernelCase from './KernelCase.js'
@@ -9,7 +9,7 @@ import type { LiveCase } from './KernelCase.js'
 import * as Register from './Register.js'
 import { SharedLayerNotBuilt } from './SharedLayer.schema.js'
 import * as TaskRef from './TaskRef.service.js'
-import { TestFile } from './TestFile.js'
+import { TestFile, testFileInfo } from './TestFile.js'
 
 export type { LiveCase } from './KernelCase.js'
 export type { DescribeMode, RegisterMode } from './Register.js'
@@ -168,11 +168,11 @@ export const open: {
 
 const sharedLayerOf = <RShared, EShared>(shared: Shared<RShared, EShared>): Layer.Layer<RShared> => {
   const scope = Scope.makeUnsafe()
-  const filepath = TestRunner.getCurrentSuite().file.filepath
+  const testFile = Option.some(testFileInfo(TestRunner.getCurrentSuite().file))
   let built: Context.Context<RShared> | undefined
   beforeAll(async () => {
     const exit = await Effect.runPromiseExit(
-      Layer.buildWithScope(shared.layer, scope).pipe(Effect.provideService(TestFile, filepath)),
+      Layer.buildWithScope(shared.layer, scope).pipe(Effect.provideService(TestFile, testFile)),
     )
     if (Exit.isFailure(exit)) {
       await Effect.runPromise(Scope.close(scope, Exit.void).pipe(Effect.ignore))

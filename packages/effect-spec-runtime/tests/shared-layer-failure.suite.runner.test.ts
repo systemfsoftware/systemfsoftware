@@ -3,15 +3,7 @@ import { Effect } from 'effect'
 import type { RunnerTask } from 'vitest'
 import { startVitest } from 'vitest/node'
 
-const url = (path: string): string => decodeURIComponent(new URL(path, import.meta.url).pathname)
-
-const runtimeSource = url('../src/mod.ts')
-const forkEntry = url('../../runner/vitest/src/mod.ts')
-const forkFailure = url('../../runner/vitest/src/failure.ts')
-const forkGuard = url('../../runner/vitest/src/guard.ts')
-const forkIntegration = url('../../runner/vitest/src/integration.ts')
-const forkTestClock = url('../../runner/vitest/src/TestClock.ts')
-const packageRoot = url('../')
+const packageRoot = `${import.meta.dirname}/..`
 
 const failuresOf = (tasks: ReadonlyArray<RunnerTask>, into: Array<string>): void => {
   for (const task of tasks) {
@@ -38,16 +30,8 @@ const runFailingFixture = (): Effect.Effect<string> =>
       testTimeout: 30_000,
       hookTimeout: 30_000,
     }, {
-      resolve: {
-        alias: {
-          '@systemfsoftware/vitest/failure': forkFailure,
-          '@systemfsoftware/vitest/TestClock': forkTestClock,
-          '@systemfsoftware/vitest/integration': forkIntegration,
-          '@systemfsoftware/vitest/guard': forkGuard,
-          '@systemfsoftware/vitest': forkEntry,
-          '@systemfsoftware/effect-spec-runtime': runtimeSource,
-        },
-      },
+      resolve: { conditions: ['@systemfsoftware/source'] },
+      ssr: { resolve: { conditions: ['@systemfsoftware/source'] } },
     })
     for (const file of vitest.state.getFiles()) {
       failuresOf([file], errors)

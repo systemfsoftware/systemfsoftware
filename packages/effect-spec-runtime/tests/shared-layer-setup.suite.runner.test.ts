@@ -1,8 +1,10 @@
-import { Suite, TestFile } from '@systemfsoftware/effect-spec-runtime'
+import { Suite } from '@systemfsoftware/effect-spec-runtime'
 import { it } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer } from 'effect'
 
-const thisFile = decodeURIComponent(new URL(import.meta.url).pathname)
+import { FileFixture, fileLayer, runtimeTestFile } from './__fixtures__/file-fixture.fixture.js'
+
+const thisFile = runtimeTestFile('tests/shared-layer-setup.suite.runner.test.ts')
 
 const slow: { built: number; released: number; phases: Array<string> } = {
   built: 0,
@@ -49,18 +51,6 @@ Suite.openShared(
   },
 )
 
-class FileFixture extends Context.Service<FileFixture, { readonly path: string }>()(
-  '@systemfsoftware/effect-spec-runtime/tests/FileFixture',
-) {}
-
-const fileLayer = Layer.effect(
-  FileFixture,
-  Effect.gen(function*() {
-    const path = yield* TestFile
-    return { path }
-  }),
-)
-
 Suite.openShared(
   { it },
   { name: 'a layer that reads the running file', describe: 'describe', options: undefined },
@@ -68,7 +58,7 @@ Suite.openShared(
   (register) => {
     register(
       'the layer sees this test file as its build-time file',
-      (expect) => Effect.flatMap(FileFixture, (fixture) => expect(fixture.path).toBe(thisFile)),
+      (expect) => Effect.flatMap(FileFixture, (fixture) => expect(fixture.file).toEqual(thisFile)),
       'run',
     )
   },

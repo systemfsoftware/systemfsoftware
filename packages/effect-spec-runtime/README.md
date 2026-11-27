@@ -49,7 +49,7 @@ An explored case's kernel run re-provides the test's binding onto the program (s
 
 `sharedLayer(layer)`, called at module top level, returns a layer that the whole test file shares: it is built once before the file's first case, in setup with no time limit, and released once when the file ends. It takes and returns a plain `Layer`, so it goes wherever a layer goes, and it runs on the same mechanism as a suite's shared layer.
 
-While a shared layer builds, the `TestFile` reference holds the running test file's path, so a layer can name what it creates after the file that created it. Outside a shared build it holds `''`.
+While a shared layer builds, the `TestFile` reference holds `Option.some` of the running test file as Vitest identifies it: `name`, its path from the Vitest root with `/` separators; `rootName`, the root directory's name; and `projectName`, the Vitest project name or `undefined`. A layer can name what it creates after the file that created it. Outside a shared build it holds `Option.none()`.
 
 ## TaskRef
 

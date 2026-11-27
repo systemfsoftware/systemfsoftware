@@ -6,6 +6,7 @@
 
 import * as Context from 'effect/Context';
 import { Layer } from 'effect';
+import * as Option_2 from 'effect/Option';
 
 // @public (undocumented)
 export namespace KernelCase {
@@ -31,7 +32,17 @@ export namespace TaskRef {
 }
 
 // @public (undocumented)
-export const TestFile: Context.Reference<string>;
+export const TestFile: Context.Reference<Option_2.Option<TestFileInfo>>;
+
+// @public (undocumented)
+export interface TestFileInfo {
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly projectName: string | undefined;
+    // (undocumented)
+    readonly rootName: string;
+}
 
 // (No @packageDocumentation comment for this package)
 

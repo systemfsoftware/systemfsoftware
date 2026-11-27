@@ -1,20 +1,10 @@
-import { Suite, TestFile } from '@systemfsoftware/effect-spec-runtime'
+import { Suite } from '@systemfsoftware/effect-spec-runtime'
 import { it } from '@systemfsoftware/vitest'
-import { Context, Effect, Layer } from 'effect'
+import { Effect } from 'effect'
 
-const thisFile = decodeURIComponent(new URL(import.meta.url).pathname)
+import { FileFixture, fileLayer, runtimeTestFile } from './__fixtures__/file-fixture.fixture.js'
 
-class FileFixture extends Context.Service<FileFixture, { readonly path: string }>()(
-  '@systemfsoftware/effect-spec-runtime/tests/FileFixtureB',
-) {}
-
-const fileLayer = Layer.effect(
-  FileFixture,
-  Effect.gen(function*() {
-    const path = yield* TestFile
-    return { path }
-  }),
-)
+const thisFile = runtimeTestFile('tests/shared-layer-testfile-b.suite.runner.test.ts')
 
 Suite.openShared(
   { it },
@@ -23,7 +13,7 @@ Suite.openShared(
   (register) => {
     register(
       'the layer sees this second file, not the first',
-      (expect) => Effect.flatMap(FileFixture, (fixture) => expect(fixture.path).toBe(thisFile)),
+      (expect) => Effect.flatMap(FileFixture, (fixture) => expect(fixture.file).toEqual(thisFile)),
       'run',
     )
   },
