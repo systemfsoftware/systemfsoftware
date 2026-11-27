@@ -86,11 +86,11 @@ These were measured while preparing the tool change; they justify the choices he
 
 ## Verification Contract
 
-| # | Command | Applies | Done signal |
-|---|---|---|---|
-| 1 | `nix build --no-link .#comment-checker` | U1 | builds from the input |
-| 2 | `nix eval --raw .#packages.aarch64-linux.comment-checker.drvPath` | U1 | prints a store path |
-| 3 | `grep -r comment-checker-sandbox nix/` | U1 | no match |
+| # | Command                                                           | Applies | Done signal           |
+| - | ----------------------------------------------------------------- | ------- | --------------------- |
+| 1 | `nix build --no-link .#comment-checker`                           | U1      | builds from the input |
+| 2 | `nix eval --raw .#packages.aarch64-linux.comment-checker.drvPath` | U1      | prints a store path   |
+| 3 | `grep -r comment-checker-sandbox nix/`                            | U1      | no match              |
 
 ## Definition of Done
 
