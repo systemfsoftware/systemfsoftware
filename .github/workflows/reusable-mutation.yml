@@ -38,8 +38,8 @@ on:
         default: '["self-hosted", "mutation"]'
       bun-version:
         description: >-
-          Bun release to put on PATH before the dependencies install, for a consumer whose build runs `bun` scripts;
-          empty installs no Bun
+          Exact Bun release (`1.x.y`, never `latest`) to put on PATH before the dependencies install, for a consumer
+          whose build runs `bun` scripts; empty installs no Bun
         required: false
         type: string
         default: ""

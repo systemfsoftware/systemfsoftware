@@ -82,16 +82,16 @@ Outputs `lane-source` and `test-jobs` (the planned test jobs as JSON, each with 
 
 Secret `sfs-fetch-token` (see [private flake inputs](#calling-the-reusable-workflows)). The caller grants `contents: read` and `checks: write`.
 
-| Input             | Default                       | Meaning                                                                                   |
-| ----------------- | ----------------------------- | ----------------------------------------------------------------------------------------- |
-| `tool`            | (required)                    | `stryker` or `cargo-mutants`; cargo-mutants fails at once                                 |
-| `mode`            | (required)                    | `diff` on a push to main, `full` for the weekly clean run                                 |
-| `packages`        | (required)                    | JSON array of package directories, run one after another                                  |
-| `stryker`         | `""`                          | The Stryker Nix installable pinned to a release commit; required with `tool: stryker`     |
-| `budget-seconds`  | `900`                         | A diff planned over this many seconds is deferred to the weekly run, with a neutral check |
-| `timeout-minutes` | `180`                         | Timeout of the mutation job                                                               |
-| `runs-on`         | `["self-hosted", "mutation"]` | JSON label list of the mutation job                                                       |
-| `bun-version`     | `""`                          | Bun release put on PATH before install, for a build that runs `bun`; empty installs none  |
+| Input             | Default                       | Meaning                                                                                          |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| `tool`            | (required)                    | `stryker` or `cargo-mutants`; cargo-mutants fails at once                                        |
+| `mode`            | (required)                    | `diff` on a push to main, `full` for the weekly clean run                                        |
+| `packages`        | (required)                    | JSON array of package directories, run one after another                                         |
+| `stryker`         | `""`                          | The Stryker Nix installable pinned to a release commit; required with `tool: stryker`            |
+| `budget-seconds`  | `900`                         | A diff planned over this many seconds is deferred to the weekly run, with a neutral check        |
+| `timeout-minutes` | `180`                         | Timeout of the mutation job                                                                      |
+| `runs-on`         | `["self-hosted", "mutation"]` | JSON label list of the mutation job                                                              |
+| `bun-version`     | `""`                          | Exact Bun release (`1.x.y`) put on PATH before install, for a build that runs `bun`; empty: none |
 
 ### `reusable-commitlint.yml`
 
