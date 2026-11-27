@@ -44,7 +44,7 @@ on:
         type: string
         default: ""
       node-version:
-        description: Exact Node release the job installs and runs on, for a consumer that pins its Node; empty keeps the default
+        description: Node release or semver spec (pin an exact one, e.g. `24.22.1`) the job installs and runs on; empty keeps setup-node-runtime's default
         required: false
         type: string
         default: ""
