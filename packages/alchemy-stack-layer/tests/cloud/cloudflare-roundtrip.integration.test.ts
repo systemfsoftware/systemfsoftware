@@ -2,7 +2,7 @@ import * as Core from '@alchemy.run/test/Core'
 import { alchemyStack } from '@systemfsoftware/alchemy-stack-layer'
 import { Gherkin, Given, it, makeFeature, sharedLayer, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as State from 'alchemy/State'
-import { type Cause, Config, Effect, Layer, Redacted, Schedule } from 'effect'
+import { type Cause, Config, Effect, Layer, Option, Redacted, Schedule } from 'effect'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
@@ -61,7 +61,15 @@ const nothingLeftAtStage = Effect.gen(function*() {
 
 sharedLayer(Layer.effectDiscard(Effect.addFinalizer(() => nothingLeftAtStage)))
 
-const CloudProbe = alchemyStack(CLOUD_STACK_NAME, { deploy: cloudProbeStack })
+const configuredStage = Option.filter(
+  Effect.runSync(Config.option(Config.String('ALCHEMY_TEST_STAGE'))),
+  (stage) => stage !== '',
+)
+
+const CloudProbe = alchemyStack(CLOUD_STACK_NAME, {
+  deploy: cloudProbeStack,
+  ...Option.match(configuredStage, { onNone: () => ({}), onSome: (stage) => ({ stage }) }),
+})
 
 const fetchReply = (url: string) =>
   Effect.gen(function*() {

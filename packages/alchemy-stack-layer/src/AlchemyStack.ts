@@ -1,7 +1,10 @@
 import * as Core from '@alchemy.run/test/Core'
+import { worktreeStage } from '@alchemy.run/test/WorktreeStage'
+import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
+import * as NodePath from '@effect/platform-node/NodePath'
 import { TestFile } from '@systemfsoftware/effect-spec-runtime'
 import type { Input } from 'alchemy/Input'
-import { Context, Effect, Layer, Option, type Scope } from 'effect'
+import { Config, Context, Effect, Layer, Option, type Scope } from 'effect'
 import * as Digest from 'effect/crypto/Digest'
 import { dual } from 'effect/Function'
 import {
@@ -58,12 +61,29 @@ class StackOwnProviders extends Context.Service<StackOwnProviders, true>()(
 
 const stackOwnProviders: Core.MakeOptions['providers'] = Layer.succeed(StackOwnProviders, true)
 
+const configuredTestStage = Config.option(Config.String('ALCHEMY_TEST_STAGE'))
+
+const worktreeOrUserStage = Effect.gen(function*() {
+  const cwd = yield* Effect.sync(() => process.cwd())
+  return (yield* worktreeStage(cwd)) ?? Core.resolveStage({})
+}).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)))
+
+const checkoutStage = (name: string) =>
+  Effect.flatMap(configuredTestStage, (configured) =>
+    Option.match(Option.filter(configured, (stage) => stage !== ''), {
+      onNone: () => worktreeOrUserStage,
+      onSome: Effect.succeed,
+    })).pipe(Effect.mapError(() => new StageUnresolved({ stack: name })))
+
 const stageOfRunningFile = (name: string) =>
   Effect.flatMap(TestFile, (file) =>
     Option.match(file, {
       onNone: () => Effect.fail(new StageUnresolved({ stack: name })),
       onSome: (testFile) =>
-        fileStage({ baseStage: Core.resolveStage({}), testFile }).pipe(Effect.provide(Digest.layerWebCrypto)),
+        Effect.flatMap(
+          checkoutStage(name),
+          (baseStage) => fileStage({ baseStage, testFile }).pipe(Effect.provide(Digest.layerWebCrypto)),
+        ),
     }))
 
 const resolveStage = (name: string, configured: string | undefined) =>

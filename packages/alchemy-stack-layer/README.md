@@ -61,7 +61,7 @@ Stacks are destroyed in reverse deploy order. A stack is registered for destroy 
 Dev mode, the sidecar and the stage resolve exactly as `@alchemy.run/test` resolves them, from one code path:
 
 - **Dev:** `ALCHEMY_TEST_DEV`, then the config's `dev`, then `ALCHEMY_DEV`. A local run starts the dev sidecar and deploys to the local Workers runtime; `ALCHEMY_TEST_DEV=0` deploys the same file to the cloud.
-- **Stage:** the config's `stage` is used as given. Without one, the stage is `ALCHEMY_TEST_STAGE`, else the per-user test stage, followed by `_` and 8 hex digits of the SHA-256 of the test file's Vitest project name, root directory name and path from the root (see `fileStage` below). Two files that deploy the same stack never share a deployment.
+- **Stage:** the config's `stage` is used as given. Without one, the stage is a non-empty `ALCHEMY_TEST_STAGE`; else, when the working directory is inside a linked git worktree, `test_$USER_<worktree>`, as `@alchemy.run/test`'s runner names it, so two worktrees running the same file at once never share a deployment; else the per-user test stage. It is followed by `_` and 8 hex digits of the SHA-256 of the test file's Vitest project name, root directory name and path from the root (see `fileStage` below). Two files that deploy the same stack never share a deployment either.
 - **State:** where a deployment records its state is the stack definition's own `state`. A cloud run over local or in-memory state fails before it deploys, with `DurableStateRequired`: a cloud deployment recorded only on one machine cannot be found or destroyed from another.
 
 The config's `dev`, `stage`, `sidecar` and `profile` are forwarded to the engine unchanged.
