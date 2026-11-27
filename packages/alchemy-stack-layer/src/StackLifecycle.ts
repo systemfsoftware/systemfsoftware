@@ -24,7 +24,7 @@ export type Deploy = <A>(
   stack: StackProgram<A>,
 ) => Effect.Effect<Input.Resolve<A>, StackDeployFailed | StackDestroyFailed | DurableStateRequired>
 
-const NON_DURABLE_STORES: ReadonlySet<string> = new Set(['local', 'inmemory'])
+const NON_DURABLE_STORES: ReadonlyArray<string> = Object.freeze(['local', 'inmemory'])
 
 interface EngineCall<E> {
   readonly engine: Engine
@@ -70,7 +70,7 @@ const requireDurable = <A>(
   stack: StackProgram<A>,
 ): Effect.Effect<void, DurableStateRequired | StackDeployFailed> =>
   Effect.flatMap(storeIdOf(engine, stack), (store) =>
-    NON_DURABLE_STORES.has(store)
+    NON_DURABLE_STORES.includes(store)
       ? Effect.fail(new DurableStateRequired({ stack: stack.stackName, stage: engine.stage, store }))
       : Effect.void)
 
