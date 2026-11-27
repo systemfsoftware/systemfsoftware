@@ -91,6 +91,7 @@ Secret `sfs-fetch-token` (see [private flake inputs](#calling-the-reusable-workf
 | `budget-seconds`  | `900`                         | A diff planned over this many seconds is deferred to the weekly run, with a neutral check |
 | `timeout-minutes` | `180`                         | Timeout of the mutation job                                                               |
 | `runs-on`         | `["self-hosted", "mutation"]` | JSON label list of the mutation job                                                       |
+| `bun-version`     | `""`                          | Bun release put on PATH before install, for a build that runs `bun`; empty installs none  |
 
 ### `reusable-commitlint.yml`
 
