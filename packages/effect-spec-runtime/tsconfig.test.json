@@ -12,6 +12,9 @@
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
     "customConditions": [
       "@systemfsoftware/source"
+    ],
+    "types": [
+      "node"
     ]
   },
   "include": [

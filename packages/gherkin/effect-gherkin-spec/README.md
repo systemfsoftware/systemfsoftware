@@ -39,6 +39,20 @@ A whole feature stays on the live clock with `Feature('Name').live('the reason i
 
 Every passing scenario runs a second time on fresh services, to find state kept outside its layer. A live scenario whose first run waits on something that happens once, such as a person approving a sign-in in a browser, names what that second run executes instead with `{ live: reason, rerun: pipeline }`. The rerun pipeline runs over the same layers, so the second run still finds leaked state without asking for the act again. Like the first pipeline, it must end in a `Then`. Outlines do not take `rerun`.
 
+Layers compose by chaining. `.withLayer` can follow `.withLayer` and `.withScenarioLayer`, and a later layer may need services an earlier one provides; a requirement no earlier layer meets is a compile error. A `.withLayer` layer lives for the whole Feature, and a `.withScenarioLayer` layer is built fresh for each scenario:
+
+```ts
+Feature('Renewing a loan')
+  .withScenarioLayer(LoanLedgerLive)
+  .withLayer(CatalogueLive)
+  .withLayer(CatalogueClientLive) // needs the catalogue CatalogueLive provides
+  .body(({ scenario }) => {
+    // ...
+  })
+```
+
+`sharedLayer(layer)`, re-exported from `@systemfsoftware/effect-spec-runtime`, makes a layer that every Feature in the file shares: called at module top level, it is built once before the file's first scenario, with no time limit, and released once when the file ends. Pass its result to `.withLayer` in each Feature that uses it.
+
 Scenario outlines parameterise the same behaviour across example rows, each row running through the same kernel exploration:
 
 ```ts

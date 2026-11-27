@@ -1,13 +1,15 @@
 /// <reference types="vitest/importMeta" />
 import { type Checks, type Expect, type Vitest, VitestTestContext } from '@systemfsoftware/vitest'
 import { type Asserted, captureRunBinding, type RunBinding } from '@systemfsoftware/vitest/integration'
-import { Effect, Exit, Layer, Scope } from 'effect'
+import { Cause, Context, Effect, Exit, Layer, Option, Scope } from 'effect'
 import { dual } from 'effect/Function'
-import { afterAll, type TestOptions } from 'vitest'
+import { afterAll, beforeAll, type TestOptions, TestRunner } from 'vitest'
 import * as KernelCase from './KernelCase.js'
 import type { LiveCase } from './KernelCase.js'
 import * as Register from './Register.js'
+import { SharedLayerNotBuilt } from './SharedLayer.schema.js'
 import * as TaskRef from './TaskRef.service.js'
+import { TestFile, testFileInfo } from './TestFile.js'
 
 export type { LiveCase } from './KernelCase.js'
 export type { DescribeMode, RegisterMode } from './Register.js'
@@ -25,9 +27,11 @@ export interface Config {
   readonly live?: LiveCase
 }
 
-export interface Shared<R> {
-  readonly layer: Layer.Layer<R>
+export interface Shared<R, E = never> {
+  readonly layer: Layer.Layer<R, E>
 }
+
+export { SharedLayerNotBuilt } from './SharedLayer.schema.js'
 
 /**
  * A registered case: the runner's own `expect` arrives as the argument, so a case's assertion
@@ -162,41 +166,52 @@ export const open: {
   ): void
 } = dual(3, openImpl)
 
-/**
- * The suite's layer, built once by the first case that needs it and released when the suite
- * ends, so every case of the suite sees the same services. The build runs on its own root
- * fiber: the first case's fiber ends with that case, and the suite's resources must not.
- */
-const suiteLayerOf = <RShared>(shared: Shared<RShared>): Layer.Layer<RShared> => {
+const sharedLayerOf = <RShared, EShared>(shared: Shared<RShared, EShared>): Layer.Layer<RShared> => {
   const scope = Scope.makeUnsafe()
-  const built = Effect.runSync(Effect.cached(
-    Effect.flatten(Effect.promise(() => Effect.runPromiseExit(Layer.buildWithScope(shared.layer, scope)))),
-  ))
+  const testFile = Option.some(testFileInfo(TestRunner.getCurrentSuite().file))
+  let built: Context.Context<RShared> | undefined
+  beforeAll(async () => {
+    const exit = await Effect.runPromiseExit(
+      Layer.buildWithScope(shared.layer, scope).pipe(Effect.provideService(TestFile, testFile)),
+    )
+    if (Exit.isFailure(exit)) {
+      await Effect.runPromise(Scope.close(scope, Exit.void).pipe(Effect.ignore))
+      throw Cause.squash(exit.cause)
+    }
+    built = exit.value
+  }, Register.UNTIMED.timeout)
   afterAll(() => Effect.runPromise(Scope.close(scope, Exit.void)), Register.UNTIMED.timeout)
-  return Layer.unwrap(Effect.map(built, Layer.succeedContext))
+  return Layer.unwrap(
+    Effect.suspend(() =>
+      built === undefined ? Effect.die(new SharedLayerNotBuilt()) : Effect.succeed(Layer.succeedContext(built))
+    ),
+  )
 }
 
-const openSharedImpl = <B, E, RShared, C>(
+export const sharedLayer = <RShared, EShared>(layer: Layer.Layer<RShared, EShared>): Layer.Layer<RShared> =>
+  sharedLayerOf({ layer })
+
+const openSharedImpl = <B, E, RShared, EShared, C>(
   bindings: Bindings,
   config: Config,
-  shared: Shared<RShared>,
+  shared: Shared<RShared, EShared>,
   use: (register: RegisterFn<B, E, RShared | Scope.Scope>, propIt: Vitest.MethodsNonLive<never>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
-    use(registrarFor<B, E, RShared, never>(bindings.it, config, suiteLayerOf(shared)), bindings.it)
+    use(registrarFor<B, E, RShared, never>(bindings.it, config, sharedLayerOf(shared)), bindings.it)
   })
 }
 
 export const openShared: {
-  <B, E, RShared, C>(
+  <B, E, RShared, EShared, C>(
     config: Config,
-    shared: Shared<RShared>,
+    shared: Shared<RShared, EShared>,
     use: (register: RegisterFn<B, E, RShared | Scope.Scope>, propIt: Vitest.MethodsNonLive<never>) => C,
   ): (bindings: Bindings) => void
-  <B, E, RShared, C>(
+  <B, E, RShared, EShared, C>(
     bindings: Bindings,
     config: Config,
-    shared: Shared<RShared>,
+    shared: Shared<RShared, EShared>,
     use: (register: RegisterFn<B, E, RShared | Scope.Scope>, propIt: Vitest.MethodsNonLive<never>) => C,
   ): void
 } = dual(4, openSharedImpl)
@@ -238,10 +253,10 @@ export const openCase: {
   ): void
 } = dual(4, openCaseImpl)
 
-const openSharedCaseImpl = <B, E, RShared, RFresh, RFreshReq extends RShared, C>(
+const openSharedCaseImpl = <B, E, RShared, EShared, RFresh, RFreshReq extends RShared, C>(
   bindings: Bindings,
   config: Config,
-  shared: Shared<RShared>,
+  shared: Shared<RShared, EShared>,
   caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
   use: (
     register: RegisterFn<B, E, RShared | RFresh | Scope.Scope>,
@@ -253,7 +268,7 @@ const openSharedCaseImpl = <B, E, RShared, RFresh, RFreshReq extends RShared, C>
       registrarFor<B, E, RFresh | RShared, never>(
         bindings.it,
         config,
-        Layer.fresh(caseLayer).pipe(Layer.provideMerge(suiteLayerOf(shared))),
+        Layer.fresh(caseLayer).pipe(Layer.provideMerge(sharedLayerOf(shared))),
       ),
       bindings.it,
     )
@@ -261,19 +276,19 @@ const openSharedCaseImpl = <B, E, RShared, RFresh, RFreshReq extends RShared, C>
 }
 
 export const openSharedCase: {
-  <B, E, RShared, RFresh, RFreshReq extends RShared, C>(
+  <B, E, RShared, EShared, RFresh, RFreshReq extends RShared, C>(
     config: Config,
-    shared: Shared<RShared>,
+    shared: Shared<RShared, EShared>,
     caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
     use: (
       register: RegisterFn<B, E, RShared | RFresh | Scope.Scope>,
       propIt: Vitest.MethodsNonLive<never>,
     ) => C,
   ): (bindings: Bindings) => void
-  <B, E, RShared, RFresh, RFreshReq extends RShared, C>(
+  <B, E, RShared, EShared, RFresh, RFreshReq extends RShared, C>(
     bindings: Bindings,
     config: Config,
-    shared: Shared<RShared>,
+    shared: Shared<RShared, EShared>,
     caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
     use: (
       register: RegisterFn<B, E, RShared | RFresh | Scope.Scope>,

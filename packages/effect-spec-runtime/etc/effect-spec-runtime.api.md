@@ -4,10 +4,17 @@
 
 ```ts
 
+import * as Context from 'effect/Context';
+import { Layer } from 'effect';
+import * as Option_2 from 'effect/Option';
+
 // @public (undocumented)
 export namespace KernelCase {
     export { LiveCase, announceLive, caseProgram, explore, exploreOnce, liveCase };
 }
+
+// @public (undocumented)
+export const sharedLayer: <RShared, EShared>(layer: Layer.Layer<RShared, EShared>) => Layer.Layer<RShared>;
 
 // @public (undocumented)
 export namespace SpanRecorder {
@@ -16,12 +23,25 @@ export namespace SpanRecorder {
 
 // @public (undocumented)
 export namespace Suite {
-    export { Bindings, CaseLive, Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, open, openCase, openShared, openSharedCase };
+    export { Bindings, CaseLive, Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, SharedLayerNotBuilt, open, openCase, openShared, openSharedCase, sharedLayer };
 }
 
 // @public (undocumented)
 export namespace TaskRef {
     export { RawVitestTaskRef, VitestTaskContext, VitestTaskRef, provideTaskRef };
+}
+
+// @public (undocumented)
+export const TestFile: Context.Reference<Option_2.Option<TestFileInfo>>;
+
+// @public (undocumented)
+export interface TestFileInfo {
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly projectName: string | undefined;
+    // (undocumented)
+    readonly rootName: string;
 }
 
 // (No @packageDocumentation comment for this package)

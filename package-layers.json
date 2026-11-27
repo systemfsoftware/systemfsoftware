@@ -28,7 +28,8 @@
     "@systemfsoftware/effect-sim-kernel-tests",
     "@systemfsoftware/conformance-spec",
     "@systemfsoftware/effect-spec-runtime",
-    "@systemfsoftware/effect-gherkin-spec"
+    "@systemfsoftware/effect-gherkin-spec",
+    "@systemfsoftware/alchemy-stack-layer"
   ],
   "spec-trace": [
     "@systemfsoftware/trace-taxonomy",

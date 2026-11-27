@@ -1,3 +1,4 @@
+export { sharedLayer } from '@systemfsoftware/effect-spec-runtime'
 export { it, layer } from '@systemfsoftware/vitest'
 export { And, But, Gherkin, Given, Then, When } from './DoNotation.js'
 export type {
