@@ -5,11 +5,15 @@
 ```ts
 
 import * as Context from 'effect/Context';
+import { Layer } from 'effect';
 
 // @public (undocumented)
 export namespace KernelCase {
     export { LiveCase, announceLive, caseProgram, explore, exploreOnce, liveCase };
 }
+
+// @public (undocumented)
+export const sharedLayer: <RShared, EShared>(layer: Layer.Layer<RShared, EShared>) => Layer.Layer<RShared>;
 
 // @public (undocumented)
 export namespace SpanRecorder {

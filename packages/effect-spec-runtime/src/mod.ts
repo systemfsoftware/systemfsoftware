@@ -1,5 +1,6 @@
 export * as KernelCase from './KernelCase.js'
 export * as SpanRecorder from './SpanRecorder.js'
 export * as Suite from './Suite.js'
+export { sharedLayer } from './Suite.js'
 export * as TaskRef from './TaskRef.service.js'
 export { TestFile } from './TestFile.js'
