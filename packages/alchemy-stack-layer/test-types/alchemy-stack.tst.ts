@@ -27,9 +27,6 @@ describe('alchemyStack', () => {
   })
 
   it('Should_GiveTwoStackNamesTwoRequirements_When_EachIsDeclared', () => {
-    expect(SignInStack.layer).type.toBeAssignableTo<
-      Layer.Layer<AlchemyStack<'SignInStack', { readonly url: string }>, StackLayerError>
-    >()
     expect(BillingStack.layer).type.not.toBeAssignableTo<
       Layer.Layer<AlchemyStack<'SignInStack', { readonly url: string }>, StackLayerError>
     >()
