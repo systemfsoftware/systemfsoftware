@@ -1,6 +1,6 @@
 # @systemfsoftware/tsdown-config
 
-Build-output policy and build guards shared by System F Software's tsdown packages: a quiet log level that keeps every actionable warning, an entry-size budget for startup-sensitive plugins, and an `api-extractor` wrapper that drops its success chatter.
+Build-output policy and build guards shared by System F Software's tsdown packages: a quiet log level that keeps every actionable warning, an entry-size budget for startup-sensitive plugins, a `types` export hook, and an `api-extractor` wrapper that drops its success chatter.
 
 Every entry is plain JavaScript with declaration files, so it loads from `node_modules` under Node 24 without type stripping.
 
@@ -8,10 +8,10 @@ Every entry is plain JavaScript with declaration files, so it loads from `node_m
 
 Add the package as a devDependency. It is distributed as a workspace tarball of the [systemfsoftware flake](https://github.com/systemfsoftware/systemfsoftware) (`packages.<system>.tsdown-config`), which `lib.mkConsumerStore` serves to an offline pnpm install.
 
-| Peer                                 | Needed for                                                     |
-| ------------------------------------ | -------------------------------------------------------------- |
-| `tsdown` `^0.23.0`                   | `quiet-build` and `eager-entry-budget` in a `tsdown.config.ts` |
-| `@microsoft/api-extractor` `^7.59.1` | the `api-extractor-quiet` bin                                  |
+| Peer                                 | Needed for                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `tsdown` `^0.23.0`                   | `quiet-build`, `eager-entry-budget` and `inject-types` in a `tsdown.config.ts` |
+| `@microsoft/api-extractor` `^7.59.1` | the `api-extractor-quiet` bin                                                  |
 
 Both peers are optional: install the one for the entry you use.
 
@@ -37,6 +37,16 @@ A rolldown plugin that fails the build when an `index.js` entry statically pulls
 import { eagerEntryBudget } from '@systemfsoftware/tsdown-config/eager-entry-budget'
 
 export default defineConfig({ entry: ['src/index.ts'], plugins: [eagerEntryBudget({ maxBytes: 64 * 1024 })] })
+```
+
+### `inject-types`
+
+A `customExports` hook that sets the root entry's `types` condition to `./dist/index.d.ts` and puts `default` after it.
+
+```ts
+import { injectTypes } from '@systemfsoftware/tsdown-config/inject-types'
+
+export default defineConfig({ entry: ['src/index.ts'], exports: { customExports: injectTypes } })
 ```
 
 ### `api-extractor-quiet`

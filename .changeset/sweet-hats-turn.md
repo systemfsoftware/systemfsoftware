@@ -17,7 +17,6 @@
 "@systemfsoftware/oxlint-plugin-effect-schema": none
 "@systemfsoftware/oxlint-plugin-test-discipline": none
 "@systemfsoftware/trace-taxonomy": none
-"@systemfsoftware/tsdown-config": none
 "@systemfsoftware/vitest": none
 ---
 
