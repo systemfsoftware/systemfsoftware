@@ -106,8 +106,17 @@ in-flight release run.
   that version leaves the cycle, and a GitHub Release the run did not cut is
   never retried. Cut it by hand from the version's changelog file.
 
-Distribution is this repository's Nix flake outputs consumed from a git ref
-(pinned by `flake.lock` rev + narHash, run in a bubblewrap sandbox), not an npm
-registry. The release path writes a git tag and a GitHub Release for each
-unreleased version and nothing more. There is no npm token, no OIDC trusted
-publishing, and no registry to bootstrap.
+Packages are distributed two ways. The release path writes a git tag and a
+GitHub Release for each unreleased version, and then, because the release
+workflow sets `npm-publish: true`, publishes every version npm lacks to npm
+through OIDC trusted publishing, with no npm token. A package new to npm needs
+its name reserved and the release workflow trusted once, from a person's npm
+session:
+
+```bash
+npm login
+nix run github:systemfsoftware/pnpm-release-management#npm-trust -- systemfsoftware/systemfsoftware
+```
+
+The same packages are also consumed as this repository's Nix flake outputs from
+a git ref (pinned by `flake.lock` rev + narHash, run in a bubblewrap sandbox).
