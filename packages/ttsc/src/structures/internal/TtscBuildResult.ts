@@ -19,6 +19,9 @@ export interface TtscBuildResult {
   /** Structured compiler/plugin diagnostics, supplied or parsed from output. */
   diagnostics: ITtscCompilerDiagnostic[];
 
+  /** This transform invocation acknowledged its complete Program report. */
+  typeScriptDiagnosticsReported?: true;
+
   /** Compiler-reported output coordinates, relocated for cached runtime runs. */
   emittedFiles?: string[];
 
@@ -93,6 +96,15 @@ export interface TtscBuildResult {
 
   /** A contributing producer explicitly reported incomplete observations. */
   observationsComplete?: false;
+
+  /**
+   * Every file of the selected project's Program, by absolute native path, as
+   * the producer that loaded that Program reported it in the same run: the
+   * upstream compiler's `--listFiles` answer or a resident host's own Program.
+   * A watch cycle hands it to its topology instead of asking the compiler a
+   * second time (#1865). Absent means no producer of this result reported it.
+   */
+  programFiles?: readonly string[];
 
   /**
    * Actual spawn completion fact before null-status coercion. True requires a
