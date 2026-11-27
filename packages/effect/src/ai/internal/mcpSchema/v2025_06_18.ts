@@ -359,14 +359,6 @@ export const GetPromptResult = Schema.Struct({
 /**
  * @internal
  */
-export const ListToolsResult = Schema.Struct({
-  ...Previous.PaginatedResult.fields,
-  tools: Schema.Array(Tool)
-})
-
-/**
- * @internal
- */
 export class ListResources extends Rpc.make("resources/list", {
   success: ListResourcesResult,
   error: Previous.McpError,
@@ -417,7 +409,7 @@ export class GetPrompt extends Rpc.make("prompts/get", {
  * @internal
  */
 export class ListTools extends Rpc.make("tools/list", {
-  success: ListToolsResult,
+  success: Previous.ListToolsResult,
   error: Previous.McpError,
   payload: Schema.UndefinedOr(Previous.PaginatedRequest)
 }) {}
@@ -479,7 +471,8 @@ const RequestedSchema = Schema.Struct({
   type: Schema.Literal("object"),
   properties: Schema.Record(
     Schema.String,
-    Schema.Union([StringSchema, NumberSchema, BooleanSchema, EnumSchema])
+    // EnumSchema first: StringSchema also matches an enum and would drop its values.
+    Schema.Union([EnumSchema, StringSchema, NumberSchema, BooleanSchema])
   ),
   required: optional(Schema.Array(Schema.String))
 })

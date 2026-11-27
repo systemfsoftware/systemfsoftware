@@ -63,7 +63,7 @@ const serverLayer = Layer.mergeAll(
   })),
   Layer.provideMerge(makeServerLayer({
     name: "test-server",
-    protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25]
+    protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25, McpProtocol.v2025_06_18, McpProtocol.v2025_03_26]
   }))
 )
 
@@ -72,7 +72,8 @@ const protocols = [McpProtocol.v2025_11_25, McpProtocol.v2026_07_28] as const
 const connect = Effect.fnUntraced(function*(
   protocol: McpProtocol.ProtocolAdapter<McpClient.ProtocolVersion>,
   server: Layer.Layer<any, any, HttpRouter.HttpRouter> = serverLayer,
-  extensions?: { readonly skills?: boolean | undefined }
+  extensions?: { readonly skills?: boolean | undefined },
+  capabilities?: McpClient.InputCapabilities
 ) {
   const { handler } = yield* makeHttpHarness(server)
   const fetch: typeof globalThis.fetch = Object.assign(
@@ -80,7 +81,7 @@ const connect = Effect.fnUntraced(function*(
     { preconnect() {} }
   )
   const context = yield* Layer.build(
-    McpClient.layerHttp({ ...clientInfo, url: MCP_ENDPOINT, protocol, extensions }).pipe(
+    McpClient.layerHttp({ ...clientInfo, url: MCP_ENDPOINT, protocol, extensions, capabilities }).pipe(
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch))
     )
@@ -171,6 +172,104 @@ describe("McpClient", () => {
         }))
     })
   }
+
+  it.effect("should connect and call tools on 2025-03-26 and 2025-06-18", () =>
+    Effect.gen(function*() {
+      for (const protocol of [McpProtocol.v2025_03_26, McpProtocol.v2025_06_18]) {
+        const client = yield* connect(protocol)
+        assert.strictEqual(client.protocolVersion, protocol.protocolVersion)
+        const tool = yield* findTool(client, "add")
+        const raw = yield* client.callTool({ tool, arguments: { a: 20, b: 22 } })
+        assert.deepStrictEqual(raw.content, [{ type: "text", text: JSON.stringify({ total: 42 }) }])
+        assert.deepStrictEqual(
+          raw.structuredContent,
+          protocol.protocolVersion === "2025-03-26" ? undefined : { total: 42 }
+        )
+      }
+    }))
+
+  describe("input continuation", () => {
+    const inputRequest = {
+      method: "elicitation/create",
+      params: { mode: "form", message: "Continue?", requestedSchema: { type: "object", properties: {} } }
+    } as const
+
+    // https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr
+    const confirmServer = Layer.effectDiscard(Effect.gen(function*() {
+      const server = yield* McpServer.McpServer
+      yield* server.addTool({
+        tool: new McpSchema.Tool({ name: "confirm", inputSchema: { type: "object" } }),
+        annotations: Context.empty(),
+        handle: () =>
+          Effect.map(
+            McpSchema.McpRequestContext,
+            (context) =>
+              context.clientCapabilities.elicitation?.form === undefined
+                ? new McpSchema.CallToolResult({
+                  content: [{ type: "text", text: "missing capability" }],
+                  isError: true
+                })
+                : context.inputResponses?.ok === undefined
+                ? new McpSchema.InputRequired({ inputRequests: { ok: inputRequest }, requestState: "state-1" })
+                : new McpSchema.CallToolResult({
+                  content: [{
+                    type: "text",
+                    text: `${String(context.inputResponses.ok.action)}:${context.requestState}`
+                  }]
+                })
+          )
+      })
+      yield* server.addPrompt({
+        prompt: McpSchema.Prompt.make({ name: "confirm" }),
+        annotations: Context.empty(),
+        completions: {},
+        handle: () =>
+          Effect.succeed(new McpSchema.InputRequired({ inputRequests: { ok: inputRequest }, requestState: "state-1" }))
+      })
+    })).pipe(Layer.provideMerge(makeServerLayer({
+      name: "confirm-server",
+      protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25]
+    })))
+
+    it.effect("should pause and continue a 2026-07-28 tool call while keeping prompts unsupported", () =>
+      Effect.gen(function*() {
+        const client = yield* connect(McpProtocol.v2026_07_28, confirmServer, undefined, { elicitation: { form: {} } })
+        const tool = yield* findTool(client, "confirm")
+        const paused = yield* client.callTool({ tool }).pipe(Effect.flip)
+        assert(paused.reason._tag === "InputRequiredError")
+        assert.deepStrictEqual(paused.reason.result, {
+          inputRequests: { ok: inputRequest },
+          requestState: "state-1"
+        })
+        const forwarded = new McpSchema.InputRequired(paused.reason.result)
+
+        const done = yield* client.callTool({
+          tool,
+          inputResponses: { ok: { action: "accept", content: {} } },
+          requestState: forwarded.requestState
+        })
+        assert.deepStrictEqual(done.content, [{ type: "text", text: "accept:state-1" }])
+
+        const [prompt] = yield* client.listPrompts()
+        const promptError = yield* client.getPrompt({ prompt }).pipe(Effect.flip)
+        assert.strictEqual(promptError.reason._tag, "UnsupportedError")
+      }))
+
+    it.effect("should refuse input capabilities and continuation fields on 2025-11-25", () =>
+      Effect.gen(function*() {
+        const capabilitiesError = yield* connect(McpProtocol.v2025_11_25, confirmServer, undefined, {
+          elicitation: {}
+        }).pipe(Effect.flip)
+        assert.strictEqual(capabilitiesError.reason._tag, "ConfigurationError")
+
+        const client = yield* connect(McpProtocol.v2025_11_25, confirmServer)
+        const tool = yield* findTool(client, "confirm")
+        for (const params of [{ requestState: "state-1" }, { inputResponses: { ok: { action: "accept" } } }]) {
+          const error = yield* client.callTool({ tool, ...params }).pipe(Effect.flip)
+          assert.strictEqual(error.reason._tag, "ConfigurationError")
+        }
+      }))
+  })
 
   describe("discovery limits", () => {
     it.effect("should expose server capabilities when initialization succeeds", () =>
@@ -436,6 +535,48 @@ describe("McpClient", () => {
       )
       const error = yield* client.listTools().pipe(Effect.flip)
       assert.strictEqual(error.reason._tag, "ValidationError")
+    }))
+
+  it.effect("should combine cache hints across paginated modern tool lists", () =>
+    Effect.gen(function*() {
+      const listing = (pages: ReadonlyArray<{ readonly ttlMs: number; readonly cacheScope: "public" | "private" }>) =>
+        scriptedHttp((message) => {
+          if (message.method !== "tools/list") return scriptedReply(McpProtocol.v2026_07_28, message)
+          const index = Number(message.params?.cursor ?? 0)
+          return jsonRpcResult(message, {
+            ...discoverResult,
+            ...pages[index],
+            tools: [{ ...slowTool, name: `t${index}` }],
+            ...(index + 1 < pages.length ? { nextCursor: String(index + 1) } : {})
+          })
+        })
+
+      const mixed = yield* listing([
+        { ttlMs: 60_000, cacheScope: "public" },
+        { ttlMs: 5_000, cacheScope: "private" },
+        { ttlMs: 30_000, cacheScope: "public" }
+      ])
+      const fromMixed = yield* mixed.client.listToolsWithCacheHint()
+      assert.deepStrictEqual(fromMixed.tools.map((tool) => tool.name), ["t0", "t1", "t2"])
+      assert.deepStrictEqual(fromMixed.cacheHint, { ttlMs: 5_000, cacheScope: "private" })
+
+      const shared = yield* listing([{ ttlMs: 60_000, cacheScope: "public" }, { ttlMs: 90_000, cacheScope: "public" }])
+      assert.deepStrictEqual((yield* shared.client.listToolsWithCacheHint()).cacheHint, {
+        ttlMs: 60_000,
+        cacheScope: "public"
+      })
+      assert.deepStrictEqual((yield* shared.client.listTools()).map((tool) => tool.name), ["t0", "t1"])
+    }))
+
+  it.effect("should omit the cache hint when the server or protocol provides none", () =>
+    Effect.gen(function*() {
+      const legacy = yield* connect(McpProtocol.v2025_11_25)
+      const fromLegacy = yield* legacy.listToolsWithCacheHint()
+      assert.isTrue(fromLegacy.tools.some((tool) => tool.name === "add"))
+      assert.isUndefined(fromLegacy.cacheHint)
+
+      const noTools = yield* scriptedHttp((message) => jsonRpcResult(message, { ...discoverResult, capabilities: {} }))
+      assert.deepStrictEqual(yield* noTools.client.listToolsWithCacheHint(), { tools: [], cacheHint: undefined })
     }))
 
   // A single page larger than the item limit must fail with LimitError, not exceed the call argument limit.

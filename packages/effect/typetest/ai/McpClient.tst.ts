@@ -1,7 +1,7 @@
 import { Context, Effect, Schema, SchemaGetter } from "effect"
 import type { AiError } from "effect/ai/AiError"
 import * as McpClient from "effect/ai/McpClient"
-import type { McpClientError } from "effect/ai/McpClientError"
+import type { InputRequiredError, McpClientError } from "effect/ai/McpClientError"
 import type * as McpProtocol from "effect/ai/McpProtocol"
 import * as McpSchema from "effect/ai/McpSchema"
 import type * as Tool from "effect/ai/Tool"
@@ -70,9 +70,11 @@ describe("McpClient", () => {
 
   it("should accept only client-supported protocol adapters", () => {
     type Protocol = Parameters<typeof McpClient.http>[0]["protocol"]
+    expect<typeof McpProtocol.v2025_03_26>().type.toBeAssignableTo<Protocol>()
+    expect<typeof McpProtocol.v2025_06_18>().type.toBeAssignableTo<Protocol>()
     expect<typeof McpProtocol.v2025_11_25>().type.toBeAssignableTo<Protocol>()
     expect<typeof McpProtocol.v2026_07_28>().type.toBeAssignableTo<Protocol>()
-    expect<typeof McpProtocol.v2025_06_18>().type.not.toBeAssignableTo<Protocol>()
+    expect<typeof McpProtocol.v2024_11_05>().type.not.toBeAssignableTo<Protocol>()
   })
 
   it("should infer result and error types when toolkit modes are selected or omitted", () => {
@@ -137,5 +139,16 @@ describe("McpClient", () => {
     expect(McpClient.toolkit).type.not.toBeCallableWith(client, {
       transformTool: (remote: McpClient.RemoteTool) => remote.setFailure(Schema.String)
     })
+  })
+
+  it("should expose a forwardable InputRequiredError result and object-only input capabilities", () => {
+    expect<InputRequiredError["result"]>().type.toBeAssignableTo<
+      ConstructorParameters<typeof McpSchema.InputRequired>[0]
+    >()
+    expect<McpSchema.ClientCapabilities>().type.toBeAssignableTo<McpClient.InputCapabilities>()
+    expect<{ readonly roots: false }>().type.not.toBeAssignableTo<McpClient.InputCapabilities>()
+    expect<{ readonly elicitation: { readonly url: false } }>().type.not.toBeAssignableTo<
+      McpClient.InputCapabilities
+    >()
   })
 })

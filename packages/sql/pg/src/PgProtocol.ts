@@ -393,7 +393,7 @@ export class EncodeError extends Data.TaggedError("PgProtocolEncodeError")<{
 }> {}
 
 const textEncoder = new TextEncoder()
-const textDecoder = new TextDecoder("utf-8", { fatal: true })
+const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
 
 /**
  * Above this length `TextEncoder.encodeInto` beats a per-character loop, below
@@ -890,7 +890,8 @@ const valueWriterUnsafe = Symbol.for("@effect/sql-pg/PgProtocol/ValueWriter/unsa
  * **Details**
  *
  * `textFormat` identifies parameters encoded as text. All other parameters
- * use the binary format.
+ * use the binary format. Result columns use binary format unless
+ * `textResults` is `true`, which requests text format for all columns.
  *
  * **Example** (Encoding a `Bind` message)
  *
@@ -913,6 +914,7 @@ export const makeBindEncoder = <A, E = never>(
   readonly portal: string
   readonly statement: string
   readonly parameters: ReadonlyArray<A>
+  readonly textResults?: boolean | undefined
 }): Result.Result<Uint8Array, EncodeError | E> => {
   try {
     const writer = begin(0x42)
@@ -972,7 +974,7 @@ export const makeBindEncoder = <A, E = never>(
     trailer[trailerOffset] = 0
     trailer[trailerOffset + 1] = 1
     trailer[trailerOffset + 2] = 0
-    trailer[trailerOffset + 3] = 1
+    trailer[trailerOffset + 3] = options.textResults === true ? 0 : 1
     writer.offset = trailerOffset + 4
     return Result.succeed(end())
   } catch (error) {

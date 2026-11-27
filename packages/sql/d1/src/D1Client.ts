@@ -152,11 +152,13 @@ const makeBatch = (options: {
     return Effect.succeed([] as unknown as BatchResults<Statements>)
   }
   const isBatch = statements.length > 1
-  return Effect.useSpan(
-    isBatch ? batchSpanName(options.spanAttributes) : Statement.spanName(options.spanAttributes),
-    { kind: "client" },
-    (span) =>
-      Effect.withFiber(Effect.fnUntraced(function*(fiber) {
+  return Effect.withFiber((fiber) =>
+    Effect.useSpan(
+      isBatch
+        ? batchSpanName(options.spanAttributes)
+        : fiber.getRef(Statement.SpanNameGenerator)(options.spanAttributes),
+      { kind: "client" },
+      Effect.fnUntraced(function*(span) {
         const transformer = fiber.getRef(Statement.CurrentTransformer)
         const prepared: Array<D1PreparedStatement> = []
         const transforms: Array<TransformRows | undefined> = []
@@ -201,7 +203,8 @@ const makeBatch = (options: {
           return transformRows ? transformRows(rows) : rows
         })
         return results as BatchResults<Statements>
-      }))
+      })
+    )
   )
 }
 
@@ -228,14 +231,16 @@ export const make = (
     const makeConnection = Effect.gen(function*() {
       const db = options.db
 
+      const prepare = (sql: string) =>
+        Effect.try({
+          try: () => db.prepare(sql),
+          catch: (cause) => new SqlError({ reason: classifyError(cause, "Failed to prepare statement", "prepare") })
+        })
+
       const prepareCache = yield* Cache.make({
         capacity: options.prepareCacheSize ?? 200,
         timeToLive: options.prepareCacheTTL ?? Duration.minutes(10),
-        lookup: (sql: string) =>
-          Effect.try({
-            try: () => db.prepare(sql),
-            catch: (cause) => new SqlError({ reason: classifyError(cause, "Failed to prepare statement", "prepare") })
-          })
+        lookup: prepare
       })
 
       const runStatementRaw = (
@@ -262,7 +267,7 @@ export const make = (
       const runRaw = (
         sql: string,
         params: ReadonlyArray<unknown> = []
-      ) => runStatementRaw(db.prepare(sql), params)
+      ) => Effect.flatMap(prepare(sql), (s) => runStatementRaw(s, params))
 
       const runCached = (
         sql: string,
@@ -272,7 +277,7 @@ export const make = (
       const runUncached = (
         sql: string,
         params: ReadonlyArray<unknown> = []
-      ) => runStatement(db.prepare(sql), params)
+      ) => Effect.flatMap(prepare(sql), (s) => runStatement(s, params))
 
       const runValues = (
         sql: string,

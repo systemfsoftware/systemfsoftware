@@ -2,7 +2,7 @@ import { type Generated, OpenAiClient, OpenAiLanguageModel, OpenAiSchema, OpenAi
 import { assert, describe, it } from "@effect/vitest"
 import { assertTrue, deepStrictEqual, strictEqual } from "@effect/vitest/utils"
 import { Array, Context, Effect, Layer, Redacted, Ref, Schema, SchemaGetter, Stream } from "effect"
-import { AiError, LanguageModel, Prompt, Response as AiResponse, Tool, Toolkit } from "effect/ai"
+import { AiError, Chat, LanguageModel, Prompt, Response as AiResponse, Tool, Toolkit } from "effect/ai"
 import { HttpClient, type HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 
 const webSearchFailures = [
@@ -820,6 +820,32 @@ describe("OpenAiLanguageModel", () => {
             Effect.provide(OpenAiLanguageModel.model("gpt-4o-mini", { store: true })),
             Effect.provide(makeTestLayer({ body: { output: [makeWebSearchCall(), makeTextOutput("Answer")] } }))
           ))
+
+        it.effect.each([false, true])(
+          "replays Chat after image generation with store=%s",
+          (store) =>
+            Effect.gen(function*() {
+              const chat = yield* Chat.empty
+              const toolkit = Toolkit.make(OpenAiTool.ImageGeneration({}))
+
+              yield* chat.generateText({ prompt: "Draw a cat", toolkit })
+              yield* chat.generateText({ prompt: "Thanks", toolkit })
+
+              const body = yield* getRequestBody((yield* MockHttpClient.requests)[1])
+              deepStrictEqual(body.input, [
+                { role: "user", content: [{ type: "input_text", text: "Draw a cat" }] },
+                ...(store ? [{ type: "item_reference", id: "ig_123" }] : []),
+                { role: "user", content: [{ type: "input_text", text: "Thanks" }] }
+              ])
+            }).pipe(
+              Effect.provide(OpenAiLanguageModel.model("gpt-4o-mini", { store })),
+              Effect.provide(makeTestLayer({
+                body: {
+                  output: [{ type: "image_generation_call", id: "ig_123", status: "completed", result: "aW1hZ2U=" }]
+                }
+              }))
+            )
+        )
 
         it.effect("references stored provider-executed items by their stored item ID", () =>
           Effect.gen(function*() {
@@ -2225,6 +2251,42 @@ describe("OpenAiLanguageModel", () => {
   })
 
   describe("streamText", () => {
+    it.effect("preserves refusal metadata in the reconstructed prompt", () =>
+      Effect.gen(function*() {
+        const item = makeTextOutput("", {
+          content: [
+            { type: "refusal", refusal: "First explanation." },
+            { type: "refusal", refusal: "Second explanation." }
+          ]
+        })
+        const refusal = "First explanation.\n\nSecond explanation."
+
+        const parts = yield* LanguageModel.streamText({ prompt: "Do something bad" }).pipe(
+          Stream.runCollect,
+          Effect.provide(OpenAiLanguageModel.model("gpt-4o-mini")),
+          Effect.provide(makeStreamTestLayer([
+            {
+              type: "response.output_item.added",
+              sequence_number: 1,
+              output_index: 0,
+              item: { ...item, status: "in_progress", content: [] }
+            },
+            { type: "response.output_item.done", sequence_number: 2, output_index: 0, item }
+          ]))
+        )
+
+        strictEqual(parts.some((part) => part.type === "text-delta"), false)
+        deepStrictEqual(parts.find((part) => part.type === "text-end")?.metadata.openai, { itemId: item.id, refusal })
+        const message = Prompt.fromResponseParts(parts).content[0]
+        assert(message?.role === "assistant")
+        const text = message.content[0]
+        assert(text.type === "text")
+        deepStrictEqual(
+          [text.text, text.options.openai?.itemId, text.options.openai?.refusal],
+          ["", item.id, refusal]
+        )
+      }))
+
     it.effect("uses call_id for streamed shell calls and keeps the item ID in metadata", () =>
       Effect.gen(function*() {
         const item = {
