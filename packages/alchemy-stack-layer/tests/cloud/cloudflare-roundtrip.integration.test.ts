@@ -12,10 +12,12 @@ import { PROBE_REPLY } from '../__fixtures__/probe-worker.fixture.js'
 
 const Feature = makeFeature({ it })
 
-const THIS_FILE_SUFFIX = '87d3b00a'
+const deployedStages = new Set<string>()
 
-const stageOfThisFile = Config.String('ALCHEMY_TEST_STAGE').pipe(
-  Config.map((base) => `${base}_${THIS_FILE_SUFFIX}`),
+const deployedStage = Effect.suspend(() =>
+  deployedStages.size === 1
+    ? Effect.succeed([...deployedStages].join(''))
+    : Effect.die(`expected one deployed stage to check, saw [${[...deployedStages].join(', ')}]`)
 )
 
 const onCloudEngine: <A>(
@@ -45,7 +47,7 @@ const workerStatusAt = (stage: string) =>
   }).pipe(Effect.provide(FetchHttpClient.layer))
 
 const nothingLeftAtStage = Effect.gen(function*() {
-  const stage = yield* stageOfThisFile
+  const stage = yield* deployedStage
   const rows = yield* stateRowsAt(stage)
   const status = yield* workerStatusAt(stage)
   return yield* rows.length === 0 && status === 404
@@ -74,7 +76,10 @@ Feature('a stack deployed to Cloudflare and destroyed when the Feature ends', { 
     scenario(
       'the deployed worker answers over HTTP',
       Gherkin.Do.pipe(
-        Given('the stack is deployed to Cloudflare')('stack', () => CloudProbe),
+        Given('the stack is deployed to Cloudflare')(
+          'stack',
+          () => Effect.tap(CloudProbe, (stack) => Effect.sync(() => deployedStages.add(stack.stage))),
+        ),
         When('the worker is fetched')('reply', (s) => fetchReply(s.stack.url)),
         Then('it replies with the probe text')((s, expect) => expect(s.reply).toBe(PROBE_REPLY)),
       ),

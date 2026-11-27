@@ -5,7 +5,12 @@ import type { Input } from 'alchemy/Input'
 import { Context, Effect, Layer, type Scope } from 'effect'
 import * as Digest from 'effect/crypto/Digest'
 import { dual } from 'effect/Function'
-import { type DurableStateRequired, type StackDeployFailed, StageUnresolved } from './StackErrors.schema.js'
+import {
+  type DurableStateRequired,
+  type StackDeployFailed,
+  type StackDestroyFailed,
+  StageUnresolved,
+} from './StackErrors.schema.js'
 import { type Deploy, deployStack, type Engine, openSidecar, type StackProgram } from './StackLifecycle.js'
 import { fileStage } from './StageName.js'
 
@@ -36,7 +41,7 @@ export interface SetupLayerConfig<Outputs, E, R, ESetup> extends EngineConfig {
   readonly setup: Layer.Layer<R, ESetup>
 }
 
-export type StackLayerError = StackDeployFailed | DurableStateRequired | StageUnresolved
+export type StackLayerError = StackDeployFailed | StackDestroyFailed | DurableStateRequired | StageUnresolved
 
 export interface AlchemyStackTag<Name extends string, Outputs, E>
   extends Context.ServiceClass<AlchemyStack<Name, Outputs>, StackKey<Name>, Outputs>
@@ -44,7 +49,7 @@ export interface AlchemyStackTag<Name extends string, Outputs, E>
   readonly layer: Layer.Layer<AlchemyStack<Name, Outputs>, E>
 }
 
-type AcquireError<E> = E | StackDeployFailed | DurableStateRequired
+type AcquireError<E> = E | StackDeployFailed | StackDestroyFailed | DurableStateRequired
 
 type AnyConfig<A, Outputs, E, R, ESetup> = StandaloneConfig<A, Outputs, E> | SetupLayerConfig<Outputs, E, R, ESetup>
 

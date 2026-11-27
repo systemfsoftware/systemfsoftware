@@ -16,6 +16,6 @@ export const cloudProbeStack = Alchemy.Stack(
       name: probeWorkerName(stage),
       main: new URL('probe-worker.fixture.ts', import.meta.url).pathname,
     })
-    return { url: worker.url.as<string>() }
+    return { url: worker.url.as<string>(), stage }
   }),
 )

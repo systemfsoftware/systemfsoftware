@@ -34,7 +34,7 @@ export interface AlchemyStackTag<Name extends string, Outputs, E> extends Contex
 }
 
 // @public (undocumented)
-export type Deploy = <A>(stack: StackProgram<A>) => Effect.Effect<Input.Resolve<A>, StackDeployFailed | DurableStateRequired>;
+export type Deploy = <A>(stack: StackProgram<A>) => Effect.Effect<Input.Resolve<A>, StackDeployFailed | StackDestroyFailed | DurableStateRequired>;
 
 // Warning: (ae-forgotten-export) The symbol "DurableStateRequired_base" needs to be exported by the entry point index.d.ts
 //
@@ -84,7 +84,7 @@ export class StackDestroyFailed extends StackDestroyFailed_base {
 export type StackKey<Name extends string> = `@systemfsoftware/alchemy-stack-layer/${Name}`;
 
 // @public (undocumented)
-export type StackLayerError = StackDeployFailed | DurableStateRequired | StageUnresolved;
+export type StackLayerError = StackDeployFailed | StackDestroyFailed | DurableStateRequired | StageUnresolved;
 
 // @public (undocumented)
 export type StackProgram<A> = Effect.Effect<CompiledStack<A>, ConfigError> & StackDefinition<never>;

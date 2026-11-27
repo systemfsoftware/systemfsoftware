@@ -20,7 +20,7 @@ const located = (tag: string) => (error: { readonly stack: string; readonly stag
   stage: error.stage,
 })
 
-const describeError = (error: StackLayerError | StackDestroyFailed): Outcome =>
+const describeError = (error: StackLayerError): Outcome =>
   Match.valueTags(error, {
     StageUnresolved: (unresolved) => ({ tag: 'StageUnresolved', stack: unresolved.stack }),
     StackDeployFailed: located('StackDeployFailed'),
@@ -149,6 +149,40 @@ Feature('deploying and destroying a stack on the engine')
           expect({ outcome: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
             outcome: { tag: 'DurableStateRequired', stack: 'LocalOnly', stage: 'lifecycle_local' },
             ops: [],
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'a leftover that cannot be destroyed stops the next deploy as a destroy failure',
+      Gherkin.Do.pipe(
+        Given('a ledger shared by both runs')('ledger', () => fresh()),
+        When('the first run deploys and its scope is never closed')('abandoned', (s) =>
+          Effect.gen(function*() {
+            const scope = yield* Scope.make()
+            const layer = alchemyStack('Stuck', {
+              dev: false,
+              stage: 'lifecycle_stuck',
+              deploy: probeStack({ ledger: s.ledger, stackName: 'Stuck' }),
+            }).layer
+            return yield* Effect.exit(Layer.buildWithScope(layer, scope))
+          })),
+        When('the next run starts at the same stage while deletes are refused')('exit', (s) =>
+          releasedExit(
+            alchemyStack('Stuck', {
+              dev: false,
+              stage: 'lifecycle_stuck',
+              deploy: probeStack({
+                ledger: { ...s.ledger, behaviour: { ...s.ledger.behaviour, refuseDelete: true } },
+                stackName: 'Stuck',
+              }),
+            }).layer,
+          )),
+        Then('it fails naming the stack and stage as a destroy failure, and deploys nothing new')((s, expect) =>
+          expect({ next: outcomeOf(s.exit), ops: opsOf(s.ledger) }).toEqual({
+            next: { tag: 'StackDestroyFailed', stack: 'Stuck', stage: 'lifecycle_stuck' },
+            ops: ['create Stuck-probe'],
           })
         ),
       ),

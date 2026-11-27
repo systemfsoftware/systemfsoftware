@@ -19,7 +19,7 @@ A registered explored case runs `explore` first and `exploreOnce` as the fork's 
 
 ## Suite
 
-`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, in the suite's setup before its first case starts, with no time limit; every case of the suite sees those same services, and they are released, again with no time limit, when the suite ends. A failed build fails the suite's cases with the build's error, and a shared layer read before its build ran dies with `SharedLayerNotBuilt`. State a case must not share belongs in the case layer:
+`Suite.open` registers a suite with no layer, `Suite.openShared` adds a layer shared by the whole suite, `Suite.openCase` adds a layer acquired fresh around every case, and `Suite.openSharedCase` does both. The shared layer is built once, in the suite's setup before its first case starts, with no time limit; every case of the suite sees those same services, and they are released, again with no time limit, when the suite ends. A failed build fails the suite's setup with the build's error, so its cases fail without running, and a shared layer read before its build ran dies with `SharedLayerNotBuilt`. State a case must not share belongs in the case layer:
 
 ```ts
 Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {

@@ -68,7 +68,7 @@ The config's `dev`, `stage`, `sidecar` and `profile` are forwarded to the engine
 
 ## Teardown
 
-- Before deploying, the layer destroys any deployment left at the resolved stage, so a run killed before its teardown is cleaned up by the next run at that stage. Give each CI job slot a stage that repeats, and run one job at a time per stage.
+- Before deploying, the layer destroys any deployment left at the resolved stage, so a run killed before its teardown is cleaned up by the next run at that stage. If that destroy fails, acquiring fails with `StackDestroyFailed` and nothing new is deployed. Give each CI job slot a stage that repeats, and run one job at a time per stage.
 - A failed destroy fails the run with `StackDestroyFailed`, naming the stack and the stage. It is never swallowed and never retried.
 - A failed deploy fails with `StackDeployFailed`, naming the stack and the stage, after what it created has been destroyed.
 - A stack built with no configured stage outside a running test file fails with `StageUnresolved`.

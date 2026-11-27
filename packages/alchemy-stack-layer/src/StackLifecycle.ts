@@ -19,7 +19,7 @@ export type StackProgram<A> = Effect.Effect<CompiledStack<A>, ConfigError> & Sta
 
 export type Deploy = <A>(
   stack: StackProgram<A>,
-) => Effect.Effect<Input.Resolve<A>, StackDeployFailed | DurableStateRequired>
+) => Effect.Effect<Input.Resolve<A>, StackDeployFailed | StackDestroyFailed | DurableStateRequired>
 
 const NON_DURABLE_STORES: ReadonlySet<string> = new Set(['local', 'inmemory'])
 
@@ -91,9 +91,8 @@ export const deployStack = (engine: Engine): Deploy => <A>(stack: StackProgram<A
     yield* checkDurability(engine, stack)
     const child = yield* Scope.fork(engine.scope, 'sequential')
     yield* Scope.addFinalizer(engine.scope, destroyThenClose(engine, stack, child))
-    const call = { engine, scope: child, onFailure: deployFailure(engine, stack.stackName) }
-    yield* destroyIn(call, stack, child)
-    return yield* inEngine(call)(
+    yield* destroyIn({ engine, scope: child, onFailure: destroyFailure(engine, stack.stackName) }, stack, child)
+    return yield* inEngine({ engine, scope: child, onFailure: deployFailure(engine, stack.stackName) })(
       Core.deploy(engine.options, stack, { stage: engine.stage, scope: child }),
     )
   })
