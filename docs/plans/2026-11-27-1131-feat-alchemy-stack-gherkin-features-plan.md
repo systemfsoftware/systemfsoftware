@@ -428,7 +428,7 @@ packages/alchemy-stack-layer/
 | Type tests          | `pnpm --filter <pkg> test:types`                                                                                                           | R1 nominality, R10 compile errors                                                              |
 | Published surface   | `pnpm --filter <pkg> api:check`, `pnpm --filter <pkg> attw`, `pnpm pack:all`                                                               | CONST-T8: what ships is what is tested                                                         |
 | Cloud roundtrip     | `ALCHEMY_TEST_DEV=0 ALCHEMY_TEST_STAGE=<stage> pnpm --filter @systemfsoftware/alchemy-stack-layer test:cloud`, with Cloudflare credentials | F2 success criterion                                                                           |
-| CI                  | `gh pr checks --watch --fail-fast`, read with `kiro-gh`                                                                                    | REPO-D1                                                                                        |
+| CI                  | `gh pr checks --watch --fail-fast`                                                                                                         | REPO-D1                                                                                        |
 
 Mutation runs are CI-only (REPO-D3).
 
