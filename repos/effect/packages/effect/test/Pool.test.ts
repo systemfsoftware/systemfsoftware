@@ -262,6 +262,74 @@ describe("Pool", () => {
       strictEqual(result, "error")
     }))
 
+  it.live("every borrower gets a failed acquisition wherever it yields", () =>
+    Effect.gen(function*() {
+      for (const borrowers of [1, 3]) {
+        for (let budget = 1; budget <= 32; budget++) {
+          const pool = yield* Pool.makeWithTTL({
+            acquire: Effect.fail("error"),
+            min: 0,
+            max: 1,
+            timeToLive: Duration.infinity
+          })
+          const fibers = yield* Effect.forEach(Array.from({ length: borrowers }), () =>
+            Effect.forkChild(
+              Effect.flip(Effect.scoped(Pool.get(pool))).pipe(
+                Effect.provideService(Scheduler.MaxOpsBeforeYield, budget)
+              ),
+              { startImmediately: true }
+            ))
+          const results = yield* Fiber.joinAll(fibers).pipe(
+            Effect.timeoutOrElse({ duration: Duration.seconds(1), orElse: () => Effect.succeed("timeout") })
+          )
+          deepStrictEqual(
+            results,
+            Array(borrowers).fill("error"),
+            `${borrowers} borrowers, MaxOpsBeforeYield ${budget}`
+          )
+        }
+      }
+    }))
+
+  it.live("a borrower gets its own failed acquisition, not an earlier one", () =>
+    Effect.gen(function*() {
+      for (let budget = 1; budget <= 32; budget++) {
+        let acquired = 0
+        const pool = yield* Pool.makeWithTTL({
+          acquire: Effect.suspend(() => Effect.fail(acquired++ === 0 ? "stale" : "fresh")),
+          min: 1,
+          max: 2,
+          targetUtilization: 0.5,
+          timeToLive: Duration.infinity
+        })
+        yield* waitUntil(() => pool.state.availableHead !== undefined)
+        const error = yield* Effect.flip(Effect.scoped(Pool.get(pool))).pipe(
+          Effect.provideService(Scheduler.MaxOpsBeforeYield, budget),
+          Effect.timeout(Duration.seconds(1))
+        )
+        strictEqual(error, "fresh", `MaxOpsBeforeYield ${budget}`)
+      }
+    }))
+
+  it.live("a failure acquired beside a healthy item still settles its borrower", () =>
+    Effect.gen(function*() {
+      const gate = yield* Deferred.make<void>()
+      let acquired = 0
+      const acquire = Effect.andThen(
+        Deferred.await(gate),
+        Effect.suspend(() => acquired++ === 1 ? Effect.fail("error") : Effect.succeed(acquired))
+      )
+      const pool = yield* Pool.make({ acquire, size: 2 })
+      const fibers = yield* Effect.forEach([1, 2], () =>
+        Effect.forkChild(Effect.exit(Pool.get(pool)), { startImmediately: true }))
+      yield* waitUntil(() =>
+        pool.state.waiters.size === 2
+      )
+      yield* Deferred.succeed(gate, void 0)
+      // The first lease stays open, so the second borrower cannot wait for it.
+      yield* Effect.timeout(Fiber.joinAll(fibers), Duration.seconds(1))
+    }))
+
   it.effect("compositional retry", () =>
     Effect.gen(function*() {
       const cond = (i: number) => (i <= 10 ? Effect.fail(i) : Effect.succeed(i))
@@ -278,6 +346,23 @@ describe("Pool", () => {
     }))
 
   describe("usage TTL idle timeout", () => {
+    it.effect("retires an idle item one TTL after its last release", () =>
+      Effect.gen(function*() {
+        const pool = yield* Pool.makeWithTTL({
+          acquire: Effect.succeed("resource"),
+          min: 0,
+          max: 1,
+          timeToLive: 1000,
+          timeToLiveStrategy: "usage"
+        })
+        yield* TestClock.adjust(50)
+        yield* Pool.use(pool, Effect.succeed)
+        yield* TestClock.adjust(999)
+        strictEqual(pool.state.items.size, 1)
+        yield* TestClock.adjust(1)
+        strictEqual(pool.state.items.size, 0)
+      }))
+
     it.effect("shrinks to min in idle order rather than acquisition order", () =>
       Effect.gen(function*() {
         let acquired = 0
@@ -579,6 +664,20 @@ describe("Pool", () => {
       assert.strictEqual(result, 1)
       assert.strictEqual(acquired, 3)
       assert.strictEqual(pool.state.usage, 0)
+
+      const lease = yield* Scope.fork(yield* Effect.scope)
+      const held = yield* Scope.fork(yield* Effect.scope)
+      const item = yield* Pool.get(pool).pipe(Scope.provide(lease))
+      yield* Pool.reserve(pool, item).pipe(Scope.provide(held))
+      yield* TestClock.adjust(50)
+      yield* Scope.close(lease, Exit.void)
+      yield* TestClock.adjust(970)
+      assert.strictEqual(pool.state.items.size, 1)
+      yield* Scope.close(held, Exit.void)
+      yield* TestClock.adjust(29)
+      assert.strictEqual(pool.state.items.size, 1)
+      yield* TestClock.adjust(1)
+      assert.strictEqual(pool.state.items.size, 0)
     }))
 
   it.effect("reserve is a no-op with concurrency one", () =>

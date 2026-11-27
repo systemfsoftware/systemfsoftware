@@ -291,12 +291,15 @@ export const get: {
           return effect.interrupt
         }
         const oentry = MutableHashMap.get(state.map, key)
-        if (Option.isSome(oentry) && !hasExpired(oentry.value, fiber)) {
-          // Move the entry to the end of the map to keep it fresh
+        if (Option.isSome(oentry)) {
           MutableHashMap.remove(state.map, key)
-          MutableHashMap.set(state.map, key, oentry.value)
-          return awaitEntry(self, key, oentry.value, restore)
+          if (!hasExpired(oentry.value, fiber)) {
+            // Move the entry to the end of the map to keep it fresh
+            MutableHashMap.set(state.map, key, oentry.value)
+            return awaitEntry(self, key, oentry.value, restore)
+          }
         }
+        const clock = fiber.getRef(effect.ClockRef)
         const scope = Scope.makeUnsafe()
         const deferred = Deferred.makeUnsafe<A, E>()
         const entry: Entry<A, E> = {
@@ -325,7 +328,7 @@ export const get: {
                 try {
                   const ttl = self.timeToLive(exit, key)
                   if (Duration.isFinite(ttl)) {
-                    entry.expiresAt = fiber.getRef(effect.ClockRef).currentTimeMillisUnsafe() + Duration.toMillis(ttl)
+                    entry.expiresAt = clock.currentTimeMillisUnsafe() + Duration.toMillis(ttl)
                   }
                 } finally {
                   Deferred.doneUnsafe(deferred, exit)

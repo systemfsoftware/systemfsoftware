@@ -1,7 +1,10 @@
 import { MssqlClient, Procedure } from "@effect/sql-mssql"
 import { assert, describe, expect, it } from "@effect/vitest"
-import { Deferred, Effect, Fiber } from "effect"
+import { Deferred, Effect, Fiber, Schema, Stream } from "effect"
 import * as Reactivity from "effect/reactivity/Reactivity"
+import { Model } from "effect/schema"
+import { SqlClient, SqlModel } from "effect/sql"
+import type * as SqlConnection from "effect/sql/SqlConnection"
 import { SqlError } from "effect/sql/SqlError"
 import * as Statement from "effect/sql/Statement"
 import type { EventEmitter } from "node:events"
@@ -9,6 +12,7 @@ import type * as Tedious from "tedious"
 import { vi } from "vitest"
 
 interface MockConnection extends EventEmitter {
+  config: Tedious.ConnectionConfiguration
   closed: boolean
   closedSignal: Deferred.Deferred<void>
   cancellations: number
@@ -53,7 +57,7 @@ vi.mock("tedious", async (importOriginal) => {
     cancellations = 0
     readonly queries: Array<string> = []
 
-    constructor() {
+    constructor(readonly config: Tedious.ConnectionConfiguration) {
       super()
       state.connections.push(this)
     }
@@ -203,6 +207,40 @@ describe("mssql", () => {
     expect(params).toEqual(["Tim", "John"])
   })
 
+  it.effect("repository update places OUTPUT before WHERE", () =>
+    Effect.gen(function*() {
+      class User extends Model.Class<User>("User")({ id: Schema.Int, name: Schema.String }) {}
+      const queries: Array<string> = []
+      const execute = (sql: string): Effect.Effect<ReadonlyArray<any>> =>
+        Effect.sync(() => {
+          queries.push(sql)
+          return [{ id: 1, name: "Grace" }]
+        })
+      const connection: SqlConnection.Connection = {
+        execute,
+        executeRaw: execute,
+        executeValues: execute,
+        executeUnprepared: execute,
+        executeValuesUnprepared: execute,
+        executeStream: (sql) => Stream.fromEffect(execute(sql))
+      }
+      const sql = yield* SqlClient.make({
+        driver: "test",
+        acquirer: Effect.succeed(connection),
+        compiler: MssqlClient.makeCompiler(),
+        spanAttributes: []
+      })
+      const repo = yield* SqlModel.makeRepository(User, {
+        tableName: "users",
+        idColumn: "id",
+        spanPrefix: "Users"
+      }).pipe(Effect.provideService(SqlClient.SqlClient, sql))
+
+      yield* repo.update(User.update.make({ id: 1, name: "Grace" }))
+
+      assert.deepStrictEqual(queries, ["update [users] set [name] = @1 OUTPUT INSERTED.* where [id] = @2"])
+    }).pipe(Effect.provide(Reactivity.layer)))
+
   it("update single helper returning", () => {
     const [query, params] = sql`UPDATE people SET ${sql.update({ name: "Tim" }).returning("*")}`
       .compile()
@@ -347,6 +385,22 @@ const makeClient = MssqlClient.make({
 const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.timeout("2 seconds"))
 
 describe("MssqlClient connection lifecycle", { concurrent: false }, () => {
+  it.effect("passes requestTimeout to Tedious", () =>
+    Effect.gen(function*() {
+      reset()
+      for (
+        const [config, expected] of [
+          [{}, undefined],
+          [{ requestTimeout: "30 seconds" }, 30_000],
+          [{ requestTimeout: 0 }, 0],
+          [{ requestTimeout: "Infinity" }, 0]
+        ] as const
+      ) {
+        yield* MssqlClient.make({ server: "localhost", ...config })
+        assert.strictEqual(state.connections.at(-1)!.config.options?.requestTimeout, expected)
+      }
+    }).pipe(Effect.scoped, Effect.provide(Reactivity.layer)))
+
   for (const operation of ["withoutTransforms", "call"] as const) {
     it.live(`${operation} reuses the transaction connection with a single-connection pool`, () =>
       Effect.gen(function*() {

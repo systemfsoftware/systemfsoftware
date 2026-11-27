@@ -78,7 +78,7 @@ import * as Order from "./Order.ts"
 import * as Pipeable from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
 import * as Rational_ from "./Rational.ts"
-import * as Record_ from "./Record.ts"
+import type * as Record_ from "./Record.ts"
 import * as Redacted_ from "./Redacted.ts"
 import * as RegExp_ from "./RegExp.ts"
 import * as Result_ from "./Result.ts"
@@ -3574,11 +3574,14 @@ function makeStruct<const Fields extends Struct.Fields>(ast: SchemaAST.Objects, 
  *
  * Each field value is a schema. Use {@link optionalKey} or {@link optional} to
  * mark fields as optional, and {@link mutableKey} to mark them as mutable.
+ * Field definitions are discovered from own enumerable string and symbol
+ * properties of `fields`. Non-enumerable and inherited definitions are ignored.
  *
  * The resulting schema's `Type` is a readonly object type with the fields'
  * decoded types. The `Encoded` form mirrors the field schemas' encoded types.
- * Declared fields may be inherited and are copied to own properties in the
- * output. The `__proto__` field is accepted only when it is an own property.
+ * Declared fields on the input may be non-enumerable or inherited and are copied
+ * to own properties in the output. The `__proto__` field is accepted only when
+ * it is an own property.
  * Parsing does not guarantee that output keys retain their input order.
  *
  * **Example** (Defining a basic struct)
@@ -3680,6 +3683,10 @@ const canonicalPropertyKey = (key: PropertyKey): string | symbol =>
  * the renamed keys. Keys not present in the mapping are left unchanged.
  * If two existing fields would produce the same encoded key, construction
  * fails.
+ * Only own enumerable string and symbol properties of the schema's `fields`
+ * define fields to rename. Non-enumerable and inherited field definitions are
+ * ignored. For each selected field, an own entry in `mapping` is used even if
+ * that entry is non-enumerable; inherited mapping entries are ignored.
  *
  * **Example** (Renaming `name` to `full_name` in the encoded form)
  *
@@ -3706,7 +3713,7 @@ export function encodeKeys<
     const appliedMapping: any = Object.create(null)
     const reverseMapping: any = Object.create(null)
     const seenEncodedKeys = new Set<string | symbol>()
-    for (const k of Reflect.ownKeys(self.fields)) {
+    for (const k of InternalRecord.ownEnumerableKeys(self.fields)) {
       const encoded = toEncoded(self.fields[k])
       const hasMapping = Object.hasOwn(mapping, k)
       const encodedKey = hasMapping ? (mapping as any)[k] as PropertyKey : k
@@ -3739,6 +3746,10 @@ export function encodeKeys<
  * returns `Option`. On encoding the derived fields are stripped. This allows
  * computed or enriched fields to live in the decoded type without appearing in
  * the encoded form.
+ * Existing and added field definitions use own enumerable string and symbol
+ * properties; non-enumerable and inherited definitions are ignored. Derivation
+ * functions are looked up by the selected field names and may be non-enumerable
+ * or inherited.
  *
  * **Example** (Adding a computed `fullName` field)
  *
@@ -3768,14 +3779,15 @@ export function extendTo<S extends Struct<Struct.Fields>, const Fields extends S
   return (
     self: S
   ): decodeTo<Struct<Simplify<{ [K in keyof S["fields"]]: toType<S["fields"][K]> } & Fields>>, S> => {
-    const f = Record_.map(self.fields, toType)
+    const f = Struct_.map(self.fields, toType)
     const to = Struct({ ...f, ...fields })
+    const keys = InternalRecord.ownEnumerableKeys(fields)
     return self.pipe(decodeTo(
       to,
       SchemaTransformation.transform({
         decode: (input) => {
           const out: any = { ...input }
-          for (const k in fields) {
+          for (const k of keys) {
             const f = derive[k]
             const o = f(input)
             if (Option_.isSome(o)) {
@@ -3786,7 +3798,7 @@ export function extendTo<S extends Struct<Struct.Fields>, const Fields extends S
         },
         encode: (input) => {
           const out = { ...input }
-          for (const k in fields) {
+          for (const k of keys) {
             delete out[k]
           }
           return out
@@ -6901,7 +6913,6 @@ export function isTrimmed(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isTrimmed()" }),
       arbitraryConstraint: {
         patterns: [{ source: TRIMMED_PATTERN, flags: "" }]
       },
@@ -6936,12 +6947,8 @@ export function isPattern(
   const source = regExp.source
   const flags = regExp.flags
   const canExport = /^[dg]*uy?$/.test(flags)
-  const runtimeRegExp = flags === ""
-    ? `new globalThis.RegExp(${format(source)})`
-    : `new globalThis.RegExp(${format(source)}, ${format(flags)})`
   return SchemaAST.isPattern(regExp, {
     toJsonSchema: () => canExport ? { pattern: flags.endsWith("y") ? `^(?:${source})` : source } : [{}, true],
-    toCode: () => ({ runtime: `Schema.isPattern(${runtimeRegExp})` }),
     ...annotations
   })
 }
@@ -6965,10 +6972,7 @@ export function isPattern(
  * @since 4.0.0
  */
 export function isStringFinite(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringFinite({
-    toCode: () => ({ runtime: "Schema.isStringFinite()" }),
-    ...annotations
-  })
+  return SchemaAST.isStringFinite(annotations)
 }
 /**
  * Validates that a string is a signed base-10 integer literal for Effect's
@@ -6989,10 +6993,7 @@ export function isStringFinite(annotations?: Annotations.Filter): SchemaAST.Filt
  * @since 4.0.0
  */
 export function isStringBigInt(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringBigInt({
-    toCode: () => ({ runtime: "Schema.isStringBigInt()" }),
-    ...annotations
-  })
+  return SchemaAST.isStringBigInt(annotations)
 }
 /**
  * Validates that a string has the `Symbol(description)` format used by Effect's
@@ -7008,10 +7009,7 @@ export function isStringBigInt(annotations?: Annotations.Filter): SchemaAST.Filt
  * @since 4.0.0
  */
 export function isStringSymbol(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringSymbol({
-    toCode: () => ({ runtime: "Schema.isStringSymbol()" }),
-    ...annotations
-  })
+  return SchemaAST.isStringSymbol(annotations)
 }
 
 const getUUIDRegExp = (version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): globalThis.RegExp => {
@@ -7064,7 +7062,6 @@ export function isUUID(version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8, annotations?: An
         payload: { version: version ?? null }
       },
       toJsonSchema: () => ({ pattern: regExp.source, format: "uuid" }),
-      toCode: () => ({ runtime: version === undefined ? "Schema.isUUID()" : `Schema.isUUID(${version})` }),
       ...annotations
     }
   )
@@ -7105,7 +7102,6 @@ export function isGUID(annotations?: Annotations.Filter) {
         id: "effect/schema/isGUID",
         payload: null
       },
-      toCode: () => ({ runtime: "Schema.isGUID()" }),
       ...annotations
     }
   )
@@ -7143,7 +7139,6 @@ export function isULID(annotations?: Annotations.Filter) {
         id: "effect/schema/isULID",
         payload: null
       },
-      toCode: () => ({ runtime: "Schema.isULID()" }),
       ...annotations
     }
   )
@@ -7188,7 +7183,6 @@ export function isAscii(annotations?: Annotations.Filter) {
         id: "effect/schema/isAscii",
         payload: null
       },
-      toCode: () => ({ runtime: "Schema.isAscii()" }),
       ...annotations
     }
   )
@@ -7228,7 +7222,6 @@ export function isBase64(annotations?: Annotations.Filter) {
       arbitraryConstraint: {
         patterns: [{ source: pattern, flags: "" }]
       },
-      toCode: () => ({ runtime: "Schema.isBase64()" }),
       ...annotations
     }
   )
@@ -7269,7 +7262,6 @@ export function isBase64Url(annotations?: Annotations.Filter) {
       arbitraryConstraint: {
         patterns: [{ source: pattern, flags: "" }]
       },
-      toCode: () => ({ runtime: "Schema.isBase64Url()" }),
       ...annotations
     }
   )
@@ -7311,7 +7303,6 @@ export function isStartingWith(startsWith: string, annotations?: Annotations.Fil
         payload: { startsWith }
       },
       toJsonSchema: () => literalToJsonSchema(jsonSchemaLiteral, startsWith, `^${RegExp_.escape(jsonSchemaLiteral)}`),
-      toCode: () => ({ runtime: `Schema.isStartingWith(${format(startsWith)})` }),
       arbitraryConstraint: {
         patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
@@ -7345,7 +7336,6 @@ export function isEndingWith(endsWith: string, annotations?: Annotations.Filter)
         payload: { endsWith }
       },
       toJsonSchema: () => literalToJsonSchema(jsonSchemaLiteral, endsWith, `${RegExp_.escape(jsonSchemaLiteral)}$`),
-      toCode: () => ({ runtime: `Schema.isEndingWith(${format(endsWith)})` }),
       arbitraryConstraint: {
         patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
@@ -7380,7 +7370,6 @@ export function isIncluding(includes: string, annotations?: Annotations.Filter) 
         payload: { includes }
       },
       toJsonSchema: () => literalToJsonSchema(jsonSchemaLiteral, includes, RegExp_.escape(jsonSchemaLiteral)),
-      toCode: () => ({ runtime: `Schema.isIncluding(${format(includes)})` }),
       arbitraryConstraint: {
         patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
@@ -7414,7 +7403,6 @@ export function isUppercased(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => [{ pattern: regExp.source }, true],
-      toCode: () => ({ runtime: "Schema.isUppercased()" }),
       arbitraryConstraint: {
         patterns: [{ source: UPPERCASED_PATTERN, flags: "" }]
       },
@@ -7448,7 +7436,6 @@ export function isLowercased(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => [{ pattern: regExp.source }, true],
-      toCode: () => ({ runtime: "Schema.isLowercased()" }),
       arbitraryConstraint: {
         patterns: [{ source: LOWERCASED_PATTERN, flags: "" }]
       },
@@ -7484,7 +7471,6 @@ export function isCapitalized(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => [{ pattern: CAPITALIZED_PATTERN }, true],
-      toCode: () => ({ runtime: "Schema.isCapitalized()" }),
       arbitraryConstraint: {
         patterns: [{ source: CAPITALIZED_PATTERN, flags: "" }]
       },
@@ -7520,7 +7506,6 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => [{ pattern: UNCAPITALIZED_PATTERN }, true],
-      toCode: () => ({ runtime: "Schema.isUncapitalized()" }),
       arbitraryConstraint: {
         patterns: [{ source: UNCAPITALIZED_PATTERN, flags: "" }]
       },
@@ -7799,8 +7784,7 @@ export const isGreaterThan: (exclusiveMinimum: number, annotations?: Annotations
         id: "effect/schema/isGreaterThan",
         payload: { exclusiveMinimum: encodeNumberPayload(exclusiveMinimum) }
       },
-      toJsonSchema: () => ({ exclusiveMinimum }),
-      toCode: () => ({ runtime: `Schema.isGreaterThan(${format(exclusiveMinimum)})` })
+      toJsonSchema: () => ({ exclusiveMinimum })
     })
   })
 /**
@@ -7830,8 +7814,7 @@ export const isGreaterThanOrEqualTo: (minimum: number, annotations?: Annotations
         id: "effect/schema/isGreaterThanOrEqualTo",
         payload: { minimum: encodeNumberPayload(minimum) }
       },
-      toJsonSchema: () => ({ minimum }),
-      toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualTo(${format(minimum)})` })
+      toJsonSchema: () => ({ minimum })
     })
   })
 /**
@@ -7861,8 +7844,7 @@ export const isLessThan: (exclusiveMaximum: number, annotations?: Annotations.Fi
         id: "effect/schema/isLessThan",
         payload: { exclusiveMaximum: encodeNumberPayload(exclusiveMaximum) }
       },
-      toJsonSchema: () => ({ exclusiveMaximum }),
-      toCode: () => ({ runtime: `Schema.isLessThan(${format(exclusiveMaximum)})` })
+      toJsonSchema: () => ({ exclusiveMaximum })
     })
   })
 /**
@@ -7892,8 +7874,7 @@ export const isLessThanOrEqualTo: (maximum: number, annotations?: Annotations.Fi
         id: "effect/schema/isLessThanOrEqualTo",
         payload: { maximum: encodeNumberPayload(maximum) }
       },
-      toJsonSchema: () => ({ maximum }),
-      toCode: () => ({ runtime: `Schema.isLessThanOrEqualTo(${format(maximum)})` })
+      toJsonSchema: () => ({ maximum })
     })
   })
 /**
@@ -7942,11 +7923,6 @@ export const isBetween: (options: {
       toJsonSchema: () => ({
         [exclusiveMinimum ? "exclusiveMinimum" : "minimum"]: options.minimum,
         [exclusiveMaximum ? "exclusiveMaximum" : "maximum"]: options.maximum
-      }),
-      toCode: () => ({
-        runtime: `Schema.isBetween({ minimum: ${format(options.minimum)}, maximum: ${
-          format(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
       })
     }
   }
@@ -7987,7 +7963,6 @@ export function isMultipleOf(
         payload: { divisor }
       },
       toJsonSchema: () => ({ multipleOf: divisor }),
-      toCode: () => ({ runtime: `Schema.isMultipleOf(${format(divisor)})` }),
       ...annotations
     }
   )
@@ -8025,7 +8000,6 @@ export function isInt(annotations?: Annotations.Filter) {
         minimum: globalThis.Number.MIN_SAFE_INTEGER,
         maximum: globalThis.Number.MAX_SAFE_INTEGER
       }),
-      toCode: () => ({ runtime: "Schema.isInt()" }),
       arbitraryConstraint: {
         number: "integer"
       },
@@ -8147,9 +8121,6 @@ function encodeDatePayload(date: globalThis.Date): string {
   return date.toISOString()
 }
 
-function formatDateRuntime(date: globalThis.Date): string {
-  return `new globalThis.Date(${format(date.getTime())})`
-}
 /**
  * Validates that a Date is greater than the specified value (exclusive).
  *
@@ -8175,8 +8146,7 @@ export const isGreaterThanDate: (
         id: "effect/schema/isGreaterThanDate",
         payload: { exclusiveMinimum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isGreaterThanDate(${formatDateRuntime(exclusiveMinimum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8211,8 +8181,7 @@ export const isGreaterThanOrEqualToDate: (
         id: "effect/schema/isGreaterThanOrEqualToDate",
         payload: { minimum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualToDate(${formatDateRuntime(minimum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8241,8 +8210,7 @@ export const isLessThanDate: (
         id: "effect/schema/isLessThanDate",
         payload: { exclusiveMaximum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isLessThanDate(${formatDateRuntime(exclusiveMaximum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8277,8 +8245,7 @@ export const isLessThanOrEqualToDate: (
         id: "effect/schema/isLessThanOrEqualToDate",
         payload: { maximum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isLessThanOrEqualToDate(${formatDateRuntime(maximum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8322,12 +8289,7 @@ export const isBetweenDate: (options: {
         id: "effect/schema/isBetweenDate",
         payload
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({
-        runtime: `Schema.isBetweenDate({ minimum: ${formatDateRuntime(options.minimum)}, maximum: ${
-          formatDateRuntime(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
-      })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8356,8 +8318,7 @@ export const isGreaterThanBigInt: (
         id: "effect/schema/isGreaterThanBigInt",
         payload: { exclusiveMinimum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isGreaterThanBigInt(${format(exclusiveMinimum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8387,8 +8348,7 @@ export const isGreaterThanOrEqualToBigInt: (
         id: "effect/schema/isGreaterThanOrEqualToBigInt",
         payload: { minimum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualToBigInt(${format(minimum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8417,8 +8377,7 @@ export const isLessThanBigInt: (
         id: "effect/schema/isLessThanBigInt",
         payload: { exclusiveMaximum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isLessThanBigInt(${format(exclusiveMaximum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8448,8 +8407,7 @@ export const isLessThanOrEqualToBigInt: (
         id: "effect/schema/isLessThanOrEqualToBigInt",
         payload: { maximum: encoded }
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isLessThanOrEqualToBigInt(${format(maximum)})` })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8488,12 +8446,7 @@ export const isBetweenBigInt: (options: {
         id: "effect/schema/isBetweenBigInt",
         payload
       },
-      toJsonSchema: () => [{}, true],
-      toCode: () => ({
-        runtime: `Schema.isBetweenBigInt({ minimum: ${format(options.minimum)}, maximum: ${
-          format(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
-      })
+      toJsonSchema: () => [{}, true]
     }
   }
 })
@@ -8557,7 +8510,6 @@ function makeIsMinLength(minLength: number, minCodePoints: number, annotations?:
           : type === undefined
           ? [{ minLength: minCodePoints, minItems: minLength }, true]
           : [{}, true],
-      toCode: () => ({ runtime: `Schema.isMinLength(${minLength})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minLength
@@ -8630,7 +8582,6 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
           : type === undefined
           ? [{ maxLength, maxItems: maxLength }, true]
           : [{}, true],
-      toCode: () => ({ runtime: `Schema.isMaxLength(${maxLength})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         maxLength
@@ -8692,7 +8643,6 @@ export function isBetweenLength(minimum: number, maximum: number, annotations?: 
             maxItems: maximum
           }, true]
           : [{}, true],
-      toCode: () => ({ runtime: `Schema.isBetweenLength(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minLength: minimum,
@@ -8735,7 +8685,6 @@ export function isMinCodePoints(minCodePoints: number, annotations?: Annotations
         payload: { minCodePoints }
       },
       toJsonSchema: () => ({ minLength: minCodePoints }),
-      toCode: () => ({ runtime: `Schema.isMinCodePoints(${minCodePoints})` }),
       arbitraryConstraint: { minCodePoints },
       ...annotations
     }
@@ -8774,7 +8723,6 @@ export function isMaxCodePoints(maxCodePoints: number, annotations?: Annotations
         payload: { maxCodePoints }
       },
       toJsonSchema: () => ({ maxLength: maxCodePoints }),
-      toCode: () => ({ runtime: `Schema.isMaxCodePoints(${maxCodePoints})` }),
       arbitraryConstraint: { maxCodePoints },
       ...annotations
     }
@@ -8819,7 +8767,6 @@ export function isBetweenCodePoints(minimum: number, maximum: number, annotation
         payload: { minimum, maximum }
       },
       toJsonSchema: () => ({ allOf: [{ minLength: minimum }, { maxLength: maximum }] }),
-      toCode: () => ({ runtime: `Schema.isBetweenCodePoints(${minimum}, ${maximum})` }),
       arbitraryConstraint: { minCodePoints: minimum, maxCodePoints: maximum },
       ...annotations
     }
@@ -8874,7 +8821,6 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
         payload: { minSize }
       },
       toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isMinSize(${minSize})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minSize
@@ -8915,7 +8861,6 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
         payload: { maxSize }
       },
       toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isMaxSize(${maxSize})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         maxSize
@@ -8960,7 +8905,6 @@ export function isBetweenSize(minimum: number, maximum: number, annotations?: An
         payload: { minimum, maximum }
       },
       toJsonSchema: () => [{}, true],
-      toCode: () => ({ runtime: `Schema.isBetweenSize(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minSize: minimum,
@@ -8972,8 +8916,7 @@ export function isBetweenSize(minimum: number, maximum: number, annotations?: An
 }
 /**
  * Validates that an object contains at least the specified number of
- * properties. This includes both string and symbol keys when counting
- * properties.
+ * own enumerable properties, including both string and symbol keys.
  *
  * **Details**
  *
@@ -8997,7 +8940,7 @@ export function isBetweenSize(minimum: number, maximum: number, annotations?: An
 export function isMinProperties(minProperties: number, annotations?: Annotations.Filter) {
   minProperties = normalizeCardinality(minProperties)
   return makeFilter<object>(
-    (input) => Reflect.ownKeys(input).length >= minProperties,
+    (input) => InternalRecord.ownEnumerableKeys(input).length >= minProperties,
     {
       expected: `a value with at least ${minProperties === 1 ? "1 entry" : `${minProperties} entries`}`,
       representation: {
@@ -9005,7 +8948,6 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
         payload: { minProperties }
       },
       toJsonSchema: ({ type }) => type === "object" ? { minProperties } : [{ minProperties }, true],
-      toCode: () => ({ runtime: `Schema.isMinProperties(${minProperties})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minProperties
@@ -9015,8 +8957,8 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
   )
 }
 /**
- * Validates that an object contains at most the specified number of properties.
- * This includes both string and symbol keys when counting properties.
+ * Validates that an object contains at most the specified number of own
+ * enumerable properties, including both string and symbol keys.
  *
  * **Details**
  *
@@ -9040,7 +8982,7 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
 export function isMaxProperties(maxProperties: number, annotations?: Annotations.Filter) {
   maxProperties = normalizeCardinality(maxProperties)
   return makeFilter<object>(
-    (input) => Reflect.ownKeys(input).length <= maxProperties,
+    (input) => InternalRecord.ownEnumerableKeys(input).length <= maxProperties,
     {
       expected: `a value with at most ${maxProperties === 1 ? "1 entry" : `${maxProperties} entries`}`,
       representation: {
@@ -9048,7 +8990,6 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
         payload: { maxProperties }
       },
       toJsonSchema: ({ type }) => type === "object" ? { maxProperties } : [{ maxProperties }, true],
-      toCode: () => ({ runtime: `Schema.isMaxProperties(${maxProperties})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         maxProperties
@@ -9058,8 +8999,8 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
   )
 }
 /**
- * Validates that an object contains between `minimum` and `maximum` properties (inclusive).
- * This includes both string and symbol keys when counting properties.
+ * Validates that an object contains between `minimum` and `maximum` own
+ * enumerable properties (inclusive), including both string and symbol keys.
  *
  * **Details**
  *
@@ -9084,7 +9025,10 @@ export function isBetweenProperties(minimum: number, maximum: number, annotation
   minimum = normalizeCardinality(minimum)
   maximum = normalizeCardinality(maximum)
   return makeFilter<object>(
-    (input) => Reflect.ownKeys(input).length >= minimum && Reflect.ownKeys(input).length <= maximum,
+    (input) => {
+      const size = InternalRecord.ownEnumerableKeys(input).length
+      return size >= minimum && size <= maximum
+    },
     {
       expected: minimum === maximum
         ? `a value with exactly ${minimum === 1 ? "1 entry" : `${minimum} entries`}`
@@ -9098,7 +9042,6 @@ export function isBetweenProperties(minimum: number, maximum: number, annotation
         type === "object"
           ? { minProperties: minimum, maxProperties: maximum }
           : [{ minProperties: minimum, maxProperties: maximum }, true],
-      toCode: () => ({ runtime: `Schema.isBetweenProperties(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitraryConstraint: {
         minProperties: minimum,
@@ -9109,13 +9052,13 @@ export function isBetweenProperties(minimum: number, maximum: number, annotation
   )
 }
 /**
- * Validates that every own property key of an object satisfies the encoded side
+ * Validates that every own enumerable property key of an object satisfies the encoded side
  * of the provided key schema.
  *
  * **Details**
  *
- * This check uses `Reflect.ownKeys`, so symbol keys are validated in addition to
- * string property names.
+ * Checks both string and symbol keys. Non-enumerable and inherited properties
+ * are ignored.
  *
  * JSON Schema:
  * This check corresponds to `propertyNames` in JSON Schema. Effect checks the
@@ -9132,7 +9075,7 @@ export function isPropertyNames(keySchema: Constraint, annotations?: Annotations
   const parser = SchemaParser._issue(propertyNames.ast)
   return makeFilter<object>(
     (input, ast, options) => {
-      const keys = Reflect.ownKeys(input)
+      const keys = InternalRecord.ownEnumerableKeys(input)
       const issues: Array<SchemaIssue.Issue> = []
       for (const key of keys) {
         const issue = parser(key, options)
@@ -9155,7 +9098,6 @@ export function isPropertyNames(keySchema: Constraint, annotations?: Annotations
       },
       toJsonSchema: ({ schemas, type }) =>
         type === "object" ? { propertyNames: schemas[0] } : [{ propertyNames: schemas[0] }, true],
-      toCode: ({ schemas }) => ({ runtime: `Schema.isPropertyNames(${schemas[0].runtime})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
       ...annotations
     }
@@ -9187,7 +9129,6 @@ export function isUnique<T>(annotations?: Annotations.Filter) {
         payload: null
       },
       toJsonSchema: () => ({ uniqueItems: true }),
-      toCode: () => ({ runtime: "Schema.isUnique()" }),
       arbitraryConstraint: {
         uniqueBy: identity
       },
@@ -9220,7 +9161,6 @@ export function isUniqueKey<Key, Value>(annotations?: Annotations.Filter) {
         id: "effect/schema/isUniqueKey",
         payload: null
       },
-      toCode: () => ({ runtime: "Schema.isUniqueKey()" }),
       arbitraryConstraint: {
         uniqueBy: (entry: readonly [Key, Value]) => entry[0]
       },
@@ -9364,12 +9304,6 @@ export function ErrorInstance(options?: ErrorOptions): ErrorInstance {
       id: "effect/schema/Error",
       payload: normalizedOptions ?? null
     },
-    toCode: () => ({
-      runtime: normalizedOptions !== undefined
-        ? `Schema.ErrorInstance(${format(normalizedOptions)})`
-        : `Schema.ErrorInstance()`,
-      Type: `globalThis.Error`
-    }),
     expected: "Error",
     toCodecJson: () => link<globalThis.Error>()(JsonError, SchemaTransformation.errorFromJsonError(normalizedOptions))
   })
@@ -9508,10 +9442,6 @@ export function ReadonlyMap<Key extends Constraint, Value extends Constraint>(
         id: "effect/schema/ReadonlyMap",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.ReadonlyMap(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `globalThis.ReadonlyMap<${typeParameters[0].Type}, ${typeParameters[1].Type}>`
-      }),
       expected: "ReadonlyMap",
       toCodec: ([key, value]) =>
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
@@ -9586,10 +9516,6 @@ export function ReadonlySet<Value extends Constraint>(value: Value): $ReadonlySe
         id: "effect/schema/ReadonlySet",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.ReadonlySet(${typeParameters[0].runtime})`,
-        Type: `globalThis.ReadonlySet<${typeParameters[0].Type}>`
-      }),
       expected: "ReadonlySet",
       toCodec: ([value]) =>
         link<globalThis.Set<Value["Encoded"]>>()(
@@ -9631,10 +9557,6 @@ export const RegExp: RegExp = instanceOf(
       id: "effect/schema/RegExp",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.RegExp`,
-      Type: `globalThis.RegExp`
-    }),
     expected: "RegExp",
     toCodecJson: () =>
       link<globalThis.RegExp>()(
@@ -9694,10 +9616,6 @@ export const URL: URL = instanceOf(
       id: "effect/schema/URL",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.URL`,
-      Type: `globalThis.URL`
-    }),
     expected: "URL",
     toCodecJson: () =>
       link<globalThis.URL>()(
@@ -9780,10 +9698,6 @@ export const Date: Date = declare(
       id: "effect/schema/Date",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.Date`,
-      Type: `globalThis.Date`
-    }),
     expected: "a valid Date",
     toCodecJson: () =>
       link<globalThis.Date>()(
@@ -9954,10 +9868,6 @@ export const File: File = instanceOf(globalThis.File, {
     id: "effect/schema/File",
     payload: null
   },
-  toCode: () => ({
-    runtime: `Schema.File`,
-    Type: `globalThis.File`
-  }),
   expected: "File",
   toCodecJson: () =>
     link<globalThis.File>()(
@@ -10035,10 +9945,6 @@ export const FormData: FormData = declare((u): u is globalThis.FormData => u ins
     id: "effect/schema/FormData",
     payload: null
   },
-  toCode: () => ({
-    runtime: `Schema.FormData`,
-    Type: `globalThis.FormData`
-  }),
   expected: "FormData",
   toCodecJson: () =>
     link<globalThis.FormData>()(
@@ -10195,10 +10101,6 @@ export const URLSearchParams: URLSearchParams = instanceOf(globalThis.URLSearchP
     id: "effect/schema/URLSearchParams",
     payload: null
   },
-  toCode: () => ({
-    runtime: `Schema.URLSearchParams`,
-    Type: `globalThis.URLSearchParams`
-  }),
   expected: "URLSearchParams",
   toCodecJson: () =>
     link<globalThis.URLSearchParams>()(
@@ -10322,7 +10224,7 @@ export interface NumberFromString extends decodeTo<Number, String> {
  * numbers.
  *
  * Encoding:
- * A number is encoded as a `string`.
+ * A number is encoded as a `string`, preserving negative zero as `"-0"`.
  *
  * @stability stable
  * @category schemas
@@ -10351,7 +10253,7 @@ export interface FiniteFromString extends decodeTo<Finite, String> {
  *   `-Infinity` values.
  *
  * Encoding:
- * - A finite number is encoded as a `string`.
+ * - A finite number is encoded as a `string`, preserving negative zero as `"-0"`.
  *
  * @stability stable
  * @category schemas
@@ -10468,6 +10370,7 @@ export interface StringFromBase64 extends decodeTo<String, String> {
  *
  * Encoding:
  * - A `string` is encoded as a base64-encoded string.
+ * - Encoding fails if the string contains an unpaired UTF-16 surrogate.
  *
  * @stability stable
  * @category schemas
@@ -10498,6 +10401,7 @@ export interface StringFromBase64Url extends decodeTo<String, String> {
  *
  * Encoding:
  * - A `string` is encoded as a base64 (URL) encoded string.
+ * - Encoding fails if the string contains an unpaired UTF-16 surrogate.
  *
  * @stability stable
  * @category schemas
@@ -10528,6 +10432,7 @@ export interface StringFromHex extends decodeTo<String, String> {
  *
  * Encoding:
  * - A `string` is encoded as a hex string.
+ * - Encoding fails if the string contains an unpaired UTF-16 surrogate.
  *
  * @stability stable
  * @category schemas
@@ -10559,6 +10464,7 @@ export interface StringFromUriComponent extends decodeTo<String, String> {
  *
  * Encoding:
  * - A `string` is encoded as a URI component encoded string.
+ * - Encoding fails if the string contains an unpaired UTF-16 surrogate.
  *
  * **Example** (Decoding URI component strings)
  *
@@ -10704,10 +10610,6 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
     id: "effect/schema/Uint8Array",
     payload: null
   },
-  toCode: () => ({
-    runtime: `Schema.Uint8Array`,
-    Type: `globalThis.Uint8Array`
-  }),
   expected: "Uint8Array",
   toCodecJson: () =>
     link<globalThis.Uint8Array<ArrayBufferLike>>()(
@@ -10950,11 +10852,6 @@ export const BigDecimal: BigDecimal = declare(
       id: "effect/schema/BigDecimal",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.BigDecimal`,
-      Type: `BigDecimal.BigDecimal`,
-      importDeclarations: [`import * as BigDecimal from "effect/BigDecimal"`]
-    }),
     expected: "BigDecimal",
     toCodecJson: () =>
       link<BigDecimal_.BigDecimal>()(
@@ -11062,11 +10959,6 @@ export const Rational: Rational = declare(
       id: "effect/schema/Rational",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.Rational`,
-      Type: `Rational.Rational`,
-      importDeclarations: [`import * as Rational from "effect/Rational"`]
-    }),
     expected: "Rational",
     toCodecArbitrary: () =>
       linkDecoding<Rational_.Rational>()(
@@ -11152,11 +11044,6 @@ export const ByteSize: ByteSize = declare(
       id: "effect/schema/ByteSize",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.ByteSize`,
-      Type: `ByteSize.ByteSize`,
-      importDeclarations: [`import * as ByteSize from "effect/ByteSize"`]
-    }),
     expected: "ByteSize",
     toCodecJson: () =>
       link<ByteSize_.ByteSize>()(
@@ -11302,7 +11189,7 @@ export type CauseReasonIso<E extends Constraint, D extends Constraint> = {
   readonly error: E["Iso"]
 } | {
   readonly _tag: "Die"
-  readonly error: D["Iso"]
+  readonly defect: D["Iso"]
 } | {
   readonly _tag: "Interrupt"
   readonly fiberId: number | undefined
@@ -11368,11 +11255,6 @@ export function CauseReason<E extends Constraint, D extends Constraint>(
         id: "effect/schema/CauseReason",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.CauseReason(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Cause.Failure<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Cause from "effect/Cause"`]
-      }),
       expected: "Cause.Failure",
       toCodec: ([error, defect]) =>
         link<Cause_.Reason<E["Encoded"]>>()(
@@ -11489,11 +11371,6 @@ export function Cause<E extends Constraint, D extends Constraint>(error: E, defe
         id: "effect/schema/Cause",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Cause(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Cause.Cause<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Cause from "effect/Cause"`]
-      }),
       expected: "Cause",
       toCodec: ([error, defect]) =>
         link<Cause_.Cause<E["Encoded"]>>()(
@@ -11516,7 +11393,7 @@ function chunkLink<Value>(values: Schema<ReadonlyArray<Value>>) {
   return link<Chunk_.Chunk<Value>>()(
     values,
     SchemaTransformation.transform({
-      decode: Chunk_.fromIterable,
+      decode: Chunk_.fromArrayUnsafe,
       encode: Arr.fromIterable
     })
   )
@@ -11576,7 +11453,7 @@ export function Chunk<Value extends Constraint>(value: Value): Chunk<Value> {
           return Effect.mapBothEager(
             SchemaParser.decodeUnknownEffect(values)(Arr.fromIterable(input), options),
             {
-              onSuccess: Chunk_.fromIterable,
+              onSuccess: Chunk_.fromArrayUnsafe,
               onFailure: (issue) => SchemaIssue.makeCompositeAtKey(ast, "values", issue, input, options)
             }
           )
@@ -11589,10 +11466,6 @@ export function Chunk<Value extends Constraint>(value: Value): Chunk<Value> {
         id: "effect/schema/Chunk",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Chunk(${typeParameters[0].runtime})`,
-        Type: `Chunk.Chunk<${typeParameters[0].Type}>`
-      }),
       expected: "Chunk",
       toCodec: ([value]) => chunkLink(ArraySchema(value)),
       toCodecArbitrary: ({ constraint, typeParameters: [value] }) =>
@@ -11777,11 +11650,6 @@ export const DateTimeUtc: DateTimeUtc = declare(
       id: "effect/schema/DateTimeUtc",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.DateTimeUtc`,
-      Type: `DateTime.Utc`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
     expected: "DateTime.Utc",
     toCodecArbitrary: ({ constraint }) => {
       const [minimum, maximum] = dateTimeArbitraryBounds(
@@ -12007,11 +11875,6 @@ export const TimeZoneOffset: TimeZoneOffset = declare(
       id: "effect/schema/TimeZoneOffset",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.TimeZoneOffset`,
-      Type: `DateTime.TimeZone.Offset`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
     expected: "DateTime.TimeZone.Offset",
     toCodecJson: () =>
       link<DateTime.TimeZone.Offset>()(
@@ -12052,11 +11915,6 @@ export const TimeZoneNamed: TimeZoneNamed = declare(
       id: "effect/schema/TimeZoneNamed",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.TimeZoneNamed`,
-      Type: `DateTime.TimeZone.Named`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
     expected: "DateTime.TimeZone.Named",
     toCodecArbitrary: () =>
       linkDecoding<DateTime.TimeZone.Named>()(
@@ -12133,11 +11991,6 @@ export const TimeZone: TimeZone = declare(
       id: "effect/schema/TimeZone",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.TimeZone`,
-      Type: `DateTime.TimeZone`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
     expected: "DateTime.TimeZone",
     toCodecArbitrary: () =>
       linkDecoding<DateTime.TimeZone>()(
@@ -12218,11 +12071,6 @@ export const DateTimeZoned: DateTimeZoned = declare(
       id: "effect/schema/DateTimeZoned",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.DateTimeZoned`,
-      Type: `DateTime.Zoned`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
     expected: "DateTime.Zoned",
     toCodecArbitrary: ({ constraint }) => {
       const [minimum, maximum] = dateTimeArbitraryBounds(
@@ -13961,11 +13809,6 @@ export const Duration: Duration = declare(
       id: "effect/schema/Duration",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.Duration`,
-      Type: `Duration.Duration`,
-      importDeclarations: [`import * as Duration from "effect/Duration"`]
-    }),
     expected: "Duration",
     toCodecJson: () =>
       link<Duration_.Duration>()(
@@ -14562,7 +14405,6 @@ export const DnsRecord: DnsRecord = Union([
 // Match operation parameters rather than object identity. RSA modulus length
 // affects generation only, so it is ignored here as on import.
 interface CryptoAlgorithm {
-  readonly _tag?: string
   readonly name: string
   readonly hash?: { readonly name: string }
   readonly modulusLength?: number
@@ -14572,20 +14414,6 @@ interface CryptoAlgorithm {
 const cryptoAlgorithmEquals = (self: CryptoAlgorithm, that: CryptoAlgorithm): boolean =>
   self === that ||
   (self.name === that.name && self.hash?.name === that.hash?.name && self.saltLength === that.saltLength)
-
-const cryptoDigestCode = (hash: { readonly name: string }) => `Digest.${hash.name.toLowerCase().replace("-", "")}`
-
-const cryptoAlgorithmCode = (family: string, algorithm: CryptoAlgorithm): string => {
-  if (algorithm.modulusLength === undefined || algorithm.hash === undefined || algorithm._tag === undefined) {
-    const code = `${family}.${algorithm.name}`
-    return algorithm.hash === undefined ? code : `{ ...${code}, hash: ${cryptoDigestCode(algorithm.hash)} }`
-  }
-  const factory = algorithm._tag.charAt(0).toLowerCase() + algorithm._tag.slice(1)
-  const saltLength = algorithm.saltLength === undefined ? "" : `, saltLength: ${algorithm.saltLength}`
-  return `${family}.${factory}({ hash: ${
-    cryptoDigestCode(algorithm.hash)
-  }, modulusLength: ${algorithm.modulusLength}${saltLength} })`
-}
 
 const cryptoAlgorithmPayload = (algorithm: CryptoAlgorithm): Json => {
   const payload: { [key: string]: Json } = { name: algorithm.name }
@@ -14602,7 +14430,6 @@ const declareCryptoKey = <K extends { readonly algorithm: CryptoAlgorithm }>(
   is: (u: unknown) => boolean,
   algorithm: CryptoAlgorithm
 ): declare<K> => {
-  const code = cryptoAlgorithmCode(family, algorithm)
   const forbidden = SchemaGetter.forbidden<never, unknown>(() =>
     `Cannot serialize ${family}.${type} values as JSON, use Schema.${name}FromFormat to read and write keys`
   )
@@ -14611,14 +14438,6 @@ const declareCryptoKey = <K extends { readonly algorithm: CryptoAlgorithm }>(
     {
       expected: `${family}.${type} for ${algorithm.name}`,
       representation: { id: `effect/crypto/${name}`, payload: cryptoAlgorithmPayload(algorithm) },
-      toCode: () => ({
-        runtime: `Schema.${name}(${code})`,
-        Type: `${family}.${type}`,
-        importDeclarations: [
-          `import * as ${family} from "effect/crypto/${family}"`,
-          ...(code.includes("Digest.") ? [`import * as Digest from "effect/crypto/Digest"`] : [])
-        ]
-      }),
       toCodecJson: () => link<K>()(Unknown, { decode: forbidden, encode: forbidden }),
       // Keys have no Arbitrary: linking to `Never` makes derivation fail.
       toCodecArbitrary: () => link<K>()(Never, { decode: forbidden, encode: forbidden }),
@@ -15691,13 +15510,6 @@ export function Exit<
         id: "effect/schema/Exit",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Exit(${typeParameters[0].runtime}, ${typeParameters[1].runtime}, ${
-          typeParameters[2].runtime
-        })`,
-        Type: `Exit.Exit<${typeParameters[0].Type}, ${typeParameters[1].Type}, ${typeParameters[2].Type}>`,
-        importDeclarations: [`import * as Exit from "effect/Exit"`]
-      }),
       expected: "Exit",
       toCodec: ([value, error, defect]) =>
         link<Exit_.Exit<A["Encoded"], E["Encoded"]>>()(
@@ -15975,11 +15787,6 @@ export function Graph<T extends Graph_.Kind, Node extends Constraint, Edge exten
         id: "effect/schema/Graph",
         payload: type
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Graph(${format(type)}, ${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Graph.Graph<${typeParameters[0].Type}, ${typeParameters[1].Type}, ${format(type)}>`,
-        importDeclarations: [`import * as Graph from "effect/Graph"`]
-      }),
       expected: `an immutable ${type} Graph`,
       toCodec: ([node, edge]) =>
         link<Graph_.Graph<Node["Encoded"], Edge["Encoded"], T>>()(
@@ -16073,11 +15880,6 @@ export function HashMap<Key extends Constraint, Value extends Constraint>(key: K
         id: "effect/schema/HashMap",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.HashMap(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `HashMap.HashMap<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as HashMap from "effect/HashMap"`]
-      }),
       expected: "HashMap",
       toCodec: ([key, value]) => hashMapLink(ArraySchema(Tuple([key, value]))),
       toCodecArbitrary: ({ constraint, typeParameters: [key, value] }) =>
@@ -16168,10 +15970,6 @@ export function HashSet<Value extends Constraint>(value: Value): HashSet<Value> 
         id: "effect/schema/HashSet",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.HashSet(${typeParameters[0].runtime})`,
-        Type: `HashSet.HashSet<${typeParameters[0].Type}>`
-      }),
       expected: "HashSet",
       toCodec: ([value]) => hashSetLink(ArraySchema(value)),
       toCodecArbitrary: ({ constraint, typeParameters: [value] }) =>
@@ -16262,11 +16060,6 @@ export function Option<A extends Constraint>(value: A): Option<A> {
         id: "effect/schema/Option",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Option(${typeParameters[0].runtime})`,
-        Type: `Option.Option<${typeParameters[0].Type}>`,
-        importDeclarations: [`import * as Option from "effect/Option"`]
-      }),
       expected: "Option",
       toCodec: ([value]) =>
         link<Option_.Option<A["Encoded"]>>()(
@@ -16401,11 +16194,6 @@ export const Cookie: Cookie = declare(
       id: "effect/http/Cookie",
       payload: null
     },
-    toCode: () => ({
-      runtime: "Schema.Cookie",
-      Type: "Cookies.Cookie",
-      importDeclarations: [`import * as Cookies from "effect/http/Cookies"`]
-    }),
     expected: "Cookie"
   }
 )
@@ -16445,11 +16233,6 @@ export const Cookies: Cookies = declare(
       id: "effect/http/Cookies",
       payload: null
     },
-    toCode: () => ({
-      runtime: "Schema.Cookies",
-      Type: "Cookies.Cookies",
-      importDeclarations: [`import * as Cookies from "effect/http/Cookies"`]
-    }),
     expected: "Cookies",
     toCodecJson: () =>
       link<Cookies_.Cookies>()(
@@ -16531,11 +16314,6 @@ export const Headers: Headers = declare(
       id: "effect/http/Headers",
       payload: null
     },
-    toCode: () => ({
-      runtime: "Schema.Headers",
-      Type: "Headers.Headers",
-      importDeclarations: [`import * as Headers from "effect/http/Headers"`]
-    }),
     expected: "Headers",
     toEquivalence: () => Headers_.Equivalence,
     toCodec: () =>
@@ -16654,6 +16432,66 @@ export const RetryAfterFromString: RetryAfterFromString = String.annotate({
 )
 
 /**
+ * Type-level representation of {@link LinkHeaderFromString}.
+ *
+ * @stability unstable
+ * @category models
+ * @since 4.1.6
+ */
+export interface LinkHeaderFromString extends
+  decodeTo<
+    $Array<
+      Struct<{
+        readonly target: String
+        readonly rel: $Array<String>
+        readonly params: $Record<String, String>
+      }>
+    >,
+    String
+  >
+{
+  readonly "Rebuild": LinkHeaderFromString
+}
+
+/**
+ * Schema for `Link` header values (RFC 8288), decoded with
+ * `Headers.parseLink` and encoded with `Headers.formatLink`.
+ *
+ * **When to use**
+ *
+ * Use with `HttpClientResponse.schemaHeaders` or HTTP API header schemas
+ * that carry a `Link` header.
+ *
+ * **Details**
+ *
+ * Decoding never fails on a string, because `Headers.parseLink` is lenient.
+ *
+ * **Example** (Decoding a Link header)
+ *
+ * ```ts
+ * import { Schema } from "effect"
+ *
+ * const links = Schema.decodeSync(Schema.LinkHeaderFromString)('</items?page=2>; rel="next"')
+ * // => [{ target: "/items?page=2", rel: ["next"], params: {} }]
+ * ```
+ *
+ * @stability unstable
+ * @category schemas
+ * @since 4.1.6
+ */
+export const LinkHeaderFromString: LinkHeaderFromString = String.annotate({
+  expected: "a Link header value"
+}).pipe(
+  decodeTo(
+    ArraySchema(Struct({ target: String, rel: ArraySchema(String), params: Record(String, String) })),
+    SchemaTransformation.transform<ReadonlyArray<Headers_.Link>, string>({
+      decode: Headers_.parseLink,
+      encode: Headers_.formatLink
+    })
+  )
+)
+
+/**
  * Type-level representation of {@link UrlParams}.
  *
  * @stability unstable
@@ -16687,11 +16525,6 @@ export const UrlParams: UrlParams = declare(
       id: "effect/http/UrlParams",
       payload: null
     },
-    toCode: () => ({
-      runtime: "Schema.UrlParams",
-      Type: "UrlParams.UrlParams",
-      importDeclarations: [`import * as UrlParams from "effect/http/UrlParams"`]
-    }),
     expected: "UrlParams",
     toEquivalence: () => UrlParams_.Equivalence,
     toCodec: () =>
@@ -17032,13 +16865,6 @@ export function Redacted<S extends Constraint>(value: S, options?: {
         id: "effect/schema/Redacted",
         payload: normalizedOptions ?? null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: normalizedOptions !== undefined
-          ? `Schema.Redacted(${typeParameters[0].runtime}, ${format(normalizedOptions)})`
-          : `Schema.Redacted(${typeParameters[0].runtime})`,
-        Type: `Redacted.Redacted<${typeParameters[0].Type}>`,
-        importDeclarations: [`import * as Redacted from "effect/Redacted"`]
-      }),
       expected: "Redacted",
       toCodecJson: ([value]) =>
         link<Redacted_.Redacted<S["Encoded"]>>()(
@@ -17180,11 +17006,6 @@ export function Result<A extends Constraint, E extends Constraint>(
         id: "effect/schema/Result",
         payload: null
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Result(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Result.Result<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Result from "effect/Result"`]
-      }),
       expected: "Result",
       toCodec: ([success, failure]) =>
         link<Result_.Result<A["Encoded"], E["Encoded"]>>()(
@@ -17261,11 +17082,6 @@ export const SemVer: SemVer = declare(
       id: "effect/schema/SemVer",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.SemVer`,
-      Type: `SemVer.SemVer`,
-      importDeclarations: [`import * as SemVer from "effect/SemVer"`]
-    }),
     expected: "SemVer",
     toCodecArbitrary: () =>
       linkDecoding<SemVer_.SemVer>()(
@@ -17341,11 +17157,6 @@ export const SemVerRange: SemVerRange = declare(
       id: "effect/schema/SemVerRange",
       payload: null
     },
-    toCode: () => ({
-      runtime: `Schema.SemVerRange`,
-      Type: `SemVerRange.SemVerRange`,
-      importDeclarations: [`import * as SemVerRange from "effect/SemVerRange"`]
-    }),
     expected: "SemVerRange",
     toCodecArbitrary: () =>
       linkDecoding<SemVerRange_.SemVerRange>()(
@@ -18794,12 +18605,7 @@ export interface JsonObject {
  * @category schemas
  * @since 4.0.0
  */
-export const Json: Codec<Json> = make(SchemaAST.annotate(SchemaAST.Json, {
-  toCode: () => ({
-    runtime: "Schema.Json",
-    Type: "Schema.Json"
-  })
-}))
+export const Json: Codec<Json> = make(SchemaAST.Json)
 /**
  * Schema for readonly string-keyed records whose values are JSON-compatible.
  *
@@ -18864,12 +18670,7 @@ const JsonError = Struct({
  * @category schemas
  * @since 4.0.0
  */
-export const MutableJson: Codec<MutableJson> = make(SchemaAST.annotate(SchemaAST.MutableJson, {
-  toCode: () => ({
-    runtime: "Schema.MutableJson",
-    Type: "Schema.MutableJson"
-  })
-}))
+export const MutableJson: Codec<MutableJson> = make(SchemaAST.MutableJson)
 /**
  * Resolves the typed annotations from a schema. The term "resolve" (rather
  * than "get") reflects the lookup strategy: if the schema has checks, the
@@ -18897,6 +18698,27 @@ export function resolveAnnotations<S extends Constraint>(
 export function resolveAnnotationsKey<S extends Constraint>(schema: S): Annotations.Key<S["Type"]> | undefined {
   return schema.ast.context?.annotations
 }
+
+interface DeclarationCodeGenerationAnnotations {
+  /**
+   * Generates runtime and TypeScript source for this declaration.
+   *
+   * @stability experimental
+   * @since 4.0.0
+   */
+  readonly toCode?: SchemaRepresentation.Generation.Declaration | undefined
+}
+
+interface FilterCodeGenerationAnnotations {
+  /**
+   * Generates runtime source for this filter.
+   *
+   * @stability experimental
+   * @since 4.0.0
+   */
+  readonly toCode?: SchemaRepresentation.Generation.Check | undefined
+}
+
 /**
  * The `Annotations` namespace groups all annotation interfaces used to attach
  * metadata to schemas. Annotations control documentation, validation messages,
@@ -19091,7 +18913,7 @@ export declare namespace Annotations {
    * @since 4.0.0
    */
   interface Declaration<T, TypeParameters extends ReadonlyArray<Constraint> = readonly []>
-    extends Bottom<T, TypeParameters>
+    extends Bottom<T, TypeParameters>, DeclarationCodeGenerationAnnotations
   {
     readonly representation?: SchemaRepresentation.RepresentationAnnotation | undefined
     /**
@@ -19153,7 +18975,6 @@ export declare namespace Annotations {
     readonly toCodecArbitrary?: ToArbitrary.Declaration<T, TypeParameters> | undefined
     readonly toEquivalence?: ToEquivalence.Declaration<T, TypeParameters> | undefined
     readonly toFormatter?: ToFormatter.Declaration<T, TypeParameters> | undefined
-    readonly toCode?: SchemaRepresentation.Generation.Declaration | undefined
     /**
      * Used to collect sentinels from a Declaration SchemaAST.
      *
@@ -19169,7 +18990,7 @@ export declare namespace Annotations {
    * @category models
    * @since 4.0.0
    */
-  interface Filter extends Augment {
+  interface Filter extends Augment, FilterCodeGenerationAnnotations {
     readonly representation?: SchemaRepresentation.CheckRepresentationAnnotation<SchemaAST.AST> | undefined
     /**
      * Compiles this filter to a JSON Schema fragment.
@@ -19191,7 +19012,6 @@ export declare namespace Annotations {
      * @see {@link SchemaRepresentation.ToJsonSchema.CheckOutput} for the result contract
      */
     readonly toJsonSchema?: SchemaRepresentation.ToJsonSchema.Check | undefined
-    readonly toCode?: SchemaRepresentation.Generation.Check | undefined
     /**
      * Complete message to use when this filter or refinement fails.
      *

@@ -10,7 +10,7 @@
  * @stability stable
  * @since 4.0.0
  */
-import * as Predicate from "./Predicate.ts"
+import { hasProperty } from "./internal/predicate.ts"
 import { getRedacted, redact, symbolRedactable } from "./Redactable.ts"
 
 /**
@@ -68,6 +68,8 @@ export interface Formatter<in Value, out Format = string> {
  * - Iterables (`Set`, `Map`, etc.): formatted as
  *   `ClassName([...elements])`.
  * - Class instances: wrapped as `ClassName({...})`.
+ * - When listing object properties, includes own string and symbol keys,
+ *   including non-enumerable ones. Inherited properties are not listed.
  * - `Redactable` values are automatically redacted.
  * - Arrays/objects with 0–1 entries are inline; larger ones are
  *   pretty-printed when `space` is set.
@@ -166,7 +168,7 @@ export function format(input: unknown, options?: {
         output = formatDate(v)
       } else if (
         !options?.ignoreToString &&
-        Predicate.hasProperty(v, "toString") &&
+        hasProperty(v, "toString") &&
         typeof v["toString"] === "function" &&
         v["toString"] !== Object.prototype.toString &&
         v["toString"] !== Array.prototype.toString
@@ -314,7 +316,7 @@ export function formatJson(input: unknown, options?: {
     input,
     function(this: object, key: string, value: unknown) {
       const original = Object.getOwnPropertyDescriptor(sources.get(this) ?? this, key)?.value
-      const redacted = Predicate.hasProperty(original, symbolRedactable)
+      const redacted = hasProperty(original, symbolRedactable)
         ? redact(original)
         : redact(value)
       if (typeof redacted === "bigint") {
@@ -323,7 +325,7 @@ export function formatJson(input: unknown, options?: {
       if (typeof redacted !== "object" || redacted === null) {
         return redacted
       }
-      const current = redacted instanceof Error && !Predicate.hasProperty(redacted, "toJSON")
+      const current = redacted instanceof Error && !hasProperty(redacted, "toJSON")
         ? { ...redacted, name: redacted.name, message: redacted.message }
         : redacted
       while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {

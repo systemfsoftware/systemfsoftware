@@ -17,6 +17,7 @@ import {
 } from "effect"
 import { vi } from "vitest"
 import type * as ConfigProviderModule from "../src/ConfigProvider.ts"
+import { withIgnoredProperties } from "./utils/structFields.ts"
 
 async function assertSuccess<T>(config: Config.Config<T>, provider: ConfigProvider.ConfigProvider, expected: T) {
   const r = await config.parse(provider).pipe(
@@ -36,6 +37,17 @@ async function assertFailure<T>(config: Config.Config<T>, provider: ConfigProvid
 }
 
 describe("Config", () => {
+  it.effect("keeps ConfigError message readable after cause replacement", () =>
+    Effect.gen(function*() {
+      const error = yield* Config.String("PORT").parse(ConfigProvider.fromUnknown({})).pipe(Effect.flip)
+      Object.assign(error, { cause: Object.create(null) })
+
+      const expected = `SchemaError(Expected string\n  at ["PORT"])`
+      assert.strictEqual(error.message, expected)
+      assert.strictEqual(error.toString(), `ConfigError(${expected})`)
+      assert.notInclude(Object.keys(error), "message")
+    }))
+
   it("recognizes SourceError defects from a reloaded module copy", async () => {
     vi.resetModules()
     const ForeignConfigProvider = await vi.importActual<typeof ConfigProviderModule>(
@@ -547,6 +559,24 @@ describe("Config", () => {
       }))
 
     describe("all", () => {
+      it.effect("collects enumerable symbol fields and ignores hidden or inherited configs", () =>
+        Effect.gen(function*() {
+          const key = Symbol("value")
+          const provider = ConfigProvider.fromUnknown({ name: "value", count: "1" })
+          const config = Config.all(withIgnoredProperties({
+            name: Config.String("name"),
+            [key]: Config.Number("count")
+          }))
+
+          assert.deepStrictEqual(yield* config.parse(provider), { name: "value", [key]: 1 })
+          assert.deepStrictEqual(
+            yield* Config.all({ [key]: Config.String("missing") }).pipe(Config.option).parse(provider),
+            Option.none()
+          )
+          const failure = yield* Config.all({ [key]: Config.Number("name") }).parse(provider).pipe(Effect.result)
+          assert.isTrue(Result.isFailure(failure))
+        }))
+
       it.effect("resolves empty groups without using a default", () =>
         Effect.gen(function*() {
           const provider = ConfigProvider.fromUnknown({})
