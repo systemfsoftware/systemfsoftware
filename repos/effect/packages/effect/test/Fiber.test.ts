@@ -1,7 +1,134 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Context, Effect, Exit, Fiber, Latch, References, Scope } from "effect"
+import {
+  Cause,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Latch,
+  References,
+  Result,
+  Scheduler,
+  Scope,
+  Tracer
+} from "effect"
 
 describe("Fiber", () => {
+  describe("cache", () => {
+    const cachedAndReferenced = Effect.withFiber((fiber) =>
+      Effect.succeed({
+        cache: fiber.cache,
+        references: {
+          scheduler: fiber.getRef(Scheduler.Scheduler),
+          tracerEnabled: fiber.getRef(References.TracerEnabled),
+          logLevel: fiber.getRef(References.CurrentLogLevel),
+          minimumLogLevel: fiber.getRef(References.MinimumLogLevel),
+          stackFrame: fiber.getRef(References.CurrentStackFrame),
+          maxOpsBeforeYield: fiber.getRef(Scheduler.MaxOpsBeforeYield),
+          preventYield: fiber.getRef(Scheduler.PreventSchedulerYield)
+        }
+      })
+    )
+
+    it("holds the reference defaults when the context provides none", () => {
+      const { cache, references } = Effect.runSync(cachedAndReferenced)
+      for (const [name, value] of Object.entries(references)) {
+        assert.strictEqual(cache[name as keyof typeof references], value, name)
+      }
+      assert.instanceOf(cache.scheduler, Scheduler.MixedScheduler)
+    })
+
+    it("holds the runFork scheduler option after a fiber ran on the same context", () => {
+      Effect.runSync(Effect.void)
+      const scheduler = new Scheduler.MixedScheduler("sync")
+      const fiber = Effect.runFork(cachedAndReferenced, { scheduler })
+      const exit = fiber.pollUnsafe()
+      assert.isTrue(exit !== undefined && Exit.isSuccess(exit))
+      const { cache, references } = (exit as Exit.Success<Effect.Success<typeof cachedAndReferenced>>).value
+      assert.strictEqual(cache.scheduler, scheduler)
+      assert.strictEqual(references.scheduler, scheduler)
+    })
+
+    it("preserves context maxDepth under runForkWith with a scheduler override", () => {
+      const base = Context.makeUnsafe<never>(new Map(), { maxDepth: 2 })
+      const scheduler = new Scheduler.MixedScheduler("sync")
+      const fiber = Effect.runForkWith(base)(
+        Effect.withFiber((f) => Effect.succeed(f.context)),
+        { scheduler }
+      )
+      const exit = fiber.pollUnsafe()
+      assert.isTrue(exit !== undefined && Exit.isSuccess(exit))
+      const ctx = (exit as Exit.Success<Context.Context<never>>).value
+      assert.strictEqual((ctx as unknown as { readonly maxDepth: number }).maxDepth, 2)
+      assert.strictEqual(Context.get(ctx, Scheduler.Scheduler), scheduler)
+    })
+
+    it("refreshes when a cached service is added by key", () => {
+      // Complete on purpose: a new cache field has to name the key it reads
+      const cached: {
+        readonly [Field in Exclude<keyof Fiber.Fiber.Cache, "tracerContext">]: readonly [
+          key: string,
+          value: Fiber.Fiber.Cache[Field]
+        ]
+      } = {
+        scheduler: ["effect/Scheduler", new Scheduler.MixedScheduler("sync")],
+        maxOpsBeforeYield: ["effect/Scheduler/MaxOpsBeforeYield", 4096],
+        preventYield: ["effect/Scheduler/PreventSchedulerYield", true],
+        tracer: ["effect/Tracer", Tracer.make({ span: () => assert.fail("no span is created") })],
+        span: ["effect/Tracer/ParentSpan", Tracer.externalSpan({ spanId: "span", traceId: "trace" })],
+        tracerEnabled: ["effect/References/TracerEnabled", false],
+        stackFrame: ["effect/References/CurrentStackFrame", {
+          name: "frame",
+          stack: () => undefined,
+          parent: undefined
+        }],
+        logLevel: ["effect/References/CurrentLogLevel", "Debug"],
+        minimumLogLevel: ["effect/References/MinimumLogLevel", "Debug"],
+        runtimeMetrics: ["effect/Metric/FiberRuntimeMetrics", { recordFiberStart() {}, recordFiberEnd() {} }]
+      }
+      for (const [field, [key, value]] of Object.entries(cached)) {
+        const read = Effect.withFiber((fiber) => Effect.succeed(fiber.cache[field as keyof typeof cached]))
+        const added = read.pipe(
+          Effect.updateContext((context: Context.Context<never>): Context.Context<never> =>
+            Context.addUnsafe(context, key, value)
+          )
+        )
+        assert.strictEqual(Effect.runSync(added), value, field)
+      }
+    })
+  })
+
+  for (const name of ["await", "join", "awaitAll"] as const) {
+    it.effect(`${name} cancellation does not interrupt an independently owned fiber`, () =>
+      Effect.gen(function*() {
+        const release = yield* Deferred.make<number>()
+        const observed = yield* Effect.forkChild(Deferred.await(release))
+        const wait = name === "await" ?
+          Fiber.await(observed)
+          : name === "join" ?
+          Fiber.join(observed)
+          : Fiber.awaitAll([observed])
+        const waiter = yield* Effect.forkChild(wait, { startImmediately: true })
+        yield* Fiber.interrupt(waiter)
+        assert.isTrue(Exit.hasInterrupts(yield* Fiber.await(waiter)))
+        assert.isUndefined(observed.pollUnsafe())
+        yield* Deferred.succeed(release, 42)
+        assert.deepStrictEqual(yield* Fiber.await(observed), Exit.succeed(42))
+      }))
+  }
+
+  // Primitives built by another version of effect call these on the fiber
+  // running them
+  it.effect("keeps the members that primitives from other versions call", () =>
+    Effect.gen(function*() {
+      const child = yield* Effect.forkChild(Effect.never)
+      const result = yield* Effect.withFiber((fiber: any) =>
+        fiber.succeedWith([fiber.children().has(child), fiber.currentSpanLocal?.name])
+      ).pipe(Effect.withSpan("span"))
+      assert.deepStrictEqual(result, [true, "span"])
+    }))
+
   it("is a fiber", async () => {
     const result = Effect.runFork(Effect.succeed(1))
     assert.isTrue(Fiber.isFiber(result))
@@ -133,6 +260,21 @@ describe("Fiber", () => {
       }))
   })
 
+  it.effect("keeps a finalizer's defect when an interrupted fiber waits for a child", () =>
+    Effect.gen(function*() {
+      const finalizer = Effect.forkChild(Effect.void, { uninterruptible: true }).pipe(
+        Effect.andThen(Effect.die("boom"))
+      )
+      const fiber = yield* Effect.never.pipe(
+        Effect.ensuring(finalizer),
+        Effect.forkChild({ startImmediately: true })
+      )
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      assert.isTrue(Exit.hasInterrupts(exit))
+      assert.deepStrictEqual(Exit.findDefect(exit), Result.succeed("boom"))
+    }))
+
   it.effect(
     "delivers a synchronous self-interrupt instead of completing to success",
     () =>
@@ -181,6 +323,7 @@ describe("Fiber", () => {
 
   it.effect("delivers a pending interrupt when interruptibleMask restores interruptibility", () =>
     Effect.gen(function*() {
+      class Note extends Context.Service<Note, string>()("InterruptNote") {}
       const masked = yield* Latch.make()
       const resume = yield* Latch.make()
       const events: Array<string> = []
@@ -200,7 +343,7 @@ describe("Fiber", () => {
       events.push("masked")
 
       yield* Effect.sync(() => {
-        child.interruptUnsafe(123)
+        child.interruptUnsafe(123, Context.make(Note, "cancelled"))
         events.push("interrupted")
       })
       assert.isUndefined(child.pollUnsafe())
@@ -219,6 +362,7 @@ describe("Fiber", () => {
         assert.fail("expected interrupted fiber to exit with failure")
       }
       assert.deepStrictEqual(Cause.interruptors(exit.cause), new Set([123]))
+      assert.strictEqual(Context.getUnsafe(Cause.annotations(exit.cause), Note), "cancelled")
       assert.deepStrictEqual(events, ["masked", "interrupted", "resumed", "interruptibleMask"])
     }))
 
@@ -252,4 +396,36 @@ describe("Fiber", () => {
       assert.isTrue(Exit.hasInterrupts(exit))
       assert.deepStrictEqual(events, ["acquired", "finalizer-start", "finalizer-end", "awaited"])
     }))
+
+  it("does not lose interruption on a deferred fiber when interrupt evaluation yields", () => {
+    const tasks: Array<() => void> = []
+    const scheduler: Scheduler.Scheduler = {
+      executionMode: "sync",
+      shouldYield: (fiber) => fiber.currentOpCount === 1,
+      makeDispatcher: () => ({
+        scheduleTask: (task) => {
+          tasks.push(task)
+        },
+        flush() {}
+      })
+    }
+
+    let childRan = false
+    let child!: Fiber.Fiber<void>
+    const main = Effect.runFork(
+      Effect.gen(function*() {
+        child = yield* Effect.forkChild(Effect.sync(() => {
+          childRan = true
+        }))
+        yield* Fiber.interrupt(child)
+      }),
+      { scheduler }
+    )
+
+    while (tasks.length > 0) tasks.shift()!()
+
+    assert.isFalse(childRan)
+    assert.isTrue(Exit.hasInterrupts(child.pollUnsafe()!))
+    assert.deepStrictEqual(main.pollUnsafe(), Exit.void)
+  })
 })

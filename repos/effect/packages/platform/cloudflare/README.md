@@ -289,6 +289,21 @@ are internal transport: they trust the same-Worker namespace bindings and must
 not be exposed on a public route. HTTP or RPC authentication and authorization
 are user code on the Worker.
 
+## Data location
+
+To keep cluster Durable Objects inside a
+[jurisdiction](https://developers.cloudflare.com/durable-objects/reference/data-location/),
+pass jurisdiction subnamespaces (for example `env.CLUSTER_ENTITY.jurisdiction("eu")`)
+for all four bindings to `CloudflareCluster.layer`, or pass `jurisdiction: "eu"`
+to `AlchemyCloudflareCluster.make`. Under local `wrangler dev`, calling
+`.jurisdiction(...)` throws in `workerd` before `CloudflareCluster.layer` receives
+the binding, so pass the four unscoped bindings for local development; only
+`AlchemyCloudflareCluster.make` falls back automatically to unrestricted bindings
+for `workerd`'s unsupported-jurisdiction error (and rethrows other failures).
+Internal peer lookups through `ctx.exports` automatically stay in the calling
+object's `ctx.id.jurisdiction`. Opting into a jurisdiction does not migrate
+existing objects or remove unrestricted twins with the same name.
+
 ## Long waits and delivery
 
 - A long ask pins the caller. A delayed ask made directly by a Worker also
@@ -500,6 +515,55 @@ The status vocabulary is **maps 1:1**, **adapted**, and **out of scope**.
 | Stream ask + future `DeliverAt`                                               | out of scope | Delayed asks support non-stream `WithExit` only                                                             |
 | External SQL as the system of record                                          | out of scope | Durable Object SQLite is the system of record                                                               |
 | Non-Worker long-lived runners as a first-class edge                           | out of scope | The Worker is the supported edge model                                                                      |
+
+## Tracing
+
+`CloudflareTracer` records Effect spans in the trace Cloudflare already collects for each Worker invocation. Effect spans show up next to the runtime's own `fetch`, KV, D1 and other binding spans, and the runtime spans nest under the Effect span that made the call. Cloudflare exports the trace to the destinations configured for the account, so there is no endpoint, exporter or flush to set up in the Worker.
+
+Turn traces on in the Wrangler configuration:
+
+```jsonc
+// wrangler.jsonc
+{
+  "observability": {
+    "traces": { "enabled": true },
+  },
+}
+```
+
+Then provide the tracer layer. It uses `tracing` from `cloudflare:workers`, so there is nothing to pass in. The same layer works in Worker handlers and in Durable Objects.
+
+```ts
+import { CloudflareTracer } from "@effect/platform-cloudflare"
+import { Effect, ManagedRuntime } from "effect"
+
+const runtime = ManagedRuntime.make(CloudflareTracer.layer)
+
+export default {
+  fetch: (request: Request, env: Env) =>
+    runtime.runPromise(
+      Effect.promise(() => env.USERS.get("user:42")).pipe(
+        Effect.map((user) => Response.json(user)),
+        Effect.withSpan("load-user", { attributes: { "user.id": 42 } })
+      )
+    )
+}
+```
+
+The tracer needs `tracing.startSpan` and `tracing.withActiveSpan`. `withActiveSpan` arrived in workerd `1.20261113.1` and is not in Cloudflare's custom spans docs yet. `@cloudflare/workers-types` types it from `5.20261107.1`, and local development needs a Wrangler or Miniflare release that bundles workerd `1.20261113.1` or later.
+
+The tracer also needs `AsyncLocalStorage` from `process.getBuiltinModule`. Workers provide it with the `nodejs_compat` flag, or with a `compatibility_date` of `2026-08-04` or later. Building the tracer layer fails without it.
+
+Cloudflare's spans are simpler than Effect's, so some span data does not carry over:
+
+- A span's Cloudflare parent comes from the async context. An Effect span created with `root: true`, or under a parent from another tracer such as an incoming `traceparent`, still nests under the active Cloudflare span.
+- Cloudflare spans have no events, links, kind or explicit timestamps. Span events are dropped, links and kind stay on the Effect span, and Cloudflare records the timing.
+- Unsampled Effect spans, such as spans below `Tracer.MinimumTraceLevel`, are not recorded. Work inside them nests under the nearest recorded span.
+- A Cloudflare span belongs to the invocation that created it. An Effect span that outlives its invocation, such as a `Layer.span` in a module-level `ManagedRuntime`, stops recording, and spans created under it in later invocations nest under that invocation's root span.
+- A Durable Object does not reject spans from its earlier requests, so there spans created under such a span join the earlier request's trace, which has already been sent, and are lost. Avoid long-lived parent spans, such as a `Layer.span`, in a runtime shared across a Durable Object's requests.
+- Sampling is Effect's decision and recording is Cloudflare's. A span Cloudflare does not record gets random ids, so an outgoing `traceparent` can be marked sampled in an invocation Cloudflare records nothing for.
+
+Use `Otlp.layer` with `FetchHttpClient` instead if you want the Worker to send its own trace to an OTLP endpoint. That trace is separate from Cloudflare's, and the Worker has to flush it before each invocation ends.
 
 ## Documentation
 

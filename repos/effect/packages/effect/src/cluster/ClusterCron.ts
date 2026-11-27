@@ -15,14 +15,14 @@
  * @stability unstable
  * @since 4.0.0
  */
+import * as Cause from "../Cause.ts"
 import * as Context from "../Context.ts"
 import * as Cron from "../Cron.ts"
 import * as DateTime from "../DateTime.ts"
 import * as Duration from "../Duration.ts"
 import * as Effect from "../Effect.ts"
-import * as Exit from "../Exit.ts"
+import * as Fiber from "../Fiber.ts"
 import * as Layer from "../Layer.ts"
-import * as Option from "../Option.ts"
 import * as PrimaryKey from "../PrimaryKey.ts"
 import * as Rpc from "../rpc/Rpc.ts"
 import * as Schedule from "../Schedule.ts"
@@ -53,6 +53,25 @@ export class CurrentScheduledTime extends Context.Service<
 >()("effect/cluster/ClusterCron/CurrentScheduledTime") {}
 
 /**
+ * Service tag and entity annotation for the effective schedule of a cron job.
+ *
+ * **When to use**
+ *
+ * Use to read a job's effective schedule inside the `execute` effect of `make`,
+ * or read it from `entity.protocol.annotations` with `Context.getOption` when
+ * inspecting registered cron entities.
+ *
+ * @stability unstable
+ * @category services
+ * @since 4.1.5
+ */
+export class CronSchedule extends Context.Service<CronSchedule, {
+  readonly cron: Cron.Cron
+  readonly calculateNextRunFromPrevious: boolean
+  readonly skipIfOlderThan: Duration.Duration
+}>()("effect/cluster/ClusterCron/CronSchedule") {}
+
+/**
  * Creates a layer that runs a cron job through the cluster sharding system.
  *
  * **Details**
@@ -60,6 +79,10 @@ export class CurrentScheduledTime extends Context.Service<
  * The job is scheduled as persisted entity messages, with an initial singleton
  * scheduling step and optional controls for shard group, next-run calculation,
  * and skipping stale scheduled runs.
+ *
+ * A run that fails or dies is logged and not retried, and the next run is
+ * scheduled as usual. To retry typed failures, apply `Effect.retry` inside
+ * `execute` with your own stopping policy.
  *
  * @stability unstable
  * @category constructors
@@ -85,9 +108,7 @@ export const make = <E, R>(options: {
    * current time.
    *
    * When enabled, all runs are processed one at a time by a single entity, so
-   * missed runs are caught up in order without overlapping. A run that fails
-   * is retried in place and blocks later runs until it succeeds or is older
-   * than `skipIfOlderThan`.
+   * missed runs are caught up in order without overlapping.
    */
   readonly calculateNextRunFromPrevious?: boolean | undefined
 
@@ -104,9 +125,15 @@ export const make = <E, R>(options: {
    * Defaults to "1 day".
    */
   readonly skipIfOlderThan?: Duration.Input | undefined
-}): Layer.Layer<never, never, Sharding | Exclude<Exclude<R, CurrentScheduledTime>, Scope>> => {
+}): Layer.Layer<never, never, Sharding | Exclude<Exclude<R, CurrentScheduledTime | CronSchedule>, Scope>> => {
   const fromPrevious = options.calculateNextRunFromPrevious === true
-  const nextRun = (after: DateTime.Utc) => DateTime.fromDateUnsafe(Cron.next(options.cron, after))
+  const cronSchedule = {
+    cron: options.cron,
+    calculateNextRunFromPrevious: fromPrevious,
+    skipIfOlderThan: Duration.fromInputUnsafe(options.skipIfOlderThan ?? "1 day")
+  }
+  const scheduleContext = Context.make(CronSchedule, cronSchedule)
+  const nextRun = (after: DateTime.Utc) => DateTime.fromDateUnsafe(Cron.next(cronSchedule.cron, after))
 
   const CronEntity = Entity.make(`ClusterCron/${options.name}`, [
     Rpc.make("run", {
@@ -118,6 +145,7 @@ export const make = <E, R>(options: {
   ])
     .annotate(ClusterSchema.ShardGroup, () => options.shardGroup ?? "default")
     .annotate(ClusterSchema.ClientTracingEnabled, false)
+    .annotate(CronSchedule, cronSchedule)
 
   // with `calculateNextRunFromPrevious`, every run shares the executor address
   const send = (dateTime: DateTime.Utc) =>
@@ -143,18 +171,23 @@ export const make = <E, R>(options: {
     { shardGroup: options.shardGroup }
   )
 
-  const skipIfOlderThan = Option.fromUndefinedOr(options.skipIfOlderThan).pipe(
-    Option.map(Duration.fromInputUnsafe),
-    Option.getOrElse(() => Duration.days(1))
+  const execute = Effect.fnUntraced(
+    function*(dateTime: DateTime.Utc) {
+      const now = yield* DateTime.now
+      if (DateTime.isLessThan(dateTime, DateTime.subtractDuration(now, cronSchedule.skipIfOlderThan))) {
+        return
+      }
+      // the run gets its own fiber and scope, so its child fibers stop and its
+      // finalizers see its exit before the next run is scheduled
+      const fiber = yield* Effect.forkChild(
+        Effect.provideContext(options.execute, Context.add(scheduleContext, CurrentScheduledTime, dateTime)),
+        { uninterruptible: "inherit" }
+      )
+      return yield* Fiber.join(fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(fiber)))
+    },
+    Effect.scoped,
+    Effect.orDie
   )
-
-  const execute = Effect.fnUntraced(function*(dateTime: DateTime.Utc) {
-    const now = yield* DateTime.now
-    if (DateTime.isLessThan(dateTime, DateTime.subtractDuration(now, skipIfOlderThan))) {
-      return
-    }
-    return yield* Effect.provideService(options.execute, CurrentScheduledTime, dateTime)
-  }, Effect.orDie)
 
   const EntityLayer = CronEntity.toLayer(Effect.gen(function*() {
     const address = yield* Entity.CurrentAddress
@@ -170,12 +203,13 @@ export const make = <E, R>(options: {
         }
         processedRun = true
         return Effect.onExitPrimitive(
-          execute(dateTime),
-          (exit) =>
-            Effect.andThen(
-              Exit.isFailure(exit) ? Effect.logWarning(exit.cause) : Effect.void,
-              fromPrevious ? schedule(nextRun(dateTime)) : Effect.flatMap(DateTime.now, (now) => schedule(nextRun(now)))
-            ),
+          execute(dateTime).pipe(
+            Effect.tapCause(Effect.logWarning),
+            // interrupted runs are left for the entity manager to replay
+            Effect.catchCauseIf((cause) => !Cause.hasInterrupts(cause), () => Effect.void)
+          ),
+          () =>
+            fromPrevious ? schedule(nextRun(dateTime)) : Effect.flatMap(DateTime.now, (now) => schedule(nextRun(now))),
           true
         ).pipe(
           Effect.annotateLogs({

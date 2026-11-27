@@ -1,7 +1,7 @@
 import { NodeCrypto, NodeFileSystem } from "@effect/platform-node"
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { assert, describe, expect, it } from "@effect/vitest"
-import { Effect, Exit, Fiber, FileSystem, Latch, Layer, Option } from "effect"
+import { Effect, Exit, Fiber, FileSystem, Latch, Layer, Option, Schema } from "effect"
 import {
   Entity,
   EntityAddress,
@@ -20,6 +20,7 @@ import {
   SqlMessageStorage
 } from "effect/cluster"
 import { Reactivity } from "effect/reactivity"
+import { Rpc } from "effect/rpc"
 import { SqlClient, Statement } from "effect/sql"
 import { TestClock } from "effect/testing"
 import { MssqlContainer } from "../fixtures/mssql-utils.ts"
@@ -274,6 +275,39 @@ describe("SqlMessageStorage", () => {
             ))
           }).pipe(TestClock.withLive), { timeout: 30_000 })
 
+        it.effect(
+          "guarded clearReplies preserves a concurrently saved reply in either lock order",
+          () =>
+            Effect.gen(function*() {
+              const sql = yield* SqlClient.SqlClient
+              const storage = yield* MessageStorage.MessageStorage
+              for (const saveFirst of [false, true]) {
+                yield* truncate
+                const request = yield* makeRequest()
+                const oldReply = yield* makeReply(request)
+                const newReply = yield* makeReply(request)
+                yield* storage.saveRequest(request)
+                yield* storage.saveReply(oldReply)
+                const reset = storage.clearReplies(request.envelope.requestId, { expectedReplyId: oldReply.reply.id })
+                const save = storage.saveReply(newReply)
+                // A competing runner resets the old completion before saving its new reply.
+                const [first, second] = saveFirst ? [Effect.andThen(reset, save), reset] : [reset, save]
+                // Hold the first operation's lock while the second connection starts.
+                const fiber = yield* Effect.andThen(first, sql`SELECT pg_sleep(2)`).pipe(
+                  sql.withTransaction,
+                  Effect.forkChild
+                )
+                yield* waitForPgSleep
+                yield* second
+                yield* Fiber.join(fiber)
+                const replies = yield* storage.repliesFor([request])
+                assert.strictEqual(replies.at(-1)?.id, newReply.reply.id)
+                assert.deepStrictEqual(yield* storage.unprocessedMessages([request.envelope.address.shardId]), [])
+              }
+            }).pipe(TestClock.withLive),
+          { timeout: 30_000 }
+        )
+
         it.effect("clearReplies does not deadlock with a concurrent deleteProcessed", () =>
           Effect.gen(function*() {
             yield* truncate
@@ -457,6 +491,62 @@ describe("SqlMessageStorage", () => {
             )
             expect(Exit.isFailure(exit)).toBe(true)
           }))
+
+        it.effect(
+          "saveRequest returns Duplicate under REPEATABLE READ when another tx commits the same primary key",
+          () =>
+            Effect.gen(function*() {
+              yield* truncate
+              const sql = yield* SqlClient.SqlClient
+              const storage = yield* MessageStorage.MessageStorage
+              const [{ isolation }] = yield* sql<{ isolation: string }>`SELECT @@transaction_isolation AS isolation`
+              expect(isolation).toEqual("REPEATABLE-READ")
+
+              const reqA = yield* makeRequest({
+                rpc: PrimaryKeyTest,
+                payload: PrimaryKeyTest.payloadSchema.make({ id: 123 })
+              })
+              const reqB = yield* makeRequest({
+                rpc: PrimaryKeyTest,
+                payload: PrimaryKeyTest.payloadSchema.make({ id: 123 })
+              })
+              const bSawEmpty = yield* Latch.make()
+              const aCommitted = yield* Latch.make()
+
+              const txA = yield* storage.withTransaction(Effect.gen(function*() {
+                const existing = yield* storage.requestIdForPrimaryKey({
+                  address: reqA.envelope.address,
+                  tag: reqA.envelope.tag,
+                  id: "123"
+                })
+                expect(existing).toEqual(Option.none())
+                yield* bSawEmpty.await
+                return yield* storage.saveRequest(reqA)
+              })).pipe(
+                Effect.tap(() => aCommitted.open),
+                Effect.forkChild({ startImmediately: true })
+              )
+
+              const txB = yield* storage.withTransaction(Effect.gen(function*() {
+                const existing = yield* storage.requestIdForPrimaryKey({
+                  address: reqB.envelope.address,
+                  tag: reqB.envelope.tag,
+                  id: "123"
+                })
+                expect(existing).toEqual(Option.none())
+                yield* bSawEmpty.open
+                yield* aCommitted.await
+                return yield* storage.saveRequest(reqB)
+              })).pipe(Effect.forkChild({ startImmediately: true }))
+
+              const savedA = yield* Fiber.join(txA).pipe(Effect.timeout("10 seconds"))
+              const savedB = yield* Fiber.join(txB).pipe(Effect.timeout("10 seconds"))
+              expect(savedA._tag).toEqual("Success")
+              assert(savedB._tag === "Duplicate")
+              expect(savedB.originalId).toEqual(reqA.envelope.requestId)
+            }).pipe(TestClock.withLive),
+          { timeout: 30_000 }
+        )
       }
 
       if (label === "mssql") {
@@ -526,12 +616,13 @@ describe("SqlMessageStorage", () => {
             const sql = yield* SqlClient.SqlClient
             yield* sql`CREATE TABLE collision_other (id INT)`
             yield* sql`CREATE INDEX collision_replies_one_exit ON collision_other (id)`
-            const storage = yield* SqlMessageStorage.makeEncoded({ prefix: "collision" }).pipe(
-              Effect.provide(NodeCrypto.layer)
+            const storage = yield* MessageStorage.makeEncoded(
+              yield* SqlMessageStorage.makeEncoded({ prefix: "collision" }).pipe(Effect.provide(NodeCrypto.layer))
             )
-            const exit = { _tag: "WithExit", requestId: "1", exit: { _tag: "Success", value: null } } as const
-            yield* storage.saveReply({ ...exit, id: "1" })
-            const error = yield* Effect.flip(storage.saveReply({ ...exit, id: "2" }))
+            const request = yield* makeRequest()
+            yield* storage.saveRequest(request)
+            yield* storage.saveReply(yield* makeReply(request))
+            const error = yield* Effect.flip(storage.saveReply(yield* makeReply(request)))
             expect(error._tag).toEqual("PersistenceError")
           }))
 
@@ -631,17 +722,34 @@ describe("SqlMessageStorage", () => {
           yield* truncate
         }))
 
-      it.effect("clearReplies requeues when the expected reply is current", () =>
+      it.effect("clearReplies requeues the request without replaying consumed interrupts", () =>
         Effect.gen(function*() {
           yield* truncate
           const storage = yield* MessageStorage.MessageStorage
+          const snowflake = yield* Snowflake.Generator
           const request = yield* makeRequest()
           const reply = yield* makeReply(request)
+          const interrupt = () =>
+            Message.OutgoingEnvelope.interrupt({
+              id: snowflake.nextUnsafe(),
+              requestId: request.envelope.requestId,
+              address: request.envelope.address
+            })
           yield* storage.saveRequest(request)
+          yield* storage.saveEnvelope(interrupt())
           yield* storage.saveReply(reply)
+          // An interrupt received after completion belongs to the next execution.
+          const pending = interrupt()
+          yield* storage.saveEnvelope(pending)
           yield* storage.clearReplies(request.envelope.requestId, { expectedReplyId: reply.reply.id })
-          expect(yield* storage.repliesFor([request])).toHaveLength(0)
-          expect(yield* storage.unprocessedMessages([request.envelope.address.shardId])).toHaveLength(1)
+          // A duplicate reset must not remove that pending interrupt either.
+          yield* storage.clearReplies(request.envelope.requestId, { expectedReplyId: reply.reply.id })
+          assert.deepStrictEqual(yield* storage.repliesFor([request]), [])
+          const messages = yield* storage.unprocessedMessages([request.envelope.address.shardId])
+          assert.deepStrictEqual(
+            messages.map(({ envelope }) => envelope._tag === "Request" ? envelope.requestId : envelope.id),
+            [request.envelope.requestId, pending.envelope.id]
+          )
         }))
 
       it.effect("clearReplies with a stale expected reply preserves a newer completion and processed state", () =>
@@ -717,7 +825,7 @@ describe("SqlMessageStorage", () => {
             .toHaveLength(2)
         }).pipe(Effect.ensuring(Effect.orDie(truncate))))
 
-      it.effect("does not store an AckChunk or Interrupt for a request deleteProcessed removed", () =>
+      it.effect("does not store late envelopes or replies for a request deleteProcessed removed", () =>
         Effect.gen(function*() {
           yield* truncate
           const sql = yield* SqlClient.SqlClient
@@ -732,14 +840,17 @@ describe("SqlMessageStorage", () => {
           expect(yield* storage.deleteProcessed({ entityType: "test", completedBefore: cutoff, limit: 100 }))
             .toEqual(1)
 
-          // a late acknowledgement and cancellation, such as ones that waited behind the delete
+          // late writes, such as ones that waited behind the delete
           yield* storage.saveEnvelope(yield* makeAckChunk(request, chunk))
           yield* storage.saveEnvelope(Message.OutgoingEnvelope.interrupt({
             id: snowflake.nextUnsafe(),
             requestId: request.envelope.requestId,
             address: request.envelope.address
           }))
+          yield* storage.saveReply(yield* makeChunkReply(request))
+          yield* storage.saveReply(yield* makeReply(request))
           expect(yield* storage.unprocessedMessages([request.envelope.address.shardId])).toEqual([])
+          expect(yield* storage.repliesForUnfiltered([request.envelope.requestId])).toEqual([])
           const requestId = String(request.envelope.requestId)
           expect(yield* sql`SELECT id FROM cluster_messages WHERE request_id = ${requestId}`).toEqual([])
         }).pipe(Effect.ensuring(Effect.orDie(truncate))))
@@ -1200,6 +1311,56 @@ describe("SqlMessageStorage", () => {
           yield* storage.saveReply(yield* makeReply(request))
           messages = yield* storage.unprocessedMessagesById([request.envelope.requestId])
           expect(messages).toHaveLength(0)
+        }))
+
+      it.effect("requestsForAddress matches type, id and tag exactly and ignores the shard", () =>
+        Effect.gen(function*() {
+          yield* truncate
+
+          const storage = yield* MessageStorage.MessageStorage
+          const address = { entityType: "Workflow/Child", entityId: "Id" }
+          const request = (id: string, options?: {
+            readonly rpc?: Rpc.AnyWithProps
+            readonly entityType?: string
+            readonly entityId?: string
+            readonly shardId?: ShardId.ShardId
+          }) =>
+            makeRequest({
+              rpc: options?.rpc ?? LongKeyRpc,
+              payload: options?.rpc ? { id } : LongKeyRpc.payloadSchema.make({ id }),
+              entityType: options?.entityType ?? address.entityType,
+              entityId: options?.entityId ?? address.entityId,
+              shardId: options?.shardId
+            })
+          const longId = "long-key-".repeat(50)
+          const unprocessed = yield* request(longId)
+          const processed = yield* request("short-key")
+          const otherShard = yield* request("other-shard", { shardId: ShardId.make("default", 2) })
+          const others = [
+            yield* request("other-tag", { rpc: Rpc.make("OtherTag", { payload: { id: Schema.String } }) }),
+            // Collations may ignore case, accents or trailing spaces.
+            yield* request("tag-case", { rpc: Rpc.make("longkeyrpc", { payload: { id: Schema.String } }) }),
+            yield* request("tag-space", { rpc: Rpc.make("LongKeyRpc ", { payload: { id: Schema.String } }) }),
+            yield* request("type-case", { entityType: "Workflow/child" }),
+            yield* request("type-space", { entityType: "Workflow/Child " }),
+            yield* request("id-case", { entityId: "id" }),
+            yield* request("id-accent", { entityId: "Íd" }),
+            yield* request("id-space", { entityId: "Id " })
+          ]
+
+          yield* storage.saveRequest(unprocessed)
+          yield* storage.saveRequest(processed)
+          yield* storage.saveReply(yield* makeReply(processed))
+          yield* storage.saveRequest(otherShard)
+          for (const other of others) yield* storage.saveRequest(other)
+
+          const found = yield* storage.requestsForAddress({
+            address: unprocessed.envelope.address,
+            tag: LongKeyRpc._tag
+          })
+          expect(found.map((r) => (r.payload as { readonly id: string }).id).sort()).toEqual(
+            [longId, "other-shard", "short-key"].sort()
+          )
         }))
     })
   })

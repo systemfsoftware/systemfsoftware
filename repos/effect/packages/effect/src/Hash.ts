@@ -11,9 +11,18 @@
  * @since 2.0.0
  */
 import { dual } from "./Function.ts"
-import { bufferBytes, byReferenceInstances, getAllObjectKeys, isArrayBufferLike, viewBytes } from "./internal/equal.ts"
-import { addBackEdge, backEdges } from "./internal/hash.ts"
-import { hasProperty } from "./Predicate.ts"
+import {
+  addBackEdge,
+  backEdges,
+  byReferenceInstances,
+  combine as combineDataFirst,
+  getAllObjectKeys,
+  hashCache,
+  mix,
+  objectKind,
+  toBytes
+} from "./internal/equal.ts"
+import { hasProperty } from "./internal/predicate.ts"
 
 /**
  * Defines the unique identifier used to identify objects that implement the Hash interface.
@@ -117,13 +126,15 @@ export const hash: <A>(self: A) => number = <A>(self: A) => {
     case "object": {
       if (self === null) {
         break
-      } else if (self instanceof Date) {
-        if (Number.isNaN(self.getTime())) {
+      }
+      const kind = objectKind(self)
+      if (kind === 1) {
+        if (Number.isNaN((self as any as Date).getTime())) {
           return string("Invalid Date")
         }
-        return string(self.toISOString())
-      } else if (self instanceof RegExp) {
-        return string(self.toString())
+        return string((self as any as Date).toISOString())
+      } else if (kind === 2) {
+        return string((self as any as RegExp).toString())
       } else {
         if (byReferenceInstances.has(self)) {
           return random(self)
@@ -144,17 +155,15 @@ export const hash: <A>(self: A) => number = <A>(self: A) => {
             h = (self as Hash)[symbol]()
           } else if (typeof self === "function") {
             h = random(self)
-          } else if (isArrayBufferLike(self)) {
-            const bytes = bufferBytes(self)
-            h = bytes === undefined ? random(self) : array(bytes)
-          } else if (self instanceof DataView) {
-            h = array(viewBytes(self))
-          } else if (Array.isArray(self) || ArrayBuffer.isView(self)) {
-            h = array(self as any)
-          } else if (self instanceof Map) {
-            h = hashMap(self)
-          } else if (self instanceof Set) {
-            h = hashSet(self)
+          } else if (kind >= 7) {
+            const bytes = toBytes(self as any, kind)
+            h = bytes === undefined ? random(self) : hashIndexed(bytes)
+          } else if (kind >= 5) {
+            h = hashIndexed(self as any)
+          } else if (kind === 3) {
+            h = hashUnordered(mapSeed, self as any as Map<unknown, unknown>, hashMapEntry)
+          } else if (kind === 4) {
+            h = hashUnordered(setSeed, self as any as Set<unknown>, hashSetElement)
           } else {
             h = structure(self)
           }
@@ -203,19 +212,11 @@ export const hash: <A>(self: A) => number = <A>(self: A) => {
  * @since 2.0.0
  */
 export const random: <A extends object>(self: A) => number = (self) => {
-  if (!randomHashCache.has(self)) {
-    randomHashCache.set(self, optimize((Math.random() * 0x100000000) | 0))
+  let h = randomHashCache.get(self)
+  if (h === undefined) {
+    randomHashCache.set(self, h = optimize((Math.random() * 0x100000000) | 0))
   }
-  return randomHashCache.get(self)!
-}
-
-// 32-bit MurmurHash3 finalizer.
-const mix = (h: number): number => {
-  h ^= h >>> 16
-  h = Math.imul(h, 0x85ebca6b)
-  h ^= h >>> 13
-  h = Math.imul(h, 0xc2b2ae35)
-  return h ^ (h >>> 16)
+  return h
 }
 
 /**
@@ -252,7 +253,7 @@ const mix = (h: number): number => {
 export const combine: {
   (b: number): (self: number) => number
   (self: number, b: number): number
-} = dual(2, (self: number, b: number): number => mix(Math.imul(self, 0x9e3779b1) + Math.imul(b, 0x85ebca6b)))
+} = dual(2, combineDataFirst)
 
 /**
  * Applies bit manipulation techniques to optimize a hash value.
@@ -351,7 +352,7 @@ export const number = (n: number) => {
     return optimize(h)
   }
   float64.setFloat64(0, n !== n ? NaN : n)
-  return optimize(combine(float64.getInt32(0), float64.getInt32(4)))
+  return optimize(combineDataFirst(float64.getInt32(0), float64.getInt32(4)))
 }
 
 /**
@@ -426,13 +427,8 @@ export const string = (str: string) => {
  * @category hashing
  * @since 2.0.0
  */
-export const structureKeys = (o: object, keys: Iterable<PropertyKey>) => {
-  let h = 12289
-  for (const key of keys) {
-    h ^= combine(hash(key), hash((o as any)[key]))
-  }
-  return optimize(h)
-}
+export const structureKeys = (o: object, keys: Iterable<PropertyKey>) =>
+  hashUnordered(12289, keys, (key) => combineDataFirst(hash(key), hash((o as any)[key])))
 
 /**
  * Computes a structural hash for an object using Effect's object key collection.
@@ -467,7 +463,7 @@ export const structureKeys = (o: object, keys: Iterable<PropertyKey>) => {
  */
 export const structure = <A extends object>(o: A) => structureKeys(o, getAllObjectKeys(o))
 
-const unordered = (seed: number, f: (el: any) => number) => (iter: Iterable<any>) => {
+const hashUnordered = <A>(seed: number, iter: Iterable<A>, f: (el: A) => number): number => {
   let h = seed
   for (const element of iter) {
     h ^= f(element)
@@ -513,18 +509,23 @@ const unordered = (seed: number, f: (el: any) => number) => (iter: Iterable<any>
 export const array = <A>(arr: Iterable<A>): number => {
   let h = 6151
   for (const element of arr) {
-    h = combine(h, hash(element))
+    h = combineDataFirst(h, hash(element))
   }
   return optimize(h)
 }
 
-const hashMap: <K, V>(map: Iterable<readonly [K, V]>) => number = unordered(
-  string("Map"),
-  ([k, v]) => combine(hash(k), hash(v))
-)
+const hashIndexed = (arr: ArrayLike<unknown>): number => {
+  let h = 6151
+  for (let i = 0; i < arr.length; i++) {
+    h = combineDataFirst(h, hash(arr[i]))
+  }
+  return optimize(h)
+}
+
+const mapSeed = string("Map")
 const setSeed = string("Set")
-const hashSet: <A>(set: Iterable<A>) => number = unordered(setSeed, (element) => combine(setSeed, hash(element)))
+const hashMapEntry = ([k, v]: [unknown, unknown]) => combineDataFirst(hash(k), hash(v))
+const hashSetElement = (element: unknown) => combineDataFirst(setSeed, hash(element))
 
 const randomHashCache = new WeakMap<any, number>()
-const hashCache = new WeakMap<object, number>()
 const visitedObjects = new WeakSet<object>()

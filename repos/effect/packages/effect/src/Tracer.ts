@@ -175,12 +175,20 @@ export const ParentSpanKey = "effect/Tracer/ParentSpan"
  * @category services
  * @since 2.0.0
  */
-export class ParentSpan extends Context.Service<ParentSpan, AnySpan>()(ParentSpanKey, { fiberCached: true }) {}
+export class ParentSpan extends Context.Service<ParentSpan, AnySpan>()(ParentSpanKey) {}
 
 /**
  * Represents a span created outside Effect's tracer, carrying trace and span
  * identifiers, sampling state, and annotations so it can be used as a parent or
  * link in Effect tracing.
+ *
+ * **Details**
+ *
+ * An external span identifies a parent or link only. Effect never records on
+ * it: it has no attributes, events, or end. While the nearest parent span is
+ * external, `Effect.currentSpan` fails, `Effect.annotateCurrentSpan` does
+ * nothing, and `Logger.tracerLogger` records nothing. Open a span with
+ * `Effect.withSpan` to get one that records.
  *
  * **Example** (Creating an external span value)
  *
@@ -514,6 +522,8 @@ export const make = (options: Tracer): Tracer => options
  * spans.map((span) => Option.getOrUndefined(span.parent)?.spanId) // => ["span-abc-123"]
  * ```
  *
+ * @see {@link ExternalSpan}
+ *
  * @stability stable
  * @category constructors
  * @since 2.0.0
@@ -660,7 +670,6 @@ export const TracerKey = "effect/Tracer"
  * @since 2.0.0
  */
 export const Tracer: Context.Reference<Tracer> = Context.Reference<Tracer>(TracerKey, {
-  fiberCached: true,
   defaultValue: () => nativeTracer
 })
 

@@ -39,6 +39,7 @@ import {
   ClosedError,
   ConfigurationError,
   HttpError,
+  InputRequiredError,
   isMcpClientError,
   LimitError,
   McpClientError,
@@ -67,7 +68,27 @@ import * as Toolkit from "./Toolkit.ts"
  * @category models
  * @since 4.0.6
  */
-export type ProtocolVersion = "2025-11-25" | "2026-07-28"
+export type ProtocolVersion = "2025-03-26" | "2025-06-18" | "2025-11-25" | "2026-07-28"
+
+/**
+ * Client input capabilities declared on `2026-07-28` connections for tool call
+ * continuations: elicitation, sampling or roots.
+ *
+ * @stability experimental
+ * @category models
+ * @since 4.1.7
+ */
+export interface InputCapabilities {
+  readonly roots?: Readonly<Record<string, unknown>> | undefined
+  readonly sampling?: {
+    readonly context?: Readonly<Record<string, unknown>> | undefined
+    readonly tools?: Readonly<Record<string, unknown>> | undefined
+  } | undefined
+  readonly elicitation?: {
+    readonly form?: Readonly<Record<string, unknown>> | undefined
+    readonly url?: Readonly<Record<string, unknown>> | undefined
+  } | undefined
+}
 
 /**
  * Service tag for applications that provide one default MCP connection.
@@ -77,6 +98,18 @@ export type ProtocolVersion = "2025-11-25" | "2026-07-28"
  * @since 4.0.6
  */
 export const McpClient: Context.Service<McpClient, McpClient> = Context.Service<McpClient>("effect/ai/McpClient")
+
+/**
+ * Cache hint returned by a `2026-07-28` MCP list response.
+ *
+ * @stability experimental
+ * @category models
+ * @since 4.1.7
+ */
+export interface ListCacheHint {
+  readonly ttlMs: number
+  readonly cacheScope: "public" | "private"
+}
 
 /**
  * A scoped connection to one MCP server.
@@ -106,6 +139,24 @@ export interface McpClient {
       } | undefined
     }
   ) => Effect.Effect<ReadonlyArray<McpSchema.Tool>, McpClientError>
+  /**
+   * Returns every tool page with the same bounds as `listTools` plus the aggregated
+   * `2026-07-28` `cacheHint` (minimum `ttlMs`; `"public"` only if every page is `"public"`).
+   * `cacheHint` is `undefined` on protocols before `2026-07-28` or when the server does not
+   * advertise the `tools` capability.
+   */
+  readonly listToolsWithCacheHint: (
+    options?: {
+      readonly timeout?: Duration.Input | undefined
+      readonly limits?: {
+        readonly maxPages?: number | undefined
+        readonly maxItems?: number | undefined
+      } | undefined
+    }
+  ) => Effect.Effect<
+    { readonly tools: ReadonlyArray<McpSchema.Tool>; readonly cacheHint: ListCacheHint | undefined },
+    McpClientError
+  >
   /** Returns every prompt page as one snapshot with the same bounds as `listTools`. */
   readonly listPrompts: (
     options?: {
@@ -192,8 +243,15 @@ export interface McpClient {
     options?: { readonly timeout?: Duration.Input | undefined }
   ) => Effect.Effect<McpSchema.ReadResourceResult, McpClientError>
   /**
-   * Calls a discovered tool, optionally decoding with a schema. Errors retain the full result.
+   * Calls a discovered tool, optionally decoding `structuredContent` with a schema. Errors retain
+   * the full result. `2025-03-26` has no structured results, so `schema` decodes `undefined`.
    * Unbounded unless `timeout` is supplied.
+   *
+   * **Details**
+   *
+   * On `2026-07-28`, a paused call fails with `InputRequiredError` whose `result` carries
+   * `inputRequests` and `requestState`. Retry with `inputResponses` and the unchanged
+   * `requestState` to continue.
    */
   readonly callTool: {
     (
@@ -201,6 +259,8 @@ export interface McpClient {
         readonly tool: McpSchema.Tool
         readonly schema?: undefined
         readonly arguments?: typeof McpSchema.CallTool.payloadSchema.Type["arguments"]
+        readonly inputResponses?: Readonly<Record<string, McpSchema.McpInputResponse>> | undefined
+        readonly requestState?: string | undefined
       },
       options?: { readonly timeout?: Duration.Input | undefined }
     ): Effect.Effect<McpSchema.CallToolResult, McpClientError>
@@ -209,6 +269,8 @@ export interface McpClient {
         readonly tool: McpSchema.Tool
         readonly schema: S
         readonly arguments?: typeof McpSchema.CallTool.payloadSchema.Type["arguments"]
+        readonly inputResponses?: Readonly<Record<string, McpSchema.McpInputResponse>> | undefined
+        readonly requestState?: string | undefined
       },
       options?: { readonly timeout?: Duration.Input | undefined }
     ): Effect.Effect<S["Type"], McpClientError, S["DecodingServices"]>
@@ -217,6 +279,8 @@ export interface McpClient {
         readonly tool: McpSchema.Tool
         readonly schema?: S | undefined
         readonly arguments?: typeof McpSchema.CallTool.payloadSchema.Type["arguments"]
+        readonly inputResponses?: Readonly<Record<string, McpSchema.McpInputResponse>> | undefined
+        readonly requestState?: string | undefined
       },
       options?: { readonly timeout?: Duration.Input | undefined }
     ): Effect.Effect<McpSchema.CallToolResult | S["Type"], McpClientError, S["DecodingServices"]>
@@ -243,8 +307,8 @@ export const isMcpClient = (value: unknown): value is McpClient => Predicate.has
  *
  * `name`, `version` and the optional `title`, `description`, `websiteUrl` and
  * `icons` identify the client to the server. `timeout` defaults to 60 seconds
- * and bounds initialization and each complete `listTools`, `listPrompts`,
- * `listResources`, `listSkills` or `readResourceDirectory` scan.
+ * and bounds initialization and each complete `listTools`, `listToolsWithCacheHint`,
+ * `listPrompts`, `listResources`, `listSkills` or `readResourceDirectory` scan.
  * `discoveryLimits` sets the default scan limits of 100 pages and 10,000
  * items. `callTool`, `getPrompt`, `readResource`, `getSkill` and
  * `readSkillResource` have no deadline unless their own `timeout` option is
@@ -257,6 +321,8 @@ export const isMcpClient = (value: unknown): value is McpClient => Predicate.has
  * server that declares the extension too, and skill entries are checked
  * against its rules. `readSkillResource` checks digests with SHA-256 on
  * `crypto.subtle`.
+ * `capabilities` declares elicitation, sampling or roots support for `2026-07-28`
+ * tool call continuations; earlier revisions reject them with `ConfigurationError`.
  * Schema decoding requires the schema's services from the caller.
  *
  * @stability experimental
@@ -278,6 +344,7 @@ export const make: (options: {
   readonly extensions?: {
     readonly skills?: boolean | undefined
   } | undefined
+  readonly capabilities?: InputCapabilities | undefined
 }) => Effect.Effect<
   McpClient,
   McpClientError,
@@ -311,7 +378,17 @@ export const make: (options: {
   // Modern requests carry the client identity in every request.
   // https://modelcontextprotocol.io/specification/2026-07-28/basic/index
   const skillsEnabled = options.extensions?.skills === true
-  const clientCapabilities = skillsEnabled ? { extensions: { [McpSkills.EXTENSION_ID]: {} } } : {}
+  const inputCapabilities = normalizeInputCapabilities(options.capabilities)
+  // Earlier revisions request input via server-to-client RPCs, which this client does not handle.
+  if (!modern && Object.keys(inputCapabilities).length > 0) {
+    return yield* fail(
+      new ConfigurationError({ description: "MCP client input capabilities require protocol 2026-07-28" })
+    )
+  }
+  const clientCapabilities = {
+    ...inputCapabilities,
+    ...(skillsEnabled ? { extensions: { [McpSkills.EXTENSION_ID]: {} } } : {})
+  }
   const meta = {
     "io.modelcontextprotocol/protocolVersion": version,
     "io.modelcontextprotocol/clientInfo": clientInfo,
@@ -321,7 +398,8 @@ export const make: (options: {
   const request = Effect.fnUntraced(function*<A>(
     method: string,
     params: Record<string, unknown>,
-    tool?: McpSchema.Tool
+    tool?: McpSchema.Tool,
+    onValidated?: (validated: unknown) => void
   ): Effect.fn.Return<A, McpClientError> {
     const rpc = protocol.clientRpcs.requests.get(method) as Rpc.AnyWithProps | undefined
     if (rpc === undefined) {
@@ -356,11 +434,17 @@ export const make: (options: {
     }
 
     const validated = yield* decodeUnknown(rpc.successSchema, result)
-    if (isRecord(result) && result.resultType === "input_required") {
-      return yield* fail(new UnsupportedError({ description: "MCP input continuation is not supported" }))
+    if (isRecord(validated) && validated.resultType === "input_required") {
+      if (method !== "tools/call") {
+        return yield* fail(new UnsupportedError({ description: "MCP input continuation is not supported" }))
+      }
+      // The wire schema guarantees `inputRequests` or `requestState`; the error schema drops the other fields.
+      return yield* fail(new InputRequiredError({ result: validated as InputRequiredError["result"] }))
     }
     const publicRpc = publicRpcs.get(method)
-    return (publicRpc === undefined ? validated : yield* decodeUnknown(publicRpc.successSchema, result)) as A
+    const decoded = (publicRpc === undefined ? validated : yield* decodeUnknown(publicRpc.successSchema, result)) as A
+    onValidated?.(validated)
+    return decoded
   })
 
   // Initialization and discovery default to `timeout`; other operations are bounded only on request.
@@ -437,13 +521,19 @@ export const make: (options: {
     method: string,
     key: K,
     params: Record<string, unknown>,
-    limits: typeof DEFAULT_DISCOVERY_LIMITS
+    limits: typeof DEFAULT_DISCOVERY_LIMITS,
+    onPage?: (validated: unknown) => void
   ) {
     const items: Array<A> = []
     const cursors = new Set<string>()
     let cursor: string | undefined
     for (let page = 0; page < limits.maxPages; page++) {
-      const result = yield* request<ListResult<K, A>>(method, cursor === undefined ? params : { ...params, cursor })
+      const result = yield* request<ListResult<K, A>>(
+        method,
+        cursor === undefined ? params : { ...params, cursor },
+        undefined,
+        onPage
+      )
       if (items.length + result[key].length > limits.maxItems) {
         return yield* limitError(`MCP ${label} discovery exceeded its item limit`)
       }
@@ -586,7 +676,26 @@ export const make: (options: {
     (effect, _params, callOptions) => withDeadline(effect, "resources/read", callOptions?.timeout)
   )
 
-  const listTools = list<"tools", McpSchema.Tool>("tools")
+  const listToolsWithCacheHint = Effect.fnUntraced(
+    function*(callOptions?: DiscoveryOptions) {
+      const limits = yield* resolveDiscoveryLimits(callOptions?.limits, discoveryLimits)
+      if (capabilities.tools === undefined) return { tools: [], cacheHint: undefined }
+      let cacheHint: ListCacheHint | undefined
+      // The `2026-07-28` decoder already requires `ttlMs` and `cacheScope` on every page.
+      const onPage = modern
+        ? (page: unknown) => {
+          const { cacheScope, ttlMs } = page as ListCacheHint
+          cacheHint = {
+            ttlMs: Math.min(cacheHint?.ttlMs ?? ttlMs, ttlMs),
+            cacheScope: cacheHint?.cacheScope === "private" ? "private" : cacheScope
+          }
+        }
+        : undefined
+      const tools = yield* paginate<"tools", McpSchema.Tool>("tools", "tools/list", "tools", {}, limits, onPage)
+      return { tools: tools.filter((tool) => transport.isCallable(tool)), cacheHint }
+    },
+    (effect, callOptions) => withDeadline(effect, "tools discovery", callOptions?.timeout ?? timeout)
+  )
 
   const callTool = Effect.fnUntraced(
     function*<S extends Schema.Top>(
@@ -594,13 +703,25 @@ export const make: (options: {
         readonly tool: McpSchema.Tool
         readonly schema?: S | undefined
         readonly arguments?: typeof McpSchema.CallTool.payloadSchema.Type["arguments"]
+        readonly inputResponses?: Readonly<Record<string, McpSchema.McpInputResponse>> | undefined
+        readonly requestState?: string | undefined
       },
       _options?: CallOptions
     ) {
+      if (!modern && (params.inputResponses !== undefined || params.requestState !== undefined)) {
+        return yield* fail(
+          new ConfigurationError({ description: "MCP input continuation requires protocol 2026-07-28" })
+        )
+      }
       const result = yield* call<McpSchema.CallToolResult>(
         "tools",
         "tools/call",
-        { name: params.tool.name, ...(params.arguments === undefined ? {} : { arguments: params.arguments }) },
+        {
+          name: params.tool.name,
+          ...(params.arguments === undefined ? {} : { arguments: params.arguments }),
+          ...(params.inputResponses === undefined ? {} : { inputResponses: params.inputResponses }),
+          ...(params.requestState === undefined ? {} : { requestState: params.requestState })
+        },
         params.tool
       )
       if (params.schema === undefined) return result
@@ -622,8 +743,8 @@ export const make: (options: {
     capabilities,
     serverInfo,
     instructions,
-    listTools: (callOptions) =>
-      listTools(callOptions).pipe(Effect.map((tools) => tools.filter((tool) => transport.isCallable(tool)))),
+    listTools: (callOptions) => listToolsWithCacheHint(callOptions).pipe(Effect.map(({ tools }) => tools)),
+    listToolsWithCacheHint,
     listPrompts: list("prompts"),
     listResources: list("resources"),
     getPrompt: (params, callOptions) =>
@@ -1011,6 +1132,7 @@ export const layerStdio: (options: {
   readonly extensions?: {
     readonly skills?: boolean | undefined
   } | undefined
+  readonly capabilities?: InputCapabilities | undefined
   readonly command: ChildProcess.Command
   readonly protocol: McpProtocol.ProtocolAdapter<ProtocolVersion>
   readonly maxMessageBytes?: ByteSize.Input | undefined
@@ -1252,6 +1374,7 @@ export const layerHttp: (options: {
   readonly extensions?: {
     readonly skills?: boolean | undefined
   } | undefined
+  readonly capabilities?: InputCapabilities | undefined
   readonly url: string | URL
   readonly protocol: McpProtocol.ProtocolAdapter<ProtocolVersion>
   readonly headers?: Readonly<Record<string, string>> | undefined
@@ -1302,6 +1425,25 @@ interface InitializeResult {
 type ListResult<K extends string, A> = Record<K, ReadonlyArray<A>> & { readonly nextCursor?: string }
 const fail = (reason: McpClientErrorReason) => new McpClientError({ reason })
 const limitError = (description: string) => fail(new LimitError({ description }))
+
+const normalizeInputCapabilities = (capabilities: InputCapabilities | undefined): Record<string, unknown> => {
+  if (!isRecord(capabilities)) return {}
+  const result: Record<string, unknown> = {}
+  if (isRecord(capabilities.roots)) result.roots = {}
+  if (isRecord(capabilities.sampling)) {
+    result.sampling = {
+      ...(isRecord(capabilities.sampling.context) ? { context: {} } : {}),
+      ...(isRecord(capabilities.sampling.tools) ? { tools: {} } : {})
+    }
+  }
+  if (isRecord(capabilities.elicitation)) {
+    result.elicitation = {
+      ...(isRecord(capabilities.elicitation.form) ? { form: {} } : {}),
+      ...(isRecord(capabilities.elicitation.url) ? { url: {} } : {})
+    }
+  }
+  return result
+}
 
 const resolveDiscoveryLimits = (
   limits: DiscoveryLimits,

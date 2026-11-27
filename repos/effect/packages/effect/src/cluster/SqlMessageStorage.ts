@@ -344,18 +344,24 @@ export const makeEncodedStorage: (options?: {
     `${messageColumns}, ${idAs("r.id", "reply_reply_id")}, ${replyJoinColumns}`
   )
 
-  const selectByMessageId = (message_id: string): Effect.Effect<ReadonlyArray<Row>, SqlError> =>
+  const emptyFragment = sql.literal("")
+  const selectByMessageId = (
+    message_id: string,
+    lock: Fragment = emptyFragment
+  ): Effect.Effect<ReadonlyArray<Row>, SqlError> =>
     sql`
       SELECT ${duplicateColumns}
       FROM ${messagesTableSql} m
       LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
       WHERE m.message_id = ${message_id}
+      ${lock}
     `
   const maxInsertAttempts = 3
   // Runs an insert that reports whether it stored the row, returning the
   // existing row with the same message_id when it did not
   const insertUnlessExists = (
-    insert: (row: MessageRow, message_id: string) => Effect.Effect<boolean, SqlError>
+    insert: (row: MessageRow, message_id: string) => Effect.Effect<boolean, SqlError>,
+    lock?: Fragment
   ) =>
   (row: MessageRow, message_id: string): Effect.Effect<ReadonlyArray<Row>, SqlError> => {
     // deleteProcessed can delete the existing row before it is read, so insert
@@ -364,7 +370,7 @@ export const makeEncodedStorage: (options?: {
       Effect.flatMap(
         insert(row, message_id),
         (inserted) =>
-          inserted ? Effect.succeed([]) : Effect.flatMap(selectByMessageId(message_id), (rows) => {
+          inserted ? Effect.succeed([]) : Effect.flatMap(selectByMessageId(message_id, lock), (rows) => {
             if (rows.length > 0) return Effect.succeed(rows)
             if (attempt < maxInsertAttempts) return loop(attempt + 1)
             return Effect.fail(
@@ -397,11 +403,15 @@ export const makeEncodedStorage: (options?: {
         )
       ),
     mysql: () =>
-      insertUnlessExists((row) =>
-        Effect.map(
-          sql`INSERT IGNORE INTO ${messagesTableSql} ${sql.insert(row)}`.raw,
-          (result: any) => result.affectedRows > 0
-        )
+      insertUnlessExists(
+        (row) =>
+          Effect.map(
+            sql`INSERT IGNORE INTO ${messagesTableSql} ${sql.insert(row)}`.raw,
+            (result: any) => result.affectedRows > 0
+          ),
+        // At MySQL's default REPEATABLE READ, a plain SELECT reads the
+        // transaction's snapshot and misses a row committed after it began.
+        sql.literal("LOCK IN SHARE MODE")
       ),
     mssql: () =>
       insertUnlessExists((row, message_id) =>
@@ -466,9 +476,10 @@ export const makeEncodedStorage: (options?: {
     orElse: () => sql.literal("FOR UPDATE SKIP LOCKED")
   })
   // Writes to a request's replies lock its row first, in deleteProcessed's
-  // order, so they cannot deadlock. An empty result means it was deleted.
-  const lockRequest = (requestId: string) =>
-    sql`SELECT 1 FROM ${messagesTableSql} ${updateLock} WHERE id = ${requestId} ${forUpdate}`
+  // order, so they cannot deadlock. An empty result means it was deleted, or
+  // does not match the filter.
+  const lockRequest = (requestId: string, filter: Fragment = emptyFragment) =>
+    sql`SELECT 1 FROM ${messagesTableSql} ${updateLock} WHERE id = ${requestId} ${filter} ${forUpdate}`
   // mssql can scan the clustered index on small tables and deadlock on other
   // requests' rows, so these statements force the request_id indexes
   const markAcksProcessed: (requestId: string) => Effect.Effect<unknown, SqlError> = sql.onDialectOrElse({
@@ -556,7 +567,6 @@ export const makeEncodedStorage: (options?: {
       `
   })
 
-  const emptyFragment = sql.literal("")
   // mssql only limits with OFFSET/FETCH, which requires the ORDER BY that
   // both queries already have
   const limitFragment = sql.onDialectOrElse({
@@ -774,8 +784,13 @@ export const makeEncodedStorage: (options?: {
         const update = reply._tag === "Chunk" ?
           sql`UPDATE ${messagesTableSql} SET last_reply_id = ${reply.id} WHERE id = ${reply.requestId}` :
           sql`UPDATE ${messagesTableSql} SET processed = ${sqlTrue}, last_reply_id = ${reply.id} WHERE request_id = ${reply.requestId}`
-        return update.unprepared.pipe(
-          Effect.andThen(sql`INSERT INTO ${repliesTableSql} ${sql.insert(row)}`),
+        return lockRequest(reply.requestId).pipe(
+          Effect.flatMap((request) =>
+            // the request was deleted, so there is nothing left to reply to
+            request.length === 0 ? Effect.void : update.unprepared.pipe(
+              Effect.andThen(sql`INSERT INTO ${repliesTableSql} ${sql.insert(row)}`)
+            )
+          ),
           sql.withTransaction
         )
       }).pipe(
@@ -786,25 +801,20 @@ export const makeEncodedStorage: (options?: {
 
     clearReplies: Effect.fnUntraced(
       function*(requestId, options) {
-        const expectedReplyId = options?.expectedReplyId
-        yield* lockRequest(String(requestId))
-        if (expectedReplyId === undefined) {
-          yield* sql`DELETE FROM ${repliesTableSql} WHERE request_id = ${String(requestId)} AND kind = 0`
-          yield* sql`DELETE FROM ${messagesTableSql} WHERE request_id = ${
-            String(requestId)
-          } AND kind = ${messageKindInterrupt}`
-          yield* sql`UPDATE ${messagesTableSql} SET processed = ${sqlFalse}, last_reply_id = NULL, last_read = NULL WHERE request_id = ${
-            String(requestId)
-          }`
-          return
-        }
         const id = String(requestId)
-        const expected = String(expectedReplyId)
-        // Check at the storage boundary, not at the earlier workflow read.
-        yield* sql`DELETE FROM ${repliesTableSql} WHERE request_id = ${id} AND kind = 0
-          AND EXISTS (SELECT 1 FROM ${messagesTableSql} WHERE id = ${id} AND last_reply_id = ${expected})`
+        const expectedReplyId = options?.expectedReplyId
+        // A guarded reset only touches rows stamped by the expected reply, so
+        // interrupts received after it are kept.
+        const stamped = expectedReplyId === undefined
+          ? emptyFragment
+          : sql`AND last_reply_id = ${String(expectedReplyId)}`
+        // Lock and check the current reply before mutating any of the request family.
+        const current = yield* lockRequest(id, stamped)
+        if (expectedReplyId !== undefined && current.length === 0) return
+        yield* sql`DELETE FROM ${repliesTableSql} WHERE request_id = ${id} AND kind = 0`
+        yield* sql`DELETE FROM ${messagesTableSql} WHERE request_id = ${id} AND kind = ${messageKindInterrupt} ${stamped}`
         yield* sql`UPDATE ${messagesTableSql} SET processed = ${sqlFalse}, last_reply_id = NULL, last_read = NULL
-          WHERE request_id = ${id} AND last_reply_id = ${expected}`
+          WHERE request_id = ${id} ${stamped}`
       },
       sql.withTransaction,
       PersistenceError.refail,
@@ -847,6 +857,29 @@ export const makeEncodedStorage: (options?: {
       `.unprepared.pipe(
         Effect.provideService(SqlClient.SafeIntegers, true),
         Effect.map(Arr.map(replyFromRow)),
+        PersistenceError.refail,
+        withTracerDisabled
+      ),
+
+    requestsForAddress: ({ address, tag }) =>
+      sql<MessageRow & ReplyJoinRow>`
+        SELECT ${sql.literal(messageColumns)}
+        FROM ${messagesTableSql} m
+        WHERE m.entity_type = ${address.entityType}
+        AND m.entity_id = ${address.entityId}
+        AND m.tag = ${tag}
+        AND m.kind = ${messageKindRequest}
+      `.pipe(
+        // The indexed predicates follow the column collation, which may ignore case,
+        // accents or trailing spaces, so exact matches are enforced here.
+        Effect.map((rows) =>
+          rows
+            .filter((row) =>
+              row.entity_type === address.entityType && row.entity_id === address.entityId && row.tag === tag
+            )
+            .map((row) => messageFromRow(row).envelope as Envelope.PartialRequestEncoded)
+        ),
+        Effect.provideService(SqlClient.SafeIntegers, true),
         PersistenceError.refail,
         withTracerDisabled
       ),
@@ -1048,6 +1081,36 @@ export const migrations = (options?: {
   const table = (name: string) => `${prefix}_${name}`
   const messagesTable = table("messages")
   const repliesTable = table("replies")
+
+  const ensureMessagesIndex = Effect.fnUntraced(function*(
+    name: string,
+    columnList: string,
+    mysqlColumnList = columnList
+  ) {
+    const sql = (yield* SqlClient.SqlClient).withoutTransforms()
+    const messagesTableSql = sql(messagesTable)
+    const index = `${messagesTable}_${name}`
+    const columns = sql.literal(columnList)
+    yield* sql.onDialectOrElse({
+      mssql: () =>
+        sql`
+          IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = ${index} AND object_id = OBJECT_ID(${messagesTable}))
+          CREATE INDEX ${sql(index)} ON ${messagesTableSql} (${columns})
+        `,
+      mysql: () =>
+        sql`
+          SELECT 1 FROM information_schema.statistics
+          WHERE table_schema = DATABASE() AND table_name = ${messagesTable} AND index_name = ${index}
+        `.pipe(
+          Effect.flatMap((rows) =>
+            rows.length > 0
+              ? Effect.void
+              : sql`CREATE INDEX ${sql(index)} ON ${messagesTableSql} (${sql.literal(mysqlColumnList)})`.unprepared
+          )
+        ),
+      orElse: () => sql`CREATE INDEX IF NOT EXISTS ${sql(index)} ON ${messagesTableSql} (${columns})`
+    })
+  })
 
   // The migrator serializes PostgreSQL DDL. Propagate errors: retrying in an
   // aborted transaction cannot succeed.
@@ -1357,31 +1420,16 @@ export const migrations = (options?: {
     }),
 
     // Serves deleteProcessed's lookup by entity type and final reply id
-    "0005_retention_index": Effect.gen(function*() {
-      const sql = (yield* SqlClient.SqlClient).withoutTransforms()
-      const messagesTableSql = sql(messagesTable)
-      const retentionIndex = `${messagesTable}_retention_idx`
-      const columns = sql.literal("entity_type, processed, last_reply_id")
-      yield* sql.onDialectOrElse({
-        mssql: () =>
-          sql`
-            IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = ${retentionIndex} AND object_id = OBJECT_ID(${messagesTable}))
-            CREATE INDEX ${sql(retentionIndex)} ON ${messagesTableSql} (${columns})
-          `,
-        mysql: () =>
-          sql`
-            SELECT 1 FROM information_schema.statistics
-            WHERE table_schema = DATABASE() AND table_name = ${messagesTable} AND index_name = ${retentionIndex}
-          `.pipe(
-            Effect.flatMap((rows) =>
-              rows.length > 0
-                ? Effect.void
-                : sql`CREATE INDEX ${sql(retentionIndex)} ON ${messagesTableSql} (${columns})`.unprepared
-            )
-          ),
-        orElse: () => sql`CREATE INDEX IF NOT EXISTS ${sql(retentionIndex)} ON ${messagesTableSql} (${columns})`
-      })
-    })
+    "0005_retention_index": ensureMessagesIndex("retention_idx", "entity_type, processed, last_reply_id"),
+
+    // Serves requestsForAddress and clearAddress. On MySQL, a prefix of
+    // entity_id keeps the utf8mb4 key within 1,536 bytes (8 KiB pages);
+    // lookups still compare the full column.
+    "0006_address_index": ensureMessagesIndex(
+      "address_idx",
+      "entity_type, entity_id, tag",
+      "entity_type, entity_id(128), tag"
+    )
   })
 }
 

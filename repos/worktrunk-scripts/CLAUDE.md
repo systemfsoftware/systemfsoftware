@@ -1,3 +1,3 @@
 @AGENTS.md
 @subtrees.toml
-@CONSTITUTION.md
+@repos/constitution/WORKING.md

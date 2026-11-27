@@ -1,6 +1,6 @@
 {
   "name": "typia",
-  "version": "15.4.0",
+  "version": "15.5.0",
   "description": "Superfast runtime validators with only one line",
   "main": "src/index.ts",
   "exports": {
@@ -36,7 +36,7 @@
     "randexp": "^0.5.3"
   },
   "peerDependencies": {
-    "ttsc": ">=0.37.0"
+    "ttsc": ">=0.38.0"
   },
   "peerDependenciesMeta": {
     "ttsc": {
