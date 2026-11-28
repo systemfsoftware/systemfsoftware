@@ -16,7 +16,7 @@
     # packs are compiled into it; this flake re-exports both variants.
     gritlint.url = "github:systemfsoftware/gritlint";
     pnpm-release-management = {
-      url = "github:systemfsoftware/pnpm-release-management/43f24b21b3c475acd03eb576bba6cf48d7ca8e2f";
+      url = "github:systemfsoftware/pnpm-release-management/3da32f4fa6f01af0a9a0cdab5cc8eb5d134b2de3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # Stryker ships only as this flake package (bin/stryker and its plugins in one
