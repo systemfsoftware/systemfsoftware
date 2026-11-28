@@ -134,6 +134,15 @@ const Window = S.TaggedStruct('Window', { start: S.Int, end: S.Int }).check(
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
+      name: 'Should_Pass_When_PipeFunctionStructCheckDeclaresResidual',
+      code: `import { pipe, Schema as S } from 'effect'
+const Window = pipe(
+  S.Struct({ start: S.Int, end: S.Int }),
+  S.check(S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } })),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
       name: 'Should_Pass_When_PipedStructCheckDeclaresResidual',
       code: `import { Schema as S } from 'effect'
 const Window = S.Struct({ start: S.Int, end: S.Int }).pipe(
@@ -211,6 +220,24 @@ const Shape = S.Struct({ start: S.Int, end: S.Int })
 const Window = Shape.pipe(S.check(S.makeFilter((w) => w.start <= w.end)))`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_PipeFunctionStructCheckHasNoDeclaration',
+      code: `import { pipe, Schema as S } from 'effect'
+const Window = pipe(S.Struct({ start: S.Int, end: S.Int }), S.check(S.makeFilter((w) => w.start <= w.end)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_LocalPipeCarriesStructCheck',
+      code: `import { Schema as S } from 'effect'
+const pipe = (a: unknown, b: unknown) => b
+const Window = pipe(
+  S.Struct({ start: S.Int, end: S.Int }),
+  S.check(S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } })),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
     },
     {
       name: 'Should_Fail_When_CurriedCheckAppliesToStruct',

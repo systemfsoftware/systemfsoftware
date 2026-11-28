@@ -40,7 +40,7 @@ The README row for `schema-filter-constructive-generation` promises that struct 
 
 **Receiver forms**
 
-- R4. `X.pipe(Schema.check(f))` and `Schema.check(f)(X)` take their receiver from `X`, so R1 applies to them.
+- R4. `X.pipe(Schema.check(f))`, `pipe(X, Schema.check(f))` and `Schema.check(f)(X)` take their receiver from `X`, so R1 applies to them.
 
 **Unchanged behaviour**
 
@@ -58,10 +58,10 @@ The README row for `schema-filter-constructive-generation` promises that struct 
 
 ### Key Technical Decisions
 
-- KTD1. **Keep `arbitrary: { residual: true }` as the declaration, matched as an exact literal shape.** Effect 4.1.4 reads no `arbitrary` key: its arbitrary compiler reads only `arbitraryConstraint` and, on `Schema.declare`, `toCodecArbitrary` (`internal/arbitrary/schema.js`). The key type-checks through the `Annotations` index signature. A design review ruled the marker the right shape because it is the one the README and the earlier plan already name. The rule must therefore validate it strictly, since the compiler never will.
+- KTD1. **Keep `arbitrary: { residual: true }` as the declaration, with `residual` matched as the literal `true`.** Effect 4.1.4 reads no `arbitrary` key: its arbitrary compiler reads only `arbitraryConstraint` and, on `Schema.declare`, `toCodecArbitrary` (`internal/arbitrary/schema.js`). The key type-checks through the `Annotations` index signature. A design review ruled the marker the right shape because it is the one the README and the earlier plan already name. The rule must therefore validate it strictly, since the compiler never will.
 - KTD2. **A separate messageId, `filterResidualUndeclared`, with struct-specific expected/actual/fix text.** The remedy differs from the scalar one: `arbitraryConstraint` cannot express a cross-field relation. Keeping `filterDiscards` untouched leaves every scalar test and consumer suppression stable.
 - KTD3. **Accept `minProperties` / `maxProperties` constraints on struct receivers and nothing else from the constraint vocabulary.** These are the only constraint keys the compiler applies to an object. A scalar key such as `minimum` on a struct filter is ignored at generation, so accepting it would let a no-op pass.
-- KTD4. **Resolve data-last receivers syntactically from the parent node.** `Schema.check` is told apart from a schema's own `.check` method by its import-origin member path below the Schema module being exactly `check`. The receiver is the `.pipe` call's object or the curried call's first argument. Without this, a struct filter written in the pipe form fell back to the scalar verdict, and the residual marker could not satisfy it.
+- KTD4. **Resolve data-last receivers syntactically from the parent node.** `Schema.check` is told apart from a schema's own `.check` method by its import-origin member path below the Schema module being exactly `check`. The receiver is the `.pipe` method's object, the first argument of Effect's `pipe` function, or the curried call's first argument. Without this, a struct filter written in the pipe form fell back to the scalar verdict, and the residual marker could not satisfy it.
 
 ### Risks
 

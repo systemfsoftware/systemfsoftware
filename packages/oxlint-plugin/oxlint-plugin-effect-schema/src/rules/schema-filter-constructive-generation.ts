@@ -51,12 +51,21 @@ const isDataLastCheck = (callee: ESTree.Node, getScope: GetScope): boolean => {
   return members.length === 1 && members[0] === 'check'
 }
 
+/** Effect's own `pipe` function (`import { pipe } from 'effect'`, `Function.pipe`), not a local of that name. */
+const isEffectPipe = (callee: ESTree.Node, getScope: GetScope): boolean => {
+  const origin = resolveImportOrigin(callee, getScope)
+  if (origin === null || !origin.source.startsWith('effect')) return false
+  return originFinalMember(origin) === 'pipe'
+}
+
 /**
  * The schema a data-last check is applied to: the receiver of the `.pipe`
- * that carries it (`X.pipe(Schema.check(f))`) or the argument of the call it
- * returns (`Schema.check(f)(X)`). Anything else has no syntactic receiver.
+ * method that carries it (`X.pipe(Schema.check(f))`), the first argument of
+ * Effect's `pipe` function (`pipe(X, Schema.check(f))`), or the argument of
+ * the call it returns (`Schema.check(f)(X)`). Anything else has no syntactic
+ * receiver.
  */
-const dataLastReceiverOf = (checkCall: ESTree.CallExpression): ESTree.Node | null => {
+const dataLastReceiverOf = (checkCall: ESTree.CallExpression, getScope: GetScope): ESTree.Node | null => {
   const call = checkCall.parent
   if (call === undefined || call.type !== 'CallExpression') return null
   if (call.callee === checkCall) {
@@ -71,6 +80,10 @@ const dataLastReceiverOf = (checkCall: ESTree.CallExpression): ESTree.Node | nul
     call.arguments.some((argument) => argument === checkCall)
   ) {
     return call.callee.object
+  }
+  if (isEffectPipe(call.callee, getScope) && call.arguments.slice(1).some((argument) => argument === checkCall)) {
+    const first = call.arguments[0]
+    return first !== undefined && isNotSpread(first) ? first : null
   }
   return null
 }
@@ -127,8 +140,8 @@ const STRUCT_CONSTRAINT_KEYS = ['minProperties', 'maxProperties'] as const
 
 /**
  * Effect's arbitrary compiler reads no annotation that means "generate this
- * struct filter by rejection sampling on purpose", so the declaration is the
- * exact literal shape `arbitrary: { residual: true }`; a misspelt key, a
+ * struct filter by rejection sampling on purpose", so the declaration is an
+ * `arbitrary` object whose `residual` is the literal `true`; a misspelt key, a
  * non-literal or `residual: false` is not a declaration. On a struct receiver
  * the only constraint keys the compiler applies are the property-count ones.
  */
@@ -335,10 +348,12 @@ export const schemaFilterConstructiveGeneration = defineRule({
         if (node.callee.type === 'MemberExpression' && !node.callee.computed) {
           const property = node.callee.property
           if (property.type !== 'Identifier' || property.name !== 'check') return
-          receiverNode = isDataLastCheck(node.callee, getScope) ? dataLastReceiverOf(node) : node.callee.object
+          receiverNode = isDataLastCheck(node.callee, getScope)
+            ? dataLastReceiverOf(node, getScope)
+            : node.callee.object
         } else if (node.callee.type === 'Identifier') {
           if (vocabularyMemberOf(node.callee, getScope) !== 'check') return
-          receiverNode = dataLastReceiverOf(node)
+          receiverNode = dataLastReceiverOf(node, getScope)
         } else {
           return
         }

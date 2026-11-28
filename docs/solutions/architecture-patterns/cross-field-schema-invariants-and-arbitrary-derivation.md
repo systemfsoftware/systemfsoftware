@@ -50,7 +50,7 @@ const LowHigh = Schema.Struct({
 )
 ```
 
-Effect's compiler reads no `arbitrary` annotation key (only `arbitraryConstraint` and, on `Schema.declare`, `toCodecArbitrary`), so the marker is a declaration the lint reads, not a generator. The rule therefore accepts only the literal shape `arbitrary: { residual: true }`. `residual: false`, a misspelt key, or a filter carrying only `message` still reports.
+Effect's compiler reads no `arbitrary` annotation key (only `arbitraryConstraint` and, on `Schema.declare`, `toCodecArbitrary`), so the marker is a declaration the lint reads, not a generator. The rule therefore requires `arbitrary.residual` to be the literal `true`. `residual: false`, a misspelt key, or a filter carrying only `message` still reports.
 
 #### Why the gate once let struct filters through
 
