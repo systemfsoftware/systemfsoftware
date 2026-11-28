@@ -4,10 +4,10 @@ applies_when:
   - writing or reviewing tests for a socket, file, HTTP, database or platform-binding adapter
   - replacing a platform driver, binding or runtime object with a mock, spy or hand-built object
   - asserting how a boundary adapter handles peer acceptance, refusal or unavailability
-tags: [testing, adapter, boundary, mocks, microvm, local-runtime]
+tags: [testing, adapter, boundary, mocks, embedded-engine, microvm, local-runtime]
 ---
 
-Test a boundary adapter against a real resource booted in a microVM (pack: testing, io-runs-in-microvms-never-on-the-host.md) or in the service's local runtime—never in a container, on the host, or as an ad-hoc child process. A database adapter's contract cases create and read state strictly through the port's own operations, never via raw SQL; a query populated only by another system is proven through the shipped system (`features-specify-our-systems-observable-behaviour.md`).
+Test a boundary adapter against a real resource from the lightest engine tier the adapter's contract needs (pack: testing, integration-io-runs-in-the-lightest-scoped-engine.md)—an in-process embedded engine, the platform's local runtime, or a scoped microVM—never in a container, on the host, or as an ad-hoc child process. A database adapter's contract cases create and read state strictly through the port's own operations, never via raw SQL; a query populated only by another system is proven through the shipped system (`features-specify-our-systems-observable-behaviour.md`).
 
 Never pass `vi.fn`, `vi.mock`, `vi.spyOn`, or a hand-built object (including a type-guarded fake) where code expects a platform driver, binding, or runtime object (for the Storybook preview stand-in exception, see `ui-testing` pack: `stories-get-io-from-stand-ins-beside-the-io-module.md`).
 
