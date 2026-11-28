@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import { originFinalMember, originMemberSequence, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
   CHECK_SITE_NAME,
   EXPORTED_FIX,
@@ -9,10 +9,14 @@ import {
   MISSING_ACTUAL,
   MISSING_EXPECTED,
   MISSING_FIX,
+  RESIDUAL_ACTUAL,
+  RESIDUAL_EXPECTED,
+  RESIDUAL_FIX,
+  RESIDUAL_NAME,
 } from './schema-filter-constructive-generation.config.js'
 import { isSchemaVocabularyOrigin } from './SchemaVocabulary.js'
 
-export type MessageIds = 'filterDiscards'
+export type MessageIds = 'filterDiscards' | 'filterResidualUndeclared'
 
 type GetScope = (node: ESTree.Node) => unknown
 type IdentifierNode = Extract<ESTree.Node, { type: 'Identifier' }>
@@ -32,6 +36,56 @@ const vocabularyMemberOf = (node: ESTree.Node, getScope: GetScope): string | nul
   const origin = resolveImportOrigin(node, getScope)
   if (origin === null || !isSchemaVocabularyOrigin(origin)) return null
   return originFinalMember(origin) ?? null
+}
+
+/**
+ * `Schema.check(...)` itself (data-last), as opposed to a schema's own
+ * `.check` method (`Schema.Finite.check(...)`): its member path below the
+ * Schema module is exactly `check`.
+ */
+const isDataLastCheck = (callee: ESTree.Node, getScope: GetScope): boolean => {
+  const origin = resolveImportOrigin(callee, getScope)
+  if (origin === null || !isSchemaVocabularyOrigin(origin)) return false
+  const sequence = originMemberSequence(origin)
+  const members = origin.source === 'effect' ? sequence.slice(1) : sequence
+  return members.length === 1 && members[0] === 'check'
+}
+
+/** Effect's own `pipe` function (`import { pipe } from 'effect'`, `Function.pipe`), not a local of that name. */
+const isEffectPipe = (callee: ESTree.Node, getScope: GetScope): boolean => {
+  const origin = resolveImportOrigin(callee, getScope)
+  if (origin === null || !origin.source.startsWith('effect')) return false
+  return originFinalMember(origin) === 'pipe'
+}
+
+/**
+ * The schema a data-last check is applied to: the receiver of the `.pipe`
+ * method that carries it (`X.pipe(Schema.check(f))`), the first argument of
+ * Effect's `pipe` function (`pipe(X, Schema.check(f))`), or the argument of
+ * the call it returns (`Schema.check(f)(X)`). Anything else has no syntactic
+ * receiver.
+ */
+const dataLastReceiverOf = (checkCall: ESTree.CallExpression, getScope: GetScope): ESTree.Node | null => {
+  const call = checkCall.parent
+  if (call === undefined || call.type !== 'CallExpression') return null
+  if (call.callee === checkCall) {
+    const first = call.arguments[0]
+    return first !== undefined && isNotSpread(first) ? first : null
+  }
+  if (
+    call.callee.type === 'MemberExpression' &&
+    !call.callee.computed &&
+    call.callee.property.type === 'Identifier' &&
+    call.callee.property.name === 'pipe' &&
+    call.arguments.some((argument) => argument === checkCall)
+  ) {
+    return call.callee.object
+  }
+  if (isEffectPipe(call.callee, getScope) && call.arguments.slice(1).some((argument) => argument === checkCall)) {
+    const first = call.arguments[0]
+    return first !== undefined && isNotSpread(first) ? first : null
+  }
+  return null
 }
 
 const objectPropertyOf = (object: ESTree.Node, key: string): PropertyNode | null => {
@@ -79,6 +133,33 @@ const hasConstructiveMetadata = (annotations: ESTree.Node | null): 'yes' | 'no' 
   const value = arbitrary.value
   if (value.type !== 'ObjectExpression') return 'no'
   if (objectPropertyOf(value, 'constraint') !== null) return 'yes'
+  return hasSpread(value) ? 'opaque' : 'no'
+}
+
+const STRUCT_CONSTRAINT_KEYS = ['minProperties', 'maxProperties'] as const
+
+/**
+ * Effect's arbitrary compiler reads no annotation that means "generate this
+ * struct filter by rejection sampling on purpose", so the declaration is an
+ * `arbitrary` object whose `residual` is the literal `true`; a misspelt key, a
+ * non-literal or `residual: false` is not a declaration. On a struct receiver
+ * the only constraint keys the compiler applies are the property-count ones.
+ */
+const hasStructGenerationDeclaration = (annotations: ESTree.Node | null): 'yes' | 'no' | 'opaque' => {
+  if (annotations === null) return 'no'
+  if (annotations.type !== 'ObjectExpression') return 'opaque'
+  const arbitraryConstraint = objectPropertyOf(annotations, 'arbitraryConstraint')
+  if (arbitraryConstraint !== null) {
+    const value = arbitraryConstraint.value
+    if (value.type !== 'ObjectExpression' || hasSpread(value)) return 'opaque'
+    if (STRUCT_CONSTRAINT_KEYS.some((key) => objectPropertyOf(value, key) !== null)) return 'yes'
+  }
+  const arbitrary = objectPropertyOf(annotations, 'arbitrary')
+  if (arbitrary === null) return hasSpread(annotations) ? 'opaque' : 'no'
+  const value = arbitrary.value
+  if (value.type !== 'ObjectExpression') return 'no'
+  const residual = objectPropertyOf(value, 'residual')
+  if (residual !== null) return residual.value.type === 'Literal' && residual.value.value === true ? 'yes' : 'no'
   return hasSpread(value) ? 'opaque' : 'no'
 }
 
@@ -182,9 +263,18 @@ const reportFilter = (
   terminal: TerminalKind,
   missingFix: string,
 ): void => {
-  if (terminal === 'struct') return
   const second = filterCall.arguments[1]
   const annotations = second !== undefined && isNotSpread(second) ? second : null
+  if (terminal === 'struct') {
+    const structVerdict = hasStructGenerationDeclaration(annotations)
+    if (structVerdict === 'yes' || structVerdict === 'opaque') return
+    context.report({
+      node: filterCall,
+      messageId: 'filterResidualUndeclared',
+      data: { name: RESIDUAL_NAME, expected: RESIDUAL_EXPECTED, actual: RESIDUAL_ACTUAL, fix: RESIDUAL_FIX },
+    })
+    return
+  }
   const verdict = hasConstructiveMetadata(annotations)
   if (verdict === 'yes' || verdict === 'opaque') return
   context.report({
@@ -258,9 +348,12 @@ export const schemaFilterConstructiveGeneration = defineRule({
         if (node.callee.type === 'MemberExpression' && !node.callee.computed) {
           const property = node.callee.property
           if (property.type !== 'Identifier' || property.name !== 'check') return
-          receiverNode = node.callee.object
+          receiverNode = isDataLastCheck(node.callee, getScope)
+            ? dataLastReceiverOf(node, getScope)
+            : node.callee.object
         } else if (node.callee.type === 'Identifier') {
           if (vocabularyMemberOf(node.callee, getScope) !== 'check') return
+          receiverNode = dataLastReceiverOf(node, getScope)
         } else {
           return
         }

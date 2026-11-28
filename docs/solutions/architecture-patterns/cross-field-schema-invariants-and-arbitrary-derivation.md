@@ -37,7 +37,7 @@ Because the compiler provides no constructive hook for struct-level filters, inv
 
 When a cross-field predicate accepts a significant proportion of random draws (typically ≥20%, e.g., `low <= high` where `low, high ∈ [0, 100]` has an acceptance rate of ~50.5%), rejection sampling will find a valid draw within a few attempts, well below `maxDiscards`.
 
-For these predicates, rejection sampling is the intended and performant engine mechanism in Effect v4. The `schema-filter-constructive-generation` rule recognizes that Effect provides no constructive metadata for struct receivers, and permits bare filters on struct and record types without requiring ritual or fake annotations:
+For these predicates, rejection sampling is the intended and performant engine mechanism in Effect v4. The author still declares that choice on the filter with `arbitrary: { residual: true }`; the `schema-filter-constructive-generation` rule reports a struct-level filter that has no declaration as `filterResidualUndeclared`:
 
 ```typescript
 import { Schema } from 'effect'
@@ -46,9 +46,15 @@ const LowHigh = Schema.Struct({
   low: Schema.Int,
   high: Schema.Int,
 }).check(
-  Schema.makeFilter((p) => p.low <= p.high),
+  Schema.makeFilter((p) => p.low <= p.high, { arbitrary: { residual: true } }),
 )
 ```
+
+Effect's compiler reads no `arbitrary` annotation key (only `arbitraryConstraint` and, on `Schema.declare`, `toCodecArbitrary`), so the marker is a declaration the lint reads, not a generator. The rule therefore requires `arbitrary.residual` to be the literal `true`. `residual: false`, a misspelt key, or a filter carrying only `message` still reports.
+
+#### Why the gate once let struct filters through
+
+The rule's first version of this doctrine silenced every filter on a struct receiver while its README promised a `filterResidualUndeclared` report. The two drifted because no test pinned the README's promise: the only struct-receiver case was a valid "no annotations" fixture. Struct-receiver behaviour is now pinned by invalid cases (unmarked, `message`-only, `TaggedStruct`, a struct passed as class fields, `Record`, piped and curried `Schema.check`, `residual: false`, a misspelt key, a scalar-only constraint).
 
 ### 2. Sparse Invariants: `Schema.declare` with `toCodecArbitrary`
 

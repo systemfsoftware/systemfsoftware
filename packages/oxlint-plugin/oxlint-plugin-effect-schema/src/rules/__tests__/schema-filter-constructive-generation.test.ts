@@ -7,6 +7,10 @@ import {
   MISSING_ACTUAL,
   MISSING_EXPECTED,
   MISSING_FIX,
+  RESIDUAL_ACTUAL,
+  RESIDUAL_EXPECTED,
+  RESIDUAL_FIX,
+  RESIDUAL_NAME,
 } from '../schema-filter-constructive-generation.config.js'
 import { schemaFilterConstructiveGeneration } from '../schema-filter-constructive-generation.js'
 
@@ -22,6 +26,11 @@ const discardsError = () => ({
 const exportedDiscardsError = () => ({
   messageId: 'filterDiscards',
   data: { name: EXPORTED_NAME, expected: MISSING_EXPECTED, actual: MISSING_ACTUAL, fix: EXPORTED_FIX },
+})
+
+const residualError = () => ({
+  messageId: 'filterResidualUndeclared',
+  data: { name: RESIDUAL_NAME, expected: RESIDUAL_EXPECTED, actual: RESIDUAL_ACTUAL, fix: RESIDUAL_FIX },
 })
 
 ruleTester.run('schema-filter-constructive-generation', schemaFilterConstructiveGeneration, {
@@ -107,10 +116,38 @@ const Prime = check(prime)(Schema.Finite)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
-      name: 'Should_Pass_When_StructFilterHasNoAnnotations',
+      name: 'Should_Pass_When_StructFilterDeclaresResidual',
       code: `import { Schema as S } from 'effect'
-const uniqueSlots = S.makeFilter((g: Group) => uniqueIds(g.slots), { expected: 'unique slot ids' })
-const Group = S.Struct({ slots: S.Array(Slot) }).check(uniqueSlots)`,
+const ordered = S.makeFilter((w: Window) => w.start <= w.end, {
+  message: 'start is not after end',
+  arbitrary: { residual: true },
+})
+const Window = S.Struct({ start: S.Int, end: S.Int }).check(ordered)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_InlineTaggedStructFilterDeclaresResidual',
+      code: `import { Schema as S } from 'effect'
+const Window = S.TaggedStruct('Window', { start: S.Int, end: S.Int }).check(
+  S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } }),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_PipeFunctionStructCheckDeclaresResidual',
+      code: `import { pipe, Schema as S } from 'effect'
+const Window = pipe(
+  S.Struct({ start: S.Int, end: S.Int }),
+  S.check(S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } })),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_PipedStructCheckDeclaresResidual',
+      code: `import { Schema as S } from 'effect'
+const Window = S.Struct({ start: S.Int, end: S.Int }).pipe(
+  S.check(S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } })),
+)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
@@ -129,16 +166,139 @@ const sized = Schema.makeFilter((g: Record<string, string>) => Object.keys(g).le
 const Bag = Schema.Record({ key: Schema.String, value: Schema.String }).check(sized)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
+  ],
+  invalid: [
     {
-      name: 'Should_Pass_When_OverrideLivesOnLocalStructDeclaration',
+      name: 'Should_Fail_When_StructFilterCarriesOnlyAMessage',
+      code: `import { Schema as S } from 'effect'
+const Window = S.Struct({ start: S.Int, end: S.Int }).check(
+  S.makeFilter((w) => w.start <= w.end, { message: 'start is not after end' }),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_StructFilterBindingHasNoDeclaration',
+      code: `import { Schema as S } from 'effect'
+const uniqueSlots = S.makeFilter((g: Group) => uniqueIds(g.slots), { expected: 'unique slot ids' })
+const Group = S.Struct({ slots: S.Array(Slot) }).check(uniqueSlots)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_TaggedStructFilterHasNoDeclaration',
+      code: `import { Schema as S } from 'effect'
+const Window = S.TaggedStruct('Window', { start: S.Int, end: S.Int }).check(
+  S.makeFilter((w) => w.start <= w.end),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_StructPassedToClassHasUndeclaredFilter',
+      code: `import { Schema as S } from 'effect'
+export class Window extends S.TaggedClass<Window>()(
+  'Window',
+  S.Struct({ start: S.Int, end: S.Int }).check(
+    S.makeFilter((w) => w.start <= w.end, { message: 'start is not after end' }),
+  ),
+) {}`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_RecordFilterHasNoDeclaration',
+      code: `import { Schema } from 'effect'
+const Bag = Schema.Record(Schema.String, Schema.Int).check(Schema.makeFilter((b) => sum(b) < 100))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_PipedStructCheckHasNoDeclaration',
+      code: `import { Schema as S } from 'effect'
+const Shape = S.Struct({ start: S.Int, end: S.Int })
+const Window = Shape.pipe(S.check(S.makeFilter((w) => w.start <= w.end)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_PipeFunctionStructCheckHasNoDeclaration',
+      code: `import { pipe, Schema as S } from 'effect'
+const Window = pipe(S.Struct({ start: S.Int, end: S.Int }), S.check(S.makeFilter((w) => w.start <= w.end)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_LocalPipeCarriesStructCheck',
+      code: `import { Schema as S } from 'effect'
+const pipe = (a: unknown, b: unknown) => b
+const Window = pipe(
+  S.Struct({ start: S.Int, end: S.Int }),
+  S.check(S.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: true } })),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_CurriedCheckAppliesToStruct',
+      code: `import { check } from 'effect/Schema'
+import { Schema } from 'effect'
+const bare = Schema.makeFilter((w: Window) => w.start <= w.end)
+const Window = check(bare)(Schema.Struct({ start: Schema.Int, end: Schema.Int }))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_ResidualIsFalse',
+      code: `import { Schema } from 'effect'
+const Window = Schema.Struct({ start: Schema.Int, end: Schema.Int }).check(
+  Schema.makeFilter((w) => w.start <= w.end, { arbitrary: { residual: false } }),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_ResidualKeyIsMisspelt',
+      code: `import { Schema } from 'effect'
+const Window = Schema.Struct({ start: Schema.Int, end: Schema.Int }).check(
+  Schema.makeFilter((w) => w.start <= w.end, { arbitrary: { residaul: true } }),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_StructFilterCarriesScalarConstraintOnly',
+      code: `import { Schema } from 'effect'
+const Window = Schema.Struct({ start: Schema.Int, end: Schema.Int }).check(
+  Schema.makeFilter((w) => w.start <= w.end, { arbitraryConstraint: { minimum: 0 } }),
+)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
+    },
+    {
+      name: 'Should_Fail_When_OverrideLivesOnLocalStructDeclaration',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
 const Person = Schema.Struct({ name: Schema.String }).annotate({ toCodecArbitrary: () => nameLink })
 const Named = Person.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [residualError()],
     },
-  ],
-  invalid: [
+    {
+      name: 'Should_Fail_When_ScalarFilterDeclaresResidual',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: number) => isPrime(v), { arbitrary: { residual: true } })
+const X = Schema.Finite.check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_PipedScalarCheckHasNoAnnotations',
+      code: `import { Schema } from 'effect'
+const X = Schema.Int.pipe(Schema.check(Schema.makeFilter((v: number) => v > 0)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
     {
       name: 'Should_Fail_When_InlineFilterHasNoAnnotations',
       code: `import { Schema } from 'effect'
