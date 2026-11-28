@@ -51,7 +51,7 @@ catalog:
   react-error-boundary: ^6.1.6
   scheduler: ^0.28.0
   storybook: ^10.6.7
-  type-fest: ^5.10.0
+  type-fest: ^6.0.3
   "@storybook/addon-vitest": ^10.6.7
   "@storybook/react-vite": ^10.6.7
   "@vitest/browser": ^5.1.0
