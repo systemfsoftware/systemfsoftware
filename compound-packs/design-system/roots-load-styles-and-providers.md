@@ -43,17 +43,17 @@ export const decorators = [(Story) => (
 
 ```tsx
 // WRONG: an island on a server-rendered page
-export default function HeaderAction(props: Props) {
+export default function PromoBanner(props: Props) {
   return (
     <AppRoot>
-      <Theme theme={pricingTheme} mode='system'>
+      <Theme theme={promoTheme} mode='system'>
         <Action {...props} />
       </Theme>
     </AppRoot>
   )
 }
-// RIGHT: the page's server markup carries <div data-astryx-theme="pricing">; the island supplies context only
-export default function HeaderAction(props: Props) {
+// RIGHT: the page's server markup carries <div data-astryx-theme="promo">; the island supplies context only
+export default function PromoBanner(props: Props) {
   return (
     <IslandRoot>
       <Action {...props} />
@@ -64,6 +64,6 @@ export default function HeaderAction(props: Props) {
 
 **Gate:**
 
-- `oxlint` banning the `Theme` import outside the single-root app's folder.
+- `oxlint` banning every way of reaching `Theme` (named, aliased, namespace, destructured, re-exported, dynamic) outside the modules that only single-root trees render.
 - A built-page check that records every `<html>` attribute from first paint through the last hydration and fails when one takes two values or a script writes `data-astryx-theme`.
 - `review` for a new root's providers.
