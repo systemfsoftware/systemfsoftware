@@ -595,11 +595,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794732797,
-        "narHash": "sha256-M6eP/2gfSRNxtrM29X3mHgjpLfeZADr/s/s4PJGu1Pk=",
+        "lastModified": 1795403149,
+        "narHash": "sha256-7CMsj45qGxfq3oAcXhZfaLJW+TM0d9prye7XDYFFZ8Q=",
         "owner": "systemfsoftware",
         "repo": "stryker-js-effect",
-        "rev": "c6e954c87b8e130dbb2d00963786039e6bff0354",
+        "rev": "0cf5ed51646a5edc95a3a3a022237f7897140523",
         "type": "github"
       },
       "original": {
