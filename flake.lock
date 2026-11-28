@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "bend": {
+      "inputs": {
+        "nixpkgs": [
+          "pnpm-release-management",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794682988,
+        "narHash": "sha256-9x/0tizq1exCQxTec4xMDOj1biv5b2R6kWIi73P87zM=",
+        "owner": "bendlang",
+        "repo": "bend",
+        "rev": "f0cf0a7c573145501981c44d9c33e326185f008e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bendlang",
+        "repo": "bend",
+        "type": "github"
+      }
+    },
     "comment-checker": {
       "inputs": {
         "nixpkgs": "nixpkgs",
@@ -76,11 +97,11 @@
         "rust-overlay": "rust-overlay_6"
       },
       "locked": {
-        "lastModified": 1794548726,
-        "narHash": "sha256-tZ8LWVuUMyIolrJnFd6koGkNJr4qxK0i5A6zC2L062A=",
+        "lastModified": 1794559985,
+        "narHash": "sha256-r+H1HI/IS20s742HSPtwwk3Sx+/eL5dMhzJWXa8TOYQ=",
         "owner": "systemfsoftware",
         "repo": "comment-checker",
-        "rev": "f3fd49afd0f14fdf629197f1ff54aacebefe8f1d",
+        "rev": "42f048b014981b37e36e8c2f8a1cbee4c0bb4eb9",
         "type": "github"
       },
       "original": {
@@ -394,6 +415,7 @@
     },
     "pnpm-release-management_3": {
       "inputs": {
+        "bend": "bend",
         "comment-checker": "comment-checker_4",
         "importPnpmLock": "importPnpmLock_4",
         "nixpkgs": [
@@ -401,17 +423,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794548935,
-        "narHash": "sha256-RyWkHbKKZB4SiOJeaoAGsKseapGXysPs6/OcJk3cgpA=",
+        "lastModified": 1795889021,
+        "narHash": "sha256-pCPNr7mzKPuRQ1LxiwPCr3WW8YThm8KY/7y/p727Db4=",
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "43f24b21b3c475acd03eb576bba6cf48d7ca8e2f",
+        "rev": "3da32f4fa6f01af0a9a0cdab5cc8eb5d134b2de3",
         "type": "github"
       },
       "original": {
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "43f24b21b3c475acd03eb576bba6cf48d7ca8e2f",
+        "rev": "3da32f4fa6f01af0a9a0cdab5cc8eb5d134b2de3",
         "type": "github"
       }
     },
