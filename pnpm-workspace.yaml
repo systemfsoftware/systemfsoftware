@@ -17,13 +17,13 @@ catalog:
   "@alchemy.run/cloudflare": 2.0.0-beta.87
   "@alchemy.run/test": 2.0.0-beta.87
   alchemy: 2.0.0-beta.87
-  "@effect/platform-node": ^4.1.4
-  "@effect/platform-bun": ^4.1.4
-  "@effect/platform-node-shared": ^4.1.4
-  effect: ^4.1.4
+  "@effect/platform-node": ^4.1.5
+  "@effect/platform-bun": ^4.1.5
+  "@effect/platform-node-shared": ^4.1.5
+  effect: ^4.1.5
   "@effect/sql-pglite": ^4.1.4
-  "@effect/tsgo": ^0.70.0
-  "@effect/opentelemetry": ^4.1.4
+  "@effect/tsgo": ^0.73.4
+  "@effect/opentelemetry": ^4.1.5
   "@opentelemetry/sdk-trace-base": ^2.12.0
   "@opentelemetry/api": ^1.10.0
   "@opentelemetry/resources": ^3.1.1
@@ -65,7 +65,7 @@ catalog:
 catalogMode: prefer
 catalogs:
   peers:
-    effect: ^4.1.4
+    effect: ^4.1.5
   oxlint:
     oxlint: ~1.93.0
     "@oxlint/plugins": ~1.93.0
